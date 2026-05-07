@@ -1,0 +1,570 @@
+import { useState, useEffect } from "react";
+import { auth, db } from "@/lib/firebase";
+import {
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signOut,
+} from "firebase/auth";
+import { doc, setDoc, addDoc, collection, getDocs, query, serverTimestamp } from "firebase/firestore";
+import { useLocation } from "wouter";
+import { useAuth } from "@/auth/AuthContext";
+import { getDefaultRouteForRole } from "@/utils/roleRedirects";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Building2, Mail, Lock, Chrome, Loader2, CheckCircle2, User, HardHat, UserCheck, Users, Palette, ChevronRight, ArrowLeft, MapPin, Wrench } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
+
+type AccountType = 'client' | 'sub' | 'team' | 'designer' | null;
+
+const TEAM_PERMISSIONS = [
+  { id: 'view_projects', label: 'View Projects' },
+  { id: 'manage_schedule', label: 'Manage Schedule' },
+  { id: 'manage_tasks', label: 'Manage Tasks' },
+  { id: 'view_financials', label: 'View Financials' },
+  { id: 'manage_documents', label: 'Manage Documents' },
+  { id: 'messaging', label: 'Messaging' },
+];
+
+const SUB_TRADES = [
+  'Concrete / Foundation',
+  'Framing / Rough Carpentry',
+  'Roofing',
+  'Electrical',
+  'Plumbing',
+  'HVAC / Mechanical',
+  'Insulation',
+  'Drywall',
+  'Flooring',
+  'Tile',
+  'Painting',
+  'Cabinets / Millwork',
+  'Countertops',
+  'Windows & Doors',
+  'Exterior Finishes / Siding',
+  'Masonry / Stonework',
+  'Landscaping / Site Work',
+  'Cleaning / Final',
+  'Other...',
+];
+
+export default function SignIn() {
+  const [, setLocation] = useLocation();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const { toast } = useToast();
+
+  // Registration modal state
+  const [registerOpen, setRegisterOpen] = useState(false);
+  const [regStep, setRegStep] = useState<1 | 2>(1);
+  const [accountType, setAccountType] = useState<AccountType>(null);
+  const [regName, setRegName] = useState("");
+  const [regEmail, setRegEmail] = useState("");
+  const [regPassword, setRegPassword] = useState("");
+  const [regConfirm, setRegConfirm] = useState("");
+  const [regCompany, setRegCompany] = useState("");
+  const [regPermissions, setRegPermissions] = useState<string[]>([]);
+  const [regTrade, setRegTrade] = useState("");
+  const [regOtherTrade, setRegOtherTrade] = useState("");
+  const [regProjectAddress, setRegProjectAddress] = useState("");
+  const [regProjectCity, setRegProjectCity] = useState("");
+
+  const { user, isAuthenticated, loading, authLoading } = useAuth();
+
+  useEffect(() => {
+    if (!loading && !authLoading && isAuthenticated && user) {
+      const defaultRoute = getDefaultRouteForRole(user.role as any);
+      setLocation(defaultRoute);
+    }
+  }, [user, isAuthenticated, loading, authLoading, setLocation]);
+
+  if (isAuthenticated && user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'linear-gradient(135deg, #1a1814 0%, #2a2520 50%, #1a1814 100%)' }}>
+        <Card className="w-full max-w-md border-0 shadow-2xl" style={{ background: 'rgba(250,250,246,0.98)' }}>
+          <CardContent className="flex flex-col items-center justify-center p-8 space-y-4">
+            <Loader2 className="h-8 w-8 animate-spin" style={{ color: '#C9A96E' }} />
+            <p className="text-sm font-sans" style={{ color: '#4A4540' }}>Redirecting to your dashboard...</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const handleEmailSignIn = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+    } catch (e: any) {
+      let msg = "An error occurred during sign in.";
+      let isAccessRevoked = false;
+      if (e.code === "auth/user-not-found") {
+        msg = "No account found with this email address.";
+      } else if (e.code === "auth/user-disabled") {
+        msg = "This account has been disabled. Please contact Skyeline Homes for assistance.";
+        isAccessRevoked = true;
+      } else if (e.code === "auth/wrong-password") {
+        msg = "Incorrect password.";
+      } else if (e.code === "auth/invalid-email") {
+        msg = "Invalid email address.";
+      } else if (e.code === "auth/too-many-requests") {
+        msg = "Too many failed attempts. Please try again later.";
+      } else if (e.code === "auth/invalid-credential") {
+        msg = "Incorrect email or password. If you believe your access was removed, contact Skyeline Homes.";
+        isAccessRevoked = false;
+      } else if (e.message) {
+        msg = e.message;
+      }
+      setError(msg);
+      if (isAccessRevoked) {
+        toast({ title: "Account Access Revoked", description: msg, variant: "destructive" });
+      }
+      setIsLoading(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: 'select_account' });
+      const result = await signInWithPopup(auth, provider);
+      try {
+        await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            firebaseUid: result.user.uid,
+            email: result.user.email,
+            name: result.user.displayName || result.user.email?.split('@')[0]
+          }),
+        });
+      } catch (_) {}
+    } catch (e: any) {
+      let msg = "An error occurred during Google sign in.";
+      if (e.code === "auth/popup-closed-by-user") msg = "Sign in was cancelled.";
+      else if (e.code === "auth/popup-blocked") msg = "Popup was blocked. Please allow popups and try again.";
+      else if (e.code === "auth/unauthorized-domain") msg = "This domain is not authorized for Google sign-in.";
+      else if (e.message) msg = e.message;
+      setError(msg);
+      setIsLoading(false);
+    }
+  };
+
+  const openRegister = () => {
+    setRegEmail(email);
+    setRegPassword(password);
+    setRegStep(1);
+    setAccountType(null);
+    setRegName("");
+    setRegCompany("");
+    setRegPermissions([]);
+    setRegTrade("");
+    setRegOtherTrade("");
+    setRegProjectAddress("");
+    setRegProjectCity("");
+    setRegisterOpen(true);
+  };
+
+  const roleLabel = (type: AccountType) => {
+    if (type === 'client') return 'client';
+    if (type === 'sub') return 'sub';
+    if (type === 'designer') return 'designer';
+    if (type === 'team') return 'admin';
+    return 'client';
+  };
+
+  const handleRegisterSubmit = async () => {
+    if (!accountType || !regName || !regEmail || !regPassword) return;
+    if (regPassword !== regConfirm) {
+      toast({ title: "Passwords don't match", variant: "destructive" });
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const cred = await createUserWithEmailAndPassword(auth, regEmail, regPassword);
+      const uid = cred.user.uid;
+      const role = roleLabel(accountType);
+      const isOtherTrade = accountType === 'sub' && regTrade === 'Other...';
+      const finalTrade = isOtherTrade ? regOtherTrade.trim() : regTrade;
+
+      // If sub selected "Other", create a pending trade request for Tyler to approve
+      if (isOtherTrade && regOtherTrade.trim()) {
+        await addDoc(collection(db, 'pendingTrades'), {
+          tradeName: regOtherTrade.trim(),
+          requestedBy: regName,
+          requestedByEmail: regEmail,
+          requestedByUid: uid,
+          status: 'pending',
+          createdAt: serverTimestamp(),
+        });
+      }
+
+      // For homeowners, try to find a matching client record by address
+      let linkedClientId: string | null = null;
+      if (accountType === 'client' && regProjectAddress.trim()) {
+        const clientsSnap = await getDocs(query(collection(db, 'clients')));
+        const normInput = regProjectAddress.trim().toLowerCase();
+        const match = clientsSnap.docs.find(d => {
+          const data = d.data();
+          const clientAddr = [data.jobAddress, data.city].filter(Boolean).join(' ').toLowerCase();
+          return clientAddr.includes(normInput.split(' ')[0]) && normInput.split(' ')[0].length > 2;
+        });
+        if (match) {
+          linkedClientId = match.id;
+          // Link the user UID to the client record
+          await setDoc(doc(db, 'clients', match.id), { linkedUserId: uid }, { merge: true });
+        }
+      }
+
+      // Write user profile to Firestore
+      await setDoc(doc(db, 'users', uid), {
+        email: regEmail,
+        name: regName,
+        role,
+        company: regCompany || null,
+        ...(accountType === 'sub' && finalTrade ? { trade: finalTrade, tradeIsCustom: isOtherTrade } : {}),
+        ...(accountType === 'client' && regProjectAddress.trim() ? {
+          projectAddress: regProjectAddress.trim(),
+          projectCity: regProjectCity.trim() || null,
+          linkedClientId,
+        } : {}),
+        active: true,
+        status: 'active',
+        requestedPermissions: [],
+        createdAt: serverTimestamp(),
+      });
+
+      await signOut(auth);
+      setRegisterOpen(false);
+      setEmail(regEmail);
+      setPassword("");
+
+      const typeLabel = accountType === 'client' ? 'Home Owner' : accountType === 'sub' ? 'Subcontractor' : accountType === 'designer' ? 'Interior Designer' : 'Skyeline Homes Team Member';
+      const extraMsg = isOtherTrade
+        ? ' Your trade has been submitted for review — Tyler will add it to the system.'
+        : linkedClientId
+          ? ' Your project address was matched to an existing record.'
+          : '';
+      setSuccessMessage(`${typeLabel} account created! Please sign in with your credentials.${extraMsg}`);
+      toast({
+        title: "Account Created!",
+        description: `Welcome to SkyelineOS. Sign in to access your portal.`,
+        duration: 6000,
+      });
+    } catch (e: any) {
+      let msg = "An error occurred.";
+      if (e.code === "auth/email-already-in-use") msg = "An account with this email already exists.";
+      else if (e.code === "auth/weak-password") msg = "Password should be at least 6 characters.";
+      else if (e.code === "auth/invalid-email") msg = "Invalid email address.";
+      else if (e.message) msg = e.message;
+      toast({ title: "Registration failed", description: msg, variant: "destructive" });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const togglePermission = (id: string) => {
+    setRegPermissions(prev =>
+      prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]
+    );
+  };
+
+  const accountTypes = [
+    {
+      type: 'client' as AccountType,
+      icon: UserCheck,
+      title: 'Home Owner',
+      description: 'Access your project status, selections, documents, and communicate with your build team.',
+    },
+    {
+      type: 'sub' as AccountType,
+      icon: HardHat,
+      title: 'Subcontractor',
+      description: 'View job assignments, submit timesheets, and manage your work with Skyeline Homes.',
+    },
+    {
+      type: 'designer' as AccountType,
+      icon: Palette,
+      title: 'Interior Designer',
+      description: 'Access design boards, material selections, and collaborate with the Skyeline Homes build team.',
+    },
+    {
+      type: 'team' as AccountType,
+      icon: Users,
+      title: 'Skyeline Homes Team Member',
+      description: 'Internal staff. Request the access you need — admin will review and approve.',
+    },
+  ];
+
+  return (
+    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'linear-gradient(135deg, #1a1814 0%, #2a2520 50%, #1a1814 100%)' }}>
+      <Card className="w-full max-w-md border-0 shadow-2xl" style={{ background: 'rgba(250,250,246,0.98)' }}>
+        <CardHeader className="text-center pb-6 pt-8">
+          <div className="flex justify-center mb-2">
+            <img
+              src="/logos/logo-transparent-cropped.png"
+              alt="Skyeline Homes"
+              className="w-auto object-contain"
+              style={{ height: '200px', maxWidth: '420px' }}
+            />
+          </div>
+          <CardDescription className="text-xs font-sans font-medium tracking-widest uppercase" style={{ color: '#C9A96E', letterSpacing: '0.15em' }}>
+            Project Management Portal
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {successMessage && (
+            <Alert className="border-green-500 bg-green-50">
+              <CheckCircle2 className="h-4 w-4 text-green-600" />
+              <AlertDescription className="text-green-700">{successMessage}</AlertDescription>
+            </Alert>
+          )}
+          {error && (
+            <Alert variant="destructive" className="border-red-400 bg-red-50">
+              <AlertDescription className="text-red-800 font-medium">{error}</AlertDescription>
+            </Alert>
+          )}
+
+          <div className="space-y-2">
+            <Label htmlFor="email">Email</Label>
+            <div className="relative">
+              <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+              <Input id="email" type="email" placeholder="Enter your email" value={email}
+                onChange={(e) => setEmail(e.target.value)} className="pl-10" disabled={isLoading} />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="password">Password</Label>
+            <div className="relative">
+              <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+              <Input id="password" type="password" placeholder="Enter your password" value={password}
+                onChange={(e) => setPassword(e.target.value)} className="pl-10" disabled={isLoading} />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Button onClick={handleEmailSignIn} className="w-full" disabled={isLoading || !email || !password}>
+              {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Sign In
+            </Button>
+            <Button onClick={openRegister} variant="outline" className="w-full" disabled={isLoading}>
+              Create Account
+            </Button>
+          </div>
+
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center"><span className="w-full border-t" /></div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-background px-2 text-muted-foreground">Or continue with</span>
+            </div>
+          </div>
+
+          <Button onClick={handleGoogleSignIn} variant="outline" className="w-full" disabled={isLoading}>
+            <Chrome className="mr-2 h-4 w-4" />
+            Continue with Google
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Registration Modal */}
+      <Dialog open={registerOpen} onOpenChange={setRegisterOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {regStep === 1 ? 'Create Your Account' : `${accountType === 'client' ? 'Home Owner' : accountType === 'sub' ? 'Subcontractor' : accountType === 'designer' ? 'Interior Designer' : 'Skyeline Homes Team Member'} Account`}
+            </DialogTitle>
+            <DialogDescription>
+              {regStep === 1 ? 'Select your account type to get started.' : 'Fill in your details to complete registration.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          {regStep === 1 ? (
+            <div className="space-y-3 pt-2">
+              {accountTypes.map(({ type, icon: Icon, title, description }) => (
+                <button
+                  key={type}
+                  onClick={() => { setAccountType(type); setRegStep(2); }}
+                  className={cn(
+                    "w-full flex items-start gap-4 p-4 rounded-lg border-2 text-left transition-colors hover:border-blue-400 hover:bg-blue-50",
+                    accountType === type ? "border-blue-500 bg-blue-50" : "border-gray-200"
+                  )}
+                >
+                  <div className="mt-0.5 p-2 rounded-md bg-blue-100">
+                    <Icon className="h-5 w-5 text-blue-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-gray-900">{title}</p>
+                    <p className="text-sm text-gray-500 mt-0.5">{description}</p>
+                  </div>
+                  <ChevronRight className="h-5 w-5 text-gray-400 mt-1 flex-shrink-0" />
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-4 pt-2">
+              <button onClick={() => setRegStep(1)} className="flex items-center gap-1 text-sm text-blue-600 hover:underline">
+                <ArrowLeft className="h-3 w-3" /> Back
+              </button>
+
+              <div className="space-y-2">
+                <Label>Full Name</Label>
+                <div className="relative">
+                  <User className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                  <Input placeholder="Your full name" value={regName}
+                    onChange={e => setRegName(e.target.value)} className="pl-10" />
+                </div>
+              </div>
+
+              {accountType === 'sub' && (
+                <div className="space-y-2">
+                  <Label>Company Name</Label>
+                  <Input placeholder="Your company or trade name" value={regCompany}
+                    onChange={e => setRegCompany(e.target.value)} />
+                </div>
+              )}
+
+              {/* Subcontractor — trade selection */}
+              {accountType === 'sub' && (
+                <div className="space-y-2">
+                  <Label>Your Trade *</Label>
+                  <div className="grid grid-cols-2 gap-1.5 max-h-52 overflow-y-auto pr-1">
+                    {SUB_TRADES.map(trade => (
+                      <button
+                        key={trade}
+                        type="button"
+                        onClick={() => { setRegTrade(trade); if (trade !== 'Other...') setRegOtherTrade(''); }}
+                        className={cn(
+                          "text-left px-3 py-2 rounded-lg border text-xs font-medium transition-colors",
+                          regTrade === trade
+                            ? "border-amber-500 bg-amber-50 text-amber-800"
+                            : "border-gray-200 text-gray-600 hover:border-gray-400"
+                        )}
+                      >
+                        {trade === 'Other...' ? <span className="italic">{trade}</span> : trade}
+                      </button>
+                    ))}
+                  </div>
+                  {regTrade === 'Other...' && (
+                    <div className="mt-2 space-y-1">
+                      <Label className="text-xs text-gray-500">Describe your trade</Label>
+                      <div className="relative">
+                        <Wrench className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                        <Input
+                          placeholder="e.g. Fireplace / Stone Mason"
+                          value={regOtherTrade}
+                          onChange={e => setRegOtherTrade(e.target.value)}
+                          className="pl-10"
+                        />
+                      </div>
+                      <p className="text-xs text-amber-600">Tyler will review and add this trade to the system.</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Home Owner — project address */}
+              {accountType === 'client' && (
+                <div className="space-y-3">
+                  <div className="space-y-2">
+                    <Label>Project / Lot Address</Label>
+                    <div className="relative">
+                      <MapPin className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                      <Input
+                        placeholder="123 Main St or Lot 4"
+                        value={regProjectAddress}
+                        onChange={e => setRegProjectAddress(e.target.value)}
+                        className="pl-10"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>City</Label>
+                    <Input
+                      placeholder="Draper, UT"
+                      value={regProjectCity}
+                      onChange={e => setRegProjectCity(e.target.value)}
+                    />
+                  </div>
+                  <p className="text-xs text-gray-400">We'll use this to connect you with your project data in our system.</p>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <Label>Email</Label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                  <Input type="email" placeholder="your@email.com" value={regEmail}
+                    onChange={e => setRegEmail(e.target.value)} className="pl-10" />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Password</Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                  <Input type="password" placeholder="At least 6 characters" value={regPassword}
+                    onChange={e => setRegPassword(e.target.value)} className="pl-10" />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Confirm Password</Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                  <Input type="password" placeholder="Repeat password" value={regConfirm}
+                    onChange={e => setRegConfirm(e.target.value)} className="pl-10" />
+                </div>
+              </div>
+
+              {accountType === 'team' && (
+                <div className="space-y-2">
+                  <Label>Request Permissions</Label>
+                  <p className="text-xs text-gray-500">Select what access you need. Admin will approve.</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {TEAM_PERMISSIONS.map(p => (
+                      <button key={p.id} onClick={() => togglePermission(p.id)}
+                        className={cn(
+                          "px-3 py-2 rounded-md border text-sm text-left transition-colors",
+                          regPermissions.includes(p.id)
+                            ? "border-blue-500 bg-blue-50 text-blue-700"
+                            : "border-gray-200 text-gray-600 hover:border-gray-300"
+                        )}>
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <Button
+                onClick={handleRegisterSubmit}
+                className="w-full"
+                disabled={
+                  isLoading || !regName || !regEmail || !regPassword || !regConfirm ||
+                  (accountType === 'sub' && !regTrade) ||
+                  (accountType === 'sub' && regTrade === 'Other...' && !regOtherTrade.trim())
+                }
+              >
+                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                {accountType === 'team' ? 'Submit for Approval' : 'Create Account'}
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

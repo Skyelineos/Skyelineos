@@ -1,0 +1,61 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build output
+dist/
+build/
+functions/lib/
+.firebase/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+firebase-debug.log
+firebase-debug.*.log
+
+# Environment + secrets — NEVER commit
+.env
+.env.*
+!.env.example
+.runtimeconfig.json
+
+# Firebase Functions deployed artifacts
+functions/.runtimeconfig.json
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+*.swp
+*.swo
+Thumbs.db
+
+# Test artifacts
+coverage/
+.nyc_output/
+playwright-report/
+test-results/
+cypress/videos/
+cypress/screenshots/
+
+# Vite
+.vite/
+
+# Tailwind cache
+.cache/
+
+# Replit-specific
+.replit
+.upm/
+.config/
+__pycache__/
+
+# Drizzle generated
+drizzle/
+
+# Local files
+*.local

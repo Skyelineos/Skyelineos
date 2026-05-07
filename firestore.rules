@@ -1,0 +1,343 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Read role from Firestore users collection (set by Cloud Functions on first login)
+    function getUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && getUserRole() == 'admin';
+    }
+
+    function isGC() {
+      return isSignedIn() && (getUserRole() == 'admin' || getUserRole() == 'gc');
+    }
+
+    function isClient() {
+      return isSignedIn() && getUserRole() == 'client';
+    }
+
+    function isDesigner() {
+      return isSignedIn() && (getUserRole() == 'designer' || isGC());
+    }
+
+    function isSub() {
+      return isSignedIn() && (getUserRole() == 'sub' || isGC());
+    }
+
+    // Users — each user reads/writes their own profile; admins can write any profile
+    match /users/{userId} {
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow write: if isAdmin() || request.auth.uid == userId;
+    }
+
+    // Projects — GC can do everything; clients see only their project; designers/subs see assigned
+    match /projects/{projectId} {
+      allow read: if isGC()
+        || (isClient() && resource.data.clientId == request.auth.uid)
+        || (isDesigner() && request.auth.uid in resource.data.assignedUserIds)
+        || (isSub() && request.auth.uid in resource.data.assignedUserIds);
+      allow create, update: if isGC();
+      allow delete: if isAdmin();
+    }
+
+    // Contacts (subs, employees, vendors)
+    match /contacts/{contactId} {
+      allow read: if isGC();
+      allow create, update: if isGC();
+      allow delete: if isAdmin();
+    }
+
+    // CRM pipeline — leads and clients
+    match /clients/{clientId} {
+      allow read: if isGC() || isSignedIn(); // signed-in users can read for address matching on registration
+      allow create, update: if isGC();
+      allow delete: if isAdmin();
+    }
+
+    // Pending trade requests (submitted during sub registration)
+    match /pendingTrades/{tradeId} {
+      allow read: if isAdmin();
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin();
+    }
+
+    // Approved trades list
+    match /trades/{tradeId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // Estimates — linked to clients and jobs
+    match /estimates/{estimateId} {
+      allow read: if isGC()
+        || (isClient() && resource.data.clientId == request.auth.uid);
+      allow write: if isGC();
+      allow delete: if isAdmin();
+
+      match /lineItems/{lineItemId} {
+        allow read: if isGC()
+          || (isClient() && get(/databases/$(database)/documents/estimates/$(estimateId)).data.clientId == request.auth.uid);
+        allow write: if isGC();
+        allow delete: if isAdmin();
+      }
+    }
+
+    // Invoices
+    match /invoices/{invoiceId} {
+      allow read: if isGC()
+        || (isClient() && resource.data.clientId == request.auth.uid);
+      allow write: if isGC();
+      allow delete: if isAdmin();
+    }
+
+    // Bids — GC full access; public token bids allowed (handled by Cloud Functions)
+    match /bids/{bidId} {
+      allow read: if isGC();
+      allow create: if true; // public bid submissions allowed (token validated in Cloud Function)
+      allow update, delete: if isGC();
+    }
+
+    // Schedule tasks
+    match /tasks/{taskId} {
+      allow read: if isGC()
+        || (isClient() && resource.data.visibleToClient == true)
+        || (isSub() && resource.data.assignedSubId == request.auth.uid);
+      allow write: if isGC();
+    }
+
+    // Messages and threads
+    match /messages/{messageId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isGC() || resource.data.authorId == request.auth.uid;
+    }
+
+    match /threads/{threadId} {
+      allow read: if isSignedIn() && request.auth.uid in resource.data.participantIds;
+      allow create: if isGC();
+      allow update: if isSignedIn() && request.auth.uid in resource.data.participantIds;
+      allow delete: if isAdmin();
+    }
+
+    // Financial data
+    match /financials/{docId} {
+      allow read: if isGC();
+      allow write: if isGC();
+      allow delete: if isAdmin();
+    }
+
+    // Documents and photos
+    match /documents/{docId} {
+      allow read: if isGC()
+        || (isClient() && resource.data.visibleToClient == true);
+      allow write: if isGC();
+      allow delete: if isAdmin();
+    }
+
+    // Change orders
+    match /changeOrders/{orderId} {
+      allow read: if isGC()
+        || (isClient() && resource.data.clientId == request.auth.uid);
+      allow create: if isGC() || isClient(); // clients create COs when approving overages
+      allow update, delete: if isGC();
+    }
+
+    // Safety forms
+    match /safetyForms/{formId} {
+      allow read: if isGC();
+      allow write: if isGC() || isSub();
+      allow delete: if isAdmin();
+    }
+
+    // Timesheets
+    match /timesheets/{sheetId} {
+      allow read: if isGC() || resource.data.userId == request.auth.uid;
+      allow create, update: if isGC() || resource.data.userId == request.auth.uid;
+      allow delete: if isAdmin();
+    }
+
+    // Project sub-collections: rooms
+    match /projects/{projectId}/rooms/{roomId} {
+      allow read: if isGC()
+        || isDesigner()
+        || (isClient() && get(/databases/$(database)/documents/projects/$(projectId)).data.clientId == request.auth.uid);
+      allow create, update: if isGC() || isDesigner();
+      allow delete: if isAdmin() || isGC();
+    }
+
+    // Project sub-collections: selections, schedules
+    match /projects/{projectId}/selections/{selectionId} {
+      allow read: if isGC()
+        || isDesigner()
+        || (isClient() && get(/databases/$(database)/documents/projects/$(projectId)).data.clientId == request.auth.uid);
+      // Client can approve their own project's selections when not locked
+      allow update: if isClient()
+        && get(/databases/$(database)/documents/projects/$(projectId)).data.clientId == request.auth.uid
+        && resource.data.get('locked', false) == false
+        && request.resource.data.clientApprovalStatus == 'Approved';
+      // GC can always write (lock/unlock, order status, finalize)
+      allow create, update: if isGC();
+      // Designer can write only when not locked
+      allow create, update: if isDesigner() && resource.data.get('locked', false) == false;
+      allow delete: if isAdmin() || isGC();
+    }
+
+    match /projects/{projectId}/schedules/{scheduleId} {
+      allow read: if isGC() || isDesigner()
+        || (isClient() && get(/databases/$(database)/documents/projects/$(projectId)).data.clientId == request.auth.uid);
+      allow write: if isGC();
+      allow delete: if isAdmin() || isGC();
+    }
+
+    // Draws (payment milestones) — clients can read their project's draws; GC manages.
+    match /projects/{projectId}/draws/{drawId} {
+      allow read: if isGC() || isDesigner()
+        || (isClient() && get(/databases/$(database)/documents/projects/$(projectId)).data.clientId == request.auth.uid);
+      allow create, update: if isGC();
+      allow delete: if isAdmin() || isGC();
+    }
+
+    // Budget vs Actual items per project
+    match /projects/{projectId}/budgetItems/{itemId} {
+      allow read: if isGC()
+        || (isClient() && get(/databases/$(database)/documents/projects/$(projectId)).data.clientId == request.auth.uid);
+      allow create, update: if isGC();
+      allow delete: if isAdmin() || isGC();
+    }
+
+    // Takeoffs — plan measurements scoped to a project. Anyone who can create estimates
+    // (GC/admin via isGC, plus designers) can read/write. Clients have no access.
+    match /projects/{projectId}/takeoffs/{takeoffId} {
+      allow read: if isGC() || isDesigner();
+      allow create, update: if isGC() || isDesigner();
+      allow delete: if isAdmin() || isGC();
+    }
+
+    // Walkthroughs — site media (photos/videos) captured on-site by GC, assigned to subs.
+    // GC sees all; subs see only items assigned to them; designers can view (often related to selections).
+    match /projects/{projectId}/walkthroughs/{walkthroughId} {
+      allow read: if isGC() || isDesigner()
+        || (isSub() && resource.data.assignedToContactId == request.auth.uid);
+      allow create: if isGC();
+      allow update: if isGC()
+        || (isSub() && resource.data.assignedToContactId == request.auth.uid
+            && request.resource.data.assignedToContactId == resource.data.assignedToContactId);
+      allow delete: if isAdmin() || isGC();
+    }
+
+    // Permits & inspections — GC/admin manage; subs see read-only.
+    match /permits/{permitId} {
+      allow read: if isGC() || isSub();
+      allow create, update: if isGC();
+      allow delete: if isAdmin() || isGC();
+    }
+
+    // Lot / land inventory — GC/admin only (sensitive financial data).
+    match /lots/{lotId} {
+      allow read: if isGC();
+      allow create, update: if isGC();
+      allow delete: if isAdmin() || isGC();
+    }
+
+    // Subscriptions — paid services tracker. Contains API keys → admin-only access.
+    match /subscriptions/{subId} {
+      allow read, write: if isAdmin();
+    }
+
+    // Notifications — each user reads only their own. Any signed-in user can write
+    // (so peer-to-peer notifications work without a backend). Updates are limited
+    // to the recipient marking-as-read.
+    match /notifications/{notificationId} {
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+    }
+
+    // App-wide settings (pipeline stages, etc.)
+    match /settings/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isGC();
+    }
+
+    // Site observation logs — GC/admin see all; clients create and read their own
+    match /siteLogs/{logId} {
+      allow read: if isGC();
+      allow create: if isSignedIn();  // clients and team can create
+      allow update: if isGC();        // GC marks resolved
+      allow delete: if isAdmin();
+
+      match /entries/{entryId} {
+        allow read: if isGC()
+          || (isClient() && get(/databases/$(database)/documents/siteLogs/$(logId)).data.createdBy == request.auth.uid);
+        allow create: if isSignedIn();
+        allow update, delete: if isGC();
+      }
+    }
+
+    // Design board selections
+    match /designSelections/{selectionId} {
+      allow read: if isGC()
+        || isDesigner()
+        || (isClient() && resource.data.clientId == request.auth.uid);
+      allow write: if isGC() || isDesigner();
+      allow delete: if isAdmin();
+    }
+
+    // Material catalog items
+    match /catalogs/{itemId} {
+      allow read: if isSignedIn();
+      allow create, update: if isGC() || isDesigner();
+      allow delete: if isAdmin() || isGC();
+    }
+
+    // Document & email templates
+    match /templates/{templateId} {
+      allow read: if isSignedIn();
+      allow create, update: if isGC();
+      allow delete: if isAdmin() || isGC();
+    }
+
+    // Automations
+    match /automations/{autoId} {
+      allow read: if isGC();
+      allow create, update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Social media posts
+    match /socialPosts/{postId} {
+      allow read: if isGC();
+      allow create, update: if isGC();
+      allow delete: if isAdmin() || isGC();
+    }
+
+    // Purchase orders
+    match /purchaseOrders/{poId} {
+      allow read: if isGC()
+        || (isSub() && resource.data.subId == request.auth.uid);
+      allow create, update: if isGC();
+      allow delete: if isAdmin() || isGC();
+    }
+
+    // Communications log
+    match /commsLog/{logId} {
+      allow read: if isGC();
+      allow create, update: if isGC();
+      allow delete: if isAdmin() || isGC();
+    }
+
+    // Deny everything else
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,150 @@
+/* Custom CSS for Financial Dashboard Components */
+
+/* Accounting-style table formatting */
+.accounting-table {
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, SFMono-Regular, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+}
+
+.accounting-table th {
+  @apply bg-muted/50 text-muted-foreground font-semibold text-xs uppercase tracking-wider;
+}
+
+.accounting-table td {
+  @apply border-b border-border/50;
+}
+
+.accounting-table .currency-cell {
+  @apply text-right font-mono tabular-nums;
+}
+
+.accounting-table .negative-amount {
+  @apply text-red-600 dark:text-red-400;
+}
+
+.accounting-table .positive-amount {
+  @apply text-green-600 dark:text-green-400;
+}
+
+/* Chart container styling */
+.cash-flow-chart {
+  @apply w-full h-96 bg-card rounded-lg border;
+}
+
+.cash-flow-chart .recharts-cartesian-axis-tick-value {
+  @apply fill-muted-foreground text-xs;
+}
+
+.cash-flow-chart .recharts-cartesian-grid-horizontal line,
+.cash-flow-chart .recharts-cartesian-grid-vertical line {
+  @apply stroke-border/30;
+}
+
+/* Date filter controls */
+.date-filter-container {
+  @apply flex items-center gap-4 p-4 bg-muted/20 rounded-lg border;
+}
+
+.date-filter-container input[type="date"] {
+  @apply bg-background border border-input rounded-md px-3 py-2 text-sm;
+}
+
+.date-filter-container input[type="date"]:focus {
+  @apply outline-none ring-2 ring-ring ring-offset-2;
+}
+
+/* Financial summary cards */
+.financial-summary-card {
+  @apply p-6 rounded-lg border bg-card text-card-foreground shadow-sm;
+}
+
+.financial-summary-card.total-amount {
+  @apply bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800;
+}
+
+.financial-summary-card.total-paid {
+  @apply bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800;
+}
+
+.financial-summary-card.balance {
+  @apply bg-orange-50 dark:bg-orange-950/20 border-orange-200 dark:border-orange-800;
+}
+
+/* Status badges */
+.status-badge-paid {
+  @apply bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300;
+}
+
+.status-badge-partial {
+  @apply bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300;
+}
+
+.status-badge-outstanding {
+  @apply bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300;
+}
+
+/* Responsive table */
+.financial-table-container {
+  @apply overflow-x-auto rounded-lg border;
+}
+
+.financial-table {
+  @apply w-full border-collapse bg-card;
+}
+
+.financial-table th {
+  @apply p-3 text-left font-semibold text-muted-foreground bg-muted/50 border-b border-border;
+}
+
+.financial-table td {
+  @apply p-3 border-b border-border last:border-b-0;
+}
+
+.financial-table tbody tr:hover {
+  @apply bg-muted/30 transition-colors duration-150;
+}
+
+/* Chart tooltips */
+.recharts-tooltip-wrapper {
+  @apply drop-shadow-lg;
+}
+
+.recharts-tooltip-content {
+  @apply bg-popover border border-border rounded-md p-3 text-popover-foreground text-sm;
+}
+
+/* Loading states */
+.financial-loading-skeleton {
+  @apply animate-pulse bg-muted/50 rounded;
+}
+
+/* Print styles for financial reports */
+@media print {
+  .financial-dashboard {
+    @apply text-black bg-white;
+  }
+  
+  .financial-table {
+    @apply text-xs;
+  }
+  
+  .financial-table th,
+  .financial-table td {
+    @apply p-2 border border-gray-300;
+  }
+  
+  .cash-flow-chart {
+    @apply break-inside-avoid;
+  }
+}
+
+/* Dark mode adjustments */
+@media (prefers-color-scheme: dark) {
+  .accounting-table .currency-cell {
+    @apply text-foreground;
+  }
+  
+  .financial-summary-card {
+    @apply bg-card/50 backdrop-blur-sm;
+  }
+}
