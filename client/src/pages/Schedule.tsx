@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
+import { useLocation } from 'wouter';
 import { AppLayout } from '@/components/layout/AppLayout';
 
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -7,35 +8,50 @@ import { GlobalScheduleCalendar } from '@/components/schedule/GlobalScheduleCale
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import {
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog';
 import { useAuth } from '@/hooks/use-auth';
 import { useQuery } from '@tanstack/react-query';
-import { CalendarDays, User, Building2, Wrench, Users, TrendingUp, Clock, AlertTriangle, BarChart3 } from 'lucide-react';
+import { CalendarDays, User, Building2, Wrench, Users, TrendingUp, Clock, AlertTriangle, BarChart3, ChevronRight } from 'lucide-react';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { collection, getDocs, query as fsQuery, where } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 
 
 export default function Schedule() {
   const { user } = useAuth();
+  const [, setLocation] = useLocation();
   const [activeTab, setActiveTab] = useState('schedule');
+  const [tradesOpen, setTradesOpen] = useState(false);
   const isMobile = useIsMobile();
 
-  // Fetch active projects with optimized caching for better navigation performance
+  // Fetch active projects directly from Firestore (org IAM blocks /api/projects)
   const { data: activeProjects = [], error: projectsError } = useQuery({
     queryKey: ['/api/projects'],
+    queryFn: async () => {
+      const snap = await getDocs(collection(db, 'projects'));
+      return snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+    },
     select: (data: any[]) => data.filter(project => project.status === 'active'),
     retry: 2,
-    staleTime: 2 * 60 * 1000, // 2 minutes - longer cache for navigation performance
-    refetchInterval: 60 * 1000, // Auto-refresh every minute (reduced frequency)
-    refetchOnWindowFocus: false, // Disable to prevent navigation interference
+    staleTime: 2 * 60 * 1000,
+    refetchInterval: 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 
-  // Fetch all tasks for statistics with optimized caching
+  // Fetch all tasks for statistics directly from Firestore.
   const { data: allTasks = [], error: tasksError } = useQuery<any[]>({
     queryKey: ['/api/tasks/all-active'],
+    queryFn: async () => {
+      const snap = await getDocs(collection(db, 'tasks'));
+      return snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+    },
     retry: 2,
-    staleTime: 2 * 60 * 1000, // 2 minutes for better navigation performance
-    refetchInterval: 60 * 1000, // Auto-refresh every minute (reduced frequency)
-    refetchOnWindowFocus: false, // Disable to prevent navigation interference
+    staleTime: 2 * 60 * 1000,
+    refetchInterval: 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 
   // Calculate schedule statistics
@@ -52,9 +68,24 @@ export default function Schedule() {
     activeProjects: activeProjects.length,
   };
 
-  const completionRate = scheduleStats.totalTasks > 0 
+  const completionRate = scheduleStats.totalTasks > 0
     ? Math.round((scheduleStats.completedTasks / scheduleStats.totalTasks) * 100)
     : 0;
+
+  // Per-trade rollup: how many tasks per trade, and which projects they touch.
+  const tradeBreakdown = useMemo(() => {
+    const map = new Map<string, { taskCount: number; projects: Set<string> }>();
+    allTasks.forEach((t: any) => {
+      if (!t.trade) return;
+      const entry = map.get(t.trade) || { taskCount: 0, projects: new Set<string>() };
+      entry.taskCount += 1;
+      if (t.projectName) entry.projects.add(t.projectName);
+      map.set(t.trade, entry);
+    });
+    return Array.from(map.entries())
+      .map(([trade, v]) => ({ trade, taskCount: v.taskCount, projects: Array.from(v.projects) }))
+      .sort((a, b) => b.taskCount - a.taskCount);
+  }, [allTasks]);
 
   // Show error state if queries fail
   if (projectsError || tasksError) {
@@ -64,7 +95,7 @@ export default function Schedule() {
           <div className="text-center">
             <AlertTriangle className="mx-auto h-12 w-12 text-red-500 mb-4" />
             <h2 className="text-lg font-semibold text-gray-900 mb-2">
-              Error Loading Schedule Data
+              Error loading schedule data
             </h2>
             <p className="text-gray-600 mb-4">
               There was a problem loading the schedule information. Please try refreshing the page.
@@ -109,70 +140,133 @@ export default function Schedule() {
           </div>
         </div>
 
-        {/* Schedule Overview Cards */}
+        {/* Schedule Overview Cards — each tile drills into its detail view */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card className="bg-gray-50">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Active Projects</p>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {scheduleStats.activeProjects}
-                  </p>
+          <button
+            type="button"
+            onClick={() => setLocation('/projects')}
+            className="text-left transition-shadow hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#C9A96E] rounded-lg"
+          >
+            <Card className="bg-gray-50 hover:bg-white transition-colors">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600 flex items-center gap-1">
+                      Active Projects <ChevronRight className="h-3 w-3 opacity-50" />
+                    </p>
+                    <p className="text-2xl font-bold text-gray-900">{scheduleStats.activeProjects}</p>
+                  </div>
+                  <Building2 className="h-8 w-8 text-blue-500" />
                 </div>
-                <Building2 className="h-8 w-8 text-blue-500" />
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </button>
 
-          <Card className="bg-gray-50">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Active Trades</p>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {scheduleStats.uniqueTrades}
-                  </p>
+          <button
+            type="button"
+            onClick={() => setTradesOpen(true)}
+            className="text-left transition-shadow hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#C9A96E] rounded-lg"
+          >
+            <Card className="bg-gray-50 hover:bg-white transition-colors">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600 flex items-center gap-1">
+                      Active Trades <ChevronRight className="h-3 w-3 opacity-50" />
+                    </p>
+                    <p className="text-2xl font-bold text-gray-900">{scheduleStats.uniqueTrades}</p>
+                  </div>
+                  <Wrench className="h-8 w-8 text-purple-500" />
                 </div>
-                <Wrench className="h-8 w-8 text-purple-500" />
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </button>
 
-          <Card className="bg-gray-50">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">In Progress</p>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {scheduleStats.inProgressTasks}
-                  </p>
+          <button
+            type="button"
+            onClick={() => setLocation('/tasks')}
+            className="text-left transition-shadow hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#C9A96E] rounded-lg"
+          >
+            <Card className="bg-gray-50 hover:bg-white transition-colors">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600 flex items-center gap-1">
+                      In Progress <ChevronRight className="h-3 w-3 opacity-50" />
+                    </p>
+                    <p className="text-2xl font-bold text-gray-900">{scheduleStats.inProgressTasks}</p>
+                  </div>
+                  <Clock className="h-8 w-8 text-orange-500" />
                 </div>
-                <Clock className="h-8 w-8 text-orange-500" />
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </button>
 
-          <Card className="bg-gray-50">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">
-                    {scheduleStats.overdueTasks > 0 ? 'Overdue' : 'Completion Rate'}
-                  </p>
-                  <p className={`text-2xl font-bold ${scheduleStats.overdueTasks > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                    {scheduleStats.overdueTasks > 0 ? scheduleStats.overdueTasks : `${completionRate}%`}
-                  </p>
+          <button
+            type="button"
+            onClick={() => setLocation('/reports')}
+            className="text-left transition-shadow hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#C9A96E] rounded-lg"
+          >
+            <Card className="bg-gray-50 hover:bg-white transition-colors">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600 flex items-center gap-1">
+                      {scheduleStats.overdueTasks > 0 ? 'Overdue' : 'Completion Rate'}
+                      <ChevronRight className="h-3 w-3 opacity-50" />
+                    </p>
+                    <p className={`text-2xl font-bold ${scheduleStats.overdueTasks > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                      {scheduleStats.overdueTasks > 0 ? scheduleStats.overdueTasks : `${completionRate}%`}
+                    </p>
+                  </div>
+                  {scheduleStats.overdueTasks > 0 ? (
+                    <AlertTriangle className="h-8 w-8 text-red-500" />
+                  ) : (
+                    <TrendingUp className="h-8 w-8 text-green-500" />
+                  )}
                 </div>
-                {scheduleStats.overdueTasks > 0 ? (
-                  <AlertTriangle className="h-8 w-8 text-red-500" />
-                ) : (
-                  <TrendingUp className="h-8 w-8 text-green-500" />
-                )}
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </button>
         </div>
+
+        {/* Trades drill-down dialog */}
+        <Dialog open={tradesOpen} onOpenChange={setTradesOpen}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Wrench className="h-5 w-5 text-purple-500" />
+                Active Trades — {tradeBreakdown.length}
+              </DialogTitle>
+              <DialogDescription>
+                Trades currently in use across all open tasks.
+              </DialogDescription>
+            </DialogHeader>
+            {tradeBreakdown.length === 0 ? (
+              <div className="text-center py-8 text-sm text-gray-400">
+                No trades tagged on any current tasks. Set a trade on a task to see it here.
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {tradeBreakdown.map(t => (
+                  <div key={t.trade} className="flex items-start justify-between gap-3 rounded-lg border border-gray-200 p-3 hover:bg-gray-50">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-gray-900">{t.trade}</p>
+                      {t.projects.length > 0 && (
+                        <p className="text-xs text-gray-500 truncate">
+                          {t.projects.join(' · ')}
+                        </p>
+                      )}
+                    </div>
+                    <Badge className="bg-purple-100 text-purple-700 border-purple-200 flex-shrink-0">
+                      {t.taskCount} task{t.taskCount === 1 ? '' : 's'}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
 
         {/* Schedule Views */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">

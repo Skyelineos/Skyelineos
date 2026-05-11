@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { Redirect } from "wouter";
 import { useAuth } from "./AuthContext";
 
@@ -16,9 +16,19 @@ export default function ProtectedRoute({
   fallbackComponent
 }: ProtectedRouteProps) {
   const { user, loading, isAuthenticated, hasRole } = useAuth();
-  
+
   // Check for test mode directly from localStorage (synchronous check)
   const isTestMode = typeof window !== 'undefined' && localStorage.getItem('testMode') === 'true';
+
+  // Safety net: if auth hasn't resolved after 8 seconds, treat it as a stuck
+  // load and force a re-flow. Common cause: stale Firebase cache from a
+  // previous build. The "Reset" button wipes site data + reloads.
+  const [stuck, setStuck] = useState(false);
+  useEffect(() => {
+    if (!loading) return;
+    const t = setTimeout(() => setStuck(true), 8000);
+    return () => clearTimeout(t);
+  }, [loading]);
 
   // Show loading state while checking auth (skip if test mode)
   if (loading && !isTestMode) {
@@ -27,6 +37,31 @@ export default function ProtectedRoute({
         <div className="flex flex-col items-center space-y-4">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
           <div className="text-sm text-muted-foreground">Verifying authentication...</div>
+          {stuck && (
+            <div className="text-center max-w-sm pt-4 space-y-3">
+              <p className="text-xs text-amber-700">
+                Auth is taking unusually long. Something may be cached. Try a reset:
+              </p>
+              <button
+                type="button"
+                className="px-3 py-1.5 rounded border border-amber-400 bg-amber-50 text-amber-900 text-sm hover:bg-amber-100"
+                onClick={async () => {
+                  try {
+                    localStorage.clear();
+                    sessionStorage.clear();
+                    // Best-effort IndexedDB wipe for Firebase persistent caches.
+                    const dbs = (indexedDB as any).databases ? await (indexedDB as any).databases() : [];
+                    for (const d of dbs) {
+                      if (d?.name) indexedDB.deleteDatabase(d.name);
+                    }
+                  } catch {}
+                  window.location.href = '/sign-in';
+                }}
+              >
+                Reset and go to sign-in
+              </button>
+            </div>
+          )}
         </div>
       </div>
     );

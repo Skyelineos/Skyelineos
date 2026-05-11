@@ -32,6 +32,9 @@ import {
   ClipboardCheck,
   FileSpreadsheet,
   Wallet,
+  Receipt,
+  Lightbulb,
+  Sparkles,
 } from 'lucide-react';
 
 interface NavItem {
@@ -56,15 +59,15 @@ const TEAM_NAV: NavGroup[] = [
   {
     label: 'Sales & Estimating',
     items: [
-      { label: 'Sales / CRM', href: '/sales',      icon: TrendingUp },
+      { label: 'Sales & CRM', href: '/sales',      icon: TrendingUp },
       { label: 'Estimates',   href: '/estimates',  icon: DollarSign },
       { label: 'Contacts',    href: '/contacts',   icon: Users },
     ],
   },
   {
-    label: 'Jobs',
+    label: 'Projects',
     items: [
-      { label: 'Jobs',          href: '/projects',      icon: FolderOpen },
+      { label: 'Projects',      href: '/projects',      icon: FolderOpen },
       { label: 'Schedule',      href: '/schedule',      icon: Calendar },
       { label: 'Tasks',         href: '/tasks',         icon: ClipboardList },
       { label: 'Change Orders', href: '/change-orders', icon: GitPullRequest },
@@ -84,6 +87,7 @@ const TEAM_NAV: NavGroup[] = [
     label: 'Finance',
     items: [
       { label: 'Finance', href: '/finance',  icon: DollarSign },
+      { label: 'Bills (AI)', href: '/bills',  icon: Receipt },
       { label: 'Reports', href: '/reports',  icon: BarChart2 },
     ],
   },
@@ -106,6 +110,7 @@ const TEAM_NAV: NavGroup[] = [
     label: 'Creative',
     items: [
       { label: 'Design Board', href: '/design-board', icon: Palette },
+      { label: 'Content Studio', href: '/content-studio', icon: Sparkles },
       { label: 'Social Media', href: '/social-media', icon: Share2 },
     ],
   },
@@ -114,6 +119,7 @@ const TEAM_NAV: NavGroup[] = [
     items: [
       { label: 'Users',          href: '/users',          icon: UserCog },
       { label: 'Templates',      href: '/templates',      icon: Hammer },
+      { label: 'Playbook',       href: '/playbook',       icon: Lightbulb },
       { label: 'Import Center',  href: '/import-center',  icon: FileSpreadsheet },
       { label: 'Automations',    href: '/automations',    icon: Zap },
       { label: 'Subscriptions',  href: '/subscriptions',  icon: Wallet },
@@ -122,7 +128,7 @@ const TEAM_NAV: NavGroup[] = [
 ];
 
 // Management section only for admins
-const MANAGEMENT_HREFS = ['/users', '/templates', '/automations', '/import-center', '/subscriptions'];
+const MANAGEMENT_HREFS = ['/users', '/templates', '/playbook', '/automations', '/import-center', '/subscriptions'];
 
 // Designer sidebar — focused on their work
 const DESIGNER_NAV: NavGroup[] = [

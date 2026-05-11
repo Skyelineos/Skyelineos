@@ -16,6 +16,7 @@ import SelectionsBoard from '@/components/client-portal/SelectionsBoard';
 import ChangeOrdersTab from '@/components/client-portal/ChangeOrdersTab';
 import ClientFinancials from '@/components/client-portal/ClientFinancials';
 import ClientSiteLog from '@/components/site-log/ClientSiteLog';
+import { ClientTodayFeed } from '@/components/today/ClientTodayFeed';
 
 import {
   LayoutDashboard, Palette, DollarSign, FileText, MessageSquare,
@@ -137,11 +138,14 @@ export default function OdysseyClientPortal() {
     switch (currentTab) {
       case 'dashboard':
         return (
-          <ClientDashboard
-            projectId={selectedProjectId}
-            project={selectedProject}
-            onNavigate={handleNavigate}
-          />
+          <div className="space-y-6">
+            <ClientTodayFeed />
+            <ClientDashboard
+              projectId={selectedProjectId}
+              project={selectedProject}
+              onNavigate={handleNavigate}
+            />
+          </div>
         );
 
       case 'financials':

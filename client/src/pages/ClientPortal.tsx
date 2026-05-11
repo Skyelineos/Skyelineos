@@ -34,6 +34,7 @@ import {
 // Import section components
 import DocumentsSection from '@/components/client-portal/DocumentsSection';
 import ScheduleSection from '@/components/client-portal/ScheduleSection';
+import { ProjectReviewBanner } from '@/components/reviews/ProjectReviewBanner';
 import CommunicationSection from '@/components/client-portal/CommunicationSection';
 import PunchlistSection from '@/components/client-portal/PunchlistSection';
 import WarrantySection from '@/components/client-portal/WarrantySection';
@@ -240,6 +241,13 @@ export default function ClientPortal() {
 
     return (
       <div className="space-y-6">
+        {/* Review prompt — only shows when project is at the end of its lifecycle
+            and this client hasn't already submitted a review. */}
+        <ProjectReviewBanner
+          projectId={String(project.id)}
+          projectName={project.name}
+          projectStatus={project.status}
+        />
         {/* Project Header */}
         <Card className="bg-gray-50">
           <CardHeader>

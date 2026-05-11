@@ -7,6 +7,7 @@ import { BuildTrackerPro } from '@/modules/gantt/ui/BuildTrackerPro';
 import { useGantt } from '@/modules/gantt/state';
 import { sampleWbs } from '@/modules/gantt/demo/sampleWbs';
 import { loadSchedule } from '@/modules/gantt/useSchedulePersistence';
+import { ScheduleSignoffBanner } from '@/components/schedule/ScheduleSignoffBanner';
 
 function GanttScheduleWrapper({ projectId, projectName }: { projectId: string; projectName: string }) {
   const { setProjectId, setProjectName, setTasks, setLinks } = useGantt();
@@ -66,8 +67,11 @@ export default function ProjectSchedule() {
 
   return (
     <ProjectLayout projectId={projectId!} projectName={transformedProject.name}>
-      <div className="h-full overflow-hidden">
-        <GanttScheduleWrapper projectId={projectId!} projectName={transformedProject.name} />
+      <div className="h-full flex flex-col overflow-hidden">
+        <ScheduleSignoffBanner projectId={projectId!} />
+        <div className="flex-1 overflow-hidden">
+          <GanttScheduleWrapper projectId={projectId!} projectName={transformedProject.name} />
+        </div>
       </div>
     </ProjectLayout>
   );

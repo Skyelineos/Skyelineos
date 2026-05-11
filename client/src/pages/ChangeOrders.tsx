@@ -110,6 +110,14 @@ function isThisMonth(co: ChangeOrder): boolean {
 }
 
 export default function ChangeOrders() {
+  return (
+    <AppLayout>
+      <ChangeOrdersContent />
+    </AppLayout>
+  );
+}
+
+export function ChangeOrdersContent({ projectId: scopedProjectId }: { projectId?: string } = {}) {
   const { toast } = useToast();
 
   const [changeOrders, setChangeOrders] = useState<ChangeOrder[]>([]);
@@ -124,6 +132,17 @@ export default function ChangeOrders() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [selectedCO, setSelectedCO] = useState<ChangeOrder | null>(null);
+
+  // Prefill new-CO form with the scoped project (if any).
+  const seededForm = (): COFormData => {
+    const f = defaultForm();
+    if (scopedProjectId) {
+      const proj = projects.find(p => p.id === scopedProjectId);
+      f.projectId = scopedProjectId;
+      f.projectName = proj?.name || '';
+    }
+    return f;
+  };
   const [formData, setFormData] = useState<COFormData>(defaultForm());
   const [isSaving, setIsSaving] = useState(false);
 
@@ -182,7 +201,7 @@ export default function ChangeOrders() {
         createdAt: serverTimestamp()
       });
       setDialogOpen(false);
-      setFormData(defaultForm());
+      setFormData(seededForm());
       toast({ title: 'Change order created' });
     } catch (error: unknown) {
       toast({
@@ -246,8 +265,9 @@ export default function ChangeOrders() {
       (co.projectName && co.projectName.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (co.clientName && co.clientName.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchStatus = statusFilter === 'all' || co.status === statusFilter;
+    const matchScoped = !scopedProjectId || co.projectId === scopedProjectId;
     const matchProject = projectFilter === 'all' || co.projectId === projectFilter;
-    return matchSearch && matchStatus && matchProject;
+    return matchScoped && matchSearch && matchStatus && matchProject;
   });
 
   // Stats
@@ -263,8 +283,7 @@ export default function ChangeOrders() {
     .reduce((sum, co) => sum + (co.amount || 0), 0);
 
   return (
-    <AppLayout>
-      <div className="space-y-6">
+      <div className="space-y-6 p-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -277,7 +296,7 @@ export default function ChangeOrders() {
             )}
           </div>
           <Button
-            onClick={() => { setFormData(defaultForm()); setDialogOpen(true); }}
+            onClick={() => { setFormData(seededForm()); setDialogOpen(true); }}
             className="text-white"
             style={{ backgroundColor: '#C9A96E', borderColor: '#C9A96E' }}
           >
@@ -370,17 +389,19 @@ export default function ChangeOrders() {
               <SelectItem value="voided">Voided</SelectItem>
             </SelectContent>
           </Select>
-          <Select value={projectFilter} onValueChange={setProjectFilter}>
-            <SelectTrigger className="w-44">
-              <SelectValue placeholder="Project" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Projects</SelectItem>
-              {projects.map(p => (
-                <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {!scopedProjectId && (
+            <Select value={projectFilter} onValueChange={setProjectFilter}>
+              <SelectTrigger className="w-44">
+                <SelectValue placeholder="Project" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Projects</SelectItem>
+                {projects.map(p => (
+                  <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
 
         {/* Table / List */}
@@ -410,7 +431,7 @@ export default function ChangeOrders() {
               </p>
               {!searchTerm && statusFilter === 'all' && projectFilter === 'all' && (
                 <Button
-                  onClick={() => { setFormData(defaultForm()); setDialogOpen(true); }}
+                  onClick={() => { setFormData(seededForm()); setDialogOpen(true); }}
                   className="text-white"
                   style={{ backgroundColor: '#C9A96E', borderColor: '#C9A96E' }}
                 >
@@ -529,17 +550,21 @@ export default function ChangeOrders() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label>Project</Label>
-                  <Select value={formData.projectId || 'none'} onValueChange={handleProjectChange}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select project" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">No project</SelectItem>
-                      {projects.map(p => (
-                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  {scopedProjectId ? (
+                    <Input value={formData.projectName || 'This project'} disabled className="bg-gray-50" />
+                  ) : (
+                    <Select value={formData.projectId || 'none'} onValueChange={handleProjectChange}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select project" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No project</SelectItem>
+                        {projects.map(p => (
+                          <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
                 <div>
                   <Label>Client</Label>
@@ -679,6 +704,5 @@ export default function ChangeOrders() {
           </DialogContent>
         </Dialog>
       </div>
-    </AppLayout>
   );
 }

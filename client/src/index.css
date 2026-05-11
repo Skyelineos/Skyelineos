@@ -96,6 +96,14 @@
     --ring: 212.7 26.8% 83.9%;
   }
 
+  /* Lighten placeholder text across all inputs/textareas so it reads as a
+     hint, not real input. Italics + lower opacity make it visually distinct. */
+  input::placeholder,
+  textarea::placeholder {
+    color: rgba(107, 114, 128, 0.6) !important; /* gray-500 @ 60% */
+    font-style: italic;
+  }
+
   /* Base element responsiveness */
   *,
   *::before,

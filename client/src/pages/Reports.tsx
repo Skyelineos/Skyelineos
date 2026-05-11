@@ -2,10 +2,11 @@ import { useState, useEffect } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { collection, getDocs, orderBy, query, limit } from 'firebase/firestore';
+import { collection, getDocs, orderBy, query, limit, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
-import { BarChart2, Briefcase, DollarSign, CheckSquare, FileText, ClipboardList, CheckCircle } from 'lucide-react';
+import { BarChart2, Briefcase, DollarSign, CheckSquare, FileText, ClipboardList, CheckCircle, Receipt, GitPullRequest, AlertTriangle } from 'lucide-react';
+import { computeScheduleSlip, getStatusLabel } from '@/lib/projectUtils';
 
 interface KPIs {
   activeProjects: number;
@@ -14,6 +15,16 @@ interface KPIs {
   pendingEstimates: number;
   siteLogItems: number;
   resolvedIssues: number;
+  unpaidBills: number;
+  pendingChangeOrders: number;
+  overdueProjects: number;
+}
+
+interface OverdueProject {
+  id: string;
+  name: string;
+  status: string;
+  daysOverdue: number;
 }
 
 interface StatusCount {
@@ -66,8 +77,11 @@ const PROJECT_COLORS: Record<string, string> = {
   active: '#22c55e',
   completed: '#6366f1',
   planning: '#C9A96E',
+  punch_list: '#f59e0b',
+  closeout: '#3b82f6',
   on_hold: '#f59e0b',
   cancelled: '#ef4444',
+  archived: '#9ca3af',
 };
 
 const ESTIMATE_COLORS: Record<string, string> = {
@@ -86,30 +100,42 @@ export default function Reports() {
     pendingEstimates: 0,
     siteLogItems: 0,
     resolvedIssues: 0,
+    unpaidBills: 0,
+    pendingChangeOrders: 0,
+    overdueProjects: 0,
   });
   const [projectByStatus, setProjectByStatus] = useState<StatusCount>({});
   const [estimateByStatus, setEstimateByStatus] = useState<StatusCount>({});
   const [recentLogs, setRecentLogs] = useState<SiteLogEntry[]>([]);
+  const [overdue, setOverdue] = useState<OverdueProject[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function load() {
       try {
-        const [projSnap, estSnap, taskSnap, logSnap] = await Promise.all([
+        const [projSnap, estSnap, taskSnap, logSnap, billSnap, coSnap] = await Promise.all([
           getDocs(collection(db, 'projects')),
           getDocs(collection(db, 'estimates')),
           getDocs(collection(db, 'tasks')),
           getDocs(query(collection(db, 'siteLogs'), orderBy('createdAt', 'desc'), limit(5))),
+          getDocs(query(collection(db, 'financials'), where('type', '==', 'bill'))),
+          getDocs(collection(db, 'changeOrders')),
         ]);
 
         let contractValue = 0;
         const pByStatus: StatusCount = {};
+        const overdueList: OverdueProject[] = [];
         projSnap.docs.forEach(d => {
-          const data = d.data() as { status?: string; contractAmount?: number };
+          const data = d.data() as { name?: string; status?: string; contractAmount?: number; targetCompletion?: string; estimatedBudget?: number };
           const s = data.status || 'unknown';
           pByStatus[s] = (pByStatus[s] || 0) + 1;
-          contractValue += data.contractAmount || 0;
+          contractValue += data.contractAmount || data.estimatedBudget || 0;
+          const slip = computeScheduleSlip(data.targetCompletion, s, 0);
+          if (slip && slip.tone === 'red') {
+            overdueList.push({ id: d.id, name: data.name || 'Untitled', status: s, daysOverdue: Math.abs(slip.days) });
+          }
         });
+        overdueList.sort((a, b) => b.daysOverdue - a.daysOverdue);
 
         const eByStatus: StatusCount = {};
         estSnap.docs.forEach(d => {
@@ -130,6 +156,17 @@ export default function Reports() {
           if ((d.data() as { status?: string }).status === 'resolved') resolvedIssues += 1;
         });
 
+        let unpaidBills = 0;
+        billSnap.docs.forEach(d => {
+          const data = d.data() as { status?: string; amount?: number };
+          if (data.status !== 'paid') unpaidBills += data.amount || 0;
+        });
+
+        let pendingChangeOrders = 0;
+        coSnap.docs.forEach(d => {
+          if ((d.data() as { status?: string }).status === 'pending') pendingChangeOrders += 1;
+        });
+
         setKpis({
           activeProjects: pByStatus['active'] || 0,
           totalContractValue: contractValue,
@@ -137,10 +174,14 @@ export default function Reports() {
           pendingEstimates: eByStatus['sent'] || 0,
           siteLogItems,
           resolvedIssues,
+          unpaidBills,
+          pendingChangeOrders,
+          overdueProjects: overdueList.length,
         });
         setProjectByStatus(pByStatus);
         setEstimateByStatus(eByStatus);
         setRecentLogs(logSnap.docs.map(d => ({ id: d.id, ...d.data() } as SiteLogEntry)));
+        setOverdue(overdueList);
       } finally {
         setLoading(false);
       }
@@ -181,8 +222,11 @@ export default function Reports() {
               <KpiCard label="Contract Value" value={'$' + (kpis.totalContractValue / 1000).toFixed(0) + 'k'} icon={DollarSign} gold />
               <KpiCard label="Open Tasks" value={kpis.openTasks} icon={CheckSquare} />
               <KpiCard label="Pending Estimates" value={kpis.pendingEstimates} icon={FileText} />
+              <KpiCard label="Unpaid Bills" value={'$' + (kpis.unpaidBills / 1000).toFixed(0) + 'k'} icon={Receipt} />
+              <KpiCard label="Pending COs" value={kpis.pendingChangeOrders} icon={GitPullRequest} />
               <KpiCard label="Site Log Items" value={kpis.siteLogItems} icon={ClipboardList} />
               <KpiCard label="Resolved Issues" value={kpis.resolvedIssues} icon={CheckCircle} gold />
+              <KpiCard label="Overdue Projects" value={kpis.overdueProjects} icon={AlertTriangle} />
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -218,6 +262,34 @@ export default function Reports() {
                 </CardContent>
               </Card>
             </div>
+
+            {/* Schedule Health: overdue projects */}
+            {overdue.length > 0 && (
+              <Card className="border border-red-200 bg-red-50/40">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base font-semibold flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-red-600" />
+                    Schedule Health — Overdue
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="divide-y divide-red-100">
+                    {overdue.slice(0, 8).map(p => (
+                      <a key={p.id} href={`/projects/${p.id}/overview`} className="flex items-center gap-4 px-5 py-3 hover:bg-red-100/40 transition-colors">
+                        <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+                          <AlertTriangle className="w-4 h-4 text-red-600" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900 truncate">{p.name}</p>
+                          <p className="text-xs text-gray-500">{getStatusLabel(p.status)}</p>
+                        </div>
+                        <span className="text-xs font-semibold text-red-700 shrink-0">{p.daysOverdue}d overdue</span>
+                      </a>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Recent Activity */}
             <Card className="border border-gray-200">

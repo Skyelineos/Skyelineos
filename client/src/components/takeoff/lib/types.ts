@@ -79,10 +79,14 @@ export interface Takeoff {
   // Per-page calibration. Key = pageNumber as string.
   calibrations: Record<string, PageCalibration>;
   measurements: Measurement[];
+  // Manual ÷2 escape hatch — when true, all page calibrations have been
+  // scaled so measurements come out half their "raw" value. Used when a
+  // plan set consistently reads double (verify-point error, weird export).
+  halvedAllPages?: boolean;
   createdAt: string;
   createdBy: string;
   updatedAt: string;
   updatedBy: string;
 }
 
-export type TakeoffTool = 'pan' | 'calibrate' | 'linear' | 'area' | 'count';
+export type TakeoffTool = 'pan' | 'calibrate' | 'verify' | 'linear' | 'area' | 'count';

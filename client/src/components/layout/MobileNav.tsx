@@ -45,10 +45,10 @@ interface MobileNavProps {
 
 const getNavigationItems = () => [
   { label: 'Dashboard',             href: '/dashboard',            icon: LayoutDashboard, roles: ['Admin', 'ProjectManager'] as const },
-  { label: 'Sales / CRM',           href: '/sales',                icon: TrendingUp,      roles: ['Admin', 'ProjectManager'] as const },
+  { label: 'Sales & CRM',           href: '/sales',                icon: TrendingUp,      roles: ['Admin', 'ProjectManager'] as const },
   { label: 'Estimates',             href: '/estimates',            icon: DollarSign,      roles: ['Admin'] as const },
   { label: 'Contacts',              href: '/contacts',             icon: Users,           roles: ['Admin', 'ProjectManager'] as const },
-  { label: 'Jobs',                  href: '/projects',             icon: FolderOpen,      roles: ['Admin', 'ProjectManager'] as const },
+  { label: 'Projects',              href: '/projects',             icon: FolderOpen,      roles: ['Admin', 'ProjectManager'] as const },
   { label: 'Schedule',              href: '/schedule',             icon: Calendar,        roles: ['Admin', 'ProjectManager'] as const },
   { label: 'Tasks',                 href: '/tasks',                icon: ClipboardList,   roles: ['Admin', 'ProjectManager'] as const },
   { label: 'Change Orders',         href: '/change-orders',        icon: GitPullRequest,  roles: ['Admin', 'ProjectManager'] as const },

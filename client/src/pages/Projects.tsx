@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'wouter';
+import { Link, useLocation } from 'wouter';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { AppLayout } from '@/components/layout/AppLayout';
 
@@ -296,7 +296,7 @@ function ProjectCardContent({
 }
 
 export default function Projects() {
-
+  const [, setLocation] = useLocation();
   const [isNewProjectFormOpen, setIsNewProjectFormOpen] = useState(false);
   const [deleteProject, setDeleteProject] = useState<{ id: number; name: string } | null>(null);
   const [archiveProject, setArchiveProject] = useState<{ id: number; name: string } | null>(null);
@@ -821,13 +821,17 @@ export default function Projects() {
                 {filteredProjects.map((project, index) => {
                   
                   return (
-                    <tr 
-                      key={project.id} 
+                    <tr
+                      key={project.id}
                       className={`border-b hover:bg-gray-50 cursor-pointer ${index % 2 === 0 ? 'bg-white' : 'bg-gray-25'}`}
+                      onMouseEnter={() => !isEditMode && prefetchProject(project.id)}
+                      onTouchStart={() => !isEditMode && prefetchProject(project.id)}
                       onClick={() => {
                         if (!isEditMode) {
                           prefetchProject(project.id);
-                          window.location.href = `/projects/${project.id}`;
+                          // Client-side navigation keeps React Query's cache
+                          // warm — no full page reload, no re-fetch from cold.
+                          setLocation(`/projects/${project.id}`);
                         }
                       }}
                     >
@@ -876,7 +880,7 @@ export default function Projects() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => window.location.href = `/projects/${project.id}`}>
+                            <DropdownMenuItem onClick={() => setLocation(`/projects/${project.id}`)}>
                               <FolderOpen className="mr-2 h-4 w-4" />
                               View Project
                             </DropdownMenuItem>

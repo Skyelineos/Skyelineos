@@ -4,6 +4,8 @@ import { useAuth } from '@/hooks/use-auth';
 import { useAdminView } from '@/contexts/AdminViewContext';
 import { useQuery } from '@tanstack/react-query';
 import { Contact } from '@shared/types';
+import { collection, getDocs, query as fsQuery, orderBy } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 // Mock default users for each portal type - in production, these would come from API
 const DEFAULT_PORTAL_USERS = {
@@ -36,10 +38,23 @@ export function useAutoAdminView() {
   const hasRole = (role: string) => user?.role?.toLowerCase() === role.toLowerCase();
   const { isAdminView, enterAdminView, exitAdminView } = useAdminView();
 
-  // Get contacts for selecting default users
+  // Get contacts for selecting default users (Firestore direct).
   const { data: contacts = [] } = useQuery({
     queryKey: ['/api/contacts'],
-    enabled: hasRole('admin')
+    enabled: hasRole('admin'),
+    queryFn: async () => {
+      const snap = await getDocs(fsQuery(collection(db, 'contacts'), orderBy('name', 'asc')));
+      return snap.docs.map(d => {
+        const data = d.data() as any;
+        return {
+          id: d.id,
+          name: data.name || '',
+          email: data.email,
+          company: data.company,
+          role: data.role || data.type || '',
+        };
+      });
+    },
   });
 
   // Cast contacts to proper type

@@ -1,6 +1,6 @@
-import { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { doc, getDoc } from 'firebase/firestore';
+import { useEffect, useMemo, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { collection, doc, getDoc, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { db, auth } from '@/lib/firebase';
 import { cacheKeys, queryCache, invalidateQueries } from '@/lib/apiCache';
 import { transformDbProject, TransformedProject } from '@/lib/projectUtils';
@@ -29,18 +29,62 @@ export function useOptimizedProjects(): OptimizedProjectsResult {
     throwOnError: false,
   });
 
-  // Fetch projects with optimized caching - cached for 5 minutes
-  const { 
-    data: dbProjects = [], 
-    isLoading: projectsLoading, 
-    error,
-    refetch 
-  } = useQuery<DatabaseProject[]>({
-    queryKey: cacheKeys.projects(),
-    ...queryCache.dynamicData,
-    // Allow immediate refetch on mutations for better UX
-    refetchOnMount: 'always',
-  });
+  // Live subscription to the projects collection. onSnapshot serves cached
+  // data instantly (from IndexedDB), then streams in any updates — second
+  // visits feel immediate instead of waiting for a fresh network round-trip.
+  const [dbProjects, setDbProjects] = useState<DatabaseProject[]>([]);
+  const [projectsLoading, setProjectsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    const q = query(collection(db, 'projects'), orderBy('createdAt', 'desc'));
+    const unsub = onSnapshot(
+      q,
+      snap => {
+        const rows: DatabaseProject[] = snap.docs.map(d => {
+          const data = d.data() as any;
+          return {
+            id: d.id,
+            name: data.name || '',
+            description: data.description || '',
+            clientName: data.clientName || '',
+            clientEmail: data.clientEmail || '',
+            clientPhone: data.clientPhone || '',
+            address: data.address || '',
+            status: data.status || 'planning',
+            estimatedBudget: data.contractAmount ?? data.estimatedBudget ?? data.budget ?? 0,
+            actualCost: data.actualCost ?? data.spent ?? 0,
+            startDate: data.startDate || '',
+            targetCompletion: data.targetCompletion || data.estimatedCompletion || '',
+            squareFootage: data.squareFootage || 0,
+            projectMetadata: data.projectMetadata || '',
+            // carry through fields the project overview reads but list doesn't
+            createdAt: data.createdAt,
+            projectCode: data.projectCode,
+            designerChoice: data.designerChoice,
+            designerContactId: data.designerContactId,
+            designerName: data.designerName,
+            designerEmail: data.designerEmail,
+            assignedProjectManager: data.assignedProjectManager,
+            notes: data.notes,
+          } as any;
+        });
+        setDbProjects(rows);
+        setProjectsLoading(false);
+        // Pre-warm React Query's per-project cache so opening any project
+        // from the list resolves instantly — no second round-trip needed.
+        rows.forEach(p => {
+          queryClient.setQueryData([`/api/projects/${p.id}`], p);
+        });
+      },
+      e => {
+        setError(e as any);
+        setProjectsLoading(false);
+      },
+    );
+    return () => unsub();
+  }, [queryClient]);
+  const refetch = () => {/* live listener — re-render is automatic */};
 
   // Optimized transformation with memoization
   const projects = useMemo(() => {
@@ -53,36 +97,44 @@ export function useOptimizedProjects(): OptimizedProjectsResult {
       );
   }, [dbProjects, projectManagers]);
 
-  // Prefetch individual project data for improved navigation performance
+  // Prefetch individual project data on hover so opening the project page
+  // feels instant. Reads the project doc into React Query's cache; the
+  // detail page will then resolve immediately on mount.
   const prefetchProject = useMemo(() => {
-    const prefetchFn = (projectId: number) => {
-      // Convert to string for comparison since project.id might be string
-      const projectIdStr = projectId?.toString();
-      if (!projectIdStr || !projects) return;
-      
-      // Only prefetch if we have the project in our list
-      const project = projects.find((p: TransformedProject) => p.id?.toString() === projectIdStr);
-      if (project) {
-        // Prefetch related data that will be needed on the project detail page
-        const queries = [
-          [`/api/projects/${projectId}`],
-          [`/api/estimates`, projectIdStr],
-          [`/api/bids/${projectId}`],
-          [`/api/projects/${projectId}/photos`],
-          [`/api/documents`, { projectId: projectIdStr }],
-          [`/api/projects/${projectId}/tasks`],
-        ];
-
-        // Prefetch in background without blocking UI
-        queries.forEach(queryKey => {
-          // Note: In real implementation, would use queryClient.prefetchQuery
-          // but avoiding global queryClient import for cleaner architecture
-        });
-      }
+    return (projectId: string | number) => {
+      const idStr = String(projectId || '');
+      if (!idStr) return;
+      // Don't refetch if we have it already and it's fresh.
+      const cached = queryClient.getQueryData([`/api/projects/${idStr}`]);
+      if (cached) return;
+      queryClient.prefetchQuery({
+        queryKey: [`/api/projects/${idStr}`],
+        queryFn: async () => {
+          const snap = await getDoc(doc(db, 'projects', idStr));
+          if (!snap.exists()) return null;
+          const d = snap.data();
+          return {
+            id: snap.id,
+            name: d.name || '',
+            clientName: d.clientName || '',
+            clientEmail: d.clientEmail || '',
+            clientPhone: d.clientPhone || '',
+            address: d.address || '',
+            status: d.status || 'planning',
+            estimatedBudget: d.contractAmount ?? d.budget ?? d.estimatedBudget ?? 0,
+            actualCost: d.spent ?? d.actualCost ?? 0,
+            startDate: d.startDate || '',
+            targetCompletion: d.estimatedCompletion || d.targetCompletion || '',
+            squareFootage: d.squareFootage || 0,
+            assignedProjectManager: d.assignedProjectManager || '',
+            projectMetadata: d.projectMetadata || '',
+            notes: d.notes || '',
+          } as DatabaseProject;
+        },
+        staleTime: 60_000,
+      });
     };
-
-    return prefetchFn;
-  }, [projects]);
+  }, [queryClient]);
 
   return {
     projects,
@@ -107,50 +159,35 @@ export function useOptimizedProject(projectId: string | undefined) {
     enabled: !!projectId,
     ...queryCache.dynamicData,
     queryFn: async () => {
-      // Try Firestore first — projects created from the Sales/CRM pipeline live here
-      try {
-        const snap = await getDoc(doc(db, 'projects', projectId!));
-        if (snap.exists()) {
-          const d = snap.data();
-          return {
-            id: snap.id,
-            name: d.name || '',
-            clientName: d.clientName || '',
-            clientEmail: d.clientEmail || '',
-            clientPhone: d.clientPhone || '',
-            address: d.address || '',
-            status: d.status || 'planning',
-            estimatedBudget: d.contractAmount ?? d.budget ?? d.estimatedBudget ?? 0,
-            actualCost: d.spent ?? d.actualCost ?? 0,
-            startDate: d.startDate || '',
-            targetCompletion: d.estimatedCompletion || d.targetCompletion || '',
-            squareFootage: d.squareFootage || 0,
-            assignedProjectManager: d.assignedProjectManager || '',
-            projectMetadata: d.projectMetadata || '',
-            notes: d.notes || '',
-          } as DatabaseProject;
-        }
-      } catch {
-        // Firestore unavailable — fall through to REST
-      }
-
-      // Fall back to REST API for legacy / server-created projects
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      try {
-        const currentUser = auth.currentUser;
-        if (currentUser) {
-          const token = await currentUser.getIdToken();
-          if (token) headers['Authorization'] = `Bearer ${token}`;
-        }
-      } catch {}
-      const res = await fetch(`/api/projects/${projectId}`, { headers });
-      if (!res.ok) throw new Error(`${res.status}`);
-      return res.json() as Promise<DatabaseProject>;
+      // Read from Firestore. The `/api/projects/{id}` fallback was removed
+      // because the org IAM policy blocks the Cloud Run endpoint and the
+      // failed fetch added ~1s of latency on every project open.
+      const snap = await getDoc(doc(db, 'projects', projectId!));
+      if (!snap.exists()) throw new Error('404');
+      const d = snap.data();
+      // Spread the raw doc first so any non-mapped fields (designerChoice,
+      // designerName, designerEmail, designerContactId, projectCode, etc.)
+      // pass through. Then override with safe normalized fallbacks.
+      return {
+        ...(d as any),
+        id: snap.id,
+        name: d.name || '',
+        clientName: d.clientName || '',
+        clientEmail: d.clientEmail || '',
+        clientPhone: d.clientPhone || '',
+        address: d.address || '',
+        status: d.status || 'planning',
+        estimatedBudget: d.contractAmount ?? d.budget ?? d.estimatedBudget ?? 0,
+        actualCost: d.spent ?? d.actualCost ?? 0,
+        startDate: d.startDate || '',
+        targetCompletion: d.estimatedCompletion || d.targetCompletion || '',
+        squareFootage: d.squareFootage || 0,
+        assignedProjectManager: d.assignedProjectManager || '',
+        projectMetadata: d.projectMetadata || '',
+        notes: d.notes || '',
+      } as any;
     },
-    retry: (failureCount, error: Error) => {
-      if (failureCount < 3 && !error.message.includes('404')) return true;
-      return false;
-    },
+    retry: (failureCount, error: Error) => failureCount < 1 && !error.message.includes('404'),
   });
 
   const transformedProject = useMemo(() => {

@@ -11,7 +11,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import {
-  collection, addDoc, getDocs, query, orderBy, serverTimestamp, where,
+  collection, addDoc, getDocs, getDoc, doc, query, orderBy, serverTimestamp, where,
 } from 'firebase/firestore';
 import {
   ref as storageRef, uploadBytes, getDownloadURL,
@@ -146,9 +146,24 @@ export function NewLogDialog({ open, onOpenChange, defaultProjectId, onCreated }
     setSaving(true);
 
     try {
+      // Resolve projectName from local state, project list, or Firestore fallback.
+      // Race condition: the save can fire before the project list useEffect
+      // populates `projectName`, leaving the doc with no name to display.
+      let resolvedProjectName = projectName;
+      if (!resolvedProjectName && projectId) {
+        const local = projects.find(p => p.id === projectId);
+        resolvedProjectName = local?.name || '';
+        if (!resolvedProjectName) {
+          try {
+            const snap = await getDoc(doc(db, 'projects', projectId));
+            if (snap.exists()) resolvedProjectName = (snap.data() as any).name || '';
+          } catch {}
+        }
+      }
+
       const logRef = await addDoc(collection(db, 'siteLogs'), {
         projectId,
-        projectName,
+        projectName: resolvedProjectName,
         title: title || `Log – ${new Date().toLocaleDateString()}`,
         createdBy: user?.firebaseUid || '',
         createdByName: user?.name || 'Unknown',

@@ -98,11 +98,16 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // Bids — GC full access; public token bids allowed (handled by Cloud Functions)
+    // Bids — GC full access; subs can read+write their own portal-submitted bids;
+    // public token bids still allowed for legacy flow
     match /bids/{bidId} {
-      allow read: if isGC();
-      allow create: if true; // public bid submissions allowed (token validated in Cloud Function)
-      allow update, delete: if isGC();
+      allow read: if isGC()
+        || (isSub() && resource.data.subContactId == request.auth.uid);
+      allow create: if true; // open create — Firestore field validations gate misuse
+      allow update: if isGC()
+        || (isSub() && resource.data.subContactId == request.auth.uid
+            && request.resource.data.status != 'awarded'); // sub can revise but not self-award
+      allow delete: if isGC();
     }
 
     // Schedule tasks
@@ -221,6 +226,94 @@ service cloud.firestore {
       allow delete: if isAdmin() || isGC();
     }
 
+    // Sub-scoped takeoffs — each subcontractor builds their own takeoff against
+    // a project's plans for bidding purposes. Per-doc isolation: a sub can only
+    // read/write their own takeoffs (matched on subUserId). GC can read all
+    // (to surface attached measurements when reviewing bids).
+    match /subTakeoffs/{takeoffId} {
+      allow read: if isGC()
+        || (isSignedIn() && resource.data.subUserId == request.auth.uid);
+      allow create: if isSignedIn()
+        && request.resource.data.subUserId == request.auth.uid;
+      allow update: if isSignedIn() && resource.data.subUserId == request.auth.uid;
+      allow delete: if isAdmin()
+        || (isSignedIn() && resource.data.subUserId == request.auth.uid);
+    }
+
+    // Bid Requests — invitations sent to subs to bid on a project scope.
+    // GC creates/manages; invited subs read only requests where they're listed.
+    match /projects/{projectId}/bidRequests/{requestId} {
+      allow read: if isGC() || isDesigner()
+        || (isSub() && request.auth.uid in resource.data.invitedSubIds);
+      allow create, update: if isGC();
+      allow delete: if isAdmin() || isGC();
+    }
+
+    // Bid Packages — wrap multiple bidRequests (one per trade) under one
+    // project-wide invite. GC manages; subs can read packages they have at
+    // least one bidRequest invite to (resolved client-side from bidRequests).
+    match /projects/{projectId}/bidPackages/{packageId} {
+      allow read: if isGC() || isDesigner() || isSub();
+      allow create, update: if isGC();
+      allow delete: if isAdmin() || isGC();
+    }
+
+    // Dashboard reminders (e.g., "select a designer in 7 days"). Each is
+    // scoped to a single GC user via ownerUid.
+    match /reminders/{reminderId} {
+      allow read: if isSignedIn() && (resource.data.ownerUid == request.auth.uid || isAdmin());
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn() && (resource.data.ownerUid == request.auth.uid || isAdmin());
+    }
+
+    // Project reviews — clients submit; GC reads + approves + can mark shared.
+    // The submitting client owns the doc via clientUid.
+    match /projectReviews/{reviewId} {
+      allow read: if isGC()
+        || (isSignedIn() && resource.data.clientUid == request.auth.uid);
+      allow create: if isSignedIn()
+        && request.resource.data.clientUid == request.auth.uid;
+      allow update: if isGC();
+      allow delete: if isAdmin();
+    }
+
+    // Single-doc settings (e.g., settings/google with placeId). GC manages.
+    match /settings/{settingId} {
+      allow read: if isSignedIn();
+      allow write: if isGC();
+    }
+
+    // Playbook — Tyler's private internal journal of best practices, delay
+    // causes, design tips, vendor recs. Admin/GC only. Surfacing to designers
+    // or clients happens later by reading specific entries explicitly in
+    // designer/client views, not by widening these rules.
+    match /playbookEntries/{entryId} {
+      allow read, write: if isGC();
+    }
+
+    // Top-level project schedule docs (Gantt module persistence). Each doc id
+    // is a projectId. Clients/designers/subs need read access so they can see
+    // the same Gantt the GC is editing; write stays GC-only.
+    match /schedules/{projectId} {
+      allow read: if isSignedIn();
+      allow write: if isGC();
+    }
+
+    // Reusable schedule templates that the GC saves from the Gantt editor.
+    match /scheduleTemplates/{templateId} {
+      allow read: if isSignedIn();
+      allow write: if isGC();
+    }
+
+    // Portal invites — tokens created by a GC that anonymous visitors can
+    // resolve on the sign-in page to pre-fill email + auto-link to a contact
+    // after they register. Read is open by design (a token is itself the
+    // capability); write is GC-only.
+    match /portalInvites/{inviteId} {
+      allow read: if true;
+      allow write: if isGC();
+    }
+
     // Walkthroughs — site media (photos/videos) captured on-site by GC, assigned to subs.
     // GC sees all; subs see only items assigned to them; designers can view (often related to selections).
     match /projects/{projectId}/walkthroughs/{walkthroughId} {
@@ -250,6 +343,13 @@ service cloud.firestore {
     // Subscriptions — paid services tracker. Contains API keys → admin-only access.
     match /subscriptions/{subId} {
       allow read, write: if isAdmin();
+    }
+
+    // Content Studio drafts — GC + admin + project managers manage; designers can read.
+    match /contentDrafts/{draftId} {
+      allow read: if isGC() || isDesigner();
+      allow create, update: if isGC();
+      allow delete: if isAdmin() || isGC();
     }
 
     // Notifications — each user reads only their own. Any signed-in user can write

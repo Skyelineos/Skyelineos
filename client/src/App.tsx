@@ -15,6 +15,7 @@ import { RoleGuard } from "@/components/auth/RoleGuard";
 import { RoleBasedRedirect } from "@/components/auth/RoleBasedRedirect";
 import { NavigationHandler } from "@/components/navigation/NavigationHandler";
 import { MinimalSpinner } from "@/components/layout/MinimalSpinner";
+import { ErrorBoundary } from "@/components/common/ErrorBoundary";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { useState, Suspense, useEffect, lazy } from "react";
 import { usePerformanceOptimizations } from "@/hooks/usePerformanceOptimizations";
@@ -54,6 +55,8 @@ const UserManagement = lazy(() => import("@/pages/UserManagement"));
 const ProjectDesign = lazy(() => import("@/pages/ProjectDesign"));
 const ProjectTakeoff = lazy(() => import("@/pages/ProjectTakeoff"));
 const Subscriptions = lazy(() => import("@/pages/Subscriptions"));
+const Bills = lazy(() => import("@/pages/Bills"));
+const ContentStudio = lazy(() => import("@/pages/ContentStudio"));
 const SiteLog = lazy(() => import("@/pages/SiteLog"));
 const Tasks = lazy(() => import("@/pages/Tasks"));
 const ChangeOrders = lazy(() => import("@/pages/ChangeOrders"));
@@ -66,9 +69,15 @@ const Reports = lazy(() => import("@/pages/Reports"));
 const CommsLog = lazy(() => import("@/pages/CommsLog"));
 const DesignBoard = lazy(() => import("@/pages/DesignBoard"));
 const Templates = lazy(() => import("@/pages/Templates"));
+const Playbook = lazy(() => import("@/pages/Playbook"));
 const SocialMedia = lazy(() => import("@/pages/SocialMedia"));
 const Automations = lazy(() => import("@/pages/Automations"));
 const ImportCenter = lazy(() => import("@/pages/ImportCenter"));
+const ProjectTasks = lazy(() => import("@/pages/ProjectTasks"));
+const ProjectChangeOrders = lazy(() => import("@/pages/ProjectChangeOrders"));
+const ProjectSiteLog = lazy(() => import("@/pages/ProjectSiteLog"));
+const ProjectBills = lazy(() => import("@/pages/ProjectBills"));
+const ProjectWalkthroughs = lazy(() => import("@/pages/ProjectWalkthroughs"));
 
 function Router() {
   // Initialize performance optimizations for faster loading
@@ -122,7 +131,9 @@ function Router() {
         <ProtectedRoute>
           <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
             <Suspense fallback={<MinimalSpinner title="Loading Overview" />}>
-              <ProjectOverview />
+              <ErrorBoundary>
+                <ProjectOverview />
+              </ErrorBoundary>
             </Suspense>
           </RoleGuard>
         </ProtectedRoute>
@@ -153,6 +164,26 @@ function Router() {
           <RoleGuard allowedRoles={['admin']} showNotAuthorized>
             <Suspense fallback={<MinimalSpinner title="Loading Subscriptions" />}>
               <Subscriptions />
+            </Suspense>
+          </RoleGuard>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/bills">
+        <ProtectedRoute>
+          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+            <Suspense fallback={<MinimalSpinner title="Loading Bills" />}>
+              <Bills />
+            </Suspense>
+          </RoleGuard>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/content-studio">
+        <ProtectedRoute>
+          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+            <Suspense fallback={<MinimalSpinner title="Loading Content Studio" />}>
+              <ContentStudio />
             </Suspense>
           </RoleGuard>
         </ProtectedRoute>
@@ -213,6 +244,56 @@ function Router() {
           <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
             <Suspense fallback={<MinimalSpinner title="Loading Design Snapshot" />}>
               <ProjectDesign />
+            </Suspense>
+          </RoleGuard>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/projects/:id/tasks">
+        <ProtectedRoute>
+          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+            <Suspense fallback={<MinimalSpinner title="Loading Tasks" />}>
+              <ProjectTasks />
+            </Suspense>
+          </RoleGuard>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/projects/:id/change-orders">
+        <ProtectedRoute>
+          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+            <Suspense fallback={<MinimalSpinner title="Loading Change Orders" />}>
+              <ProjectChangeOrders />
+            </Suspense>
+          </RoleGuard>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/projects/:id/site-log">
+        <ProtectedRoute>
+          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+            <Suspense fallback={<MinimalSpinner title="Loading Site Log" />}>
+              <ProjectSiteLog />
+            </Suspense>
+          </RoleGuard>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/projects/:id/bills">
+        <ProtectedRoute>
+          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+            <Suspense fallback={<MinimalSpinner title="Loading Bills" />}>
+              <ProjectBills />
+            </Suspense>
+          </RoleGuard>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/projects/:id/walkthroughs">
+        <ProtectedRoute>
+          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+            <Suspense fallback={<MinimalSpinner title="Loading Walkthroughs" />}>
+              <ProjectWalkthroughs />
             </Suspense>
           </RoleGuard>
         </ProtectedRoute>
@@ -542,6 +623,16 @@ function Router() {
           <RoleGuard allowedRoles={['admin']} showNotAuthorized>
             <Suspense fallback={<MinimalSpinner title="Loading Automations" />}>
               <Automations />
+            </Suspense>
+          </RoleGuard>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/playbook">
+        <ProtectedRoute>
+          <RoleGuard allowedRoles={['admin', 'gc']} showNotAuthorized>
+            <Suspense fallback={<MinimalSpinner title="Loading Playbook" />}>
+              <Playbook />
             </Suspense>
           </RoleGuard>
         </ProtectedRoute>

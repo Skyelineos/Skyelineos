@@ -1,6 +1,10 @@
+import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'wouter';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { buildProjectCode } from '@/lib/projectUtils';
 import {
   FileText,
   Hammer,
@@ -17,6 +21,11 @@ import {
   X,
   Menu,
   Palette,
+  CheckSquare,
+  GitPullRequest,
+  ClipboardCheck,
+  Receipt,
+  Ruler,
 } from 'lucide-react';
 
 interface ProjectSidebarProps {
@@ -27,67 +36,50 @@ interface ProjectSidebarProps {
 }
 
 const sidebarItems = [
-  {
-    id: 'overview',
-    label: 'Overview',
-    icon: ClipboardList,
-    description: 'Project summary and key information'
-  },
-  {
-    id: 'estimates',
-    label: 'Estimates',
-    icon: FileText,
-    description: 'Create and manage project estimates'
-  },
-  {
-    id: 'bids',
-    label: 'Bid Management',
-    icon: Hammer,
-    description: 'Manage subcontractor bidding process'
-  },
-  {
-    id: 'schedule',
-    label: 'Schedule',
-    icon: Calendar,
-    description: 'Project timeline and milestones'
-  },
-  {
-    id: 'budget',
-    label: 'Budget',
-    icon: DollarSign,
-    description: 'Financial tracking and cost analysis'
-  },
-  {
-    id: 'documents',
-    label: 'Documents',
-    icon: FolderOpen,
-    description: 'Project files and documentation'
-  },
-  {
-    id: 'photos',
-    label: 'Photos',
-    icon: Camera,
-    description: 'Progress photos and visual documentation'
-  },
-  {
-    id: 'design',
-    label: 'Design',
-    icon: Palette,
-    description: 'Designer finish selections snapshot'
-  },
-  {
-    id: 'messages',
-    label: 'Messages',
-    icon: MessageCircle,
-    description: 'Project communications and messages'
-  }
+  { id: 'overview',      label: 'Overview',      icon: ClipboardList },
+  { id: 'tasks',         label: 'Tasks',         icon: CheckSquare },
+  { id: 'schedule',      label: 'Schedule',      icon: Calendar },
+  { id: 'estimates',     label: 'Estimates',     icon: FileText },
+  { id: 'takeoff',       label: 'Takeoff',       icon: Ruler },
+  { id: 'bids',          label: 'Bids',          icon: Hammer },
+  { id: 'budget',        label: 'Budget',        icon: DollarSign },
+  { id: 'bills',         label: 'Bills',         icon: Receipt },
+  { id: 'change-orders', label: 'Change Orders', icon: GitPullRequest },
+  { id: 'site-log',      label: 'Site Log',      icon: ClipboardCheck },
+  { id: 'walkthroughs',  label: 'Walkthroughs',  icon: Users },
+  { id: 'documents',     label: 'Documents',     icon: FolderOpen },
+  { id: 'photos',        label: 'Photos',        icon: Camera },
+  { id: 'design',        label: 'Design',        icon: Palette },
 ];
 
 export function ProjectSidebar({ projectId, projectName, isOpen = false, onToggle }: ProjectSidebarProps) {
   const [location, setLocation] = useLocation();
-  
+
   // Extract current tab from URL
   const currentTab = location.split('/')[3] || 'overview';
+
+  // Resolve the friendly project code (LastName + MMDDYYYY). Reads from cache
+  // first thanks to persistent Firestore offline cache.
+  const [projectCode, setProjectCode] = useState('');
+  useEffect(() => {
+    if (!projectId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const snap = await getDoc(doc(db, 'projects', projectId));
+        if (cancelled) return;
+        if (snap.exists()) {
+          const data = snap.data() as any;
+          const code = data.projectCode
+            || buildProjectCode(data.clientName, data.createdAt);
+          setProjectCode(code);
+        }
+      } catch {
+        // Best-effort; fall back to empty.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [projectId]);
 
   const handleBackClick = () => {
     setLocation('/projects');
@@ -132,7 +124,7 @@ export function ProjectSidebar({ projectId, projectName, isOpen = false, onToggl
               {projectName}
             </h2>
             <p className="text-sm text-slate-300">
-              Project ID: PRJ-{String(projectId).padStart(4, '0')}
+              Project ID: {projectCode || '…'}
             </p>
           </div>
         </div>

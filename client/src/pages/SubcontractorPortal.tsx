@@ -22,6 +22,8 @@ import {
 } from 'lucide-react';
 import PhotosTab from '@/components/photos/PhotosTab';
 import { MessagingModule } from '@/components/messaging/MessagingModule';
+import { SubTodayFeed } from '@/components/today/SubTodayFeed';
+import { SubBidRequestsTab } from '@/components/bidding/SubBidRequestsTab';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -234,6 +236,9 @@ export default function SubcontractorPortal() {
 
   const renderDashboard = () => (
     <div className="space-y-6">
+      <SubTodayFeed />
+
+      {/* Legacy stats (kept below the today feed) */}
       {/* Stat cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
@@ -622,6 +627,7 @@ export default function SubcontractorPortal() {
 
     switch (currentTab) {
       case 'dashboard': return renderDashboard();
+      case 'bid-requests': return <SubBidRequestsTab />;
       case 'bids': return renderBids();
       case 'schedule': return renderSchedule();
       case 'compliance': return renderCompliance();

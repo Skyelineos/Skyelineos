@@ -202,6 +202,14 @@ function LogCard({ log, onStatusChange }: { log: SiteLogDoc; onStatusChange: (id
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function SiteLog() {
+  return (
+    <AppLayout>
+      <SiteLogContent />
+    </AppLayout>
+  );
+}
+
+export function SiteLogContent({ projectId: scopedProjectId }: { projectId?: string } = {}) {
   const { user } = useAuth();
   const [logs, setLogs] = useState<SiteLogDoc[]>([]);
   const [loading, setLoading] = useState(true);
@@ -232,11 +240,15 @@ export default function SiteLog() {
   };
 
   const filtered = logs.filter(l => {
+    if (scopedProjectId && l.projectId !== scopedProjectId) return false;
     if (filterProject !== '__all__' && l.projectId !== filterProject) return false;
     if (filterStatus !== 'all' && l.status !== filterStatus) return false;
     if (search) {
       const s = search.toLowerCase();
-      if (!l.title.toLowerCase().includes(s) && !l.projectName.toLowerCase().includes(s) && !l.createdByName.toLowerCase().includes(s)) return false;
+      const title = (l.title || '').toLowerCase();
+      const proj  = (l.projectName || '').toLowerCase();
+      const by    = (l.createdByName || '').toLowerCase();
+      if (!title.includes(s) && !proj.includes(s) && !by.includes(s)) return false;
     }
     return true;
   });
@@ -245,8 +257,8 @@ export default function SiteLog() {
   const clientCount = logs.filter(l => l.createdByRole === 'client').length;
 
   return (
-    <AppLayout>
-      <div className="space-y-5">
+    <>
+      <div className="space-y-5 p-6">
         {/* Header */}
         <div className="flex items-start justify-between">
           <div>
@@ -277,15 +289,17 @@ export default function SiteLog() {
               className="pl-9 h-9 text-sm"
             />
           </div>
-          <Select value={filterProject} onValueChange={setFilterProject}>
-            <SelectTrigger className="h-9 text-sm w-48">
-              <SelectValue placeholder="All projects" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__all__">All projects</SelectItem>
-              {projects.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
+          {!scopedProjectId && (
+            <Select value={filterProject} onValueChange={setFilterProject}>
+              <SelectTrigger className="h-9 text-sm w-48">
+                <SelectValue placeholder="All projects" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">All projects</SelectItem>
+                {projects.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
           <Select value={filterStatus} onValueChange={v => setFilterStatus(v as any)}>
             <SelectTrigger className="h-9 text-sm w-36">
               <SelectValue />
@@ -322,7 +336,8 @@ export default function SiteLog() {
         open={newLogOpen}
         onOpenChange={setNewLogOpen}
         onCreated={() => {}}
+        defaultProjectId={scopedProjectId}
       />
-    </AppLayout>
+    </>
   );
 }

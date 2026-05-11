@@ -6,6 +6,13 @@ import { FastScheduleCard, FastUrgentCard, FastProjectsCard } from '@/components
 import { CashFlowForecastCard } from '@/components/dashboard/CashFlowForecastCard';
 import { FinancialPositionCard } from '@/components/dashboard/FinancialPositionCard';
 import WeatherForecast from '@/components/dashboard/WeatherForecast';
+import { GCTodayFeed } from '@/components/today/GCTodayFeed';
+import { MissingTradeAlertCard } from '@/components/dashboard/MissingTradeAlertCard';
+import { MissingTradeScopesCard } from '@/components/dashboard/MissingTradeScopesCard';
+import { RemindersCard } from '@/components/dashboard/RemindersCard';
+import { PendingReviewsCard } from '@/components/dashboard/PendingReviewsCard';
+import { MissingTasksAlertCard } from '@/components/dashboard/MissingTasksAlertCard';
+import { UnsignedSchedulesCard } from '@/components/dashboard/UnsignedSchedulesCard';
 
 // Simplified Dashboard Data
 const upcomingSchedule = [
@@ -69,15 +76,16 @@ export default function Dashboard() {
             </p>
           </div>
         ) : (
-          /* Admin header */
-          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
-            <div className="min-w-0">
-              <h1 className="font-heading font-semibold text-brand-black text-wrap" style={{ fontSize: 'clamp(1.75rem, 4vw, 2.5rem)', letterSpacing: '0.01em' }}>
-                Dashboard
-              </h1>
-              <p className="text-sm md:text-base font-sans text-wrap" style={{ color: '#6B6560', letterSpacing: '0.02em' }}>Today's overview for Skyeline Homes</p>
-            </div>
-          </div>
+          /* GC / admin: Today feed first — what matters today */
+          <>
+            <RemindersCard />
+            <PendingReviewsCard />
+            <UnsignedSchedulesCard />
+            <MissingTasksAlertCard />
+            <MissingTradeAlertCard />
+            <MissingTradeScopesCard />
+            <GCTodayFeed />
+          </>
         )}
 
         {/* Main Dashboard Grid - Mobile First */}

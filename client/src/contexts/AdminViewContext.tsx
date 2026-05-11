@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 
 export interface AdminViewUser {
   id: string;
@@ -12,6 +12,7 @@ interface AdminViewContextType {
   isAdminView: boolean;
   portalType: 'client' | 'subcontractor' | 'designer' | null;
   viewedUser: AdminViewUser | null;
+  isReadOnly: boolean;
   setIsAdminView: (value: boolean) => void;
   setPortalType: (type: 'client' | 'subcontractor' | 'designer' | null) => void;
   setViewedUser: (user: AdminViewUser | null) => void;
@@ -38,12 +39,28 @@ export const AdminViewProvider = ({ children }: { children: ReactNode }) => {
     setViewedUser(null);
   };
 
+  // We expose this flag for components that want to disable specific actions
+  // when in admin view, but we DON'T globally intercept clicks/submits — the
+  // visible banner is the warning and writes are allowed so the admin can walk
+  // through full role workflows (create selection, file site log, submit bid)
+  // and verify the system end-to-end.
+  const isReadOnly = false;
+  useEffect(() => {
+    if (isAdminView) {
+      document.body.setAttribute('data-admin-view', 'true');
+    } else {
+      document.body.removeAttribute('data-admin-view');
+    }
+    return () => document.body.removeAttribute('data-admin-view');
+  }, [isAdminView]);
+
   return (
     <AdminViewContext.Provider
       value={{
         isAdminView,
         portalType,
         viewedUser,
+        isReadOnly,
         setIsAdminView,
         setPortalType,
         setViewedUser,

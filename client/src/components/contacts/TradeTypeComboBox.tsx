@@ -1,85 +1,88 @@
-import * as React from "react"
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ComboBox } from "@/components/ui/combobox"
-import { apiRequest } from "@/lib/queryClient"
-import { useToast } from "@/hooks/use-toast"
+import * as React from 'react';
+import { useEffect, useState } from 'react';
+import { collection, addDoc, onSnapshot, orderBy, query, serverTimestamp } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { ComboBox } from '@/components/ui/combobox';
+import { useToast } from '@/hooks/use-toast';
 
 interface Trade {
-  id: number;
+  id: string;
   name: string;
-  description: string;
-  category: string;
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
+  isActive?: boolean;
 }
 
-interface TradeTypeComboBoxProps {
-  value?: string
-  onValueChange: (value: string) => void
-  className?: string
+interface Props {
+  value?: string;
+  onValueChange: (value: string) => void;
+  className?: string;
 }
 
-export function TradeTypeComboBox({
-  value,
-  onValueChange,
-  className,
-}: TradeTypeComboBoxProps) {
+// Inline-create combobox for trades. Reads `trades` collection in real time;
+// typing a brand-new value adds it to the global list immediately so the next
+// contact you create can pick it without leaving the form.
+export function TradeTypeComboBox({ value, onValueChange, className }: Props) {
   const { toast } = useToast();
-  const queryClient = useQueryClient();
+  const [trades, setTrades] = useState<Trade[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Fetch trades from API
-  const { data: trades = [], isLoading } = useQuery<Trade[]>({
-    queryKey: ['/api/trades'],
-    staleTime: 5 * 60 * 1000 // 5 minutes
-  });
+  useEffect(() => {
+    const q = query(collection(db, 'trades'), orderBy('name'));
+    const unsub = onSnapshot(
+      q,
+      snap => {
+        setTrades(snap.docs.map(d => ({ id: d.id, ...(d.data() as any) })));
+        setLoading(false);
+      },
+      () => setLoading(false),
+    );
+    return () => unsub();
+  }, []);
 
-  // Create new trade mutation
-  const createTradeMutation = useMutation({
-    mutationFn: (tradeName: string) => 
-      apiRequest('/api/trades', { 
-        method: 'POST', 
-        body: {
-          name: tradeName,
-          description: `Auto-created trade: ${tradeName}`,
+  const activeNames = trades
+    .filter(t => t.isActive !== false)
+    .map(t => t.name)
+    .sort((a, b) => a.localeCompare(b));
+
+  const handle = async (newValue: string) => {
+    const trimmed = (newValue || '').trim();
+    if (!trimmed) {
+      onValueChange('');
+      return;
+    }
+    const exists = activeNames.some(n => n.toLowerCase() === trimmed.toLowerCase());
+    if (!exists) {
+      try {
+        await addDoc(collection(db, 'trades'), {
+          name: trimmed,
+          description: 'Added from contact form',
           category: 'Construction',
-          isActive: true
-        }
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/trades'] });
-      toast({
-        title: "Trade Added",
-        description: "New trade created successfully."
-      });
+          isActive: true,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+        toast({ title: 'Trade added', description: `Created "${trimmed}"` });
+      } catch (e: any) {
+        toast({
+          title: 'Could not add trade',
+          description: e?.message || 'Failed to create trade',
+          variant: 'destructive',
+        });
+      }
     }
-  });
-
-  // Get only active trade names
-  const activeTradeNames = trades
-    .filter(trade => trade.isActive)
-    .map(trade => trade.name)
-    .sort();
-
-  const handleValueChange = (newValue: string) => {
-    // If it's a new trade type not in the list, create it
-    if (newValue && !activeTradeNames.includes(newValue) && newValue.trim()) {
-      createTradeMutation.mutate(newValue.trim());
-    }
-    onValueChange(newValue)
-  }
+    onValueChange(trimmed);
+  };
 
   return (
     <ComboBox
-      options={activeTradeNames}
+      options={activeNames}
       value={value}
-      onValueChange={handleValueChange}
-      placeholder={isLoading ? "Loading trades..." : "Select or type trade type..."}
-      searchPlaceholder="Search trade types..."
+      onValueChange={handle}
+      placeholder={loading ? 'Loading trades…' : 'Select or type a trade…'}
+      searchPlaceholder="Search trades…"
       className={className}
       allowCustom={true}
-      emptyMessage="No trade types found."
-      disabled={isLoading}
+      emptyMessage="No trades yet — type to add one."
+      disabled={loading}
     />
-  )
+  );
 }

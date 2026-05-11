@@ -1,5 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useLocation } from 'wouter';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { collection, doc, getDocs, query as fsQuery, serverTimestamp, updateDoc, where } from 'firebase/firestore';
+import { db, auth } from '@/lib/firebase';
+import { sendPasswordResetEmail } from 'firebase/auth';
 import { 
   Dialog, 
   DialogContent, 
@@ -89,7 +93,7 @@ export default function ContactDetailView({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/contacts'] });
-      toast({ title: "Contact Archived", description: "Contact has been archived successfully." });
+      toast({ title: "Contact archived", description: "Contact has been archived successfully." });
       onOpenChange(false);
     },
     onError: () => {
@@ -107,7 +111,7 @@ export default function ContactDetailView({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/contacts'] });
-      toast({ title: "Contact Deleted", description: "Contact has been permanently deleted." });
+      toast({ title: "Contact deleted", description: "Contact has been permanently deleted." });
       onOpenChange(false);
     },
     onError: () => {
@@ -159,55 +163,52 @@ export default function ContactDetailView({
 
   const canEdit = userRole === 'admin' || userRole === 'projectManager';
 
-  // Portal access management mutations
+  // Portal access management — direct Firestore writes (the /api/* route is
+  // blocked by org IAM on Cloud Run).
   const updatePortalAccessMutation = useMutation({
-    mutationFn: async ({ contactId, hasPortalAccess, portalEmail }: { 
-      contactId: number; 
-      hasPortalAccess: boolean; 
-      portalEmail?: string; 
+    mutationFn: async ({ contactId, hasPortalAccess, portalEmail }: {
+      contactId: number | string;
+      hasPortalAccess: boolean;
+      portalEmail?: string;
     }) => {
-      const response = await fetch(`/api/contacts/${contactId}/portal-access`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          hasPortalAccess, 
-          portalEmail: portalEmail || contact?.email,
-          portalAccessGrantedAt: hasPortalAccess ? new Date().toISOString() : null
-        }),
+      await updateDoc(doc(db, 'contacts', String(contactId)), {
+        hasPortalAccess,
+        portalEmail: portalEmail || contact?.email || '',
+        portalAccessGrantedAt: hasPortalAccess ? serverTimestamp() : null,
+        updatedAt: serverTimestamp(),
       });
-      if (!response.ok) throw new Error('Failed to update portal access');
-      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/contacts'] });
-      toast({ 
-        title: "Portal Access Updated", 
-        description: `Portal access has been ${contact?.hasPortalAccess ? 'revoked' : 'granted'} successfully.` 
+      toast({
+        title: 'Portal access updated',
+        description: `Portal access has been ${contact?.hasPortalAccess ? 'revoked' : 'granted'}.`,
       });
     },
-    onError: () => {
-      toast({ 
-        title: "Error", 
-        description: "Failed to update portal access.", 
-        variant: "destructive" 
+    onError: (e: any) => {
+      toast({
+        title: 'Error',
+        description: e?.message || 'Failed to update portal access.',
+        variant: 'destructive',
       });
     },
   });
 
   const resetPasswordMutation = useMutation({
-    mutationFn: async (contactId: number) => {
-      const response = await fetch(`/api/contacts/${contactId}/reset-password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      });
-      if (!response.ok) throw new Error('Failed to reset password');
-      return response.json();
+    mutationFn: async (contactId: number | string) => {
+      // Use Firebase Auth's built-in password reset — emails the user a
+      // one-click reset link. No /api route, no temp password generation.
+      void contactId; // unused — keyed by email
+      const email = (contact?.email || '').trim();
+      if (!email) throw new Error('No email on file for this contact');
+      await sendPasswordResetEmail(auth, email);
+      return { email };
     },
-    onSuccess: (data) => {
-      toast({ 
-        title: "Password Reset", 
-        description: `New temporary password: ${data.temporaryPassword}`,
-        duration: 10000 // Show longer for user to copy
+    onSuccess: (data: any) => {
+      toast({
+        title: 'Password reset email sent',
+        description: `Reset link sent to ${data.email}. They'll receive it within a minute.`,
+        duration: 8000,
       });
     },
     onError: () => {
@@ -417,21 +418,11 @@ export default function ContactDetailView({
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center gap-3">
-            <Palette className="h-4 w-4 text-gray-400" />
-            <div>
-              <div className="font-medium">Design Specialty</div>
-              <div className="text-sm text-gray-600">Modern & Contemporary</div>
-            </div>
-          </div>
-          
-          <Separator />
-          
-          <div className="flex items-center gap-3">
             <Building2 className="h-4 w-4 text-gray-400" />
             <div>
-              <div className="font-medium">Company Type</div>
+              <div className="font-medium">Business Name</div>
               <div className="text-sm text-gray-600">
-                {contact.company ? 'External Designer' : 'Internal Team'}
+                {contact.company || <span className="italic text-gray-400">Not set</span>}
               </div>
             </div>
           </div>
@@ -554,12 +545,7 @@ export default function ContactDetailView({
                           <Badge variant="outline">{contact.trade}</Badge>
                         )}
                       </div>
-                      <div className="flex items-center gap-1 mt-2">
-                        {getRatingStars(contact.rating || 0)}
-                        <span className="text-sm text-gray-600 ml-2">
-                          ({contact.rating || 0}/5)
-                        </span>
-                      </div>
+                      <ContactAverageRating contact={contact} />
                       
                       {/* Contact Information */}
                       <div className="flex flex-wrap items-center gap-4 sm:gap-6 mt-4 pt-3 border-t border-gray-200">
@@ -600,7 +586,15 @@ export default function ContactDetailView({
                         <div className="flex items-center gap-2">
                           <Calendar className="h-4 w-4 text-gray-400" />
                           <span className="text-sm text-gray-600">
-                            Added {new Date(contact.createdAt).toLocaleDateString()}
+                            {(() => {
+                              const raw: any = contact.createdAt;
+                              const ms = raw?.toMillis
+                                ? raw.toMillis()
+                                : (raw?.seconds ? raw.seconds * 1000 : Date.parse(String(raw || '')));
+                              return Number.isFinite(ms)
+                                ? `Added ${new Date(ms).toLocaleDateString()}`
+                                : 'Added recently';
+                            })()}
                           </span>
                         </div>
                       </div>
@@ -656,58 +650,22 @@ export default function ContactDetailView({
 
               {/* Right Column - Portal Access and Additional Information */}
               <div className="space-y-6">
-                {/* Associated Projects */}
-                <Card className="bg-gray-50">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Briefcase className="h-5 w-5" />
-                      Associated Projects ({(() => {
-                        try {
-                          return JSON.parse(contact.associatedProjects || '[]').length;
-                        } catch {
-                          return 0;
-                        }
-                      })()})
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {(() => {
-                      try {
-                        const projects = JSON.parse(contact.associatedProjects || '[]');
-                        return projects.length > 0 ? (
-                          <div className="space-y-2">
-                            {projects.map((project: string, index: number) => (
-                              <div
-                                key={index}
-                                className="flex items-center justify-between p-2 rounded-lg bg-gray-50 hover:bg-gray-100 cursor-pointer"
-                                onClick={() => {
-                                  // Navigate to project detail
-                                  window.open(`/projects/${project}`, '_blank');
-                                }}
-                              >
-                                <span className="font-medium">{project}</span>
-                                <ExternalLink className="h-4 w-4 text-gray-400" />
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="text-center py-6 text-gray-500">
-                            No associated projects
-                          </div>
-                        );
-                      } catch {
-                        return (
-                          <div className="text-center py-6 text-gray-500">
-                            No associated projects
-                          </div>
-                        );
-                      }
-                    })()}
-                  </CardContent>
-                </Card>
+                {/* Spouse — only meaningful for clients. */}
+                {String(contact.role || '').toLowerCase() === 'client' && (
+                  <SpouseCard contact={contact} />
+                )}
+
+                {/* Associated Projects — real lookup against projects collection. */}
+                <AssociatedProjectsCard contact={contact} />
 
                 {/* Portal Access Management - For eligible contact types */}
-                {(canEdit && (contact.role === 'client' || contact.role === 'subcontractor' || contact.role === 'designer' || contact.role === 'vendor')) && (
+                {(canEdit && (contact.role === 'client' || contact.role === 'subcontractor' || contact.role === 'designer' || contact.role === 'vendor')) && (() => {
+                  // A contact has real portal access if EITHER an admin explicitly
+                  // granted it (`hasPortalAccess`) OR they self-signed-up and got
+                  // linked (`linkedUserId` is set).
+                  const linkedUserId = (contact as any).linkedUserId;
+                  const portalActive = !!contact.hasPortalAccess || !!linkedUserId;
+                  return (
                   <Card className="bg-gray-50">
                     <CardHeader>
                       <CardTitle className="flex items-center gap-2">
@@ -722,18 +680,20 @@ export default function ContactDetailView({
                           <div>
                             <div className="font-medium">Portal Access</div>
                             <div className="text-sm text-gray-600">
-                              {contact.hasPortalAccess ? 'Enabled' : 'Disabled'}
+                              {portalActive
+                                ? (linkedUserId ? 'Active (self-registered)' : 'Enabled')
+                                : 'Disabled'}
                             </div>
                           </div>
                         </div>
-                        <Badge 
-                          variant="outline" 
-                          className={contact.hasPortalAccess 
-                            ? "text-green-600 border-green-300 bg-green-50" 
+                        <Badge
+                          variant="outline"
+                          className={portalActive
+                            ? "text-green-600 border-green-300 bg-green-50"
                             : "text-gray-600 border-gray-300 bg-gray-50"
                           }
                         >
-                          {contact.hasPortalAccess ? (
+                          {portalActive ? (
                             <>
                               <CheckCircle className="h-3 w-3 mr-1" />
                               Active
@@ -747,7 +707,7 @@ export default function ContactDetailView({
                         </Badge>
                       </div>
 
-                      {contact.hasPortalAccess && (
+                      {portalActive && (
                         <>
                           <Separator />
                           <div className="space-y-3">
@@ -787,13 +747,13 @@ export default function ContactDetailView({
                       )}
 
                       <div className="flex gap-2 pt-2">
-                        <Button 
-                          variant={contact.hasPortalAccess ? "outline" : "default"}
+                        <Button
+                          variant={portalActive ? "outline" : "default"}
                           size="sm"
-                          onClick={() => handlePortalAccess(!contact.hasPortalAccess)}
+                          onClick={() => handlePortalAccess(!portalActive)}
                         >
                           <Shield className="h-4 w-4 mr-2" />
-                          {contact.hasPortalAccess ? 'Revoke Access' : 'Grant Access'}
+                          {portalActive ? 'Revoke Access' : 'Grant Access'}
                         </Button>
                         
                         {contact.hasPortalAccess && (
@@ -809,7 +769,8 @@ export default function ContactDetailView({
                       </div>
                     </CardContent>
                   </Card>
-                )}
+                  );
+                })()}
 
                 {/* Tags */}
                 {(() => {
@@ -886,5 +847,283 @@ export default function ContactDetailView({
         </AlertDialogContent>
       </AlertDialog>
     </Dialog>
+  );
+}
+
+// ─── Associated Projects (real Firestore lookup) ─────────────────────────────
+interface AssociatedProjectRow {
+  id: string;
+  name: string;
+  status: string;
+  projectCode?: string;
+}
+
+function AssociatedProjectsCard({ contact }: { contact: any }) {
+  const [, setLocation] = useLocation();
+  const [projects, setProjects] = useState<AssociatedProjectRow[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!contact?.id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const contactId = String(contact.id);
+        // Three possible links — run all in parallel, then de-dupe by doc id.
+        const queries = [
+          // Client picker (NewProjectForm) writes contactId into clientIds array.
+          fsQuery(collection(db, 'projects'), where('clientIds', 'array-contains', contactId)),
+          // Designer selection writes contactId into designerContactId.
+          fsQuery(collection(db, 'projects'), where('designerContactId', '==', contactId)),
+        ];
+        // Sales-converted clients link via salesClientId on the contact pointing
+        // at the clients/{id} doc — and the project may reference that same id.
+        if (contact.salesClientId) {
+          queries.push(fsQuery(
+            collection(db, 'projects'),
+            where('salesClientId', '==', String(contact.salesClientId)),
+          ));
+        }
+        const snaps = await Promise.all(queries.map(q => getDocs(q).catch(() => null)));
+        if (cancelled) return;
+        const seen = new Map<string, AssociatedProjectRow>();
+        for (const snap of snaps) {
+          if (!snap) continue;
+          snap.docs.forEach(d => {
+            const data = d.data() as any;
+            if (!seen.has(d.id)) {
+              seen.set(d.id, {
+                id: d.id,
+                name: data.name || '(unnamed project)',
+                status: data.status || '',
+                projectCode: data.projectCode,
+              });
+            }
+          });
+        }
+        setProjects(Array.from(seen.values()));
+      } catch {
+        setProjects([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [contact?.id, contact?.salesClientId]);
+
+  return (
+    <Card className="bg-gray-50">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Briefcase className="h-5 w-5" />
+          Associated Projects ({projects.length})
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {loading ? (
+          <div className="text-center py-6 text-gray-400 text-sm">Loading…</div>
+        ) : projects.length === 0 ? (
+          <div className="text-center py-6 text-gray-500">No associated projects</div>
+        ) : (
+          <div className="space-y-2">
+            {projects.map(p => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => setLocation(`/projects/${p.id}/overview`)}
+                className="w-full flex items-center justify-between p-2 rounded-lg bg-white hover:bg-gray-100 border border-gray-200 text-left"
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium truncate">{p.name}</p>
+                  <p className="text-[11px] text-gray-500 truncate">
+                    {p.projectCode || ''}{p.projectCode && p.status ? ' · ' : ''}{p.status}
+                  </p>
+                </div>
+                <ExternalLink className="h-4 w-4 text-gray-400 flex-shrink-0" />
+              </button>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Spouse card ─────────────────────────────────────────────────────────────
+// Shows linked spouse contact info (when set) plus inline-captured fallback
+// fields. If a contact is linked, name/email pull from there. If only inline
+// info is set (because spouse hasn't been entered as a separate contact yet),
+// show that. Edit happens via the Edit Contact dialog.
+function SpouseCard({ contact }: { contact: any }) {
+  const [, setLocation] = useLocation();
+  const [spouseContact, setSpouseContact] = useState<any>(null);
+  const spouseId = String(contact?.spouseContactId || '');
+  const inlineName = String(contact?.spouseName || '');
+  const inlineEmail = String(contact?.spouseEmail || '');
+  const inlinePhone = String(contact?.spousePhone || '');
+
+  useEffect(() => {
+    if (!spouseId) {
+      setSpouseContact(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const snap = await getDocs(fsQuery(
+          collection(db, 'contacts'),
+          where('__name__', '==', spouseId),
+        ));
+        if (cancelled) return;
+        if (!snap.empty) setSpouseContact({ id: snap.docs[0].id, ...(snap.docs[0].data() as any) });
+        else setSpouseContact(null);
+      } catch {
+        setSpouseContact(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [spouseId]);
+
+  const hasAnything = !!spouseId || !!inlineName || !!inlineEmail || !!inlinePhone;
+  const name = spouseContact?.name || inlineName;
+  const email = spouseContact?.email || inlineEmail;
+  const phone = spouseContact?.phone || inlinePhone;
+
+  return (
+    <Card className="bg-gray-50">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <User className="h-5 w-5" />
+          Spouse
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {!hasAnything ? (
+          <p className="text-sm text-gray-400 italic">No spouse added — use Edit to add.</p>
+        ) : (
+          <div className="space-y-2">
+            <div>
+              <p className="text-sm font-medium">{name || <span className="italic text-gray-400">Name not set</span>}</p>
+              {spouseContact && (
+                <button
+                  type="button"
+                  onClick={() => setLocation('/contacts')}
+                  className="text-[11px] text-[#C9A96E] hover:underline"
+                >
+                  Linked contact — open Contacts
+                </button>
+              )}
+              {!spouseContact && spouseId && (
+                <p className="text-[11px] text-amber-700">Linked contact not found.</p>
+              )}
+              {!spouseContact && !spouseId && (
+                <p className="text-[11px] text-gray-500 italic">Not yet signed up — will auto-link when they register with this email.</p>
+              )}
+            </div>
+            {email && (
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <Mail className="h-3.5 w-3.5 text-gray-400" />
+                <a href={`mailto:${email}`} className="hover:underline">{email}</a>
+              </div>
+            )}
+            {phone && (
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <Phone className="h-3.5 w-3.5 text-gray-400" />
+                <a href={`tel:${phone}`} className="hover:underline">{phone}</a>
+              </div>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Average rating from projectReviews ──────────────────────────────────────
+// Pulls reviews this contact submitted (via clientUid OR contactId) and averages
+// projectRating + builderRating across all of them. Only shown for clients —
+// designers/subs get separate review channels later.
+function ContactAverageRating({ contact }: { contact: any }) {
+  const [avg, setAvg] = useState<number | null>(null);
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    if (!contact?.id) return;
+    const role = String(contact.role || '').toLowerCase();
+    if (role !== 'client') return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const contactId = String(contact.id);
+        // Match reviews by contactId on the review doc. Also include reviews
+        // submitted by the contact's linked Firebase Auth uid for safety.
+        const queries = [
+          fsQuery(collection(db, 'projectReviews'), where('contactId', '==', contactId)),
+        ];
+        const linkedUid = (contact as any).linkedUserId;
+        if (linkedUid) {
+          queries.push(fsQuery(collection(db, 'projectReviews'), where('clientUid', '==', String(linkedUid))));
+        }
+        const snaps = await Promise.all(queries.map(q => getDocs(q).catch(() => null)));
+        if (cancelled) return;
+        const seen = new Map<string, any>();
+        for (const snap of snaps) {
+          if (!snap) continue;
+          snap.docs.forEach(d => {
+            if (!seen.has(d.id)) seen.set(d.id, d.data());
+          });
+        }
+        const reviews = Array.from(seen.values());
+        if (reviews.length === 0) {
+          setAvg(null);
+          setCount(0);
+          return;
+        }
+        const vals: number[] = [];
+        reviews.forEach((r: any) => {
+          if (typeof r.projectRating === 'number' && r.projectRating > 0) vals.push(r.projectRating);
+          if (typeof r.builderRating === 'number' && r.builderRating > 0) vals.push(r.builderRating);
+        });
+        if (vals.length === 0) {
+          setAvg(null);
+          setCount(reviews.length);
+          return;
+        }
+        setAvg(vals.reduce((a, b) => a + b, 0) / vals.length);
+        setCount(reviews.length);
+      } catch {
+        setAvg(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [contact?.id, contact?.linkedUserId, contact?.role]);
+
+  if (String(contact?.role || '').toLowerCase() !== 'client') return null;
+  if (avg === null) {
+    return (
+      <div className="flex items-center gap-1 mt-2">
+        {[1, 2, 3, 4, 5].map(i => (
+          <Star key={i} className="h-4 w-4 text-gray-300" />
+        ))}
+        <span className="text-sm text-gray-400 ml-2 italic">No reviews yet</span>
+      </div>
+    );
+  }
+  const rounded = Math.round(avg);
+  return (
+    <div className="flex items-center gap-1 mt-2">
+      {[1, 2, 3, 4, 5].map(i => (
+        <Star
+          key={i}
+          className={`h-4 w-4 ${i <= rounded ? 'text-amber-400 fill-current' : 'text-gray-300'}`}
+        />
+      ))}
+      <span className="text-sm text-gray-600 ml-2">
+        {avg.toFixed(1)} / 5
+      </span>
+      <span className="text-xs text-gray-400">
+        · {count} review{count === 1 ? '' : 's'}
+      </span>
+    </div>
   );
 }

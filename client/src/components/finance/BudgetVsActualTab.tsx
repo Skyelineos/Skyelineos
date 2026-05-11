@@ -310,7 +310,7 @@ export default function BudgetVsActualTab({ projects }: { projects: Project[] })
 
               {/* Totals row */}
               <div className="grid grid-cols-[1fr_100px_100px_100px_100px_120px_60px] gap-2 px-4 py-3 bg-gray-50 border-t-2 border-gray-300">
-                <p className="text-sm font-bold text-gray-900">TOTAL</p>
+                <p className="text-sm font-bold text-gray-900">Total</p>
                 <p className="text-sm text-right font-bold text-gray-900">{fmt(totalBudget)}</p>
                 <p className="text-sm text-right font-bold text-gray-900">{fmt(totalActual)}</p>
                 <p className="text-sm text-right font-bold text-gray-500">{fmt(totalCommitted)}</p>

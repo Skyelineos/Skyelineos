@@ -19,6 +19,10 @@ const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0
 
 export { app };
 export const auth = getAuth(app);
+// Firestore with in-memory cache (default). Persistent IndexedDB cache was
+// tried but iPad Safari + multi-tab manager misbehaves in some configs and
+// can leave the app stuck on first load. Performance gains from onSnapshot
+// + React Query are already substantial without persistent local cache.
 export const db = getFirestore(app);
 export const functions = getFunctions(app, 'us-central1');
 export const storage = getStorage(app);

@@ -114,12 +114,18 @@ export function realPolygonPerimeter(
 
 // ─── Display formatting ───────────────────────────────────────────────────────
 
+/**
+ * Architect-style linear formatting. ft → `24'-6"` (feet-dash-inches) which
+ * is what plans use. Other units render as `<value> <unit>` with precision.
+ */
 export function formatLinear(value: number, unit: LinearUnit, precision = 2): string {
   if (unit === 'ft') {
-    const feet = Math.floor(value);
-    const inches = Math.round((value - feet) * 12);
-    if (inches === 12) return `${feet + 1}' 0"`;
-    return `${feet}' ${inches}"`;
+    const sign = value < 0 ? '-' : '';
+    const abs = Math.abs(value);
+    const feet = Math.floor(abs);
+    const inches = Math.round((abs - feet) * 12);
+    if (inches === 12) return `${sign}${feet + 1}'-0"`;
+    return `${sign}${feet}'-${inches}"`;
   }
   return `${value.toFixed(precision)} ${unit}`;
 }

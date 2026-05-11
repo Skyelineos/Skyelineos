@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { collection, doc, getDocs, onSnapshot, query, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { SubcontractorComboBox } from '@/components/ui/subcontractor-combobox';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, FileText, User, Mail, Phone, MapPin, Calendar, DollarSign, Users } from 'lucide-react';
-import { apiRequest } from '@/lib/queryClient';
+import { Loader2, FileText, User, Mail, Phone, MapPin, Calendar, DollarSign, Users, Palette } from 'lucide-react';
 
 interface EditProjectFormProps {
   project: any;
@@ -28,19 +29,28 @@ export function WorkingEditProjectForm({ project, open, onOpenChange }: EditProj
   const [targetCompletion, setTargetCompletion] = useState('');
   const [assignedProjectManager, setAssignedProjectManager] = useState('');
   const [clientId, setClientId] = useState('');
+  const [designerChoice, setDesignerChoice] = useState<string>('');
+  const [designerContactId, setDesignerContactId] = useState<string>('');
+  const [saving, setSaving] = useState(false);
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Load client contacts
-  const { data: clientContacts = [] } = useQuery({
-    queryKey: ['/api/contacts'],
-    select: (data: any[]) => data.filter(contact => contact.role === 'client')
-  });
-
-  // Load project managers
-  const { data: projectManagers = [] } = useQuery({
-    queryKey: ['/api/project-managers']
+  // Live contact list from Firestore. Used for client picker, designer picker,
+  // and project-manager picker — replaces the broken /api/contacts route.
+  const [allContacts, setAllContacts] = useState<any[]>([]);
+  useEffect(() => {
+    const q = query(collection(db, 'contacts'));
+    const unsub = onSnapshot(q, snap => {
+      setAllContacts(snap.docs.map(d => ({ id: d.id, ...(d.data() as any) })));
+    }, () => {});
+    return () => unsub();
+  }, []);
+  const clientContacts = allContacts.filter(c => String(c.role || '').toLowerCase() === 'client');
+  const designerContacts = allContacts.filter(c => String(c.role || '').toLowerCase() === 'designer');
+  const projectManagers = allContacts.filter(c => {
+    const r = String(c.role || '').toLowerCase();
+    return r === 'project_manager' || r === 'pm';
   });
 
   // Initialize form with project data when dialog opens
@@ -58,71 +68,74 @@ export function WorkingEditProjectForm({ project, open, onOpenChange }: EditProj
       setTargetCompletion(project.targetCompletion ? project.targetCompletion.split('T')[0] : '');
       setAssignedProjectManager(project.assignedProjectManager || '');
       setClientId(project.metadata?.clientId || '');
+      setDesignerChoice(String(project.designerChoice || ''));
+      setDesignerContactId(String(project.designerContactId || ''));
     }
   }, [open, project]);
 
-  // Update project mutation
-  const updateProjectMutation = useMutation({
-    mutationFn: async (data: any) => {
-      return apiRequest(`/api/projects/${project.id}`, 'PUT', data);
-    },
-    onSuccess: () => {
-      toast({
-        title: 'Project Updated',
-        description: 'Project details have been saved successfully.',
-      });
-      queryClient.invalidateQueries({ queryKey: ['/api/projects'] });
-      queryClient.invalidateQueries({ queryKey: [`/api/projects/${project.id}`] });
-      onOpenChange(false);
-    },
-    onError: (error: any) => {
-      toast({
-        title: 'Update Failed',
-        description: error.message || 'Failed to update project',
-        variant: 'destructive',
-      });
-    },
-  });
-
-  const handleSave = () => {
-    // Basic validation
+  const handleSave = async () => {
     if (!name.trim()) {
       toast({
-        title: 'Validation Error',
+        title: 'Validation error',
         description: 'Project name is required',
         variant: 'destructive',
       });
       return;
     }
-
     if (!clientName.trim()) {
       toast({
-        title: 'Validation Error', 
+        title: 'Validation error',
         description: 'Client name is required',
         variant: 'destructive',
       });
       return;
     }
+    if (designerChoice === 'select' && !designerContactId) {
+      toast({
+        title: 'Pick a designer',
+        description: 'Choose a designer contact or change the option.',
+        variant: 'destructive',
+      });
+      return;
+    }
 
-    const updateData = {
-      name: name.trim(),
-      description: description.trim(),
-      clientName: clientName.trim(),
-      clientEmail: clientEmail.trim(),
-      clientPhone: clientPhone.trim(),
-      status,
-      address: address.trim(),
-      estimatedBudget: estimatedBudget ? parseFloat(estimatedBudget) : null,
-      startDate: startDate || null,
-      targetCompletion: targetCompletion || null,
-      assignedProjectManager: assignedProjectManager || null,
-      metadata: {
-        ...project.metadata,
-        clientId: clientId || null,
-      }
-    };
-
-    updateProjectMutation.mutate(updateData);
+    setSaving(true);
+    try {
+      const designer = designerChoice === 'select'
+        ? designerContacts.find((d: any) => String(d.id) === String(designerContactId)) || null
+        : null;
+      await updateDoc(doc(db, 'projects', project.id), {
+        name: name.trim(),
+        description: description.trim(),
+        clientName: clientName.trim(),
+        clientEmail: clientEmail.trim(),
+        clientPhone: clientPhone.trim(),
+        status,
+        address: address.trim(),
+        estimatedBudget: estimatedBudget ? parseFloat(estimatedBudget) : null,
+        startDate: startDate || null,
+        targetCompletion: targetCompletion || null,
+        assignedProjectManager: assignedProjectManager || null,
+        designerChoice: designerChoice || '',
+        designerContactId: designerChoice === 'select' ? (designerContactId || '') : '',
+        designerName: designer?.name || '',
+        designerEmail: designer?.email || '',
+        designerCompany: designer?.company || '',
+        updatedAt: serverTimestamp(),
+      });
+      toast({ title: 'Project updated', description: 'Project details saved.' });
+      queryClient.invalidateQueries({ queryKey: [`/api/projects/${project.id}`] });
+      queryClient.invalidateQueries({ queryKey: ['/api/projects'] });
+      onOpenChange(false);
+    } catch (e: any) {
+      toast({
+        title: 'Could not update project',
+        description: e?.message || 'Save failed',
+        variant: 'destructive',
+      });
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleClientSelection = (selectedClientId: string) => {
@@ -184,8 +197,12 @@ export function WorkingEditProjectForm({ project, open, onOpenChange }: EditProj
                   <SelectContent>
                     <SelectItem value="planning">Planning</SelectItem>
                     <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="on_hold">On Hold</SelectItem>
+                    <SelectItem value="punch_list">Punch List</SelectItem>
+                    <SelectItem value="closeout">Closeout</SelectItem>
                     <SelectItem value="completed">Completed</SelectItem>
+                    <SelectItem value="on_hold">On Hold</SelectItem>
+                    <SelectItem value="cancelled">Cancelled</SelectItem>
+                    <SelectItem value="archived">Archived</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -359,25 +376,86 @@ export function WorkingEditProjectForm({ project, open, onOpenChange }: EditProj
               </div>
             </div>
           </div>
+
+          {/* Designer section */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold border-b pb-2 flex items-center gap-2">
+              <Palette className="h-4 w-4" />
+              Designer
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {[
+                { val: 'select', label: 'Select a designer', desc: 'Pick from your designer contacts' },
+                { val: 'none', label: 'No designer needed', desc: 'Spec build or self-managed' },
+                { val: 'client_self', label: 'Client doing design', desc: 'The client owns design selections' },
+                { val: 'later', label: 'Decide later', desc: 'Flag to come back to this' },
+              ].map(opt => {
+                const active = designerChoice === opt.val;
+                return (
+                  <label
+                    key={opt.val}
+                    className={`flex items-start gap-3 border rounded-lg p-3 cursor-pointer transition-colors ${
+                      active ? 'border-[#C9A96E] bg-[#FFF8E7]/60' : 'border-gray-200 hover:border-gray-400'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="designerChoice"
+                      value={opt.val}
+                      checked={active}
+                      onChange={() => setDesignerChoice(opt.val)}
+                      className="mt-1"
+                    />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">{opt.label}</p>
+                      <p className="text-xs text-gray-500">{opt.desc}</p>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+            {designerChoice === 'select' && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium">
+                  Designer <span className="text-red-500 font-bold">*</span>
+                </label>
+                <Select
+                  value={designerContactId}
+                  onValueChange={setDesignerContactId}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={designerContacts.length === 0 ? 'No designer contacts yet — add one in Contacts' : 'Pick a designer'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {designerContacts.map((d: any) => (
+                      <SelectItem key={d.id} value={String(d.id)}>
+                        {d.name}{d.company ? ` — ${d.company}` : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="flex justify-end gap-2 pt-4 border-t">
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             onClick={() => onOpenChange(false)}
-            disabled={updateProjectMutation.isPending}
+            disabled={saving}
           >
             Cancel
           </Button>
-          <Button 
+          <Button
             onClick={handleSave}
-            disabled={updateProjectMutation.isPending}
+            disabled={saving}
             className="bg-theme-primary hover:bg-theme-primary-hover text-white"
           >
-            {updateProjectMutation.isPending ? (
+            {saving ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Saving...
+                Saving…
               </>
             ) : (
               'Save Changes'

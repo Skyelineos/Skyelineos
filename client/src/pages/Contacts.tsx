@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -10,11 +10,13 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
 import { Users, Search, Download, Upload, Plus, TrendingUp, Building, UserCheck, Wrench, Edit, Trash2, Mail, Phone, MoreVertical, User } from 'lucide-react';
-import { TradeTypeComboBox } from '@/components/contacts/TradeTypeComboBox';
+import { MultiTradeSelector } from '@/components/contacts/MultiTradeSelector';
+import { EditContactModal } from '@/components/contacts/EditContactModal';
 import ContactImportModal from '@/components/contacts/ContactImportModal';
 import ContactDetailView from '@/components/contacts/ContactDetailView';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/use-auth';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
 interface Contact {
@@ -79,17 +81,45 @@ export default function Contacts() {
     isActive: true
   });
 
-  // Contact form data state
-  const [newContactFormData, setNewContactFormData] = useState({
-    name: '',
+  // Contact form data state. `trades` is the source of truth (multi-trade);
+  // `trade` is mirrored from trades[0] for backwards-compat with old reads.
+  // `firstName` + `lastName` are the source of truth; `name` is joined.
+  const [newContactFormData, setNewContactFormData] = useState<{
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone: string;
+    company: string;
+    role: string;
+    trades: string[];
+    salesStage: string;
+    sendInvite: boolean;
+  }>({
+    firstName: '',
+    lastName: '',
     email: '',
     phone: '',
     company: '',
     role: 'client',
-    trade: ''
+    trades: [],
+    salesStage: '',
+    sendInvite: false,
   });
 
+  // Sales pipeline stages (kept in sync with NewClientModal/Sales). Loaded from
+  // settings/salesStages on mount; falls back to defaults.
+  const [salesStages, setSalesStages] = useState<{ key: string; label: string; color: string }[]>([
+    { key: 'new_lead',        label: 'New Lead',         color: '#64748b' },
+    { key: 'meeting_booked',  label: 'Meeting Booked',   color: '#3b82f6' },
+    { key: 'design_phase',    label: 'Design Phase',     color: '#8b5cf6' },
+    { key: 'in_estimating',   label: 'In Estimating',    color: '#f59e0b' },
+    { key: 'close_to_sign',   label: 'Close to Signing', color: '#C9A96E' },
+    { key: 'won',             label: 'Won',              color: '#22c55e' },
+    { key: 'lost',            label: 'Lost',             color: '#ef4444' },
+  ]);
+
   const { toast } = useToast();
+  const { user } = useAuth();
 
   // Subscribe to contacts
   useEffect(() => {
@@ -115,9 +145,27 @@ export default function Contacts() {
     return unsub;
   }, []);
 
+  // Load sales stages from settings (matches Sales.tsx + NewClientModal source).
+  useEffect(() => {
+    (async () => {
+      try {
+        const snap = await getDoc(doc(db, 'settings', 'pipeline'));
+        const data = snap.exists() ? snap.data() : null;
+        if (data?.stages && Array.isArray(data.stages) && data.stages.length > 0) {
+          setSalesStages(data.stages);
+        }
+      } catch {
+        // Stay on defaults.
+      }
+    })();
+  }, []);
+
   // Reset contact form
   const resetContactForm = () => {
-    setNewContactFormData({ name: '', email: '', phone: '', company: '', role: 'client', trade: '' });
+    setNewContactFormData({
+      firstName: '', lastName: '', email: '', phone: '', company: '',
+      role: 'client', trades: [], salesStage: '', sendInvite: false,
+    });
   };
 
   const handleContactClick = (contact: Contact) => {
@@ -144,30 +192,121 @@ export default function Contacts() {
 
   const handleAddContact = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSavingContact(true);
-    try {
-      const validRole = newContactFormData.role?.trim() || 'client';
-      await addDoc(collection(db, 'contacts'), {
-        name: newContactFormData.name,
-        email: newContactFormData.email,
-        phone: newContactFormData.phone,
-        company: newContactFormData.company,
-        role: validRole,
-        trade: newContactFormData.trade,
-        isActive: true,
-        createdAt: serverTimestamp()
-      });
-      resetContactForm();
-      setShowAddModal(false);
-      toast({ title: 'Contact Added', description: 'Contact has been successfully created.' });
-    } catch (error: unknown) {
+    const validRole = newContactFormData.role?.trim() || 'client';
+
+    // Hard rule: clients must land somewhere in the sales pipeline so nothing
+    // slips through without an owner / next-action stage.
+    if (validRole === 'client' && !newContactFormData.salesStage) {
       toast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to add contact',
-        variant: 'destructive'
+        title: 'Sales pipeline stage required',
+        description: 'Pick where this client sits in the sales pipeline before saving.',
+        variant: 'destructive',
       });
-    } finally {
-      setIsSavingContact(false);
+      return;
+    }
+
+    // Subs and vendors must have at least one trade so the bid-package flow
+    // can target them by specialty. Multiple trades are allowed.
+    if ((validRole === 'subcontractor' || validRole === 'vendor') && newContactFormData.trades.length === 0) {
+      toast({
+        title: 'Trade required',
+        description: 'Add at least one trade so this sub/vendor can be matched to bid packages.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Optimistic UX: close the modal immediately so the user isn't stuck
+    // watching a spinner. The write keeps running in the background and we
+    // toast either success or failure once it resolves.
+    const formSnapshot = { ...newContactFormData };
+    resetContactForm();
+    setShowAddModal(false);
+    setIsSavingContact(false);
+    try {
+      if (validRole === 'client') {
+        // Dual-write: contact + matching CRM client doc, cross-referenced.
+        const batch = writeBatch(db);
+        const contactRef = doc(collection(db, 'contacts'));
+        const clientRef  = doc(collection(db, 'clients'));
+        const fullName = `${formSnapshot.firstName} ${formSnapshot.lastName}`.trim();
+        batch.set(contactRef, {
+          firstName: formSnapshot.firstName,
+          lastName: formSnapshot.lastName,
+          name: fullName,
+          email: formSnapshot.email,
+          phone: formSnapshot.phone,
+          company: formSnapshot.company,
+          role: validRole,
+          type: 'client',
+          trade: '',
+          trades: [],
+          isActive: true,
+          salesClientId: clientRef.id,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+        batch.set(clientRef, {
+          name: fullName,
+          email: formSnapshot.email,
+          phone: formSnapshot.phone,
+          stage: formSnapshot.salesStage,
+          projectType: 'custom_home',
+          source: 'referral',
+          priority: 'medium',
+          tags: [],
+          contactId: contactRef.id,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+        await batch.commit();
+        const stageLabel = salesStages.find(s => s.key === formSnapshot.salesStage)?.label || formSnapshot.salesStage;
+        toast({
+          title: 'Contact added',
+          description: `Client created — also placed in Sales at "${stageLabel}".`,
+        });
+      } else {
+        const fullName = `${formSnapshot.firstName} ${formSnapshot.lastName}`.trim();
+        const newRef = await addDoc(collection(db, 'contacts'), {
+          firstName: formSnapshot.firstName,
+          lastName: formSnapshot.lastName,
+          name: fullName,
+          email: formSnapshot.email,
+          phone: formSnapshot.phone,
+          company: formSnapshot.company,
+          role: validRole,
+          trade: formSnapshot.trades[0] || '',
+          trades: formSnapshot.trades,
+          isActive: true,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+        toast({ title: 'Contact added', description: `${fullName} added to contacts.` });
+        if (formSnapshot.sendInvite && formSnapshot.email) {
+          // Fire-and-forget invite — opens the user's mail client.
+          const { createPortalInvite, openInviteMail } = await import('@/lib/portalInvite');
+          try {
+            const token = await createPortalInvite({
+              contactId: newRef.id,
+              email: formSnapshot.email,
+              role: validRole,
+              firstName: formSnapshot.firstName,
+              invitedBy: user?.email || '',
+            });
+            openInviteMail({ email: formSnapshot.email, firstName: formSnapshot.firstName, token });
+          } catch (e: any) {
+            toast({ title: 'Invite not sent', description: e?.message || '', variant: 'destructive' });
+          }
+        }
+      }
+    } catch (error: unknown) {
+      // eslint-disable-next-line no-console
+      console.error('Add contact failed:', error);
+      toast({
+        title: 'Could not add contact',
+        description: error instanceof Error ? error.message : 'Failed to add contact',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -260,10 +399,18 @@ export default function Contacts() {
       contact.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (contact.company && contact.company.toLowerCase().includes(searchTerm.toLowerCase())) ||
       contact.role?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (contact.trade && contact.trade.toLowerCase().includes(searchTerm.toLowerCase()));
+      (contact.trade && contact.trade.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (Array.isArray((contact as any).trades) && (contact as any).trades.some((t: string) =>
+        typeof t === 'string' && t.toLowerCase().includes(searchTerm.toLowerCase())
+      ));
     const matchesRole = roleFilter === 'all' || contact.role?.toLowerCase() === roleFilter.toLowerCase();
     const matchesCompany = companyFilter === 'all' || contact.company === companyFilter;
     return matchesSearch && matchesRole && matchesCompany;
+  }).sort((a, b) => {
+    // Alphabetical by name — primary sort. Fall back to email if name is empty.
+    const aKey = String(a.name || a.email || '').toLowerCase();
+    const bKey = String(b.name || b.email || '').toLowerCase();
+    return aKey.localeCompare(bKey);
   });
 
   const uniqueRoles = Array.from(new Set(contacts.map((c) => c.role))).sort();
@@ -290,13 +437,19 @@ export default function Contacts() {
   };
 
   const exportContacts = () => {
-    const headers = ['Name', 'Email', 'Phone', 'Company', 'Role', 'Trade'];
+    const headers = ['Name', 'Email', 'Phone', 'Company', 'Role', 'Trades'];
     const csvContent = [
       headers.join(','),
-      ...filteredContacts.map((contact) => [
-        contact.name, contact.email, contact.phone || '',
-        contact.company || '', contact.role, contact.trade || ''
-      ].join(','))
+      ...filteredContacts.map((contact) => {
+        const arr: string[] = Array.isArray((contact as any).trades) ? (contact as any).trades : [];
+        const tradesStr = arr.length > 0 ? arr.join('; ') : (contact.trade || '');
+        return [
+          contact.name, contact.email, contact.phone || '',
+          contact.company || '', contact.role,
+          // Wrap in quotes since trades are joined by `;` (CSV-safe).
+          `"${tradesStr.replace(/"/g, '""')}"`,
+        ].join(',');
+      })
     ].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
@@ -543,9 +696,17 @@ export default function Contacts() {
                               {contact.company && (
                                 <span className="font-medium text-gray-800">{contact.company}</span>
                               )}
-                              {contact.role.toLowerCase() === 'subcontractor' && contact.trade && (
-                                <Badge variant="outline" className="text-xs">{contact.trade}</Badge>
-                              )}
+                              {(() => {
+                                const role = String(contact.role || '').toLowerCase();
+                                if (role !== 'subcontractor' && role !== 'vendor') return null;
+                                const arr = Array.isArray((contact as any).trades) ? (contact as any).trades : [];
+                                const display: string[] = arr.length > 0
+                                  ? arr.filter((t: any) => typeof t === 'string' && t.trim())
+                                  : (contact.trade ? [contact.trade] : []);
+                                return display.map((t: string) => (
+                                  <Badge key={t} variant="outline" className="text-xs">{t}</Badge>
+                                ));
+                              })()}
                               <span>{contact.email}</span>
                               {contact.phone && <span>{contact.phone}</span>}
                             </div>
@@ -620,7 +781,7 @@ export default function Contacts() {
 
             {/* Add Contact Modal */}
             <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
-              <DialogContent>
+              <DialogContent className="max-w-2xl">
                 <DialogHeader>
                   <DialogTitle>Add New Contact</DialogTitle>
                   <DialogDescription>
@@ -630,14 +791,25 @@ export default function Contacts() {
                 <form onSubmit={handleAddContact} className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <Label htmlFor="name">Name *</Label>
+                      <Label htmlFor="firstName">First Name *</Label>
                       <Input
-                        id="name"
-                        value={newContactFormData.name}
-                        onChange={(e) => setNewContactFormData(prev => ({ ...prev, name: e.target.value }))}
+                        id="firstName"
+                        value={newContactFormData.firstName}
+                        onChange={(e) => setNewContactFormData(prev => ({ ...prev, firstName: e.target.value }))}
                         required
                       />
                     </div>
+                    <div>
+                      <Label htmlFor="lastName">Last Name *</Label>
+                      <Input
+                        id="lastName"
+                        value={newContactFormData.lastName}
+                        onChange={(e) => setNewContactFormData(prev => ({ ...prev, lastName: e.target.value }))}
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
                     <div>
                       <Label htmlFor="email">Email *</Label>
                       <Input
@@ -648,8 +820,6 @@ export default function Contacts() {
                         required
                       />
                     </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
                     <div>
                       <Label htmlFor="phone">Phone</Label>
                       <Input
@@ -659,21 +829,24 @@ export default function Contacts() {
                         onChange={(e) => setNewContactFormData(prev => ({ ...prev, phone: e.target.value }))}
                       />
                     </div>
-                    <div>
-                      <Label htmlFor="company">Company</Label>
-                      <Input
-                        id="company"
-                        value={newContactFormData.company}
-                        onChange={(e) => setNewContactFormData(prev => ({ ...prev, company: e.target.value }))}
-                      />
-                    </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <Label htmlFor="role">Role *</Label>
                       <Select
                         value={newContactFormData.role}
-                        onValueChange={(value) => setNewContactFormData(prev => ({ ...prev, role: value }))}
+                        onValueChange={(value) => {
+                          const isVendorish = value === 'subcontractor' || value === 'vendor';
+                          const isDesigner = value === 'designer';
+                          // Designers and vendors both have a company/business
+                          // name. Trades are sub/vendor only.
+                          setNewContactFormData(prev => ({
+                            ...prev,
+                            role: value,
+                            company: (isVendorish || isDesigner) ? prev.company : '',
+                            trades:  isVendorish ? prev.trades  : [],
+                          }));
+                        }}
                       >
                         <SelectTrigger>
                           <SelectValue placeholder="Select role" />
@@ -681,21 +854,94 @@ export default function Contacts() {
                         <SelectContent>
                           <SelectItem value="client">Client</SelectItem>
                           <SelectItem value="subcontractor">Subcontractor</SelectItem>
+                          <SelectItem value="vendor">Vendor</SelectItem>
+                          <SelectItem value="designer">Designer</SelectItem>
                           <SelectItem value="employee">Employee</SelectItem>
                           <SelectItem value="supplier">Supplier</SelectItem>
-                          <SelectItem value="vendor">Vendor</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
-                    <div>
-                      <Label htmlFor="trade">Trade/Specialty</Label>
-                      <TradeTypeComboBox
-                        value={newContactFormData.trade || ''}
-                        onValueChange={(trade) => setNewContactFormData(prev => ({ ...prev, trade }))}
-                        className="w-full"
-                      />
-                    </div>
                   </div>
+                  {(() => {
+                    const isVendorish = newContactFormData.role === 'subcontractor' || newContactFormData.role === 'vendor';
+                    const isDesigner = newContactFormData.role === 'designer';
+                    const showCompany = isVendorish || isDesigner;
+                    const isClient = newContactFormData.role === 'client';
+                    return (
+                      <>
+                        {showCompany && (
+                          <div>
+                            <Label htmlFor="company">
+                              {isDesigner ? 'Business Name' : 'Company'}
+                            </Label>
+                            <Input
+                              id="company"
+                              value={newContactFormData.company}
+                              onChange={(e) => setNewContactFormData(prev => ({ ...prev, company: e.target.value }))}
+                              placeholder={isDesigner ? 'e.g. Skyeline Design' : ''}
+                            />
+                          </div>
+                        )}
+                        {isVendorish && (
+                          <div>
+                            <Label>
+                              Trades / Specialties <span className="text-red-500">*</span>
+                            </Label>
+                            <MultiTradeSelector
+                              value={newContactFormData.trades}
+                              onValueChange={(trades) => setNewContactFormData(prev => ({ ...prev, trades }))}
+                            />
+                            <p className="text-[11px] text-gray-500 mt-1">
+                              Add every trade this sub/vendor covers — each one makes them eligible for that trade's bid packages.
+                            </p>
+                          </div>
+                        )}
+
+                        {isClient && (
+                          <div className="rounded-lg border border-[#C9A96E] bg-[#FFF8E7]/60 p-3">
+                            <Label htmlFor="salesStage" className="font-medium">
+                              Sales Pipeline Stage *
+                            </Label>
+                            <p className="text-xs text-gray-500 mb-2">
+                              Required for clients — every client has to live somewhere in the pipeline.
+                            </p>
+                            <Select
+                              value={newContactFormData.salesStage}
+                              onValueChange={(v) => setNewContactFormData(prev => ({ ...prev, salesStage: v }))}
+                            >
+                              <SelectTrigger id="salesStage">
+                                <SelectValue placeholder="Where in the pipeline?" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {salesStages.map(s => (
+                                  <SelectItem key={s.key} value={s.key}>
+                                    <span className="flex items-center gap-2">
+                                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
+                                      {s.label}
+                                    </span>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
+                  <label className="flex items-start gap-2 p-3 border rounded-lg bg-amber-50/40 border-amber-200 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={newContactFormData.sendInvite}
+                      onChange={e => setNewContactFormData(prev => ({ ...prev, sendInvite: e.target.checked }))}
+                      className="mt-1"
+                    />
+                    <div className="text-sm">
+                      <p className="font-medium text-amber-900">Send portal invite after saving</p>
+                      <p className="text-xs text-amber-700/80">
+                        Opens your email with a pre-filled sign-up link. When they register, their account auto-links to this contact.
+                      </p>
+                    </div>
+                  </label>
                   <DialogFooter>
                     <Button type="button" variant="outline" onClick={() => { resetContactForm(); setShowAddModal(false); }}>
                       Cancel
@@ -882,8 +1128,11 @@ export default function Contacts() {
           />
         )}
 
-        {/* Suppress unused editingContact warning */}
-        {editingContact && null}
+        <EditContactModal
+          contact={editingContact}
+          open={!!editingContact}
+          onClose={() => setEditingContact(null)}
+        />
       </div>
     </AppLayout>
   );

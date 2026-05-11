@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { collection, getDocs, query as fsQuery, orderBy } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -32,9 +34,23 @@ export const AdminPortalControls = () => {
     return null;
   }
 
-  // Fetch contacts for user selection
+  // Fetch contacts for user selection — read Firestore directly (the /api/contacts
+  // REST endpoint is blocked by org IAM on Cloud Run).
   const { data: contacts = [], isLoading } = useQuery<Contact[]>({
     queryKey: ['/api/contacts'],
+    queryFn: async () => {
+      const snap = await getDocs(fsQuery(collection(db, 'contacts'), orderBy('name', 'asc')));
+      return snap.docs.map(d => {
+        const data = d.data() as any;
+        return {
+          id: d.id as any,
+          name: data.name || '',
+          email: data.email,
+          company: data.company,
+          role: data.role || data.type || '',
+        } as Contact;
+      });
+    },
   });
 
   // Determine current portal from URL
@@ -138,13 +154,13 @@ export const AdminPortalControls = () => {
   };
 
   return (
-    <div className="bg-blue-50 border-b border-blue-200 px-4 py-3">
+    <div className="bg-amber-100 border-b-2 border-amber-400 px-4 py-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <Eye className="h-4 w-4 text-blue-600" />
-            <span className="text-sm font-medium text-blue-900">
-              Admin Viewing: {getPortalDisplayName(currentPortalType)}
+            <Eye className="h-4 w-4 text-amber-700" />
+            <span className="text-sm font-bold text-amber-900 uppercase tracking-wide">
+              Admin viewing {getPortalDisplayName(currentPortalType)}
             </span>
           </div>
           
@@ -221,14 +237,6 @@ export const AdminPortalControls = () => {
           Exit Admin View
         </Button>
       </div>
-      
-      {viewedUser && (
-        <div className="mt-2 text-xs text-theme-primary">
-          Currently viewing as: <strong>{viewedUser.name}</strong>
-          {viewedUser.company && ` (${viewedUser.company})`}
-          {viewedUser.email && ` - ${viewedUser.email}`}
-        </div>
-      )}
     </div>
   );
 };

@@ -22,12 +22,15 @@ import {
   CheckCircle2, XCircle, Clock, Copy, X, Building2, Mail,
   Hammer, Zap, Droplets, Paintbrush, Thermometer, Package,
   TreePine, Layers, Grid3X3, ShieldCheck, Ruler, Scissors,
-  Palette, AlertCircle, SlidersHorizontal,
+  Palette, AlertCircle, SlidersHorizontal, Lock, Eye, TrendingUp,
 } from 'lucide-react';
 import { lazy, Suspense } from 'react';
 import { MinimalSpinner } from '@/components/layout/MinimalSpinner';
 
 const TakeoffStudio = lazy(() => import('@/components/takeoff/TakeoffStudio'));
+const PortalBidsPanel = lazy(() =>
+  import('@/components/bidding/PortalBidsPanel').then(m => ({ default: m.PortalBidsPanel })),
+);
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -40,7 +43,10 @@ interface LineItem {
   description: string;
   qty: number;
   unit: string;
+  /** What the client sees per-unit on the estimate. Always client-facing. */
   unitCost: number;
+  /** What the sub charges Skyeline per unit. Internal — never shown to client. */
+  subCost?: number;
   total: number;
   subId?: string;
   subName?: string;
@@ -152,18 +158,33 @@ function fmtFull(n: number) {
 
 function calcTotals(items: LineItem[], overhead: number, profit: number) {
   const subtotal = items.reduce((s, i) => s + (i.total ?? 0), 0);
+  // Internal subtotal at sub costs (what Skyeline actually pays).
+  const internalSubtotal = items.reduce((s, i) => s + (i.qty || 0) * (i.subCost ?? 0), 0);
+  // Direct markup: difference between what the client pays per line and what
+  // the sub charges Skyeline. This is "before-overhead" gross margin.
+  const lineMarkup = Math.max(0, subtotal - internalSubtotal);
   const overheadAmt = subtotal * (overhead / 100);
   const profitAmt = (subtotal + overheadAmt) * (profit / 100);
+  const total = subtotal + overheadAmt + profitAmt;
+  // Total Skyeline keeps = line markup + overhead + profit % (overhead is also
+  // typically Skyeline's pocket since subs don't charge a separate OH). Show
+  // both honest line-level margin and the all-in profit once OH/profit % apply.
+  const grossProfit = total - internalSubtotal;
+  const grossMarginPct = total > 0 ? (grossProfit / total) * 100 : 0;
   return {
     subtotal,
+    internalSubtotal,
+    lineMarkup,
     overheadAmt,
     profitAmt,
-    total: subtotal + overheadAmt + profitAmt,
+    grossProfit,
+    grossMarginPct,
+    total,
   };
 }
 
 function newLineItem(trade = 'framing'): LineItem {
-  return { id: crypto.randomUUID(), trade, description: '', qty: 1, unit: 'lump sum', unitCost: 0, total: 0 };
+  return { id: crypto.randomUUID(), trade, description: '', qty: 1, unit: 'lump sum', unitCost: 0, subCost: 0, total: 0 };
 }
 
 // ─── Line Item Row ─────────────────────────────────────────────────────────────
@@ -194,6 +215,8 @@ function LineItemRow({
       const uc  = field === 'unitCost' ? v : item.unitCost;
       onChange(item.id, field, v);
       onChange(item.id, 'total', qty * uc);
+    } else if (field === 'subCost') {
+      onChange(item.id, field, v);
     } else {
       onChange(item.id, field, v);
     }
@@ -204,10 +227,28 @@ function LineItemRow({
     : null;
   const materialAmt = laborAmt != null ? item.total - laborAmt : null;
 
+  // Per-line internal vs client math.
+  const subCost      = item.subCost ?? 0;
+  const clientUnit   = item.unitCost ?? 0;
+  const qty          = item.qty ?? 0;
+  const internalTotal = qty * subCost;
+  const lineProfit   = item.total - internalTotal;
+  const lineMarginPct = item.total > 0 ? (lineProfit / item.total) * 100 : 0;
+  const markupPct    = subCost > 0 ? ((clientUnit - subCost) / subCost) * 100 : 0;
+
+  // Color cue for the line profit pill.
+  const profitColor =
+    lineProfit < 0 ? 'bg-red-100 text-red-700 border-red-200'
+    : lineMarginPct < 10 ? 'bg-amber-100 text-amber-700 border-amber-200'
+    : 'bg-green-100 text-green-700 border-green-200';
+
   return (
-    <div className="py-2 border-b border-gray-100 last:border-0 space-y-1.5">
-      <div className="grid gap-2"
-        style={{ gridTemplateColumns: '1fr 2fr 60px 100px 30px 110px 110px 24px' }}>
+    <div className="py-2 border-b border-gray-100 last:border-0">
+      {/* Single row: trade · description · qty · unit · 📏 · sub $ · client $ · profit pill · total · X
+          Sub cost sits next to client price (lock icon = internal) so the eye
+          can see "what I pay → what client pays → my profit" left-to-right. */}
+      <div className="grid gap-2 items-center"
+        style={{ gridTemplateColumns: '1fr 2fr 60px 90px 30px 110px 110px 90px 90px 24px' }}>
         <Select value={item.trade} onValueChange={v => onChange(item.id, 'trade', v)}>
           <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
           <SelectContent>
@@ -237,7 +278,6 @@ function LineItemRow({
           </SelectContent>
         </Select>
 
-        {/* Measure from plans button */}
         <button
           title="Measure from plans"
           onClick={() => onMeasure(item.id)}
@@ -250,15 +290,44 @@ function LineItemRow({
           <Ruler className="h-3.5 w-3.5" />
         </button>
 
-        <Input
-          className="h-8 text-xs text-right"
-          type="number"
-          value={item.unitCost || ''}
-          onChange={e => handleNum('unitCost', e.target.value)}
-          placeholder="0.00"
-        />
+        {/* SUB COST — internal. Lock icon left of input is the only visual cue. */}
+        <div className="relative">
+          <Lock className="w-3 h-3 text-gray-400 absolute left-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <Input
+            className="h-8 text-xs text-right pl-6 bg-gray-50 border-gray-200"
+            type="number"
+            value={item.subCost ?? ''}
+            onChange={e => handleNum('subCost', e.target.value)}
+            placeholder="Sub $"
+            title="Internal — what the sub charges Skyeline per unit (hidden from client)"
+          />
+        </div>
 
-        <div className="h-8 flex items-center justify-end text-sm font-medium text-gray-700 pr-1">
+        {/* CLIENT PRICE — what shows on the estimate. Blue tint = client-facing. */}
+        <div className="relative">
+          <Input
+            className="h-8 text-xs text-right border-blue-200 bg-blue-50/30 focus-visible:ring-blue-300"
+            type="number"
+            value={item.unitCost || ''}
+            onChange={e => handleNum('unitCost', e.target.value)}
+            placeholder="Client $"
+            title="Client price per unit — shown on the estimate"
+          />
+        </div>
+
+        {/* Profit pill — $ profit + margin % per line */}
+        <div className="flex justify-end">
+          {(subCost > 0 || clientUnit > 0) ? (
+            <span className={`inline-flex items-center gap-1 text-[11px] font-mono px-1.5 py-1 rounded border ${profitColor}`}>
+              {lineProfit >= 0 ? '+' : ''}{fmt(lineProfit)}
+              {item.total > 0 && (
+                <span className="opacity-70">·{lineMarginPct.toFixed(0)}%</span>
+              )}
+            </span>
+          ) : <span className="text-xs text-gray-300 text-right">—</span>}
+        </div>
+
+        <div className="h-8 flex items-center justify-end text-sm font-medium text-gray-800 pr-1">
           {fmt(item.total)}
         </div>
 
@@ -267,25 +336,32 @@ function LineItemRow({
         </button>
       </div>
 
-      {/* Status badges + split display */}
-      {(item.needsSelection || item.splitLaborMaterial) && (
-        <div className="ml-1 flex items-center gap-2 flex-wrap">
+      {/* Inline markup + status badges (only when relevant) */}
+      {(subCost > 0 && clientUnit > 0) || item.needsSelection || item.splitLaborMaterial ? (
+        <div className="mt-1 ml-1 flex items-center gap-2 flex-wrap text-[11px]">
+          {subCost > 0 && clientUnit > 0 && (
+            <span className="text-gray-500">
+              Markup <strong className={markupPct < 0 ? 'text-red-600' : 'text-gray-700'}>{fmt(clientUnit - subCost)}/{item.unit}</strong>
+              <span className="text-gray-300 mx-1">·</span>
+              {markupPct.toFixed(0)}% over sub cost
+            </span>
+          )}
           {item.needsSelection && item.selectionStatus && (
-            <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium ${SELECTION_STATUS_COLOR[item.selectionStatus] || 'bg-gray-100 text-gray-600'}`}>
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-medium ${SELECTION_STATUS_COLOR[item.selectionStatus] || 'bg-gray-100 text-gray-600'}`}>
               <Palette className="w-3 h-3" />
               {SELECTION_STATUS_LABEL[item.selectionStatus] || item.selectionStatus}
             </span>
           )}
           {item.splitLaborMaterial && laborAmt != null && materialAmt != null && (
-            <span className="inline-flex items-center gap-1.5 text-xs text-gray-500">
+            <span className="inline-flex items-center gap-1.5 text-gray-500">
               <Scissors className="w-3 h-3 text-gray-400" />
-              Labor: <strong>{fmt(laborAmt)}</strong>
+              Labor <strong>{fmt(laborAmt)}</strong>
               <span className="text-gray-300">·</span>
-              Material: <strong className="text-amber-700">{fmt(materialAmt)}</strong>
+              Material <strong className="text-amber-700">{fmt(materialAmt)}</strong>
             </span>
           )}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -370,13 +446,14 @@ function KanbanColumn({ stage, label, accent, estimates, onEdit, onDelete, onMov
 // ─── Estimate Modal (full editor) ─────────────────────────────────────────────
 
 function EstimateModal({
-  open, onClose, editing, clients, onSave,
+  open, onClose, editing, clients, onSave, prefillProject,
 }: {
   open: boolean;
   onClose: () => void;
   editing: Estimate | null;
   clients: CRMClient[];
   onSave: (data: Omit<Estimate, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
+  prefillProject?: { id: string; name: string } | null;
 }) {
   const defaultItems = () => TRADES.slice(0, 5).map(t => newLineItem(t.key));
 
@@ -417,10 +494,10 @@ function EstimateModal({
       setValidUntil(editing.validUntil ?? '');
       setItems(editing.lineItems?.length ? editing.lineItems : defaultItems());
     } else {
-      setTitle('');
+      setTitle(prefillProject?.name ? `${prefillProject.name} — Estimate` : '');
       setClientId('');
       setJobAddress('');
-      setProjectId('');
+      setProjectId(prefillProject?.id || '');
       setStatus('draft');
       setOverhead(10);
       setProfitPct(15);
@@ -434,7 +511,8 @@ function EstimateModal({
     setMeasuringItemId(null);
     setSelectionPromptItemId(null);
     setSplitItemId(null);
-  }, [editing, open]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing, open, prefillProject?.id]);
 
   // When client selected, auto-fill address
   useEffect(() => {
@@ -489,8 +567,20 @@ function EstimateModal({
   return (
     <>
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-5xl max-h-[95vh] overflow-y-auto p-0">
-        <DialogHeader className="px-6 py-4 border-b sticky top-0 bg-white z-10">
+      <DialogContent
+        className={
+          editing && (activeTab === 'takeoffs' || activeTab === 'bid_packages')
+            ? 'max-w-[96vw] w-full h-[92vh] max-h-[92vh] p-0 flex flex-col overflow-hidden'
+            : 'max-w-5xl max-h-[95vh] overflow-y-auto p-0'
+        }
+      >
+        <DialogHeader
+          className={
+            editing && (activeTab === 'takeoffs' || activeTab === 'bid_packages')
+              ? 'px-6 py-4 border-b bg-white z-10 flex-shrink-0'
+              : 'px-6 py-4 border-b sticky top-0 bg-white z-10'
+          }
+        >
           <DialogTitle className="font-heading text-xl">
             {editing ? 'Edit Estimate' : 'New Estimate'}
           </DialogTitle>
@@ -539,17 +629,21 @@ function EstimateModal({
           </div>
         )}
 
-        {/* ── Bid Packages placeholder ── */}
+        {/* ── Bid Packages tab ── */}
         {editing && activeTab === 'bid_packages' && (
-          <div className="px-6 py-10 text-center text-gray-400">
-            <p className="font-medium">Bid Packages</p>
-            <p className="text-sm mt-1">Coming soon — send scopes to subcontractors for bidding.</p>
+          <div className="flex-1 min-h-0 overflow-y-auto p-4">
+            <Suspense fallback={<MinimalSpinner title="Loading bids..." />}>
+              <PortalBidsPanel
+                projectId={editing.projectId || 'default'}
+                projectName={editing.title}
+              />
+            </Suspense>
           </div>
         )}
 
         {/* ── Takeoffs tab ── */}
         {editing && activeTab === 'takeoffs' && (
-          <div className="overflow-hidden flex-1">
+          <div className="flex-1 min-h-0 overflow-hidden">
             <Suspense fallback={<MinimalSpinner title="Loading Plans..." />}>
               <TakeoffStudio
                 projectId={editing.projectId || 'default'}
@@ -599,21 +693,70 @@ function EstimateModal({
             </div>
           </div>
 
+          {/* Profit / margin summary — internal only, anchors the GC's view */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+            <div className="rounded-lg border border-blue-200 bg-blue-50/40 p-3">
+              <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-blue-800 font-semibold">
+                <Eye className="w-3 h-3" />
+                Client Sees
+              </div>
+              <div className="text-lg font-bold text-gray-900 mt-0.5">{fmt(totals.total)}</div>
+              <div className="text-[10px] text-gray-500">All-in price on the estimate</div>
+            </div>
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+              <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-gray-700 font-semibold">
+                <Lock className="w-3 h-3" />
+                Sub Costs
+              </div>
+              <div className="text-lg font-bold text-gray-900 mt-0.5">{fmt(totals.internalSubtotal)}</div>
+              <div className="text-[10px] text-gray-500">What Skyeline pays subs</div>
+            </div>
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+              <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-amber-800 font-semibold">
+                <TrendingUp className="w-3 h-3" />
+                Line Markup
+              </div>
+              <div className="text-lg font-bold text-gray-900 mt-0.5">{fmt(totals.lineMarkup)}</div>
+              <div className="text-[10px] text-gray-500">Client price − sub cost (per row)</div>
+            </div>
+            <div className="rounded-lg border border-green-200 bg-green-50 p-3">
+              <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-green-800 font-semibold">
+                <DollarSign className="w-3 h-3" />
+                Gross Profit
+              </div>
+              <div className="text-lg font-bold text-gray-900 mt-0.5">
+                {fmt(totals.grossProfit)}
+              </div>
+              <div className="text-[10px] text-gray-500">
+                {totals.grossMarginPct.toFixed(1)}% margin (markup + OH + profit %)
+              </div>
+            </div>
+          </div>
+
           {/* Line items by trade */}
           <div>
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center justify-between mb-2">
               <h3 className="font-semibold text-gray-800">Scope of Work</h3>
+              <span className="text-[11px] text-gray-400 inline-flex items-center gap-1">
+                <Eye className="w-3 h-3" /> Top row = client-facing
+                <span className="text-gray-300 mx-1">·</span>
+                <Lock className="w-3 h-3" /> Internal row = your costs / margin
+              </span>
             </div>
 
             {/* Column headers */}
             <div className="hidden sm:grid text-xs text-gray-400 font-medium px-1 mb-1"
-              style={{ gridTemplateColumns: '1fr 2fr 60px 100px 30px 110px 110px 24px' }}>
+              style={{ gridTemplateColumns: '1fr 2fr 60px 90px 30px 110px 110px 90px 90px 24px' }}>
               <span>Trade</span>
               <span>Description</span>
               <span className="text-right">Qty</span>
               <span>Unit</span>
               <span title="Measure from plans"><Ruler className="h-3 w-3 text-gray-300" /></span>
-              <span className="text-right">Unit Cost</span>
+              <span className="text-right inline-flex items-center justify-end gap-1">
+                <Lock className="w-3 h-3" /> Sub $
+              </span>
+              <span className="text-right text-blue-700">Client $</span>
+              <span className="text-right">Profit</span>
               <span className="text-right">Total</span>
               <span />
             </div>
@@ -735,7 +878,12 @@ function EstimateModal({
 
     {/* ── Takeoff Studio overlay ── */}
     <Dialog open={!!measuringItemId} onOpenChange={open => { if (!open) setMeasuringItemId(null); }}>
-      <DialogContent className="max-w-[96vw] w-full max-h-[95vh] p-0 flex flex-col">
+      <DialogContent
+        className="max-w-[96vw] w-full max-h-[95vh] p-0 flex flex-col"
+        // Lock the modal's touch behaviour so iOS pinch-zoom doesn't rescale
+        // the entire dialog. Our own wheel/gesture handlers run inside.
+        style={{ touchAction: 'none', overscrollBehavior: 'contain' }}
+      >
         <DialogHeader className="px-4 py-3 border-b flex-shrink-0 flex flex-row items-center justify-between">
           <DialogTitle className="flex items-center gap-2">
             <Ruler className="w-4 h-4 text-amber-600" />
@@ -912,6 +1060,44 @@ export default function EstimateBuilder() {
       setClients(snap.docs.map(d => ({ id: d.id, ...d.data() } as CRMClient)));
     });
   }, []);
+
+  // ── Deep-link handlers (?openEstimate=<id> or ?newForProject=<id>) ────────
+  // Project Overview's "Open Estimate" / "Create Estimate" buttons hand the
+  // user off here with a query string. We auto-open the right dialog.
+  const [pendingDeepLink, setPendingDeepLink] = useState<{
+    openId?: string;
+    newForProject?: { id: string; name: string };
+  } | null>(null);
+  // Lives across renders so EstimateModal can pre-fill project on a brand-new estimate.
+  const [prefillProject, setPrefillProject] = useState<{ id: string; name: string } | null>(null);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const openId = params.get('openEstimate');
+    const newForProject = params.get('newForProject');
+    const projectName = params.get('projectName') || '';
+    if (openId) setPendingDeepLink({ openId });
+    else if (newForProject) setPendingDeepLink({ newForProject: { id: newForProject, name: projectName } });
+  }, []);
+  // When estimates load, resolve a pending openEstimate into the actual record.
+  useEffect(() => {
+    if (!pendingDeepLink) return;
+    if (pendingDeepLink.openId) {
+      const match = estimates.find(e => e.id === pendingDeepLink.openId);
+      if (match) {
+        setEditing(match);
+        setModalOpen(true);
+        setPendingDeepLink(null);
+        window.history.replaceState({}, '', '/estimates');
+      }
+    } else if (pendingDeepLink.newForProject) {
+      setPrefillProject(pendingDeepLink.newForProject);
+      setEditing(null);
+      setModalOpen(true);
+      setPendingDeepLink(null);
+      window.history.replaceState({}, '', '/estimates');
+    }
+  }, [pendingDeepLink, estimates]);
 
   // ── CRUD ──────────────────────────────────────────────────────────────────
   const handleSave = async (data: Omit<Estimate, 'id' | 'createdAt' | 'updatedAt'>) => {
@@ -1183,10 +1369,11 @@ export default function EstimateBuilder() {
 
       <EstimateModal
         open={modalOpen}
-        onClose={() => { setModalOpen(false); setEditing(null); }}
+        onClose={() => { setModalOpen(false); setEditing(null); setPrefillProject(null); }}
         editing={editing}
         clients={clients}
         onSave={handleSave}
+        prefillProject={prefillProject}
       />
 
       <GmailBidImporter

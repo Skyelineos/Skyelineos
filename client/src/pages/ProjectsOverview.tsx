@@ -564,7 +564,7 @@ export default function ProjectsOverview() {
             ) : (
               <div className="text-center py-12 text-gray-500">
                 <Building className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-                <h3 className="text-lg font-medium mb-2">No Projects Yet</h3>
+                <h3 className="text-lg font-medium mb-2">No projects yet</h3>
                 <p className="text-sm mb-4">Get started by creating your first construction project.</p>
                 <Link href="/projects/new">
                   <Button>

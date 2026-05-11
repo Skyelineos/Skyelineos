@@ -17,7 +17,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { Building2, Mail, Lock, Chrome, Loader2, CheckCircle2, User, HardHat, UserCheck, Users, Palette, ChevronRight, ArrowLeft, MapPin, Wrench } from 'lucide-react';
+import { Building2, Mail, Lock, Chrome, Loader2, CheckCircle2, User, HardHat, UserCheck, Users, Palette, ChevronRight, ArrowLeft, MapPin, Wrench, Phone } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
@@ -69,6 +69,7 @@ export default function SignIn() {
   const [accountType, setAccountType] = useState<AccountType>(null);
   const [regName, setRegName] = useState("");
   const [regEmail, setRegEmail] = useState("");
+  const [regPhone, setRegPhone] = useState("");
   const [regPassword, setRegPassword] = useState("");
   const [regConfirm, setRegConfirm] = useState("");
   const [regCompany, setRegCompany] = useState("");
@@ -86,6 +87,31 @@ export default function SignIn() {
       setLocation(defaultRoute);
     }
   }, [user, isAuthenticated, loading, authLoading, setLocation]);
+
+  // Resolve ?invite=<token> on mount: pre-fill the registration email + name
+  // so the visitor lands in the "Create account" flow with their info ready.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('invite');
+    if (!token) return;
+    (async () => {
+      try {
+        const snap = await getDocs(query(
+          collection(db, 'portalInvites'),
+          where('token', '==', token),
+        ));
+        if (snap.empty) return;
+        const data = snap.docs[0].data() as any;
+        if (data.status !== 'pending') return;
+        setRegEmail(String(data.email || ''));
+        setRegName(String(data.firstName || ''));
+        // Open the registration drawer automatically.
+        setRegisterOpen(true);
+      } catch {/* best-effort */}
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (isAuthenticated && user) {
     return (
@@ -127,7 +153,7 @@ export default function SignIn() {
       }
       setError(msg);
       if (isAccessRevoked) {
-        toast({ title: "Account Access Revoked", description: msg, variant: "destructive" });
+        toast({ title: "Account access revoked", description: msg, variant: "destructive" });
       }
       setIsLoading(false);
     }
@@ -228,12 +254,116 @@ export default function SignIn() {
         }
       }
 
+      // Contact linking: match an existing contact by email OR phone OR full
+      // name (any one matches). If none match, create a new contact tagged
+      // with the role they chose. Either way the user record gets linked.
+      const contactRoleFor = (t: AccountType): string => (
+        t === 'client' ? 'client'
+        : t === 'sub' ? 'subcontractor'
+        : t === 'designer' ? 'designer'
+        : 'employee'
+      );
+      const contactRole = contactRoleFor(accountType);
+      // Normalize phone to digits-only so "(208) 555-1234" matches "2085551234".
+      const normalizePhone = (p: string) => String(p || '').replace(/\D/g, '');
+      let linkedContactId: string | null = null;
+      try {
+        const emailLower = regEmail.trim().toLowerCase();
+        const phoneDigits = normalizePhone(regPhone);
+        const nameLower = regName.trim().toLowerCase();
+        const contactsSnap = await getDocs(collection(db, 'contacts'));
+        const matchingContact = contactsSnap.docs.find(d => {
+          const data = d.data() as any;
+          const e = String(data.email || '').trim().toLowerCase();
+          if (e && e === emailLower) return true;
+          const p = normalizePhone(data.phone);
+          if (p && phoneDigits && p === phoneDigits) return true;
+          const n = String(data.name || '').trim().toLowerCase();
+          if (n && nameLower && n === nameLower) return true;
+          return false;
+        });
+        if (matchingContact) {
+          // Found an existing contact — link this user to it. Only fill in
+          // fields that are blank so we don't overwrite GC-curated data.
+          const existing = matchingContact.data() as any;
+          const update: Record<string, any> = {
+            linkedUserId: uid,
+            hasPortalAccess: true,
+            updatedAt: serverTimestamp(),
+          };
+          if (!existing.role) update.role = contactRole;
+          if (!existing.name) update.name = regName;
+          if (!existing.email) update.email = regEmail;
+          if (!existing.phone && regPhone.trim()) update.phone = regPhone.trim();
+          if (accountType === 'sub' && finalTrade) {
+            const arr: string[] = Array.isArray(existing.trades) ? existing.trades : [];
+            const legacy = String(existing.trade || '').trim();
+            const merged = Array.from(new Set([
+              ...arr,
+              ...(legacy ? [legacy] : []),
+              finalTrade,
+            ].filter(Boolean)));
+            update.trades = merged;
+            update.trade = merged[0];
+          }
+          if (accountType === 'sub' && regCompany && !existing.company) {
+            update.company = regCompany;
+          }
+          await setDoc(doc(db, 'contacts', matchingContact.id), update, { merge: true });
+          linkedContactId = matchingContact.id;
+        } else {
+          // No direct contact match — but a CLIENT contact might have listed
+          // this person as their spouse (inline spouseEmail). In that case,
+          // create a new contact AND mirror the link both ways.
+          let spouseOfContactId = '';
+          const inlineSpouseMatch = contactsSnap.docs.find(d => {
+            const data = d.data() as any;
+            const e = String(data.spouseEmail || '').trim().toLowerCase();
+            return e && e === emailLower;
+          });
+          if (inlineSpouseMatch) spouseOfContactId = inlineSpouseMatch.id;
+
+          const newContactRef = await addDoc(collection(db, 'contacts'), {
+            name: regName,
+            email: regEmail,
+            phone: regPhone.trim(),
+            company: accountType === 'sub' ? (regCompany || '') : '',
+            role: contactRole,
+            trade: accountType === 'sub' && finalTrade ? finalTrade : '',
+            trades: accountType === 'sub' && finalTrade ? [finalTrade] : [],
+            isActive: true,
+            hasPortalAccess: true,
+            linkedUserId: uid,
+            spouseContactId: spouseOfContactId,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+          linkedContactId = newContactRef.id;
+
+          // Mirror the spouse link back onto the existing client's contact —
+          // they had only inline spouse info before; now point to the real doc.
+          if (spouseOfContactId) {
+            try {
+              await setDoc(doc(db, 'contacts', spouseOfContactId), {
+                spouseContactId: newContactRef.id,
+                updatedAt: serverTimestamp(),
+              }, { merge: true });
+            } catch {/* best-effort */}
+          }
+        }
+      } catch (e: any) {
+        // Surface but don't block signup — admin can fix later.
+        // eslint-disable-next-line no-console
+        console.error('Contact linking failed:', e?.message || e);
+      }
+
       // Write user profile to Firestore
       await setDoc(doc(db, 'users', uid), {
         email: regEmail,
         name: regName,
         role,
         company: regCompany || null,
+        linkedContactId,
         ...(accountType === 'sub' && finalTrade ? { trade: finalTrade, tradeIsCustom: isOtherTrade } : {}),
         ...(accountType === 'client' && regProjectAddress.trim() ? {
           projectAddress: regProjectAddress.trim(),
@@ -509,6 +639,18 @@ export default function SignIn() {
                   <Input type="email" placeholder="your@email.com" value={regEmail}
                     onChange={e => setRegEmail(e.target.value)} className="pl-10" />
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Phone <span className="text-gray-400 font-normal text-xs">(optional)</span></Label>
+                <div className="relative">
+                  <Phone className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                  <Input type="tel" placeholder="(208) 555-1234" value={regPhone}
+                    onChange={e => setRegPhone(e.target.value)} className="pl-10" />
+                </div>
+                <p className="text-[11px] text-gray-400">
+                  Helps us link you to an existing contact record if there is one.
+                </p>
               </div>
 
               <div className="space-y-2">

@@ -281,6 +281,34 @@ export function BidSubmissionDetailsModal({
               </Card>
             )}
 
+            {/* Attached takeoff measurements — only present when the sub used the
+                takeoff tool and chose to share the numbers behind their bid. */}
+            {Array.isArray(bidDetails.attachedMeasurements) && bidDetails.attachedMeasurements.length > 0 && (
+              <Card className="border-[#C9A96E]/40 bg-[#FFF8E7]/40">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <FileText className="w-4 h-4 text-[#C9A96E]" />
+                    Sub's Takeoff Measurements ({bidDetails.attachedMeasurements.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-1.5">
+                    {bidDetails.attachedMeasurements.map((m: any, i: number) => (
+                      <div key={m.id || i} className="flex items-center justify-between gap-3 text-sm py-1.5 border-b border-[#C9A96E]/10 last:border-0">
+                        <span className="text-gray-800 truncate">
+                          <span className="text-xs uppercase tracking-wide text-gray-400 mr-2">{m.type}</span>
+                          {m.label}
+                        </span>
+                        <span className="font-mono text-sm font-semibold text-gray-900 flex-shrink-0">
+                          {Number(m.value).toLocaleString()} {m.unit}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Attachments Section */}
             {bidDetails.attachments && bidDetails.attachments.length > 0 && (
               <Card className="bg-gray-50">

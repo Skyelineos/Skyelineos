@@ -1,6 +1,7 @@
 import { useRoute } from 'wouter';
 import { ProjectLayout } from '@/components/layout/ProjectLayout';
 import BidsTabNew from '@/components/projects/BidsTabNew';
+import { PortalBidsPanel } from '@/components/bidding/PortalBidsPanel';
 import { useOptimizedProject } from '@/hooks/useOptimizedProjects';
 import { ProjectDetailSkeleton } from '@/components/projects/ProjectSkeleton';
 
@@ -37,7 +38,8 @@ export default function ProjectBids() {
 
   return (
     <ProjectLayout projectId={projectId!} projectName={transformedProject.name}>
-      <div className="p-6">
+      <div className="p-6 space-y-6">
+        <PortalBidsPanel projectId={projectId!} projectName={transformedProject.name} />
         <BidsTabNew projectId={parseInt(projectId!)} userRole="admin" />
       </div>
     </ProjectLayout>

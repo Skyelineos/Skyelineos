@@ -28,6 +28,7 @@ import { ProjectDesignDashboard } from '@/components/designer/ProjectDesignDashb
 import { RoomManager } from '@/components/designer/RoomManager';
 import { GlobalDesignDashboard } from '@/components/designer/GlobalDesignDashboard';
 import TakeoffStudio from '@/components/takeoff/TakeoffStudio';
+import { DesignerTodayFeed } from '@/components/today/DesignerTodayFeed';
 
 interface FirestoreProject {
   id: string;
@@ -192,6 +193,9 @@ export default function DesignerPortal() {
               </div>
             )}
           </div>
+
+          {/* Today feed — what needs my attention right now */}
+          {!selectedProject && <DesignerTodayFeed />}
 
           {/* Global Dashboard + Project Grid */}
           {!selectedProject && (

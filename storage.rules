@@ -12,9 +12,26 @@ service firebase.storage {
     match /projects/{projectId}/{allPaths=**} {
       allow read, write: if request.auth != null;
     }
+
+    // Sub-scoped takeoff PDFs — any authed user can upload/read. Per-doc
+    // visibility is enforced by the Firestore subTakeoffs rule, not here.
+    match /subTakeoffs/{allPaths=**} {
+      allow read, write: if request.auth != null;
+    }
     
     // Site log media — any authenticated user can upload; any auth user can read
     match /site-logs/{allPaths=**} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Bills (vendor invoices for AI OCR) — any authenticated user can upload + read
+    // (Firestore rules gate which users can create the metadata record)
+    match /bills/{allPaths=**} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Content Studio media (photos + videos for social posts)
+    match /content/{allPaths=**} {
       allow read, write: if request.auth != null;
     }
 

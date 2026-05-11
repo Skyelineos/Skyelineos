@@ -4,6 +4,9 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { TradeTypeComboBox } from "./TradeTypeComboBox"
 
+// Note: outer Button (Add) imported above is intentional — only the per-chip
+// remove uses a plain <button> for sizing.
+
 interface MultiTradeSelectorProps {
   value?: string[]
   onValueChange: (trades: string[]) => void
@@ -49,29 +52,29 @@ export function MultiTradeSelector({
               <Badge
                 key={trade}
                 variant="secondary"
-                className="flex items-center gap-1 pr-1"
+                className="flex items-center gap-1 pr-1 whitespace-nowrap max-w-full"
               >
-                {trade}
+                <span className="truncate max-w-[16rem]">{trade}</span>
                 {!disabled && (
-                  <Button
+                  <button
                     type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-4 w-4 p-0 hover:bg-transparent"
+                    aria-label={`Remove ${trade}`}
+                    className="inline-flex items-center justify-center h-4 w-4 p-0 rounded-sm hover:bg-black/10 flex-shrink-0"
                     onClick={() => handleRemoveTrade(trade)}
                   >
                     <X className="h-3 w-3" />
-                  </Button>
+                  </button>
                 )}
               </Badge>
             ))}
           </div>
         )}
 
-        {/* Add new trade */}
+        {/* Add new trade. min-w-0 on the input container keeps flexbox from
+            blowing out and clipping the Add button when the modal is narrow. */}
         {!disabled && (
-          <div className="flex gap-2">
-            <div className="flex-1">
+          <div className="flex gap-2 items-stretch">
+            <div className="flex-1 min-w-0">
               <TradeTypeComboBox
                 value={currentTrade}
                 onValueChange={setCurrentTrade}
@@ -83,6 +86,7 @@ export function MultiTradeSelector({
               variant="outline"
               onClick={() => handleAddTrade(currentTrade)}
               disabled={!currentTrade || selectedTrades.includes(currentTrade)}
+              className="flex-shrink-0"
             >
               Add
             </Button>

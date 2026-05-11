@@ -22,8 +22,14 @@ const sidebarItems = [
     path: 'dashboard'
   },
   {
+    id: 'bid-requests',
+    label: 'Bid Requests',
+    icon: Hammer,
+    path: 'bid-requests'
+  },
+  {
     id: 'bids',
-    label: 'Bid Management',
+    label: 'My Bids',
     icon: Hammer,
     path: 'bids'
   },

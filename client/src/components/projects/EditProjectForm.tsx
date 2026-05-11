@@ -27,7 +27,7 @@ const editProjectSchema = z.object({
   address: z.string().optional(),
   squareFootage: z.coerce.number().min(0, 'Square footage must be positive').optional(),
   estimatedBudget: z.coerce.number().min(0, 'Budget must be positive').optional(),
-  status: z.enum(['planning', 'active', 'on_hold', 'completed']),
+  status: z.enum(['planning', 'active', 'punch_list', 'closeout', 'completed', 'on_hold', 'cancelled', 'archived']),
   startDate: z.string().optional(),
   targetCompletion: z.string().optional(),
   assignedProjectManager: z.string().optional(),
@@ -338,8 +338,12 @@ export function EditProjectForm({ project, open, onOpenChange }: EditProjectForm
                         <SelectContent>
                           <SelectItem value="planning">Planning</SelectItem>
                           <SelectItem value="active">Active</SelectItem>
-                          <SelectItem value="on_hold">On Hold</SelectItem>
+                          <SelectItem value="punch_list">Punch List</SelectItem>
+                          <SelectItem value="closeout">Closeout</SelectItem>
                           <SelectItem value="completed">Completed</SelectItem>
+                          <SelectItem value="on_hold">On Hold</SelectItem>
+                          <SelectItem value="cancelled">Cancelled</SelectItem>
+                          <SelectItem value="archived">Archived</SelectItem>
                         </SelectContent>
                       </Select>
                     </FormControl>

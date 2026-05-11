@@ -4,6 +4,8 @@ import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import { useQuery } from '@tanstack/react-query';
+import { collection, getDocs, query as fsQuery, where, doc as fsDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -39,29 +41,19 @@ interface GlobalScheduleCalendarProps {
 }
 
 export function GlobalScheduleCalendar({ projectId }: GlobalScheduleCalendarProps = {}) {
-  // Fetch tasks from multiple projects or specific project
+  // Fetch tasks directly from Firestore — global or project-scoped.
   const { data: tasks = [], isLoading, error } = useQuery<any[]>({
     queryKey: projectId ? [`/api/projects/${projectId}/schedule`] : ['/api/tasks/all-active'],
     queryFn: async () => {
       if (projectId) {
-        const response = await fetch(`/api/projects/${projectId}/schedule`, {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
-          },
-        });
-        if (!response.ok) throw new Error('Failed to fetch project schedule');
-        const data = await response.json();
-        return data.tasks || [];
-      } else {
-        // Fallback to global tasks if no projectId
-        const response = await fetch('/api/tasks/all-active', {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
-          },
-        });
-        if (!response.ok) throw new Error('Failed to fetch tasks');
-        return response.json();
+        const snap = await getDocs(fsQuery(
+          collection(db, 'tasks'),
+          where('projectId', '==', projectId),
+        ));
+        return snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
       }
+      const snap = await getDocs(collection(db, 'tasks'));
+      return snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
     },
     retry: 2,
     staleTime: 2 * 60 * 1000,
@@ -73,23 +65,14 @@ export function GlobalScheduleCalendar({ projectId }: GlobalScheduleCalendarProp
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Task update mutation for drag-and-drop with project-specific endpoint
+  // Task update mutation for drag-and-drop — writes directly to Firestore.
   const updateTaskMutation = useMutation({
-    mutationFn: async ({ taskId, updates, taskProjectId }: { taskId: number; updates: any; taskProjectId: number }) => {
-      const response = await fetch(`/api/projects/${taskProjectId}/tasks/${taskId}/dates`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
-        },
-        body: JSON.stringify(updates),
+    mutationFn: async ({ taskId, updates }: { taskId: number | string; updates: any; taskProjectId?: number | string }) => {
+      await updateDoc(fsDoc(db, 'tasks', String(taskId)), {
+        ...updates,
+        updatedAt: serverTimestamp(),
       });
-
-      if (!response.ok) {
-        throw new Error('Failed to update task dates');
-      }
-
-      return response.json();
+      return { taskId, updates };
     },
     onSuccess: (_, variables) => {
       // Invalidate both global and project-specific queries

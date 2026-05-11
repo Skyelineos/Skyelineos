@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'wouter';
 import {
   collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot,
-  serverTimestamp, query, orderBy, getDoc, setDoc,
+  serverTimestamp, query, orderBy, getDoc, setDoc, writeBatch,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { AppLayout } from '@/components/layout/AppLayout';
@@ -23,7 +23,7 @@ import {
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 type ProjectType = 'custom_home' | 'remodel' | 'addition' | 'spec' | 'commercial' | 'other';
-type LeadSource  = 'referral' | 'website' | 'instagram' | 'email' | 'phone' | 'other';
+type LeadSource  = 'referral' | 'parade_of_homes' | 'website' | 'instagram' | 'email' | 'phone' | 'other';
 
 interface StageConfig { key: string; label: string; color: string; }
 
@@ -74,12 +74,13 @@ const PROJECT_TYPES: { value: ProjectType; label: string }[] = [
 ];
 
 const LEAD_SOURCES: { value: LeadSource; label: string }[] = [
-  { value: 'referral',  label: 'Referral'  },
-  { value: 'website',   label: 'Website'   },
-  { value: 'instagram', label: 'Instagram' },
-  { value: 'email',     label: 'Email'     },
-  { value: 'phone',     label: 'Phone'     },
-  { value: 'other',     label: 'Other'     },
+  { value: 'referral',        label: 'Referral'        },
+  { value: 'parade_of_homes', label: 'Parade of Homes' },
+  { value: 'website',         label: 'Website'         },
+  { value: 'instagram',       label: 'Instagram'       },
+  { value: 'email',           label: 'Email'           },
+  { value: 'phone',           label: 'Phone'           },
+  { value: 'other',           label: 'Other'           },
 ];
 
 const COLOR_OPTIONS = [
@@ -272,7 +273,8 @@ function LeadDialog({ open, editing, stages, teamMembers, onClose, onSave }: {
   const [tagInput, setTagInput] = useState('');
 
   const blank = {
-    name: '', email: '', phone: '', company: '', jobAddress: '', city: '',
+    firstName: '', lastName: '',
+    email: '', phone: '', company: '', jobAddress: '', city: '',
     stage: stages[0]?.key || 'new_lead',
     projectType: 'custom_home' as ProjectType,
     source: 'referral' as LeadSource,
@@ -283,13 +285,25 @@ function LeadDialog({ open, editing, stages, teamMembers, onClose, onSave }: {
     tags: [] as string[],
   };
 
+  // When editing an existing lead, split the stored full `name` into first/last.
+  // First word is firstName; everything else is lastName. Round-trips: if the
+  // user doesn't change anything, save reproduces the same combined name.
+  const splitName = (full: string): { firstName: string; lastName: string } => {
+    const parts = (full || '').trim().split(/\s+/);
+    if (parts.length === 0 || !parts[0]) return { firstName: '', lastName: '' };
+    if (parts.length === 1) return { firstName: parts[0], lastName: '' };
+    return { firstName: parts[0], lastName: parts.slice(1).join(' ') };
+  };
+
   const [form, setForm] = useState(blank);
 
   useEffect(() => {
     if (open) {
       if (editing) {
+        const { firstName, lastName } = splitName(editing.name || '');
         setForm({
-          name: editing.name || '',
+          firstName,
+          lastName,
           email: editing.email || '',
           phone: editing.phone || '',
           company: editing.company || '',
@@ -324,12 +338,15 @@ function LeadDialog({ open, editing, stages, teamMembers, onClose, onSave }: {
   const removeTag = (tag: string) => set('tags', form.tags.filter(t => t !== tag));
 
   const handleSave = async () => {
-    if (!form.name.trim()) { toast({ title: 'Name is required', variant: 'destructive' }); return; }
+    const fullName = `${form.firstName.trim()} ${form.lastName.trim()}`.trim();
+    if (!fullName) { toast({ title: 'First or last name is required', variant: 'destructive' }); return; }
     setSaving(true);
     try {
       const assignedMember = teamMembers.find(m => m.id === form.assignedTo);
       await onSave({
-        name: form.name.trim(),
+        name: fullName,
+        firstName: form.firstName.trim() || null,
+        lastName:  form.lastName.trim()  || null,
         email: form.email || null,
         phone: form.phone || null,
         company: form.company || null,
@@ -360,26 +377,30 @@ function LeadDialog({ open, editing, stages, teamMembers, onClose, onSave }: {
         </DialogHeader>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-2">
-          {/* Name */}
-          <div className="sm:col-span-2">
-            <Label>Full Name *</Label>
-            <Input value={form.name} onChange={e => set('name', e.target.value)} placeholder="Steve & Laura Gardanier" />
+          {/* Name — split into first/last */}
+          <div>
+            <Label>First Name *</Label>
+            <Input value={form.firstName} onChange={e => set('firstName', e.target.value)} placeholder="—" className="placeholder:text-gray-300" />
+          </div>
+          <div>
+            <Label>Last Name *</Label>
+            <Input value={form.lastName} onChange={e => set('lastName', e.target.value)} placeholder="—" className="placeholder:text-gray-300" />
           </div>
 
           {/* Contact */}
           <div>
             <Label>Email</Label>
-            <Input type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="email@example.com" />
+            <Input type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="—" className="placeholder:text-gray-300" />
           </div>
           <div>
             <Label>Phone</Label>
-            <Input value={form.phone} onChange={e => set('phone', e.target.value)} placeholder="(555) 000-0000" />
+            <Input value={form.phone} onChange={e => set('phone', e.target.value)} placeholder="—" className="placeholder:text-gray-300" />
           </div>
 
           {/* Company */}
           <div>
-            <Label>Company</Label>
-            <Input value={form.company} onChange={e => set('company', e.target.value)} placeholder="Optional" />
+            <Label>Company <span className="text-xs text-gray-400 font-normal">(optional)</span></Label>
+            <Input value={form.company} onChange={e => set('company', e.target.value)} placeholder="—" className="placeholder:text-gray-300" />
           </div>
 
           {/* Source */}
@@ -396,21 +417,21 @@ function LeadDialog({ open, editing, stages, teamMembers, onClose, onSave }: {
           {/* Address */}
           <div>
             <Label>Job Address</Label>
-            <Input value={form.jobAddress} onChange={e => set('jobAddress', e.target.value)} placeholder="123 Main St" />
+            <Input value={form.jobAddress} onChange={e => set('jobAddress', e.target.value)} placeholder="—" className="placeholder:text-gray-300" />
           </div>
           <div>
             <Label>City</Label>
-            <Input value={form.city} onChange={e => set('city', e.target.value)} placeholder="Salt Lake City" />
+            <Input value={form.city} onChange={e => set('city', e.target.value)} placeholder="—" className="placeholder:text-gray-300" />
           </div>
 
           {/* Budget & Sqft */}
           <div>
             <Label>Budget ($)</Label>
-            <Input type="number" value={form.budget} onChange={e => set('budget', e.target.value)} placeholder="2000000" />
+            <Input type="number" value={form.budget} onChange={e => set('budget', e.target.value)} placeholder="—" className="placeholder:text-gray-300" />
           </div>
           <div>
             <Label>Square Footage</Label>
-            <Input type="number" value={form.squareFootage} onChange={e => set('squareFootage', e.target.value)} placeholder="3500" />
+            <Input type="number" value={form.squareFootage} onChange={e => set('squareFootage', e.target.value)} placeholder="—" className="placeholder:text-gray-300" />
           </div>
 
           {/* Project type & stage */}
@@ -500,16 +521,20 @@ function LeadDialog({ open, editing, stages, teamMembers, onClose, onSave }: {
 
 // ─── Create Project + Estimate Dialog ────────────────────────────────────────
 
-function CreateProjectDialog({ client, mode, onClose, onCreate }: {
+function CreateProjectDialog({ client, mode, previousStage, previousStageLabel, onClose, onCreate, onRevert }: {
   client: Client;
   mode: 'auto' | 'prompt'; // auto = estimating (required), prompt = optional
+  previousStage?: string;
+  previousStageLabel?: string;
   onClose: () => void;
   onCreate: (projectId: string) => void;
+  onRevert?: () => void;
 }) {
   const { user } = useAuth();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [saving, setSaving] = useState(false);
+  const [reverting, setReverting] = useState(false);
   const [form, setForm] = useState({
     projectName: client.name,
     address: [client.jobAddress, client.city].filter(Boolean).join(', '),
@@ -577,8 +602,8 @@ function CreateProjectDialog({ client, mode, onClose, onCreate }: {
   };
 
   return (
-    <Dialog open onOpenChange={v => { if (!v && mode === 'prompt') onClose(); }}>
-      <DialogContent className="max-w-md">
+    <Dialog open onOpenChange={v => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-lg w-[calc(100vw-2rem)]">
         <DialogHeader>
           <DialogTitle>
             {mode === 'auto'
@@ -616,14 +641,40 @@ function CreateProjectDialog({ client, mode, onClose, onCreate }: {
           This will create a <strong>Project</strong> in your Jobs list and a <strong>Draft Estimate</strong> in Estimates — both linked to this lead.
         </div>
 
-        <DialogFooter>
-          {mode === 'prompt' && (
-            <Button variant="outline" onClick={onClose}>Skip for now</Button>
+        <DialogFooter className="flex flex-col-reverse sm:flex-row sm:flex-wrap sm:justify-end gap-2 pt-2">
+          {/* Move back: reverts the stage drag if it was a mistake. */}
+          {onRevert && previousStage && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-red-600 border-red-200 hover:bg-red-50 w-full sm:w-auto"
+              disabled={reverting || saving}
+              onClick={async () => {
+                setReverting(true);
+                try { await onRevert(); }
+                finally { setReverting(false); }
+              }}
+              title={previousStageLabel ? `Move back to ${previousStageLabel}` : 'Move back to previous stage'}
+            >
+              {reverting ? 'Reverting…' : 'Move back'}
+            </Button>
           )}
+          {/* Skip: keep the new stage but don't create the project/estimate yet. */}
           <Button
+            variant="outline"
+            size="sm"
+            className="w-full sm:w-auto"
+            onClick={onClose}
+            disabled={reverting || saving}
+          >
+            Skip for now
+          </Button>
+          <Button
+            size="sm"
             style={{ backgroundColor: '#C9A96E', color: '#141414' }}
+            className="w-full sm:w-auto"
             onClick={handleCreate}
-            disabled={saving || !form.projectName.trim()}
+            disabled={saving || reverting || !form.projectName.trim()}
           >
             {saving ? 'Creating…' : 'Create Project & Estimate'}
           </Button>
@@ -642,13 +693,22 @@ interface Filters {
   tags: string[];
   assignedTo: string;
   stage: string;
-  sort: 'newest' | 'oldest' | 'budget_desc' | 'budget_asc' | 'name_asc';
+  priority: '' | 'low' | 'medium' | 'high';
+  sort: 'newest' | 'oldest' | 'budget_desc' | 'budget_asc' | 'name_asc' | 'priority';
 }
 
 const EMPTY_FILTERS: Filters = {
   search: '', budgetMin: '', budgetMax: '', tags: [],
-  assignedTo: '', stage: '', sort: 'newest',
+  assignedTo: '', stage: '', priority: '', sort: 'newest',
 };
+
+// Priority → color used for the card left-stripe + filter chip.
+const PRIORITY_COLORS: Record<string, { stripe: string; bg: string; text: string; label: string }> = {
+  high:   { stripe: '#ef4444', bg: 'bg-red-50',    text: 'text-red-700',    label: 'High' },
+  medium: { stripe: '#f59e0b', bg: 'bg-amber-50',  text: 'text-amber-700',  label: 'Medium' },
+  low:    { stripe: '#94a3b8', bg: 'bg-slate-50',  text: 'text-slate-600',  label: 'Low' },
+};
+const PRIORITY_RANK: Record<string, number> = { high: 3, medium: 2, low: 1 };
 
 function FilterPanel({ open, filters, onFiltersChange, onClose, stages, teamMembers, allTags }: {
   open: boolean;
@@ -662,7 +722,7 @@ function FilterPanel({ open, filters, onFiltersChange, onClose, stages, teamMemb
   const set = (k: keyof Filters, v: any) => onFiltersChange({ ...filters, [k]: v });
   const activeCount = [
     filters.search, filters.budgetMin, filters.budgetMax,
-    filters.assignedTo, filters.stage, ...filters.tags,
+    filters.assignedTo, filters.stage, filters.priority, ...filters.tags,
   ].filter(Boolean).length + (filters.sort !== 'newest' ? 1 : 0);
 
   return (
@@ -735,6 +795,35 @@ function FilterPanel({ open, filters, onFiltersChange, onClose, stages, teamMemb
           </Select>
         </div>
 
+        {/* Priority */}
+        <div>
+          <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Priority</Label>
+          <Select value={filters.priority || 'all'} onValueChange={v => set('priority', v === 'all' ? '' : v)}>
+            <SelectTrigger className="mt-1.5"><SelectValue placeholder="Any priority" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Any priority</SelectItem>
+              <SelectItem value="high">
+                <span className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: PRIORITY_COLORS.high.stripe }} />
+                  High only
+                </span>
+              </SelectItem>
+              <SelectItem value="medium">
+                <span className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: PRIORITY_COLORS.medium.stripe }} />
+                  Medium only
+                </span>
+              </SelectItem>
+              <SelectItem value="low">
+                <span className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: PRIORITY_COLORS.low.stripe }} />
+                  Low only
+                </span>
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
         {/* Tags */}
         {allTags.length > 0 && (
           <div>
@@ -770,6 +859,7 @@ function FilterPanel({ open, filters, onFiltersChange, onClose, stages, teamMemb
             <SelectContent>
               <SelectItem value="newest">Newest First</SelectItem>
               <SelectItem value="oldest">Oldest First</SelectItem>
+              <SelectItem value="priority">Priority: High → Low</SelectItem>
               <SelectItem value="budget_desc">Budget: High → Low</SelectItem>
               <SelectItem value="budget_asc">Budget: Low → High</SelectItem>
               <SelectItem value="name_asc">Name A → Z</SelectItem>
@@ -811,13 +901,17 @@ function PipelineCard({ client, stages, onEdit, onDelete, onAdvance }: {
     else setLinkOpen(true);
   };
 
+  const priorityCfg = PRIORITY_COLORS[client.priority || 'medium'] || PRIORITY_COLORS.medium;
+
   return (
     <>
       <div
         draggable
         onDragStart={e => { e.dataTransfer.setData('clientId', client.id); e.dataTransfer.effectAllowed = 'move'; }}
         onDoubleClick={e => { e.preventDefault(); openProject(); }}
-        className="bg-white border border-gray-200 rounded-lg px-3 py-2.5 shadow-sm hover:shadow-md hover:border-gray-300 transition-all cursor-grab active:cursor-grabbing group relative"
+        className="bg-white border border-gray-200 rounded-lg px-3 py-2.5 shadow-sm hover:shadow-md hover:border-gray-300 transition-all cursor-grab active:cursor-grabbing group relative overflow-hidden"
+        style={{ borderLeft: `3px solid ${priorityCfg.stripe}` }}
+        title={`Priority: ${priorityCfg.label}`}
       >
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
@@ -902,8 +996,13 @@ function ListRow({ client, stages, onEdit, onDelete }: {
 }) {
   const [, setLocation] = useLocation();
   const cfg = stageConfig(client.stage, stages);
+  const priorityCfg = PRIORITY_COLORS[client.priority || 'medium'] || PRIORITY_COLORS.medium;
   return (
-    <div className="flex items-center gap-4 bg-white border border-gray-200 rounded-lg px-4 py-3 hover:border-gray-300 transition-colors">
+    <div
+      className="flex items-center gap-4 bg-white border border-gray-200 rounded-lg px-4 py-3 hover:border-gray-300 transition-colors"
+      style={{ borderLeft: `3px solid ${priorityCfg.stripe}` }}
+      title={`Priority: ${priorityCfg.label}`}
+    >
       <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: cfg.color }} />
       <div className="flex-1 min-w-0">
         <p className="text-sm font-semibold text-gray-900 truncate">{client.name}</p>
@@ -955,8 +1054,9 @@ export default function Sales() {
   const [editStagesOpen, setEditStagesOpen] = useState(false);
   const [editing, setEditing] = useState<Client | null>(null);
 
-  // Project creation prompt state
-  const [pendingProject, setPendingProject] = useState<{ client: Client; mode: 'auto' | 'prompt' } | null>(null);
+  // Project creation prompt state. previousStage lets the dialog revert if the
+  // drag was a mistake (e.g. user dragged a card to estimating but didn't mean to).
+  const [pendingProject, setPendingProject] = useState<{ client: Client; mode: 'auto' | 'prompt'; previousStage?: string } | null>(null);
 
   // Drag state
   const [dragOverStage, setDragOverStage] = useState<string | null>(null);
@@ -971,11 +1071,12 @@ export default function Sales() {
     if (client.linkedJobId) return; // already has a project — skip
     const firstStageKey = stages[0]?.key || '';
     if (isEstimatingStage(newStage)) {
-      // Moving to estimating → auto-create (show dialog pre-populated, no skip)
-      setPendingProject({ client, mode: 'auto' });
+      // Moving to estimating → prompt with project/estimate pre-fill, but
+      // also let the user back out (revert to oldStage or skip without creating).
+      setPendingProject({ client, mode: 'auto', previousStage: oldStage });
     } else if (oldStage === firstStageKey) {
-      // Moving out of the first stage (New Lead) → prompt
-      setPendingProject({ client, mode: 'prompt' });
+      // Moving out of the first stage (New Lead) → soft prompt
+      setPendingProject({ client, mode: 'prompt', previousStage: oldStage });
     }
   };
 
@@ -1027,12 +1128,19 @@ export default function Sales() {
     if (filters.budgetMax) out = out.filter(c => (c.budget || 0) <= parseFloat(filters.budgetMax));
     if (filters.assignedTo) out = out.filter(c => c.assignedTo === filters.assignedTo);
     if (filters.stage) out = out.filter(c => c.stage === filters.stage);
+    if (filters.priority) out = out.filter(c => (c.priority || 'medium') === filters.priority);
     if (filters.tags.length > 0) out = out.filter(c => filters.tags.every(t => c.tags?.includes(t)));
     out = [...out].sort((a, b) => {
       if (filters.sort === 'oldest') return (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0);
       if (filters.sort === 'budget_desc') return (b.budget || 0) - (a.budget || 0);
       if (filters.sort === 'budget_asc') return (a.budget || 0) - (b.budget || 0);
       if (filters.sort === 'name_asc') return a.name.localeCompare(b.name);
+      if (filters.sort === 'priority') {
+        const ra = PRIORITY_RANK[a.priority || 'medium'] ?? 2;
+        const rb = PRIORITY_RANK[b.priority || 'medium'] ?? 2;
+        if (rb !== ra) return rb - ra;
+        return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
+      }
       return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
     });
     return out;
@@ -1058,11 +1166,39 @@ export default function Sales() {
         checkProjectCreation(updatedClient, prevStage, data.stage);
       }
     } else {
-      const ref = await addDoc(collection(db, 'clients'), { ...data, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
-      toast({ title: 'Lead added' });
+      // Two writes, one batch: a Sales/CRM client row AND a matching contact row
+      // (so the new lead also appears in Contacts as type='client'). The two
+      // docs cross-reference each other via salesClientId/contactId.
+      const clientRef  = doc(collection(db, 'clients'));
+      const contactRef = doc(collection(db, 'contacts'));
+      const batch = writeBatch(db);
+      batch.set(clientRef, {
+        ...data,
+        contactId: contactRef.id,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      batch.set(contactRef, {
+        name: data.name || '',
+        email: data.email || '',
+        phone: data.phone || '',
+        type: 'client',
+        role: 'client',
+        company: data.company || '',
+        address: data.jobAddress || '',
+        city: data.city || '',
+        notes: data.notes || '',
+        tags: data.tags || [],
+        isActive: true,
+        salesClientId: clientRef.id,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      await batch.commit();
+      toast({ title: 'Lead added — also linked in Contacts' });
       // New lead created directly into estimating
       if (data.stage && isEstimatingStage(data.stage)) {
-        const newClient: Client = { id: ref.id, name: data.name || '', stage: data.stage, ...data } as Client;
+        const newClient: Client = { id: clientRef.id, name: data.name || '', stage: data.stage, ...data } as Client;
         checkProjectCreation(newClient, '', data.stage);
       }
     }
@@ -1275,9 +1411,32 @@ export default function Sales() {
         <CreateProjectDialog
           client={pendingProject.client}
           mode={pendingProject.mode}
+          previousStage={pendingProject.previousStage}
+          previousStageLabel={
+            pendingProject.previousStage
+              ? stageConfig(pendingProject.previousStage, stages).label
+              : undefined
+          }
           onClose={() => setPendingProject(null)}
-          onCreate={(projectId) => {
+          onCreate={() => {
             setPendingProject(null);
+          }}
+          onRevert={async () => {
+            // User changed their mind — revert the stage on the lead doc.
+            if (!pendingProject.previousStage) return;
+            try {
+              await updateDoc(doc(db, 'clients', pendingProject.client.id), {
+                stage: pendingProject.previousStage,
+                updatedAt: serverTimestamp(),
+              });
+              toast({
+                title: 'Reverted',
+                description: `${pendingProject.client.name} moved back to "${stageConfig(pendingProject.previousStage, stages).label}".`,
+              });
+              setPendingProject(null);
+            } catch (e: any) {
+              toast({ title: 'Revert failed', description: e.message, variant: 'destructive' });
+            }
           }}
         />
       )}

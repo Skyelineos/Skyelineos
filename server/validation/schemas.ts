@@ -16,7 +16,7 @@ export const createProjectSchema = z.object({
   startDate: z.string().optional(),
   endDate: z.string().optional(),
   budget: z.number().optional(),
-  status: z.enum(['planning', 'active', 'on_hold', 'completed', 'cancelled']).default('planning')
+  status: z.enum(['planning', 'active', 'punch_list', 'closeout', 'completed', 'on_hold', 'cancelled', 'archived']).default('planning')
 });
 
 export const updateProjectSchema = createProjectSchema.partial();

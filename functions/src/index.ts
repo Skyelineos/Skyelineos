@@ -1314,6 +1314,159 @@ async function authMiddleware(req: any, res: any, next: any) {
   }
 }
 
+// ── AI Bill OCR via Claude vision ─────────────────────────────────────────────
+// Routed through the api Express app (instead of standalone callable) to avoid
+// Cloud Run IAM 'allUsers' which is blocked by org policy.
+
+app.post('/api/analyze-bill', authMiddleware, async (req: any, res: any) => {
+  try {
+    const { storagePath, mimeType } = req.body || {};
+    if (!storagePath) return res.status(400).json({ error: 'storagePath required' });
+
+    const Anthropic = require('@anthropic-ai/sdk');
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
+
+    const bucket = admin.storage().bucket();
+    const file = bucket.file(storagePath);
+    const [exists] = await file.exists();
+    if (!exists) return res.status(404).json({ error: `File not found at ${storagePath}` });
+    const [buffer] = await file.download();
+    const [metadata] = await file.getMetadata();
+    const detectedMime = mimeType || metadata.contentType || 'image/jpeg';
+
+    const supportedImageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    const isPdf = detectedMime === 'application/pdf';
+    const isImage = supportedImageTypes.includes(detectedMime);
+    if (!isPdf && !isImage) return res.status(400).json({ error: `Unsupported mime type: ${detectedMime}` });
+
+    const SCHEMA_HINT = `{"vendor":"string or null","vendorAddress":"string or null","vendorPhone":"string or null","invoiceNumber":"string or null","billDate":"YYYY-MM-DD or null","dueDate":"YYYY-MM-DD or null","amount":"number or null","subtotal":"number or null","tax":"number or null","description":"string or null","category":"materials|labor|equipment|fees|subcontractor|other or null","projectReference":"string or null","lineItems":[{"description":"string","qty":"number or null","unitCost":"number or null","amount":"number"}],"paymentTerms":"string or null","rawText":"string","confidence":"high|medium|low"}`;
+
+    const SYSTEM_PROMPT = `You are an expert at extracting structured data from construction industry vendor bills, invoices, and receipts. Extract the data into the provided JSON schema.
+
+Rules:
+- For dates, return YYYY-MM-DD format. Infer year from context if missing.
+- For amounts, return numbers only (no $ or commas).
+- For category, pick: materials, labor, equipment, fees, subcontractor, other.
+- For projectReference, look for P.O. Number, Job, Project, Reference fields.
+- If a field isn't visible, return null. Don't guess.
+- For lineItems, only include rows with clear description and amount.
+- For confidence: "high" if clear; "medium" if some ambiguity; "low" if blurry.
+- Return ONLY valid JSON. No prose, no markdown.`;
+
+    const client = new Anthropic({ apiKey });
+    const userContent: any[] = [
+      { type: 'text', text: `Extract bill data into this exact JSON schema:\n\n${SCHEMA_HINT}\n\nReturn only the JSON.` },
+      {
+        type: isPdf ? 'document' : 'image',
+        source: { type: 'base64', media_type: detectedMime, data: buffer.toString('base64') },
+      },
+    ];
+
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 2048,
+      system: SYSTEM_PROMPT,
+      messages: [{ role: 'user', content: userContent }],
+    });
+
+    const textBlock = response.content.find((b: any) => b.type === 'text');
+    if (!textBlock) return res.status(500).json({ error: 'No text response from Claude' });
+
+    let raw = textBlock.text.trim();
+    if (raw.startsWith('```')) raw = raw.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '');
+    const extraction = JSON.parse(raw);
+    if (!Array.isArray(extraction.lineItems)) extraction.lineItems = [];
+
+    return res.json({ extraction });
+  } catch (e: any) {
+    console.error('[analyze-bill] error:', e);
+    return res.status(500).json({ error: e.message || String(e) });
+  }
+});
+
+// ── Content Studio: Claude Vision analyzes media for caption + tags ────────
+
+app.post('/api/content/analyze-media', authMiddleware, async (req: any, res: any) => {
+  try {
+    const { storagePath, mimeType, projectName, projectPhase } = req.body || {};
+    if (!storagePath) return res.status(400).json({ error: 'storagePath required' });
+
+    const Anthropic = require('@anthropic-ai/sdk');
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
+
+    const bucket = admin.storage().bucket();
+    const file = bucket.file(storagePath);
+    const [exists] = await file.exists();
+    if (!exists) return res.status(404).json({ error: `File not found at ${storagePath}` });
+    const [buffer] = await file.download();
+    const [metadata] = await file.getMetadata();
+    const detectedMime = mimeType || metadata.contentType || 'image/jpeg';
+
+    const supportedImageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (!supportedImageTypes.includes(detectedMime)) {
+      // For videos: extract first frame is a separate problem. For now, reject.
+      return res.status(400).json({ error: `Unsupported mime type for analysis: ${detectedMime}. Videos require a thumbnail.` });
+    }
+
+    const SYSTEM_PROMPT = `You are an Instagram content creator and copywriter for Skyeline Homes — a custom luxury home builder in Utah. Your voice: confident, warm, specific, occasionally witty. NEVER use cliché real-estate phrases ("dream home", "sanctuary", "oasis", "stunning"). Write captions that sound human, not corporate.
+
+Given a construction site or finished-home photo, return ONLY valid JSON in this schema:
+
+{
+  "subject": "string — what's in the photo (e.g. 'Kitchen', 'Foundation pour', 'Front exterior')",
+  "phase": "foundation|framing|mep|drywall|finishes|exterior|completed|design|other",
+  "tags": ["string", "string", ...] — 3-6 descriptive tags,
+  "captions": [
+    "string — caption option 1, conversational + specific",
+    "string — caption option 2, slightly different angle",
+    "string — caption option 3, can be punchier or include a question"
+  ],
+  "hashtags": ["string", ...] — 8-12 mix of broad + niche Utah-specific (e.g. #utahcustomhomes #americanforkbuilder #wasatchcustomhomes #parkcityhomebuilder),
+  "confidence": "high|medium|low"
+}
+
+Rules:
+- Captions: 1-3 sentences each. Specific details over generic praise.
+- If projectName is provided, weave it in naturally to ONE caption (not all three).
+- If projectPhase context is provided, it's a hint — verify with what you see.
+- Hashtags: lowercase, no spaces. Mix #utahcustomhomes (broad) with #moabbuilder (niche).
+- No emoji unless it adds genuine visual specificity (e.g. 🪵 for woodwork is OK; 🏠✨ is not).`;
+
+    const userText = projectName
+      ? `Photo from the ${projectName} project${projectPhase ? `, current phase: ${projectPhase}` : ''}. Analyze and generate Instagram-ready content.`
+      : 'Analyze this construction/home photo for Instagram content.';
+
+    const userContent: any[] = [
+      { type: 'text', text: userText },
+      {
+        type: 'image',
+        source: { type: 'base64', media_type: detectedMime, data: buffer.toString('base64') },
+      },
+    ];
+
+    const client = new Anthropic({ apiKey });
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 1024,
+      system: SYSTEM_PROMPT,
+      messages: [{ role: 'user', content: userContent }],
+    });
+
+    const textBlock = response.content.find((b: any) => b.type === 'text');
+    if (!textBlock) return res.status(500).json({ error: 'No text response from Claude' });
+
+    let raw = textBlock.text.trim();
+    if (raw.startsWith('```')) raw = raw.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '');
+    const analysis = JSON.parse(raw);
+    return res.json({ analysis });
+  } catch (e: any) {
+    console.error('[content/analyze-media] error:', e);
+    return res.status(500).json({ error: e.message || String(e) });
+  }
+});
+
 // ── Designer Access Requests ──────────────────────────────────────────────────
 
 app.post('/api/designer/request-access', authMiddleware, async (req: any, res: any) => {
@@ -1429,6 +1582,198 @@ app.delete('/api/catalog/:itemId', authMiddleware, async (req: any, res: any) =>
   } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
 
+// ── Instagram Graph API ───────────────────────────────────────────────────────
+// Posts to @skyelinehomes via Meta Graph API v25.0. Uses non-expiring Page Access
+// Token + IG Business Account ID from Secret Manager. Storage objects are exposed
+// to IG via short-lived signed URLs (1h) so Graph API can fetch them.
+
+const FB_GRAPH = 'https://graph.facebook.com/v25.0';
+
+async function igCreds() {
+  // .trim() — Secret Manager values set via stdin can have trailing newlines that
+  // corrupt URLs (Graph API returns "string did not match the expected pattern").
+  const igUserId = (process.env.META_IG_BUSINESS_ID || '').trim();
+  const accessToken = (process.env.META_PAGE_ACCESS_TOKEN || '').trim();
+  if (!igUserId || !accessToken) throw new Error('Meta credentials not configured');
+  return { igUserId, accessToken };
+}
+
+async function signedUrlFor(storagePath: string): Promise<string> {
+  const file = admin.storage().bucket().file(storagePath);
+  const [exists] = await file.exists();
+  if (!exists) throw new Error(`File not found at ${storagePath}`);
+  const [url] = await file.getSignedUrl({
+    action: 'read',
+    expires: Date.now() + 60 * 60 * 1000, // 1h — IG fetches within seconds
+    version: 'v4',
+  });
+  return url;
+}
+
+// Poll a Reel/video container until status_code === FINISHED (or fail/timeout)
+async function waitForContainer(containerId: string, accessToken: string, timeoutMs = 5 * 60 * 1000): Promise<void> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const r = await fetch(`${FB_GRAPH}/${containerId}?fields=status_code,status&access_token=${accessToken}`);
+    const j: any = await r.json();
+    if (j.status_code === 'FINISHED') return;
+    if (j.status_code === 'ERROR' || j.status_code === 'EXPIRED') {
+      throw new Error(`Container ${containerId} failed: ${j.status || j.status_code}`);
+    }
+    await new Promise(rs => setTimeout(rs, 3000));
+  }
+  throw new Error(`Container ${containerId} timed out`);
+}
+
+// GET account info — confirms Meta wiring works, surfaces follower count
+app.get('/api/instagram/account', authMiddleware, async (_req: any, res: any) => {
+  try {
+    const { igUserId, accessToken } = await igCreds();
+    const r = await fetch(`${FB_GRAPH}/${igUserId}?fields=username,name,followers_count,media_count,profile_picture_url,biography&access_token=${accessToken}`);
+    const data: any = await r.json();
+    if (!r.ok) return res.status(500).json({ error: data.error?.message || 'Graph API error' });
+    res.json(data);
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+// Publish a single-image post
+app.post('/api/instagram/publish-photo', authMiddleware, async (req: any, res: any) => {
+  try {
+    const { storagePath, caption } = req.body || {};
+    if (!storagePath) return res.status(400).json({ error: 'storagePath required' });
+    const { igUserId, accessToken } = await igCreds();
+    const imageUrl = await signedUrlFor(storagePath);
+
+    const createParams = new URLSearchParams({ image_url: imageUrl, access_token: accessToken });
+    if (caption) createParams.set('caption', caption);
+    const createRes = await fetch(`${FB_GRAPH}/${igUserId}/media`, { method: 'POST', body: createParams });
+    const createJson: any = await createRes.json();
+    if (!createRes.ok) return res.status(500).json({ error: createJson.error?.message || 'IG create failed', details: createJson });
+
+    const publishRes = await fetch(`${FB_GRAPH}/${igUserId}/media_publish`, {
+      method: 'POST',
+      body: new URLSearchParams({ creation_id: createJson.id, access_token: accessToken }),
+    });
+    const publishJson: any = await publishRes.json();
+    if (!publishRes.ok) return res.status(500).json({ error: publishJson.error?.message || 'IG publish failed', details: publishJson });
+
+    res.json({ mediaId: publishJson.id, permalink: `https://www.instagram.com/p/${publishJson.id}` });
+  } catch (e: any) {
+    console.error('[ig publish-photo] error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Publish a Reel (video). Polls container until FINISHED before publishing.
+app.post('/api/instagram/publish-reel', authMiddleware, async (req: any, res: any) => {
+  try {
+    const { storagePath, caption, shareToFeed } = req.body || {};
+    if (!storagePath) return res.status(400).json({ error: 'storagePath required' });
+    const { igUserId, accessToken } = await igCreds();
+    const videoUrl = await signedUrlFor(storagePath);
+
+    const createParams = new URLSearchParams({
+      media_type: 'REELS',
+      video_url: videoUrl,
+      access_token: accessToken,
+      share_to_feed: shareToFeed === false ? 'false' : 'true',
+    });
+    if (caption) createParams.set('caption', caption);
+
+    const createRes = await fetch(`${FB_GRAPH}/${igUserId}/media`, { method: 'POST', body: createParams });
+    const createJson: any = await createRes.json();
+    if (!createRes.ok) return res.status(500).json({ error: createJson.error?.message || 'IG reel create failed', details: createJson });
+
+    await waitForContainer(createJson.id, accessToken);
+
+    const publishRes = await fetch(`${FB_GRAPH}/${igUserId}/media_publish`, {
+      method: 'POST',
+      body: new URLSearchParams({ creation_id: createJson.id, access_token: accessToken }),
+    });
+    const publishJson: any = await publishRes.json();
+    if (!publishRes.ok) return res.status(500).json({ error: publishJson.error?.message || 'IG reel publish failed', details: publishJson });
+
+    res.json({ mediaId: publishJson.id });
+  } catch (e: any) {
+    console.error('[ig publish-reel] error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Publish a carousel (2-10 images)
+app.post('/api/instagram/publish-carousel', authMiddleware, async (req: any, res: any) => {
+  try {
+    const { storagePaths, caption } = req.body || {};
+    if (!Array.isArray(storagePaths) || storagePaths.length < 2 || storagePaths.length > 10) {
+      return res.status(400).json({ error: 'storagePaths must be array of 2-10 images' });
+    }
+    const { igUserId, accessToken } = await igCreds();
+
+    // Step 1: create child containers
+    const childIds: string[] = [];
+    for (const path of storagePaths) {
+      const imageUrl = await signedUrlFor(path);
+      const r = await fetch(`${FB_GRAPH}/${igUserId}/media`, {
+        method: 'POST',
+        body: new URLSearchParams({ image_url: imageUrl, is_carousel_item: 'true', access_token: accessToken }),
+      });
+      const j: any = await r.json();
+      if (!r.ok) return res.status(500).json({ error: j.error?.message || 'Carousel child failed', details: j });
+      childIds.push(j.id);
+    }
+
+    // Step 2: create carousel container
+    const carouselParams = new URLSearchParams({
+      media_type: 'CAROUSEL',
+      children: childIds.join(','),
+      access_token: accessToken,
+    });
+    if (caption) carouselParams.set('caption', caption);
+    const carouselRes = await fetch(`${FB_GRAPH}/${igUserId}/media`, { method: 'POST', body: carouselParams });
+    const carouselJson: any = await carouselRes.json();
+    if (!carouselRes.ok) return res.status(500).json({ error: carouselJson.error?.message || 'Carousel create failed', details: carouselJson });
+
+    // Step 3: publish
+    const publishRes = await fetch(`${FB_GRAPH}/${igUserId}/media_publish`, {
+      method: 'POST',
+      body: new URLSearchParams({ creation_id: carouselJson.id, access_token: accessToken }),
+    });
+    const publishJson: any = await publishRes.json();
+    if (!publishRes.ok) return res.status(500).json({ error: publishJson.error?.message || 'Carousel publish failed', details: publishJson });
+
+    res.json({ mediaId: publishJson.id });
+  } catch (e: any) {
+    console.error('[ig publish-carousel] error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// List recent IG media (for Reels analyzer + history view)
+app.get('/api/instagram/recent-media', authMiddleware, async (req: any, res: any) => {
+  try {
+    const { igUserId, accessToken } = await igCreds();
+    const limit = req.query.limit || 25;
+    const fields = 'id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count';
+    const r = await fetch(`${FB_GRAPH}/${igUserId}/media?fields=${fields}&limit=${limit}&access_token=${accessToken}`);
+    const data: any = await r.json();
+    if (!r.ok) return res.status(500).json({ error: data.error?.message || 'Graph API error' });
+    res.json(data);
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+// Per-post insights (impressions, reach, etc.)
+app.get('/api/instagram/insights/:mediaId', authMiddleware, async (req: any, res: any) => {
+  try {
+    const { accessToken } = await igCreds();
+    // Different metrics for Reels vs feed posts; request superset, IG drops what doesn't apply
+    const metrics = 'reach,likes,comments,shares,saved,plays,total_interactions';
+    const r = await fetch(`${FB_GRAPH}/${req.params.mediaId}/insights?metric=${metrics}&access_token=${accessToken}`);
+    const data: any = await r.json();
+    if (!r.ok) return res.status(500).json({ error: data.error?.message || 'Graph API error' });
+    res.json(data);
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
 // ── Catch all handler for other routes
 app.use('*', (req: any, res: any) => {
   console.log(`❌ 404 - API endpoint not found: ${req.method} ${req.originalUrl}`);
@@ -1440,10 +1785,29 @@ app.use('*', (req: any, res: any) => {
   });
 });
 
-exports.api = onRequest({ cors: true }, app);
+// API function — bound to Anthropic + Meta credentials via Secret Manager
+exports.api = onRequest(
+  {
+    cors: true,
+    secrets: [
+      'ANTHROPIC_API_KEY',
+      'META_APP_ID',
+      'META_APP_SECRET',
+      'META_PAGE_ID',
+      'META_IG_BUSINESS_ID',
+      'META_PAGE_ACCESS_TOKEN',
+    ],
+    memory: '512MiB',
+    timeoutSeconds: 540, // Reels can take 30-90s to process
+  },
+  app,
+);
 
 // ── Phase 3: Notification dispatch (email + SMS) ─────────────────────────────
 export { dispatchNotification } from './notifications/dispatch';
 
 // ── Phase 3: Scheduled due-date sweep (7am MT daily) ─────────────────────────
 export { dueSweep } from './notifications/scheduledDueSweep';
+
+// (analyzeBill standalone function removed — moved into api Express app at /api/analyze-bill
+//  to avoid org policy blocking allUsers IAM on a separate Cloud Run service)

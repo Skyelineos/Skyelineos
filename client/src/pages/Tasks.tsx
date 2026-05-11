@@ -92,6 +92,17 @@ function getInitials(name: string): string {
 }
 
 export default function Tasks() {
+  return (
+    <AppLayout>
+      <TasksContent />
+    </AppLayout>
+  );
+}
+
+// Layout-agnostic body — renders inside whichever layout the caller provides.
+// When `projectId` is set, scopes everything to that project: filters, hides
+// the project picker, prefills new-task form, and drops the project badge.
+export function TasksContent({ projectId: scopedProjectId }: { projectId?: string } = {}) {
   const { toast } = useToast();
 
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -141,7 +152,13 @@ export default function Tasks() {
 
   const openAddDialog = () => {
     setEditingTask(null);
-    setFormData(defaultForm());
+    const base = defaultForm();
+    if (scopedProjectId) {
+      const proj = projects.find(p => p.id === scopedProjectId);
+      base.projectId = scopedProjectId;
+      base.projectName = proj?.name || '';
+    }
+    setFormData(base);
     setDialogOpen(true);
   };
 
@@ -236,15 +253,15 @@ export default function Tasks() {
       (t.assignedToName && t.assignedToName.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchStatus = statusFilter === 'all' || t.status === statusFilter;
     const matchPriority = priorityFilter === 'all' || t.priority === priorityFilter;
+    const matchScoped = !scopedProjectId || t.projectId === scopedProjectId;
     const matchProject = projectFilter === 'all' || t.projectId === projectFilter;
-    return matchSearch && matchStatus && matchPriority && matchProject;
+    return matchScoped && matchSearch && matchStatus && matchPriority && matchProject;
   });
 
   const tasksByStatus = (status: TaskStatus) => filteredTasks.filter(t => t.status === status);
 
   return (
-    <AppLayout>
-      <div className="space-y-6">
+      <div className="space-y-6 p-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -306,17 +323,19 @@ export default function Tasks() {
               <SelectItem value="urgent">Urgent</SelectItem>
             </SelectContent>
           </Select>
-          <Select value={projectFilter} onValueChange={setProjectFilter}>
-            <SelectTrigger className="w-40">
-              <SelectValue placeholder="Project" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Projects</SelectItem>
-              {projects.map(p => (
-                <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {!scopedProjectId && (
+            <Select value={projectFilter} onValueChange={setProjectFilter}>
+              <SelectTrigger className="w-40">
+                <SelectValue placeholder="Project" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Projects</SelectItem>
+                {projects.map(p => (
+                  <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
 
         {/* Content */}
@@ -445,17 +464,21 @@ export default function Tasks() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label>Project</Label>
-                  <Select value={formData.projectId || 'none'} onValueChange={v => handleProjectChange(v === 'none' ? '' : v)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select project" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">No project</SelectItem>
-                      {projects.map(p => (
-                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  {scopedProjectId ? (
+                    <Input value={formData.projectName || 'This project'} disabled className="bg-gray-50" />
+                  ) : (
+                    <Select value={formData.projectId || 'none'} onValueChange={v => handleProjectChange(v === 'none' ? '' : v)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select project" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No project</SelectItem>
+                        {projects.map(p => (
+                          <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
                 <div>
                   <Label>Assignee</Label>
@@ -526,7 +549,6 @@ export default function Tasks() {
           </DialogContent>
         </Dialog>
       </div>
-    </AppLayout>
   );
 }
 
