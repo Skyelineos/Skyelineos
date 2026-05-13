@@ -913,54 +913,59 @@ function PipelineCard({ client, stages, onEdit, onDelete, onAdvance }: {
         style={{ borderLeft: `3px solid ${priorityCfg.stripe}` }}
         title={`Priority: ${priorityCfg.label}`}
       >
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-gray-900 truncate">{client.name}</p>
-            {client.assignedToName && (
-              <p className="text-xs text-gray-400 truncate mt-0.5">{client.assignedToName}</p>
-            )}
-          </div>
-          <div className="flex items-center gap-1 flex-shrink-0">
-            {client.budget && (
-              <span className="text-xs font-semibold text-gray-700 whitespace-nowrap">{fmtFull(client.budget)}</span>
-            )}
-            <div className="relative">
-              <button
-                onClick={e => { e.stopPropagation(); setMenuOpen(m => !m); }}
-                className="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 opacity-0 group-hover:opacity-100 transition-opacity"
-              >
-                <MoreVertical className="w-4 h-4" />
-              </button>
-              {menuOpen && (
-                <>
-                  <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-                  <div className="absolute right-0 top-7 z-20 w-44 bg-white border border-gray-200 rounded-lg shadow-lg py-1 text-sm">
-                    <button onClick={() => { setMenuOpen(false); openProject(); }}
-                      className="w-full text-left flex items-center gap-2 px-3 py-2 hover:bg-gray-50">
-                      <ExternalLink className="w-4 h-4" />
-                      {client.linkedJobId ? 'Open Project' : 'Link & Open Project'}
-                    </button>
-                    <button onClick={() => { setMenuOpen(false); onEdit(); }}
-                      className="w-full text-left flex items-center gap-2 px-3 py-2 hover:bg-gray-50">
-                      <Edit2 className="w-4 h-4" />Edit
-                    </button>
-                    {canAdvance && (
-                      <button onClick={() => { setMenuOpen(false); onAdvance(); }}
-                        className="w-full text-left flex items-center gap-2 px-3 py-2 hover:bg-gray-50">
-                        <ArrowRight className="w-4 h-4" />Advance Stage
-                      </button>
-                    )}
-                    <div className="border-t border-gray-100 my-1" />
-                    <button onClick={() => { setMenuOpen(false); onDelete(); }}
-                      className="w-full text-left flex items-center gap-2 px-3 py-2 hover:bg-red-50 text-red-600">
-                      <Trash2 className="w-4 h-4" />Delete
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
+        {/* Kebab menu — floats top-right so the lead name owns the full
+            card width directly below. */}
+        <div className="absolute top-1.5 right-1.5 z-10">
+          <button
+            onClick={e => { e.stopPropagation(); setMenuOpen(m => !m); }}
+            className="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 opacity-0 group-hover:opacity-100 transition-opacity"
+          >
+            <MoreVertical className="w-4 h-4" />
+          </button>
+          {menuOpen && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+              <div className="absolute right-0 top-7 z-20 w-44 bg-white border border-gray-200 rounded-lg shadow-lg py-1 text-sm">
+                <button onClick={() => { setMenuOpen(false); openProject(); }}
+                  className="w-full text-left flex items-center gap-2 px-3 py-2 hover:bg-gray-50">
+                  <ExternalLink className="w-4 h-4" />
+                  {client.linkedJobId ? 'Open Project' : 'Link & Open Project'}
+                </button>
+                <button onClick={() => { setMenuOpen(false); onEdit(); }}
+                  className="w-full text-left flex items-center gap-2 px-3 py-2 hover:bg-gray-50">
+                  <Edit2 className="w-4 h-4" />Edit
+                </button>
+                {canAdvance && (
+                  <button onClick={() => { setMenuOpen(false); onAdvance(); }}
+                    className="w-full text-left flex items-center gap-2 px-3 py-2 hover:bg-gray-50">
+                    <ArrowRight className="w-4 h-4" />Advance Stage
+                  </button>
+                )}
+                <div className="border-t border-gray-100 my-1" />
+                <button onClick={() => { setMenuOpen(false); onDelete(); }}
+                  className="w-full text-left flex items-center gap-2 px-3 py-2 hover:bg-red-50 text-red-600">
+                  <Trash2 className="w-4 h-4" />Delete
+                </button>
+              </div>
+            </>
+          )}
         </div>
+        {/* Lead name — the headline. Full width, larger, up to three lines
+            so a long name doesn't get clipped. pr-7 reserves space for the
+            kebab in the top-right. */}
+        <p className="text-base font-bold text-gray-900 leading-snug line-clamp-3 pr-7 [overflow-wrap:normal] [word-break:keep-all] hyphens-none" title={client.name}>
+          {client.name}
+        </p>
+        {client.assignedToName && (
+          <p className="text-xs text-gray-500 truncate mt-1" title={client.assignedToName}>
+            {client.assignedToName}
+          </p>
+        )}
+        {client.budget && (
+          <p className="text-xs font-semibold text-gray-700 mt-1 whitespace-nowrap">
+            {fmtFull(client.budget)}
+          </p>
+        )}
 
         {/* Tags */}
         {client.tags && client.tags.length > 0 && (
@@ -1321,7 +1326,13 @@ export default function Sales() {
           </div>
         ) : (
           /* ── Pipeline View ─────────────────────────────────────── */
-          <div className="flex gap-4 overflow-x-auto flex-1 pb-4">
+          /* Mobile: horizontal scroll with fixed-width columns (otherwise
+             cramped). Desktop (md+): equal-width columns sized to fit
+             every stage on the page at once — Tyler's preference. */
+          <div
+            className="flex md:grid gap-2 md:gap-3 overflow-x-auto md:overflow-x-visible flex-1 pb-4"
+            style={{ gridTemplateColumns: `repeat(${stages.length}, minmax(0, 1fr))` }}
+          >
             {stages.map(stage => {
               const stageClients = filteredClients.filter(c => c.stage === stage.key);
               const stageTotal = stageClients.reduce((s, c) => s + (c.budget || 0), 0);
@@ -1330,22 +1341,28 @@ export default function Sales() {
               return (
                 <div
                   key={stage.key}
-                  className="flex-shrink-0 w-64 flex flex-col"
+                  className="flex-shrink-0 w-64 md:w-auto md:min-w-0 flex flex-col"
                   onDragOver={e => { e.preventDefault(); setDragOverStage(stage.key); }}
                   onDragLeave={() => setDragOverStage(null)}
                   onDrop={e => handleDrop(e, stage.key)}
                 >
-                  {/* Column Header */}
-                  <div className={`flex items-center justify-between px-3 py-2.5 rounded-t-xl border border-b-0 transition-colors ${isDropTarget ? 'border-gray-400' : 'border-gray-200'}`}
-                    style={{ backgroundColor: isDropTarget ? `${stage.color}10` : '#f9fafb' }}>
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: stage.color }} />
-                      <span className="text-sm font-semibold text-gray-800">{stage.label}</span>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-xs font-bold text-gray-500">
-                        {stageTotal > 0 ? `Total: ${fmtFull(stageTotal)}` : `Total: $0.00`}
-                      </span>
+                  {/* Column Header — label is the headline: full width,
+                      two-line wrap, larger font. Lead count + total stack
+                      below as secondary info. A color stripe across the
+                      top edge keeps columns scannable when many stages
+                      are visible. */}
+                  <div className={`rounded-t-xl border border-b-0 overflow-hidden transition-colors ${isDropTarget ? 'border-gray-400' : 'border-gray-200'}`}>
+                    <div className="h-1" style={{ backgroundColor: stage.color }} />
+                    <div className="px-3 py-2" style={{ backgroundColor: isDropTarget ? `${stage.color}10` : '#f9fafb' }}>
+                      <p className="text-sm font-bold text-gray-900 leading-snug break-words line-clamp-2" title={stage.label}>
+                        {stage.label}
+                      </p>
+                      <div className="flex items-center justify-between mt-1 text-xs text-gray-500">
+                        <span className="font-medium">{stageClients.length} {stageClients.length === 1 ? 'lead' : 'leads'}</span>
+                        <span className="font-bold" title={`Total: ${fmtFull(stageTotal)}`}>
+                          {stageTotal > 0 ? fmtFull(stageTotal) : '$0'}
+                        </span>
+                      </div>
                     </div>
                   </div>
 

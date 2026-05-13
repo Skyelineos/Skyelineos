@@ -29,6 +29,7 @@ import { RoomManager } from '@/components/designer/RoomManager';
 import { GlobalDesignDashboard } from '@/components/designer/GlobalDesignDashboard';
 import TakeoffStudio from '@/components/takeoff/TakeoffStudio';
 import { DesignerTodayFeed } from '@/components/today/DesignerTodayFeed';
+import { MyContractsView } from '@/components/contracts/MyContractsView';
 
 interface FirestoreProject {
   id: string;
@@ -216,6 +217,14 @@ export default function DesignerPortal() {
                 </div>
               ) : (
                 <div className="space-y-8">
+                  {/* Designer's contract / agreement (visible to them only) */}
+                  {userId && (
+                    <div>
+                      <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-widest mb-4">My Agreement</h2>
+                      <MyContractsView userId={userId} audience="designer" />
+                    </div>
+                  )}
+
                   {/* Cross-project summary dashboard */}
                   <GlobalDesignDashboard
                     projects={rawProjects}

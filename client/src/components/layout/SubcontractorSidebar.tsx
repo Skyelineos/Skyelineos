@@ -8,6 +8,7 @@ import {
   Shield,
   DollarSign,
   FileText,
+  FileSignature,
   MessageSquare,
   Camera,
   X,
@@ -32,6 +33,12 @@ const sidebarItems = [
     label: 'My Bids',
     icon: Hammer,
     path: 'bids'
+  },
+  {
+    id: 'contracts',
+    label: 'My Contracts',
+    icon: FileSignature,
+    path: 'contracts'
   },
   {
     id: 'schedule',

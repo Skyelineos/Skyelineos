@@ -29,6 +29,9 @@ import { ChatThread } from '@/components/ui/ChatThread';
 import { WalkthroughCapture } from '@/components/walkthrough/WalkthroughCapture';
 import { WalkthroughList } from '@/components/walkthrough/WalkthroughList';
 import { ProjectFinancialsCard } from '@/components/projects/ProjectFinancialsCard';
+import { ProjectStageTracker, deriveStageFromProject } from '@/components/projects/ProjectStageTracker';
+import { SoftBudgetBadge } from '@/components/projects/SoftBudgetBadge';
+import { ContractProfitCard } from '@/components/projects/ContractProfitCard';
 
 
 
@@ -170,6 +173,13 @@ export default function ProjectOverview() {
   return (
     <ProjectLayout projectId={projectId!} projectName={transformedProject.name}>
         <div className="p-6 space-y-6">
+        {/* Lifecycle "what's next?" callout (full version with action link).
+            ProjectLayout already shows a compact step bar above every
+            project page — this adds the per-stage next-action prompt. */}
+        <ProjectStageTracker
+          projectId={projectId!}
+          stage={deriveStageFromProject(project)}
+        />
         {/* Project Header */}
         <div className="flex items-center justify-between">
           <div>
@@ -180,6 +190,7 @@ export default function ProjectOverview() {
             <Badge className={`${getStatusBadgeClass(transformedProject.status)} font-medium px-3 py-1`}>
               {getStatusLabel(transformedProject.status)}
             </Badge>
+            <SoftBudgetBadge projectId={projectId!} lastDesignChangeAt={(project as any)?.lastDesignChangeAt} />
             {slip && (
               <Badge className={`${slipToneClass} font-medium px-3 py-1 gap-1`}>
                 <Calendar className="w-3 h-3" />
@@ -249,7 +260,11 @@ export default function ProjectOverview() {
           </CardContent>
         </Card>
 
-        {/* Financials — estimate, change orders, projected profit. */}
+        {/* Profit vs. contracts — revenue from client contracts, costs from
+            sub + designer contracts, cash on hand from paid milestones. */}
+        <ContractProfitCard projectId={projectId!} />
+
+        {/* Estimate-side financials — pre-contract estimating + COs. */}
         <ProjectFinancialsCard
           projectId={projectId!}
           projectName={transformedProject.name}

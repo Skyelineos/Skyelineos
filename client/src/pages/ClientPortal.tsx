@@ -40,6 +40,7 @@ import PunchlistSection from '@/components/client-portal/PunchlistSection';
 import WarrantySection from '@/components/client-portal/WarrantySection';
 import EstimatesSection from '@/components/client-portal/EstimatesSection';
 import { MessagingModule } from '@/components/messaging/MessagingModule';
+import { MyContractsView } from '@/components/contracts/MyContractsView';
 import { ChatThread } from '@/components/ui/ChatThread';
 
 // Get actual client user from authentication or mock based on URL/query params
@@ -420,6 +421,8 @@ export default function ClientPortal() {
     switch (currentTab) {
       case 'dashboard':
         return renderDashboard();
+      case 'contracts':
+        return <MyContractsView userId={user?.firebaseUid || ''} audience="client" />;
       case 'documents':
         return <DocumentsSection projectId={selectedProject} />;
       case 'design':

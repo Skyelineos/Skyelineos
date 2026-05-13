@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged, User as FirebaseUser, signOut } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 
 // Backend user interface with role and permissions
 interface BackendUser {
@@ -127,14 +127,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           navDisabled: data.navDisabled || [],
         });
       } else {
-        // No Firestore profile yet — create a minimal one so the user isn't locked out
-        setUser({
-          id: 0,
+        // No Firestore profile yet — create one so the user appears in the admin UI
+        const newProfile = {
           email: firebaseUser.email || '',
           name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || '',
-          role: 'client',
+          role: 'pending_gc',
           permissions: [],
           firebaseUid: firebaseUser.uid,
+          provider: firebaseUser.providerData[0]?.providerId || 'unknown',
+          createdAt: serverTimestamp(),
+        };
+        await setDoc(doc(db, 'users', firebaseUser.uid), newProfile);
+        setUser({
+          id: 0,
+          ...newProfile,
+          role: 'pending_gc',
         });
       }
     } catch (error) {

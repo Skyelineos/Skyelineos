@@ -33,9 +33,31 @@ interface Task {
   status: TaskStatus;
   priority: TaskPriority;
   dueDate?: string;
+  // Workflow category — used by the "Kanban by category" view (mirrors
+  // Jack's Sales / Administration / Pre Site / Site / Client board).
+  category?: TaskCategory;
   createdAt?: unknown;
   updatedAt?: unknown;
 }
+
+type TaskCategory = 'uncategorized' | 'sales' | 'administration' | 'pre_site' | 'site' | 'client';
+const CATEGORY_ORDER: TaskCategory[] = ['uncategorized', 'sales', 'administration', 'pre_site', 'site', 'client'];
+const CATEGORY_LABEL: Record<TaskCategory, string> = {
+  uncategorized: 'Uncategorized',
+  sales:         'Sales',
+  administration: 'Administration',
+  pre_site:      'Pre Site',
+  site:          'Site',
+  client:        'Client',
+};
+const CATEGORY_COLOR: Record<TaskCategory, string> = {
+  uncategorized: '#94a3b8',
+  sales:         '#0ea5e9',
+  administration: '#0ea5e9',
+  pre_site:      '#ef4444',
+  site:          '#ef4444',
+  client:        '#22c55e',
+};
 
 interface Project {
   id: string;
@@ -59,7 +81,8 @@ const defaultForm = (): TaskFormData => ({
   assignedToName: '',
   status: 'todo',
   priority: 'medium',
-  dueDate: ''
+  dueDate: '',
+  category: 'uncategorized',
 });
 
 const STATUS_COLUMNS: { key: TaskStatus; label: string }[] = [
@@ -110,7 +133,7 @@ export function TasksContent({ projectId: scopedProjectId }: { projectId?: strin
   const [users, setUsers] = useState<AppUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
+  const [viewMode, setViewMode] = useState<'kanban' | 'kanban_category' | 'list'>('kanban');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
@@ -259,6 +282,7 @@ export function TasksContent({ projectId: scopedProjectId }: { projectId?: strin
   });
 
   const tasksByStatus = (status: TaskStatus) => filteredTasks.filter(t => t.status === status);
+  const tasksByCategory = (cat: TaskCategory) => filteredTasks.filter(t => (t.category || 'uncategorized') === cat);
 
   return (
       <div className="space-y-6 p-6">
@@ -270,13 +294,29 @@ export function TasksContent({ projectId: scopedProjectId }: { projectId?: strin
             <Badge variant="secondary" className="text-sm">{filteredTasks.length}</Badge>
           </div>
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setViewMode(viewMode === 'kanban' ? 'list' : 'kanban')}
-            >
-              {viewMode === 'kanban' ? <List className="h-4 w-4" /> : <LayoutGrid className="h-4 w-4" />}
-            </Button>
+            <div className="inline-flex rounded-md border border-gray-200 overflow-hidden">
+              <button
+                onClick={() => setViewMode('kanban')}
+                className={`px-2.5 py-1 text-xs ${viewMode === 'kanban' ? 'bg-gray-900 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                title="By status"
+              >
+                Status
+              </button>
+              <button
+                onClick={() => setViewMode('kanban_category')}
+                className={`px-2.5 py-1 text-xs border-l border-gray-200 ${viewMode === 'kanban_category' ? 'bg-gray-900 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                title="By category"
+              >
+                Category
+              </button>
+              <button
+                onClick={() => setViewMode('list')}
+                className={`px-2.5 py-1 text-xs border-l border-gray-200 ${viewMode === 'list' ? 'bg-gray-900 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                title="List"
+              >
+                List
+              </button>
+            </div>
             <Button
               onClick={openAddDialog}
               className="text-white"
@@ -353,7 +393,7 @@ export function TasksContent({ projectId: scopedProjectId }: { projectId?: strin
             ))}
           </div>
         ) : viewMode === 'kanban' ? (
-          /* Kanban View */
+          /* Kanban by Status */
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
             {STATUS_COLUMNS.map(col => {
               const colTasks = tasksByStatus(col.key);
@@ -367,6 +407,42 @@ export function TasksContent({ projectId: scopedProjectId }: { projectId?: strin
                     {colTasks.length === 0 ? (
                       <div className="h-20 border-2 border-dashed border-gray-200 rounded-lg flex items-center justify-center text-sm text-gray-400">
                         No tasks
+                      </div>
+                    ) : (
+                      colTasks.map(task => (
+                        <TaskCard
+                          key={task.id}
+                          task={task}
+                          onEdit={openEditDialog}
+                          onDelete={handleDelete}
+                          onStatusChange={handleStatusChange}
+                        />
+                      ))
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : viewMode === 'kanban_category' ? (
+          /* Kanban by Category (Jack-style) */
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+            {CATEGORY_ORDER.map(cat => {
+              const colTasks = tasksByCategory(cat);
+              const color = CATEGORY_COLOR[cat];
+              return (
+                <div key={cat} className="flex flex-col gap-2">
+                  <div className="flex flex-col gap-1 px-1">
+                    <div className="h-1 rounded" style={{ backgroundColor: color }} />
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-semibold text-xs text-gray-700">{CATEGORY_LABEL[cat]}</h3>
+                      <Badge variant="secondary" className="text-[10px]">{colTasks.length}</Badge>
+                    </div>
+                  </div>
+                  <div className="space-y-2 min-h-[150px]">
+                    {colTasks.length === 0 ? (
+                      <div className="h-16 border-2 border-dashed border-gray-200 rounded-md flex items-center justify-center text-[11px] text-gray-400">
+                        Empty
                       </div>
                     ) : (
                       colTasks.map(task => (
@@ -524,6 +600,17 @@ export function TasksContent({ projectId: scopedProjectId }: { projectId?: strin
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+              <div>
+                <Label>Category</Label>
+                <Select value={formData.category || 'uncategorized'} onValueChange={v => setFormData(prev => ({ ...prev, category: v as TaskCategory }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {CATEGORY_ORDER.map(cat => (
+                      <SelectItem key={cat} value={cat}>{CATEGORY_LABEL[cat]}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div>
                 <Label htmlFor="task-due">Due Date</Label>

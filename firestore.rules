@@ -435,6 +435,24 @@ service cloud.firestore {
       allow delete: if isAdmin() || isGC();
     }
 
+    // Contracts — legal/financial spine. Each party can read their own.
+    // GC reads/writes everything; client/sub/designer/employee read only
+    // contracts where they are the `other` party (matched by uid).
+    match /contracts/{contractId} {
+      allow read: if isGC()
+        || (isSignedIn() && resource.data.other.userId == request.auth.uid);
+      allow create, update: if isGC();
+      allow delete: if isAdmin();
+    }
+
+    // Move-in binder docs — owned by the project.
+    match /projects/{projectId}/moveInBinder/{itemId} {
+      allow read: if isGC()
+        || (isClient() && get(/databases/$(database)/documents/projects/$(projectId)).data.clientId == request.auth.uid);
+      allow create, update: if isGC();
+      allow delete: if isAdmin() || isGC();
+    }
+
     // Deny everything else
     match /{document=**} {
       allow read, write: if false;

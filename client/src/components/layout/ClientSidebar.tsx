@@ -11,6 +11,7 @@ import {
   Palette,
   Camera,
   DollarSign,
+  FileSignature,
   ArrowLeft,
   X,
   Menu
@@ -22,6 +23,12 @@ const sidebarItems = [
     label: 'Dashboard',
     icon: Home,
     path: 'dashboard'
+  },
+  {
+    id: 'contracts',
+    label: 'My Contract',
+    icon: FileSignature,
+    path: 'contracts'
   },
   {
     id: 'documents',

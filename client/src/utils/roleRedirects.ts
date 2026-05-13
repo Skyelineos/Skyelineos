@@ -4,20 +4,29 @@ import { UserRole } from '@/hooks/useRoleAccess';
  * Utility functions for role-based redirects and route access
  */
 
-export function getDefaultRouteForRole(role: UserRole, userId?: string): string {
-  switch (role) {
+export function getDefaultRouteForRole(role: UserRole | string, userId?: string): string {
+  // Normalize role string — Firestore docs store some legacy shortforms
+  // ("sub", "gc", "project_manager") that should route the same as their
+  // canonical equivalents. Without this, a sub signing up with role="sub"
+  // falls through and gets stuck on a redirect loop.
+  const normalized = String(role || '').toLowerCase().replace(/_/g, '');
+  switch (normalized) {
     case 'admin':
       return '/dashboard';
-    case 'projectManager':
+    case 'gc':
+    case 'projectmanager':
       return '/projects';
     case 'client':
+    case 'homeowner':
       return '/client-portal';
+    case 'sub':
     case 'subcontractor':
+    case 'vendor':
       return '/subcontractor-portal';
     case 'designer':
       return '/designer-portal';
     default:
-      return '/login';
+      return '/sign-in';
   }
 }
 

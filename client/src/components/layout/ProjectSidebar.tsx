@@ -47,6 +47,7 @@ const sidebarItems = [
   { id: 'change-orders', label: 'Change Orders', icon: GitPullRequest },
   { id: 'site-log',      label: 'Site Log',      icon: ClipboardCheck },
   { id: 'walkthroughs',  label: 'Walkthroughs',  icon: Users },
+  { id: 'move-in-binder', label: 'Move-in Binder', icon: ClipboardCheck },
   { id: 'documents',     label: 'Documents',     icon: FolderOpen },
   { id: 'photos',        label: 'Photos',        icon: Camera },
   { id: 'design',        label: 'Design',        icon: Palette },

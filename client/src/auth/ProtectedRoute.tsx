@@ -67,9 +67,19 @@ export default function ProtectedRoute({
     );
   }
 
-  // If authentication is required but no user (and not in test mode), redirect to sign-in
+  // If authentication is required but no user (and not in test mode), redirect to sign-in.
+  // Preserve the originally requested URL as a `?next=` query param so the
+  // sign-in page can bounce the user back here after authenticating
+  // (used by emailed deep links into the sub portal).
   if (requireAuth && !isAuthenticated && !isTestMode) {
     console.debug('ProtectedRoute: Redirecting unauthenticated user to /sign-in');
+    if (typeof window !== 'undefined') {
+      const intended = window.location.pathname + window.location.search;
+      if (intended && intended !== '/sign-in' && !intended.startsWith('/sign-in?')) {
+        const target = `/sign-in?next=${encodeURIComponent(intended)}`;
+        return <Redirect to={target} />;
+      }
+    }
     return <Redirect to="/sign-in" />;
   }
 

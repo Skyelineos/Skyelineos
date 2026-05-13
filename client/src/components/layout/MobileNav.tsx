@@ -56,7 +56,7 @@ const getNavigationItems = () => [
   { label: 'Timesheet',             href: '/timesheet',            icon: Clock,           roles: ['Admin', 'ProjectManager'] as const },
   { label: 'Safety',                href: '/safety',               icon: ShieldCheck,     roles: ['Admin', 'ProjectManager'] as const },
   { label: 'Catalogs',              href: '/catalogs',             icon: BookOpen,        roles: ['Admin', 'ProjectManager'] as const },
-  { label: 'Finance',               href: '/finance',              icon: DollarSign,      roles: ['Admin'] as const },
+  { label: 'Finance',               href: '/financials',           icon: DollarSign,      roles: ['Admin'] as const },
   { label: 'Reports',               href: '/reports',              icon: BarChart2,       roles: ['Admin'] as const },
   { label: 'Templates',             href: '/templates',            icon: Hammer,          roles: ['Admin'] as const },
   { label: 'Messaging',             href: '/messages',             icon: MessageSquare,   roles: ['Admin', 'ProjectManager'] as const },

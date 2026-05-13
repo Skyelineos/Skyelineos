@@ -3,11 +3,10 @@ import { auth, db } from "@/lib/firebase";
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
-  GoogleAuthProvider,
-  signInWithPopup,
+  sendPasswordResetEmail,
   signOut,
 } from "firebase/auth";
-import { doc, setDoc, addDoc, collection, getDocs, query, serverTimestamp } from "firebase/firestore";
+import { doc, setDoc, getDoc, addDoc, collection, getDocs, query, serverTimestamp } from "firebase/firestore";
 import { useLocation } from "wouter";
 import { useAuth } from "@/auth/AuthContext";
 import { getDefaultRouteForRole } from "@/utils/roleRedirects";
@@ -17,7 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { Building2, Mail, Lock, Chrome, Loader2, CheckCircle2, User, HardHat, UserCheck, Users, Palette, ChevronRight, ArrowLeft, MapPin, Wrench, Phone } from 'lucide-react';
+import { Building2, Mail, Lock, Loader2, CheckCircle2, User, HardHat, UserCheck, Users, Palette, ChevronRight, ArrowLeft, MapPin, Wrench, Phone } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
@@ -65,6 +64,9 @@ export default function SignIn() {
 
   // Registration modal state
   const [registerOpen, setRegisterOpen] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetSending, setResetSending] = useState(false);
   const [regStep, setRegStep] = useState<1 | 2>(1);
   const [accountType, setAccountType] = useState<AccountType>(null);
   const [regName, setRegName] = useState("");
@@ -83,10 +85,27 @@ export default function SignIn() {
 
   useEffect(() => {
     if (!loading && !authLoading && isAuthenticated && user) {
-      const defaultRoute = getDefaultRouteForRole(user.role as any);
-      setLocation(defaultRoute);
+      // Honor ?next=<url> from the URL if present — this is set by
+      // ProtectedRoute when a deep link required auth, so emailed bid-package
+      // links land the sub right on the requested bid after sign-in.
+      const params = typeof window !== 'undefined'
+        ? new URLSearchParams(window.location.search)
+        : null;
+      const next = params?.get('next');
+      const safeNext = next && next.startsWith('/') && !next.startsWith('//') ? next : null;
+      setLocation(safeNext || getDefaultRouteForRole(user.role as any));
     }
   }, [user, isAuthenticated, loading, authLoading, setLocation]);
+
+  // Pre-fill the sign-in email from ?email=<addr> so subs landing via an
+  // emailed bid invite don't have to re-type their address.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const prefill = params.get('email');
+    if (prefill && !email) setEmail(prefill);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Resolve ?invite=<token> on mount: pre-fill the registration email + name
   // so the visitor lands in the "Create account" flow with their info ready.
@@ -159,32 +178,35 @@ export default function SignIn() {
     }
   };
 
-  const handleGoogleSignIn = async () => {
-    setIsLoading(true);
-    setError(null);
+  const handlePasswordReset = async () => {
+    const target = resetEmail.trim();
+    if (!target) {
+      toast({ title: 'Email required', description: 'Enter the email address tied to your account.', variant: 'destructive' });
+      return;
+    }
+    setResetSending(true);
     try {
-      const provider = new GoogleAuthProvider();
-      provider.setCustomParameters({ prompt: 'select_account' });
-      const result = await signInWithPopup(auth, provider);
-      try {
-        await fetch('/api/auth/register', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            firebaseUid: result.user.uid,
-            email: result.user.email,
-            name: result.user.displayName || result.user.email?.split('@')[0]
-          }),
-        });
-      } catch (_) {}
+      await sendPasswordResetEmail(auth, target);
+      toast({
+        title: 'Reset link sent',
+        description: `If an account exists for ${target}, a password reset email is on its way. Check your inbox (and spam folder).`,
+      });
+      setResetOpen(false);
+      setResetEmail('');
     } catch (e: any) {
-      let msg = "An error occurred during Google sign in.";
-      if (e.code === "auth/popup-closed-by-user") msg = "Sign in was cancelled.";
-      else if (e.code === "auth/popup-blocked") msg = "Popup was blocked. Please allow popups and try again.";
-      else if (e.code === "auth/unauthorized-domain") msg = "This domain is not authorized for Google sign-in.";
-      else if (e.message) msg = e.message;
-      setError(msg);
-      setIsLoading(false);
+      // Most Firebase errors here surface the email — but we deliberately
+      // show a generic message so the form can't be used to probe for
+      // valid emails. Log the underlying error for debugging only.
+      // eslint-disable-next-line no-console
+      console.warn('Password reset error:', e?.code || e);
+      toast({
+        title: 'Reset link sent',
+        description: `If an account exists for ${target}, a password reset email is on its way. Check your inbox (and spam folder).`,
+      });
+      setResetOpen(false);
+      setResetEmail('');
+    } finally {
+      setResetSending(false);
     }
   };
 
@@ -207,7 +229,9 @@ export default function SignIn() {
     if (type === 'client') return 'client';
     if (type === 'sub') return 'sub';
     if (type === 'designer') return 'designer';
-    if (type === 'team') return 'admin';
+    // Team members start pending — an admin (Tyler) approves them from
+    // the dashboard before they get full admin access.
+    if (type === 'team') return 'pending_team';
     return 'client';
   };
 
@@ -370,29 +394,45 @@ export default function SignIn() {
           projectCity: regProjectCity.trim() || null,
           linkedClientId,
         } : {}),
-        active: true,
-        status: 'active',
-        requestedPermissions: [],
+        active: accountType !== 'team',
+        status: accountType === 'team' ? 'pending_approval' : 'active',
+        requestedPermissions: accountType === 'team' ? regPermissions : [],
         createdAt: serverTimestamp(),
       });
 
-      await signOut(auth);
       setRegisterOpen(false);
-      setEmail(regEmail);
-      setPassword("");
 
       const typeLabel = accountType === 'client' ? 'Home Owner' : accountType === 'sub' ? 'Subcontractor' : accountType === 'designer' ? 'Interior Designer' : 'Skyeline Homes Team Member';
-      const extraMsg = isOtherTrade
-        ? ' Your trade has been submitted for review — Tyler will add it to the system.'
-        : linkedClientId
-          ? ' Your project address was matched to an existing record.'
-          : '';
-      setSuccessMessage(`${typeLabel} account created! Please sign in with your credentials.${extraMsg}`);
-      toast({
-        title: "Account Created!",
-        description: `Welcome to SkyelineOS. Sign in to access your portal.`,
-        duration: 6000,
-      });
+
+      // Team members must wait for admin approval before they can access
+      // anything, so we sign them out and show a clear waiting message.
+      // Clients / subs / designers are auto-approved — leave them signed
+      // in and let the auth-state effect route them straight into their
+      // portal so onboarding is one continuous flow.
+      if (accountType === 'team') {
+        await signOut(auth);
+        setEmail(regEmail);
+        setPassword("");
+        setSuccessMessage(`${typeLabel} account created! Your request is pending admin approval — you'll be able to sign in once Tyler approves your request.`);
+        toast({
+          title: 'Request submitted',
+          description: 'A team admin will review your account shortly.',
+          duration: 6000,
+        });
+      } else {
+        const extraMsg = isOtherTrade
+          ? ' Your trade has been submitted for review.'
+          : linkedClientId
+            ? ' Your project address was matched to an existing record.'
+            : '';
+        toast({
+          title: `Welcome, ${regName.split(' ')[0] || typeLabel}!`,
+          description: `Account created.${extraMsg} Taking you to your portal…`,
+          duration: 4000,
+        });
+        // The useEffect that watches `isAuthenticated` will pick up the
+        // new auth state and route to /<role>-portal automatically.
+      }
     } catch (e: any) {
       let msg = "An error occurred.";
       if (e.code === "auth/email-already-in-use") msg = "An account with this email already exists.";
@@ -485,6 +525,17 @@ export default function SignIn() {
             </div>
           </div>
 
+          <div className="flex items-center justify-end -mt-1">
+            <button
+              type="button"
+              onClick={() => { setResetEmail(email); setResetOpen(true); }}
+              className="text-xs text-gray-500 hover:text-gray-800 hover:underline"
+              disabled={isLoading}
+            >
+              Forgot password?
+            </button>
+          </div>
+
           <div className="space-y-2">
             <Button onClick={handleEmailSignIn} className="w-full" disabled={isLoading || !email || !password}>
               {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
@@ -495,19 +546,44 @@ export default function SignIn() {
             </Button>
           </div>
 
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center"><span className="w-full border-t" /></div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-background px-2 text-muted-foreground">Or continue with</span>
-            </div>
-          </div>
-
-          <Button onClick={handleGoogleSignIn} variant="outline" className="w-full" disabled={isLoading}>
-            <Chrome className="mr-2 h-4 w-4" />
-            Continue with Google
-          </Button>
         </CardContent>
       </Card>
+
+      {/* Password reset modal — sends a Firebase Auth reset email so the
+          user can pick a new password without needing admin intervention. */}
+      <Dialog open={resetOpen} onOpenChange={setResetOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reset your password</DialogTitle>
+            <DialogDescription>
+              Enter the email tied to your Skyeline OS account. We'll email you a link to set a new password.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <Label htmlFor="reset-email">Email</Label>
+            <div className="relative">
+              <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+              <Input
+                id="reset-email"
+                type="email"
+                placeholder="you@example.com"
+                value={resetEmail}
+                onChange={e => setResetEmail(e.target.value)}
+                className="pl-10"
+                autoFocus
+                disabled={resetSending}
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setResetOpen(false)} disabled={resetSending}>Cancel</Button>
+            <Button onClick={handlePasswordReset} disabled={resetSending || !resetEmail.trim()}>
+              {resetSending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Send reset link
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Registration Modal */}
       <Dialog open={registerOpen} onOpenChange={setRegisterOpen}>

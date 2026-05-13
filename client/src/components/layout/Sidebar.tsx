@@ -35,6 +35,7 @@ import {
   Receipt,
   Lightbulb,
   Sparkles,
+  FileSignature,
 } from 'lucide-react';
 
 interface NavItem {
@@ -61,6 +62,7 @@ const TEAM_NAV: NavGroup[] = [
     items: [
       { label: 'Sales & CRM', href: '/sales',      icon: TrendingUp },
       { label: 'Estimates',   href: '/estimates',  icon: DollarSign },
+      { label: 'Contracts',   href: '/contracts',  icon: FileSignature },
       { label: 'Contacts',    href: '/contacts',   icon: Users },
     ],
   },
@@ -86,7 +88,7 @@ const TEAM_NAV: NavGroup[] = [
   {
     label: 'Finance',
     items: [
-      { label: 'Finance', href: '/finance',  icon: DollarSign },
+      { label: 'Finance', href: '/financials',  icon: DollarSign },
       { label: 'Bills (AI)', href: '/bills',  icon: Receipt },
       { label: 'Reports', href: '/reports',  icon: BarChart2 },
     ],

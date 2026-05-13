@@ -78,7 +78,12 @@ interface Bill {
   description?: string;
   category?: string;
   amount: number;
-  status: 'unpaid' | 'pending' | 'paid';
+  // Workflow states mirroring the Jack tabbed flow:
+  //   draft → awaiting_approval → approved_for_payment → paid
+  //   side states: hold_payment, rejected, bank_charge, credit_note
+  status: 'draft' | 'awaiting_approval' | 'hold_payment' | 'approved_for_payment'
+        | 'paid' | 'rejected' | 'bank_charge' | 'credit_note'
+        | 'unpaid' | 'pending'; // legacy aliases retained for older docs
   billDate?: string;
   dueDate?: string;
   projectId?: string;
@@ -91,7 +96,10 @@ interface Bill {
 }
 
 const CATEGORIES = ['materials', 'labor', 'equipment', 'fees', 'subcontractor', 'other'];
-const STATUSES = ['unpaid', 'pending', 'paid'];
+const STATUSES = [
+  'draft', 'awaiting_approval', 'hold_payment', 'approved_for_payment',
+  'paid', 'rejected', 'bank_charge', 'credit_note',
+];
 
 export default function Bills() {
   return (
@@ -191,7 +199,7 @@ export function BillsContent({ projectId: scopedProjectId }: { projectId?: strin
         amount: ex.amount || 0,
         billDate: ex.billDate || '',
         dueDate: ex.dueDate || '',
-        status: 'unpaid',
+        status: 'awaiting_approval',
         notes: ex.paymentTerms ? `Terms: ${ex.paymentTerms}` : '',
         imageUrl: downloadUrl,
         storagePath: path,
@@ -279,12 +287,35 @@ export function BillsContent({ projectId: scopedProjectId }: { projectId?: strin
   // Scope to project if requested.
   const visibleBills = scopedProjectId ? bills.filter(b => b.projectId === scopedProjectId) : bills;
 
-  // Stats
+  // Workflow tab filter — what's currently in view.
+  const [statusTab, setStatusTab] = useState<string>('all');
+  // Treat legacy 'unpaid'/'pending' as 'draft'/'awaiting_approval' for filter purposes.
+  const statusMatch = (b: Bill, key: string) => {
+    if (key === 'all') return true;
+    if (key === 'draft') return b.status === 'draft' || b.status === 'unpaid';
+    if (key === 'awaiting_approval') return b.status === 'awaiting_approval' || b.status === 'pending';
+    return b.status === key;
+  };
+  const filteredByStatus = visibleBills.filter(b => statusMatch(b, statusTab));
+
+  // Stats — by workflow column
   const totals = {
-    unpaid: visibleBills.filter(b => b.status === 'unpaid').reduce((s, b) => s + (b.amount || 0), 0),
-    pending: visibleBills.filter(b => b.status === 'pending').reduce((s, b) => s + (b.amount || 0), 0),
+    unpaid: visibleBills.filter(b => b.status === 'unpaid' || b.status === 'draft').reduce((s, b) => s + (b.amount || 0), 0),
+    pending: visibleBills.filter(b => b.status === 'pending' || b.status === 'awaiting_approval').reduce((s, b) => s + (b.amount || 0), 0),
     paid: visibleBills.filter(b => b.status === 'paid').reduce((s, b) => s + (b.amount || 0), 0),
   };
+
+  const STATUS_TABS: Array<{ key: string; label: string }> = [
+    { key: 'all',                   label: 'All' },
+    { key: 'draft',                 label: 'Draft' },
+    { key: 'awaiting_approval',     label: 'Awaiting Approval' },
+    { key: 'hold_payment',          label: 'Hold Payment' },
+    { key: 'approved_for_payment',  label: 'Approved For Payment' },
+    { key: 'paid',                  label: 'Paid' },
+    { key: 'rejected',              label: 'Rejected' },
+    { key: 'bank_charge',           label: 'Bank Charges' },
+    { key: 'credit_note',           label: 'Credit Notes' },
+  ];
 
   return (
       <div className="p-6 max-w-7xl mx-auto space-y-6">
@@ -498,13 +529,38 @@ export function BillsContent({ projectId: scopedProjectId }: { projectId?: strin
 
         {/* Bills list */}
         <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Recent Bills</CardTitle>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <CardTitle className="text-base">Bills</CardTitle>
+              <div className="text-xs text-gray-500">
+                {filteredByStatus.length} of {visibleBills.length} bills{statusTab !== 'all' ? ` · ${STATUS_TABS.find(t => t.key === statusTab)?.label}` : ''}
+              </div>
+            </div>
+            {/* Workflow status tabs (Jack-style) */}
+            <div className="flex flex-wrap gap-1 mt-3 -mb-1">
+              {STATUS_TABS.map(t => {
+                const count = visibleBills.filter(b => statusMatch(b, t.key)).length;
+                const isActive = statusTab === t.key;
+                return (
+                  <button
+                    key={t.key}
+                    onClick={() => setStatusTab(t.key)}
+                    className={`text-xs px-2.5 py-1 rounded-md border transition ${
+                      isActive
+                        ? 'bg-gray-900 border-gray-900 text-white'
+                        : 'bg-white border-gray-200 text-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    {t.label} <span className={isActive ? 'opacity-70' : 'text-gray-400'}>· {count}</span>
+                  </button>
+                );
+              })}
+            </div>
           </CardHeader>
           <CardContent className="p-0">
-            {visibleBills.length === 0 ? (
+            {filteredByStatus.length === 0 ? (
               <div className="text-center py-12 text-sm text-gray-500">
-                No bills yet. Upload your first one above.
+                {visibleBills.length === 0 ? 'No bills yet. Upload your first one above.' : 'No bills in this state.'}
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -520,7 +576,7 @@ export function BillsContent({ projectId: scopedProjectId }: { projectId?: strin
                     </tr>
                   </thead>
                   <tbody>
-                    {visibleBills.map(b => (
+                    {filteredByStatus.map(b => (
                       <tr key={b.id} className="border-b last:border-0 hover:bg-gray-50">
                         <td className="px-4 py-3">
                           <div className="font-medium text-gray-900">{b.vendor}</div>
@@ -534,9 +590,9 @@ export function BillsContent({ projectId: scopedProjectId }: { projectId?: strin
                         <td className="px-4 py-3 text-right font-mono text-gray-900">${b.amount.toLocaleString()}</td>
                         <td className="px-4 py-3">
                           <Select value={b.status} onValueChange={v => handleStatusChange(b.id, v as any)}>
-                            <SelectTrigger className="h-7 text-xs w-24"><SelectValue /></SelectTrigger>
+                            <SelectTrigger className="h-7 text-xs w-40"><SelectValue /></SelectTrigger>
                             <SelectContent>
-                              {STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                              {STATUSES.map(s => <SelectItem key={s} value={s}>{s.replace(/_/g, ' ')}</SelectItem>)}
                             </SelectContent>
                           </Select>
                         </td>

@@ -364,12 +364,21 @@ export function SendBidPackageModal({ open, projectId, projectName, onClose }: P
           notifiedSubIds.add(subId);
           const sub = allSubs.find(s => s.id === subId);
           const recipientId = sub?.linkedUserId || subId;
+          // Deep-link to the bids tab and carry the request ID + the sub's
+          // email as query params. The portal can highlight the specific
+          // request; the sign-in form (if not yet authenticated) pre-fills
+          // the email. ProtectedRoute preserves the full path+query as
+          // ?next=<url> through the sign-in bounce so they land back here.
+          const qs = new URLSearchParams();
+          qs.set('bidRequest', r.id);
+          if (sub?.email) qs.set('email', sub.email);
+          const deepLink = `/subcontractor-portal/bids?${qs.toString()}`;
           notifications.push({
             userId: recipientId,
             kind: 'system',
             title: `New bid package: ${pkgPayload.name}`,
-            body: `Project: ${projectName || ''}. Open the Bids tab in your portal to review.`,
-            link: '/subcontractor-portal/bids',
+            body: `Project: ${projectName || ''}. Click "View in Skyeline OS" below to open this bid request and submit your quote.`,
+            link: deepLink,
             projectId,
             refType: 'task',
             refId: r.id,

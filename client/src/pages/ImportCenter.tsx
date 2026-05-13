@@ -12,8 +12,10 @@ import {
   Users, FolderOpen, Calendar, Package, Building2, DollarSign,
   FileText, Wrench, ChevronDown, ChevronRight, X, Link as LinkIcon,
   Coins, ListChecks, Replace, Palette, ClipboardList, Receipt,
-  Award, Map, ScrollText,
+  Award, Map, ScrollText, HardHat,
 } from 'lucide-react';
+import { useAuth } from '@/hooks/use-auth';
+import { SKYELINE_SUBCONTRACTOR_COUNT } from '@/lib/skyelineSubcontractors';
 
 // ─── Google Sheets URL → CSV helper ─────────────────────────────────────────
 // Accepts the standard /edit URL or share link. Extracts file ID + sheet gid.
@@ -988,6 +990,93 @@ function ImportCard({ template }: { template: ImportTemplate }) {
 
 // ─── Main page ───────────────────────────────────────────────────────────────
 export default function ImportCenter() {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [seeding, setSeeding] = useState(false);
+
+  const importSkyelineSubs = async () => {
+    if (!confirm('Import the full Skyeline subcontractor list into Contacts? Duplicates by company name are skipped.')) return;
+    setSeeding(true);
+    try {
+      const { seedSkyelineSubcontractors } = await import('@/lib/skyelineSubcontractors');
+      const result = await seedSkyelineSubcontractors(user?.email || '');
+      toast({
+        title: 'Skyeline subs imported',
+        description: `${result.added} added · ${result.skipped} unchanged · ${result.mergedTrades} extra trades merged · ${result.tradesAdded} new trades · ${result.errors} errors`,
+      });
+    } catch (e: any) {
+      toast({ title: 'Import failed', description: e?.message || 'Unknown error', variant: 'destructive' });
+    } finally {
+      setSeeding(false);
+    }
+  };
+
+  // Jack pipeline import — pulls Tyler's pre-migration leads, contacts,
+  // and estimates straight in. Idempotent (matches by name/email).
+  const [importingJack, setImportingJack] = useState(false);
+  const importJack = async () => {
+    if (!confirm('Import Tyler\'s Jack pipeline (12 contacts, 6 leads, 2 estimates)? Idempotent — re-running is safe.')) return;
+    setImportingJack(true);
+    try {
+      const { importJackPipeline } = await import('@/lib/jackPipeline/seed');
+      const r = await importJackPipeline(user?.email || 'unknown');
+      toast({
+        title: 'Jack pipeline imported',
+        description:
+          `Contacts: +${r.contacts.added} (${r.contacts.skipped} skipped) · ` +
+          `Leads: +${r.leads.added} (${r.leads.skipped} skipped) · ` +
+          `Estimates: +${r.estimates.added} (${r.estimates.skipped} skipped)`,
+      });
+    } catch (e: any) {
+      toast({ title: 'Jack import failed', description: e?.message || 'Unknown', variant: 'destructive' });
+    } finally {
+      setImportingJack(false);
+    }
+  };
+
+  // Backfill: touch every contact so the ensureContactAuthAccount
+  // Firestore trigger runs, creating Auth accounts for the ones that
+  // don't have one yet. Idempotent — already-linked contacts get an
+  // updatedAt bump and otherwise no-op.
+  const [linking, setLinking] = useState(false);
+  const linkAllContacts = async () => {
+    if (!confirm('Create Firebase Auth accounts for every contact in the database that has an email but no login? Existing accounts are left alone. ~one quick write per contact.')) return;
+    setLinking(true);
+    try {
+      const { collection, getDocs, query, writeBatch, doc, serverTimestamp } = await import('firebase/firestore');
+      const { db } = await import('@/lib/firebase');
+      const snap = await getDocs(query(collection(db, 'contacts')));
+      const toTouch = snap.docs.filter(d => {
+        const data = d.data() as any;
+        return typeof data.email === 'string' && data.email.trim() && !data.linkedUserId && data.isActive !== false;
+      });
+      if (toTouch.length === 0) {
+        toast({ title: 'Nothing to do', description: 'All contacts with emails already have logins.' });
+        return;
+      }
+      // Batched writes: Firestore allows 500 ops per batch.
+      let written = 0;
+      for (let i = 0; i < toTouch.length; i += 400) {
+        const slice = toTouch.slice(i, i + 400);
+        const batch = writeBatch(db);
+        slice.forEach(d => batch.update(doc(db, 'contacts', d.id), {
+          updatedAt: serverTimestamp(),
+          touchedForAuthSync: serverTimestamp(),
+        }));
+        await batch.commit();
+        written += slice.length;
+      }
+      toast({
+        title: 'Auth backfill queued',
+        description: `${written} contact${written === 1 ? '' : 's'} touched. The server is creating Auth accounts now (usually finishes in 1–2 minutes).`,
+      });
+    } catch (e: any) {
+      toast({ title: 'Backfill failed', description: e?.message || 'Unknown error', variant: 'destructive' });
+    } finally {
+      setLinking(false);
+    }
+  };
+
   return (
     <AppLayout>
       <div className="p-6 max-w-6xl mx-auto space-y-10">
@@ -1004,9 +1093,102 @@ export default function ImportCenter() {
           </p>
         </div>
 
+        {/* Pre-packaged Skyeline data — one-click seeds with no CSV needed. */}
+        <div>
+          <h2 className="text-lg font-semibold text-gray-800 mb-1">Pre-packaged Skyeline Data</h2>
+          <p className="text-sm text-gray-400 mb-4">Built-in data sets hand-curated from Tyler's office docs. One click — no file required.</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Card className="border-2 border-orange-200 bg-orange-50/30">
+              <CardHeader className="pb-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <HardHat className="w-5 h-5 text-orange-600" />
+                    <CardTitle className="text-base">Skyeline Subcontractor List</CardTitle>
+                  </div>
+                  <Badge variant="outline" className="text-xs">~{SKYELINE_SUBCONTRACTOR_COUNT} contacts</Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-sm text-gray-600">
+                  Hand-extracted from the office Subcontractor List PDF. Subs and vendors across every trade with company, contact, email, phone, and address where known. Compliance fields (W9, license, insurance) are not included.
+                </p>
+                <p className="text-xs text-gray-500">
+                  Also populates the <strong>Trades</strong> list with every trade in the PDF (Appliances, Brick, Cabinets…). Idempotent — existing contacts and trades are skipped, so it's safe to re-run.
+                </p>
+                <Button
+                  onClick={importSkyelineSubs}
+                  disabled={seeding}
+                  className="w-full"
+                  style={{ backgroundColor: '#C9A96E', color: '#141414' }}
+                >
+                  <HardHat className="w-4 h-4 mr-2" />
+                  {seeding ? 'Importing…' : 'Import Skyeline Subs'}
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card className="border-2 border-violet-200 bg-violet-50/30">
+              <CardHeader className="pb-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <FolderOpen className="w-5 h-5 text-violet-600" />
+                    <CardTitle className="text-base">Migrate from Jack</CardTitle>
+                  </div>
+                  <Badge variant="outline" className="text-xs">12 + 6 + 2</Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-sm text-gray-600">
+                  Pulls your Jack pipeline directly into Skyeline OS — 12 client contacts, 6 leads in their CRM stages (~$6.9M pipeline), and 2 estimates in Pending.
+                </p>
+                <p className="text-xs text-gray-500">
+                  Hand-extracted from the Jack screenshots taken May 12. Idempotent — re-running skips anything already in the database.
+                </p>
+                <Button
+                  onClick={importJack}
+                  disabled={importingJack}
+                  className="w-full"
+                  style={{ backgroundColor: '#7c3aed', color: 'white' }}
+                >
+                  <FolderOpen className="w-4 h-4 mr-2" />
+                  {importingJack ? 'Importing…' : 'Import Jack Pipeline'}
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card className="border-2 border-blue-200 bg-blue-50/30">
+              <CardHeader className="pb-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Users className="w-5 h-5 text-blue-600" />
+                    <CardTitle className="text-base">Create logins for all contacts</CardTitle>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-sm text-gray-600">
+                  Creates a Firebase Auth account for every contact in the database that has an email but no login yet. Once an account exists, that contact can use the <strong>Forgot password</strong> link on the sign-in page to set their initial password.
+                </p>
+                <p className="text-xs text-gray-500">
+                  Idempotent — contacts already linked to a user are skipped. Backed by a Firestore trigger so the actual Auth + user-doc creation happens server-side.
+                </p>
+                <Button
+                  onClick={linkAllContacts}
+                  disabled={linking}
+                  className="w-full"
+                  variant="outline"
+                >
+                  <Users className="w-4 h-4 mr-2" />
+                  {linking ? 'Backfilling…' : 'Create logins for all contacts'}
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+
         {/* Import templates grid */}
         <div>
-          <h2 className="text-lg font-semibold text-gray-800 mb-4">Available Imports</h2>
+          <h2 className="text-lg font-semibold text-gray-800 mb-4">CSV / Google Sheets Imports</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {TEMPLATES.map(t => <ImportCard key={t.id} template={t} />)}
           </div>

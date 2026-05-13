@@ -432,7 +432,7 @@ export default function Subscriptions() {
               <h1 className="text-2xl font-bold text-gray-900">Subscriptions</h1>
             </div>
             <p className="text-gray-500 text-sm">
-              Every paid service powering Skyline OS — costs, dashboards, and API keys in one place.
+              Every paid service powering Skyeline OS — costs, dashboards, and API keys in one place.
             </p>
           </div>
           <Button

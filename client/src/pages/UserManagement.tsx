@@ -237,6 +237,20 @@ function UserRow({
         </div>
       )}
 
+      {/* Employment agreement link (team roles only) */}
+      {isTeamRole && (
+        <div className="flex-shrink-0">
+          <a
+            href={`/contracts?employee=${encodeURIComponent(user.id)}`}
+            className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-800 px-2 py-1 border border-gray-200 rounded"
+            title="Open this person's employment agreement"
+          >
+            <span>📄</span>
+            Agreement
+          </a>
+        </div>
+      )}
+
       {/* Permissions (team roles only, not self) */}
       {isTeamRole && !isSelf && (
         <div className="flex-shrink-0">

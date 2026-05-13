@@ -1803,11 +1803,26 @@ exports.api = onRequest(
   app,
 );
 
+
 // ── Phase 3: Notification dispatch (email + SMS) ─────────────────────────────
 export { dispatchNotification } from './notifications/dispatch';
 
 // ── Phase 3: Scheduled due-date sweep (7am MT daily) ─────────────────────────
 export { dueSweep } from './notifications/scheduledDueSweep';
+
+// ── Auto-create Firebase Auth account for every contact with an email ────────
+// Lets any contact use the "Forgot password" flow without an admin first
+// having to manually invite them.
+export { ensureContactAuthAccount } from './auth/ensureContactAuth';
+
+// ── One-shot backfill: scan all contacts and run the same flow. Runs on
+//    a 5-minute schedule but writes a marker doc after the first
+//    successful run and exits early afterwards.
+export { oneShotContactAuthBackfill } from './auth/contactAuthBackfill';
+
+// ── Warranty reminders: when a project gets a moveInDate, auto-create
+//    reminders at 3 / 6 / 11 / 12 months from that date.
+export { createWarrantyReminders } from './projects/warrantyReminders';
 
 // (analyzeBill standalone function removed — moved into api Express app at /api/analyze-bill
 //  to avoid org policy blocking allUsers IAM on a separate Cloud Run service)

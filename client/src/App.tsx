@@ -38,6 +38,7 @@ const Financials = lazy(() => import("@/pages/Financials"));
 const Messages = lazy(() => import("@/pages/Messages"));
 const Settings = lazy(() => import("@/pages/Settings"));
 const Contacts = lazy(() => import("@/pages/Contacts"));
+const Contracts = lazy(() => import("@/pages/Contracts"));
 const AdminPortal = lazy(() => import("@/pages/AdminPortal"));
 const OdysseyClientPortal = lazy(() => import("@/pages/OdysseyClientPortal"));
 const SubcontractorPortal = lazy(() => import("@/pages/SubcontractorPortal"));
@@ -78,6 +79,7 @@ const ProjectChangeOrders = lazy(() => import("@/pages/ProjectChangeOrders"));
 const ProjectSiteLog = lazy(() => import("@/pages/ProjectSiteLog"));
 const ProjectBills = lazy(() => import("@/pages/ProjectBills"));
 const ProjectWalkthroughs = lazy(() => import("@/pages/ProjectWalkthroughs"));
+const ProjectMoveInBinder = lazy(() => import("@/pages/ProjectMoveInBinder"));
 
 function Router() {
   // Initialize performance optimizations for faster loading
@@ -299,6 +301,16 @@ function Router() {
         </ProtectedRoute>
       </Route>
 
+      <Route path="/projects/:id/move-in-binder">
+        <ProtectedRoute>
+          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+            <Suspense fallback={<MinimalSpinner title="Loading Move-in Binder" />}>
+              <ProjectMoveInBinder />
+            </Suspense>
+          </RoleGuard>
+        </ProtectedRoute>
+      </Route>
+
       <Route path="/schedule">
         <ProtectedRoute>
           <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
@@ -384,6 +396,16 @@ function Router() {
           <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
             <Suspense fallback={<MinimalSpinner title="Loading Contacts" />}>
               <Contacts />
+            </Suspense>
+          </RoleGuard>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/contracts">
+        <ProtectedRoute>
+          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+            <Suspense fallback={<MinimalSpinner title="Loading Contracts" />}>
+              <Contracts />
             </Suspense>
           </RoleGuard>
         </ProtectedRoute>
@@ -558,14 +580,9 @@ function Router() {
         </ProtectedRoute>
       </Route>
 
+      {/* /finance redirects to canonical /financials — old duplicate page. */}
       <Route path="/finance">
-        <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc']} showNotAuthorized>
-            <Suspense fallback={<MinimalSpinner title="Loading Finance" />}>
-              <Finance />
-            </Suspense>
-          </RoleGuard>
-        </ProtectedRoute>
+        <Redirect to="/financials" />
       </Route>
 
       <Route path="/reports">

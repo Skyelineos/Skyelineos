@@ -40,6 +40,26 @@ const KIND_COPY: Record<string, { title: (r: Reminder) => string; cta: string; p
     cta: 'Open Schedule',
     pathFor: () => '/schedule',
   },
+  warranty_3mo: {
+    title: r => `3-month warranty check-in for ${r.projectName || 'project'}`,
+    cta: 'Open warranty',
+    pathFor: r => `/projects/${r.projectId}/move-in-binder`,
+  },
+  warranty_6mo: {
+    title: r => `6-month warranty walkthrough for ${r.projectName || 'project'} (drywall touch-up)`,
+    cta: 'Open warranty',
+    pathFor: r => `/projects/${r.projectId}/move-in-binder`,
+  },
+  warranty_11mo: {
+    title: r => `11-month walkthrough for ${r.projectName || 'project'} — before warranty expires`,
+    cta: 'Open warranty',
+    pathFor: r => `/projects/${r.projectId}/move-in-binder`,
+  },
+  warranty_12mo: {
+    title: r => `Warranty expires for ${r.projectName || 'project'} — ask for Google review`,
+    cta: 'Open warranty',
+    pathFor: r => `/projects/${r.projectId}/move-in-binder`,
+  },
 };
 
 // Surfaces due reminders (e.g., "select a designer in 7 days") on the

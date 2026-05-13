@@ -24,6 +24,7 @@ import PhotosTab from '@/components/photos/PhotosTab';
 import { MessagingModule } from '@/components/messaging/MessagingModule';
 import { SubTodayFeed } from '@/components/today/SubTodayFeed';
 import { SubBidRequestsTab } from '@/components/bidding/SubBidRequestsTab';
+import { MyContractsView } from '@/components/contracts/MyContractsView';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -629,6 +630,7 @@ export default function SubcontractorPortal() {
       case 'dashboard': return renderDashboard();
       case 'bid-requests': return <SubBidRequestsTab />;
       case 'bids': return renderBids();
+      case 'contracts': return <MyContractsView userId={effectiveUid} audience="sub" />;
       case 'schedule': return renderSchedule();
       case 'compliance': return renderCompliance();
       case 'invoices': return renderInvoices();

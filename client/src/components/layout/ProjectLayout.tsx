@@ -1,6 +1,7 @@
 import { ReactNode, useState } from 'react';
 import { TopNavbar } from './TopNavbar';
 import { ProjectSidebar } from './ProjectSidebar';
+import { StageTrackerByProjectId } from '@/components/projects/StageTrackerByProjectId';
 
 interface ProjectLayoutProps {
   children: ReactNode;
@@ -34,6 +35,10 @@ export function ProjectLayout({ children, projectId, projectName }: ProjectLayou
         
         {/* Page content */}
         <main className="flex-1 overflow-auto bg-gray-50">
+          {/* Compact lifecycle tracker shown on every project sub-page */}
+          <div className="px-4 pt-3">
+            <StageTrackerByProjectId projectId={projectId} compact />
+          </div>
           <div className="h-full">
             {children}
           </div>

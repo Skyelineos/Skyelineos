@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { JobTemplateEditor } from '@/components/templates/JobTemplateEditor';
 import { DocumentTemplateEditor } from '@/components/templates/DocumentTemplateEditor';
+import { ScheduleTemplateEditor } from '@/components/templates/ScheduleTemplateEditor';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -35,6 +36,8 @@ interface Template {
   isDefault?: boolean;
   createdByName?: string;
   createdAt?: { toDate: () => Date } | null;
+  // Schedule-template specific: number of tasks shown on the card.
+  taskCount?: number;
 }
 
 // ── Category config ────────────────────────────────────────────────────────────
@@ -183,6 +186,30 @@ function DetailView({
 
   useEffect(() => {
     setLoading(true);
+    // Schedule templates live in their own collection (`scheduleTemplates`)
+    // because the Gantt's Load Template API reads from it. Other categories
+    // share the unified `templates` collection.
+    if (category === 'schedule') {
+      const unsub = onSnapshot(
+        query(collection(db, 'scheduleTemplates'), orderBy('createdAt', 'desc')),
+        snap => {
+          setTemplates(snap.docs.map(d => {
+            const data = d.data() as any;
+            return {
+              id: d.id,
+              name: data.name || 'Untitled schedule',
+              category: 'schedule',
+              description: data.description,
+              createdAt: data.createdAt,
+              taskCount: Array.isArray(data.tasks) ? data.tasks.length : 0,
+            } as Template;
+          }));
+          setLoading(false);
+        },
+        () => setLoading(false),
+      );
+      return () => unsub();
+    }
     const unsub = onSnapshot(
       query(
         collection(db, 'templates'),
@@ -268,7 +295,8 @@ function DetailView({
 
   async function handleDelete(id: string) {
     try {
-      await deleteDoc(doc(db, 'templates', id));
+      const collectionName = category === 'schedule' ? 'scheduleTemplates' : 'templates';
+      await deleteDoc(doc(db, collectionName, id));
       toast({ title: 'Template deleted' });
     } catch {
       toast({ title: 'Error deleting template', variant: 'destructive' });
@@ -301,6 +329,15 @@ function DetailView({
     return (
       <JobTemplateEditor
         template={editingTemplate}
+        onBack={() => setEditingTemplate(null)}
+      />
+    );
+  }
+
+  if (category === 'schedule' && editingTemplate) {
+    return (
+      <ScheduleTemplateEditor
+        templateId={editingTemplate.id}
         onBack={() => setEditingTemplate(null)}
       />
     );
@@ -436,6 +473,11 @@ function DetailView({
                 {tmpl.description && (
                   <p className="text-sm text-gray-500 line-clamp-2">{tmpl.description}</p>
                 )}
+                {category === 'schedule' && typeof tmpl.taskCount === 'number' && (
+                  <Badge variant="outline" className="text-xs">
+                    {tmpl.taskCount} task{tmpl.taskCount === 1 ? '' : 's'}
+                  </Badge>
+                )}
                 <p className="text-xs text-gray-400">Created {fmtDate(tmpl.createdAt)}</p>
                 <div className="flex items-center gap-2 pt-1 border-t border-gray-100">
                   <Button
@@ -444,18 +486,18 @@ function DetailView({
                     style={{ backgroundColor: meta.bg, color: meta.color }}
                     variant="outline"
                     onClick={() => {
-                      if (category === 'job' || category === 'document') setEditingTemplate(tmpl);
+                      if (category === 'job' || category === 'document' || category === 'schedule') setEditingTemplate(tmpl);
                       else toast({ title: `Applied "${tmpl.name}"` });
                     }}
                   >
-                    Use Template
+                    {category === 'schedule' ? 'Open' : 'Use Template'}
                   </Button>
                   <Button
                     size="sm"
                     variant="outline"
                     className="px-2.5"
                     onClick={() => {
-                      if (category === 'job' || category === 'document') setEditingTemplate(tmpl);
+                      if (category === 'job' || category === 'document' || category === 'schedule') setEditingTemplate(tmpl);
                       else openEdit(tmpl);
                     }}
                   >
