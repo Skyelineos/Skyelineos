@@ -523,6 +523,38 @@ service cloud.firestore {
       allow read, write: if false; // Cloud Function only
     }
 
+    // Ingestion Lab (spike) — admin-only namespace, fully isolated from
+    // production collections. The single-rule wildcard below is the
+    // isolation guarantee: every path under ingestion_lab/** is gated on
+    // isAdmin() reads and Cloud-Function-only writes. The one specific
+    // path that opens a write surface is processed_items, where the admin
+    // UI updates review fields (Approve / Correct / Reject and Ask-queue
+    // answer text).
+    //
+    // OAuth tokens (config doc) and OAuth state nonces are written
+    // exclusively by the api Cloud Function via Admin SDK (which bypasses
+    // these rules) — matches the qboConnections pattern at line 518.
+    match /ingestion_lab/{document=**} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // Admin can update review fields on processed items from the UI
+    // (Approve / Correct / Reject buttons, Ask-queue answer text). All
+    // other fields are immutable from the client; the brain pass writes
+    // them server-side via Admin SDK.
+    match /ingestion_lab/data/processed_items/{itemId} {
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly([
+               'reviewStatus',
+               'reviewedAt',
+               'reviewedByUid',
+               'correction',
+               'clarificationAnswer'
+             ]);
+    }
+
     // Deny everything else
     match /{document=**} {
       allow read, write: if false;
