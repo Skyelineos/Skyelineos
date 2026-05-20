@@ -2,6 +2,7 @@ const { onRequest } = require("firebase-functions/v2/https");
 const express = require("express");
 const cors = require("cors");
 const admin = require("firebase-admin");
+import { registerIngestionLabOAuth } from './ingestionLab/oauthHandlers';
 
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -11,6 +12,11 @@ const app = express();
 
 app.use(cors({ origin: true }));
 app.use(express.json());
+
+// Ingestion Lab — Gmail + Drive OAuth routes (under /api/ingestionLab/oauth/**).
+// Registered early so they sit alongside other /api/** routes and resolve
+// before the catch-all 404 below.
+registerIngestionLabOAuth(app, db);
 
 // Real Firestore API endpoints
 app.get('/api/projects', async (req: any, res: any) => {
@@ -2005,6 +2011,9 @@ exports.api = onRequest(
       'QBO_CLIENT_ID',
       'QBO_CLIENT_SECRET',
       'QBO_ENV',
+      // Ingestion Lab OAuth — Gmail + Drive use one Google OAuth client.
+      'GOOGLE_CLIENT_ID',
+      'GOOGLE_CLIENT_SECRET',
     ],
     memory: '512MiB',
     timeoutSeconds: 540, // Reels can take 30-90s to process
