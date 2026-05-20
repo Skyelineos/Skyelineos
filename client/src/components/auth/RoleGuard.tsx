@@ -2,6 +2,7 @@ import { ReactNode } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { useAdminView } from '@/contexts/AdminViewContext';
 import { Redirect } from 'wouter';
+import { getDefaultRouteForRole } from '@/utils/roleRedirects';
 
 export type UserRole = 'admin' | 'projectManager' | 'client' | 'subcontractor' | 'designer';
 
@@ -12,11 +13,13 @@ function getUserRole(userRole: string): UserRole {
   switch (normalizedRole) {
     case 'admin':
       return 'admin';
+    case 'gc':                  // Skyeline Team — same access level as projectManager
     case 'projectmanager':
     case 'project_manager':
       return 'projectManager';
     case 'client':
       return 'client';
+    case 'sub':                 // Subcontractor short form
     case 'subcontractor':
       return 'subcontractor';
     case 'designer':
@@ -65,7 +68,13 @@ export function RoleGuard({
 
   if (!hasPermission) {
     if (showNotAuthorized) {
-      return <Redirect to="/not-authorized" />;
+      // Bounce to the user's natural home (their portal) instead of dumping
+      // them on a generic "Access Denied" page. A sub landing on /dashboard
+      // via a stale bookmark belongs on /subcontractor-portal, not a brick
+      // wall. Only fall through to /not-authorized if their role has no
+      // default home defined.
+      const home = getDefaultRouteForRole(normalizedRole as any);
+      return <Redirect to={home && home !== '/sign-in' ? home : '/not-authorized'} />;
     }
     return fallback || null;
   }

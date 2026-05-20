@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
+import { tradeLabel } from '@/lib/estimates/markup';
 
 interface Task {
   id: string | number;
@@ -224,7 +225,7 @@ export const VirtualizedTaskList = memo(({
             <div className="flex items-center space-x-4 text-xs text-gray-600">
               {task.trade && (
                 <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded">
-                  {task.trade}
+                  {tradeLabel(task.trade)}
                 </span>
               )}
               

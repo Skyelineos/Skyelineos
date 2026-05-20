@@ -1,6 +1,6 @@
 import { useRoute } from 'wouter';
 import { ProjectLayout } from '@/components/layout/ProjectLayout';
-import EstimateManagement from '@/components/projects/EstimateManagement';
+import { EstimateBuilderContent } from '@/pages/EstimateBuilder';
 import { useOptimizedProject } from '@/hooks/useOptimizedProjects';
 import { ProjectDetailSkeleton } from '@/components/projects/ProjectSkeleton';
 
@@ -13,9 +13,7 @@ export default function ProjectEstimates() {
   if (isLoading) {
     return (
       <ProjectLayout projectId={projectId!} projectName="Loading...">
-        <div className="p-6">
-          <ProjectDetailSkeleton />
-        </div>
+        <div className="p-6"><ProjectDetailSkeleton /></div>
       </ProjectLayout>
     );
   }
@@ -23,13 +21,9 @@ export default function ProjectEstimates() {
   if (error || !transformedProject) {
     return (
       <ProjectLayout projectId={projectId!} projectName="Project Not Found">
-        <div className="p-6">
-          <div className="text-center">
-            <h2 className="text-2xl font-bold text-red-600 mb-2">Project Not Found</h2>
-            <p className="text-gray-600 mb-4">
-              The project you're looking for doesn't exist or may have been deleted.
-            </p>
-          </div>
+        <div className="p-6 text-center">
+          <h2 className="text-2xl font-bold text-red-600 mb-2">Project Not Found</h2>
+          <p className="text-gray-600">The project you're looking for doesn't exist or may have been deleted.</p>
         </div>
       </ProjectLayout>
     );
@@ -37,8 +31,12 @@ export default function ProjectEstimates() {
 
   return (
     <ProjectLayout projectId={projectId!} projectName={transformedProject.name}>
-      <div className="p-6">
-        <EstimateManagement projectId={projectId!} />
+      <div className="p-4 md:p-6">
+        <EstimateBuilderContent
+          projectId={projectId!}
+          projectName={transformedProject.name}
+          embedded
+        />
       </div>
     </ProjectLayout>
   );

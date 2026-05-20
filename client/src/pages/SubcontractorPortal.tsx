@@ -25,6 +25,9 @@ import { MessagingModule } from '@/components/messaging/MessagingModule';
 import { SubTodayFeed } from '@/components/today/SubTodayFeed';
 import { SubBidRequestsTab } from '@/components/bidding/SubBidRequestsTab';
 import { MyContractsView } from '@/components/contracts/MyContractsView';
+import { EnablePushButton } from '@/components/notifications/EnablePushButton';
+import { RecipientMismatchBanner } from '@/components/bidding/RecipientMismatchBanner';
+import { StatCard } from '@/components/dashboard/StatCard';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -236,32 +239,15 @@ export default function SubcontractorPortal() {
   // ── Tab content ───────────────────────────────────────────────────────────
 
   const renderDashboard = () => (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6">
       <SubTodayFeed />
 
-      {/* Legacy stats (kept below the today feed) */}
-      {/* Stat cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          { label: 'Active Projects', value: activeProjects.length, icon: Building, color: 'text-blue-600' },
-          { label: 'Open Bids', value: openBids.length, icon: Briefcase, color: 'text-amber-600' },
-          { label: 'Pending Invoices', value: pendingInvoices.length, icon: FileText, color: 'text-orange-600' },
-          { label: 'Paid This Month', value: fmtMoney(paidThisMonth), icon: DollarSign, color: 'text-green-600' },
-        ].map(s => (
-          <Card key={s.label}>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className={`p-2 rounded-lg bg-gray-50 ${s.color}`}>
-                  <s.icon className="w-5 h-5" />
-                </div>
-                <div>
-                  <p className="text-xl font-bold text-gray-900">{s.value}</p>
-                  <p className="text-xs text-gray-500">{s.label}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+      {/* Stat cards — unified with the GC dashboard's design language. */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
+        <StatCard label="Active Projects" value={activeProjects.length} icon={Building} accent="gold" />
+        <StatCard label="Open Bids" value={openBids.length} icon={Briefcase} accent="gold" />
+        <StatCard label="Pending Invoices" value={pendingInvoices.length} icon={FileText} accent="amber" />
+        <StatCard label="Paid This Month" value={fmtMoney(paidThisMonth)} icon={DollarSign} accent="green" />
       </div>
 
       {/* Compliance alert */}
@@ -278,12 +264,12 @@ export default function SubcontractorPortal() {
         </Alert>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
         {/* Upcoming Tasks */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-[#C9A96E]" /> Upcoming Tasks
+        <Card className="rounded-xl hover:shadow-md transition-shadow">
+          <CardHeader className="p-4 md:p-6 pb-3">
+            <CardTitle className="text-fluid-lg flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-[#C9A96E]" /> Upcoming Tasks
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -311,10 +297,10 @@ export default function SubcontractorPortal() {
         </Card>
 
         {/* Assigned Projects */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Building className="w-4 h-4 text-[#C9A96E]" /> Assigned Projects
+        <Card className="rounded-xl hover:shadow-md transition-shadow">
+          <CardHeader className="p-4 md:p-6 pb-3">
+            <CardTitle className="text-fluid-lg flex items-center gap-2">
+              <Building className="w-5 h-5 text-[#C9A96E]" /> Assigned Projects
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -348,7 +334,14 @@ export default function SubcontractorPortal() {
 
   const renderBids = () => (
     <div className="space-y-4">
-      <h2 className="text-xl font-bold text-gray-900">Bid Management</h2>
+      <RecipientMismatchBanner />
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <h2 className="text-xl font-bold text-gray-900">Bid Management</h2>
+        <EnablePushButton />
+      </div>
+      <p className="text-[11px] text-gray-500 -mt-2">
+        Enable phone notifications to receive bid invites and reminders directly on this device — works even if you don't get email or SMS.
+      </p>
       {bids.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
@@ -628,7 +621,7 @@ export default function SubcontractorPortal() {
 
     switch (currentTab) {
       case 'dashboard': return renderDashboard();
-      case 'bid-requests': return <SubBidRequestsTab />;
+      case 'bid-requests': return <><RecipientMismatchBanner /><SubBidRequestsTab /></>;
       case 'bids': return renderBids();
       case 'contracts': return <MyContractsView userId={effectiveUid} audience="sub" />;
       case 'schedule': return renderSchedule();

@@ -10,6 +10,7 @@ import { Calendar, Clock, Users, Link, X, Plus } from 'lucide-react';
 import { Task, Dependency } from '../../hooks/useProjectSchedule';
 import { apiRequest } from '../../lib/queryClient';
 import { useToast } from '../../hooks/use-toast';
+import { DEFAULT_TRADES, normalizeTradeId } from '@/lib/estimates/markup';
 
 interface TaskEditModalProps {
   isOpen: boolean;
@@ -76,7 +77,9 @@ export function TaskEditModal({
         duration: task.duration || 1,
         progress: task.progress || 0,
         status: task.status || 'planned',
-        trade: task.trade || '',
+        // Normalize so old label-stored trades resolve to canonical IDs and the
+        // Select shows the right option. Backward compatible with existing data.
+        trade: normalizeTradeId(task.trade || ''),
         description: task.description || '',
         color: task.color || '#3b82f6'
       });
@@ -206,12 +209,17 @@ export function TaskEditModal({
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="trade">Trade/Category</Label>
-                <Input
-                  id="trade"
-                  value={formData.trade}
-                  onChange={(e) => handleInputChange('trade', e.target.value)}
-                  placeholder="e.g., Plumbing, Electrical"
-                />
+                <Select value={formData.trade || ''} onValueChange={(v) => handleInputChange('trade', v === '__unset__' ? '' : v)}>
+                  <SelectTrigger id="trade">
+                    <SelectValue placeholder="— select trade —" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__unset__">— none —</SelectItem>
+                    {DEFAULT_TRADES.map(t => (
+                      <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div>
                 <Label htmlFor="status">Status</Label>

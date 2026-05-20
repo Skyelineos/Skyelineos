@@ -1314,6 +1314,103 @@ async function authMiddleware(req: any, res: any, next: any) {
   }
 }
 
+// ── Sub portal contact-claim routes ──────────────────────────────────────────
+// Same reason as analyze-bill: org policy blocks new Cloud Run services with
+// public IAM, so the claim flow lives as Express routes on the existing api
+// function instead of as standalone callables.
+
+// List the signed-in user's matched contacts (linkedUserId or email match).
+app.post('/api/contacts/list-mine', authMiddleware, async (req: any, res: any) => {
+  try {
+    const uid: string = req.user.uid;
+    const email: string = ((req.user.email || '') as string).toLowerCase().trim();
+    const out = new Map<string, any>();
+    const byLink = await db.collection('contacts').where('linkedUserId', '==', uid).limit(50).get();
+    byLink.docs.forEach((d: any) => out.set(d.id, { id: d.id, ...d.data() }));
+    if (email) {
+      const byEmail = await db.collection('contacts').where('email', '==', email).limit(50).get();
+      byEmail.docs.forEach((d: any) => out.set(d.id, { id: d.id, ...d.data() }));
+      try {
+        const byExtra = await db.collection('contacts').where('additionalEmails', 'array-contains', email).limit(50).get();
+        byExtra.docs.forEach((d: any) => out.set(d.id, { id: d.id, ...d.data() }));
+      } catch { /* index may not exist — ignore */ }
+    }
+    res.json({ contacts: Array.from(out.values()) });
+  } catch (e: any) {
+    console.error('[contacts/list-mine]', e);
+    res.status(500).json({ error: e.message || String(e) });
+  }
+});
+
+// List every sub-type contact with no linkedUserId yet (claim candidates).
+app.post('/api/contacts/list-unclaimed-subs', authMiddleware, async (_req: any, res: any) => {
+  try {
+    const out = new Map<string, any>();
+    const queries = [
+      db.collection('contacts').where('type', '==', 'sub'),
+      db.collection('contacts').where('role', '==', 'sub'),
+      db.collection('contacts').where('role', '==', 'subcontractor'),
+    ];
+    for (const q of queries) {
+      const snap = await q.limit(200).get();
+      snap.docs.forEach((d: any) => {
+        const data = d.data();
+        if (!data.linkedUserId) out.set(d.id, { id: d.id, ...data });
+      });
+    }
+    res.json({ contacts: Array.from(out.values()) });
+  } catch (e: any) {
+    console.error('[contacts/list-unclaimed-subs]', e);
+    res.status(500).json({ error: e.message || String(e) });
+  }
+});
+
+// Claim a contact with one of three modes: claim | replace | add.
+app.post('/api/contacts/claim', authMiddleware, async (req: any, res: any) => {
+  try {
+    const uid: string = req.user.uid;
+    const email: string = ((req.user.email || '') as string).toLowerCase().trim();
+    const { contactId, mode } = req.body || {};
+    if (!contactId) return res.status(400).json({ error: 'contactId required' });
+    if (!['claim', 'replace', 'add'].includes(mode)) {
+      return res.status(400).json({ error: "mode must be 'claim', 'replace', or 'add'" });
+    }
+    if (!email) return res.status(400).json({ error: 'Auth account has no email' });
+
+    const ref = db.collection('contacts').doc(contactId);
+    const snap = await ref.get();
+    if (!snap.exists) return res.status(404).json({ error: 'Contact not found' });
+    const data: any = snap.data();
+
+    if (data.linkedUserId && data.linkedUserId !== uid) {
+      return res.status(409).json({
+        error: 'This contact is already linked to another user. Ask the GC to reset it if this is a mistake.',
+      });
+    }
+
+    const updates: Record<string, any> = {
+      linkedUserId: uid,
+      linkedAt: admin.firestore.FieldValue.serverTimestamp(),
+      claimedBy: email,
+    };
+    if (mode === 'replace') {
+      if (data.email && data.email.toLowerCase() !== email) {
+        updates.previousEmails = admin.firestore.FieldValue.arrayUnion(data.email);
+      }
+      updates.email = email;
+    } else if (mode === 'add') {
+      if (data.email && data.email.toLowerCase() !== email) {
+        updates.additionalEmails = admin.firestore.FieldValue.arrayUnion(email);
+      }
+    }
+    await ref.update(updates);
+    res.json({ ok: true, contactId, mode, updatedFields: Object.keys(updates) });
+  } catch (e: any) {
+    console.error('[contacts/claim]', e);
+    res.status(500).json({ error: e.message || String(e) });
+  }
+});
+
 // ── AI Bill OCR via Claude vision ─────────────────────────────────────────────
 // Routed through the api Express app (instead of standalone callable) to avoid
 // Cloud Run IAM 'allUsers' which is blocked by org policy.
@@ -1774,18 +1871,127 @@ app.get('/api/instagram/insights/:mediaId', authMiddleware, async (req: any, res
   } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
 
-// ── Catch all handler for other routes
+// ─── QuickBooks Online OAuth routes (folded into api function) ──────────────
+// Org IAM blocks new public Cloud Functions, so the OAuth flow piggybacks on
+// the already-public `api` function. Hosting rewrites `/qbo/oauth/**` here,
+// so Intuit's redirect URI is the clean `https://skyelineos.web.app/qbo/oauth/callback`.
+const QBO_REDIRECT_URI = 'https://skyelineos.web.app/qbo/oauth/callback';
+const QBO_APP_BASE     = 'https://skyelineos.web.app';
+
+app.get('/qbo/oauth/start', async (req: any, res: any) => {
+  try {
+    const state = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    await db.collection('qboOAuthStates').doc(state).set({
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    // .trim() — Secret Manager values often have a trailing \n that breaks
+    // both the authorize URL and the token exchange Basic auth header.
+    const params = new URLSearchParams({
+      client_id: (process.env.QBO_CLIENT_ID || '').trim(),
+      response_type: 'code',
+      scope: 'com.intuit.quickbooks.accounting',
+      redirect_uri: QBO_REDIRECT_URI,
+      state,
+    });
+    res.redirect(`https://appcenter.intuit.com/connect/oauth2?${params.toString()}`);
+  } catch (e: any) {
+    console.error('[qbo/oauth/start] failed:', e);
+    res.status(500).send(`Start failed: ${e?.message || 'unknown'}`);
+  }
+});
+
+app.get('/qbo/oauth/callback', async (req: any, res: any) => {
+  const { code, state, realmId, error: oauthError, error_description } = req.query;
+  if (oauthError) {
+    return res.status(400).send(`<h2>Connection cancelled</h2><p>${oauthError}: ${error_description || ''}</p><p><a href="${QBO_APP_BASE}/financials">Back to Skyeline OS</a></p>`);
+  }
+  if (!code || !state || !realmId) {
+    return res.status(400).send('Missing code / state / realmId');
+  }
+  try {
+    const stateDoc = await db.collection('qboOAuthStates').doc(String(state)).get();
+    if (!stateDoc.exists) {
+      return res.status(400).send('Invalid state token. Restart the connection from Skyeline OS.');
+    }
+    await stateDoc.ref.delete();
+
+    const rawCid = process.env.QBO_CLIENT_ID || '';
+    const rawSec = process.env.QBO_CLIENT_SECRET || '';
+    const qboClientId = rawCid.trim();
+    const qboClientSecret = rawSec.trim();
+    // Diagnostic: log lengths + edge chars so we can verify the function is
+    // reading the right bytes (without leaking the full secret).
+    console.log('[qbo/oauth/callback] cid raw len:', rawCid.length, 'trim len:', qboClientId.length, 'first5:', qboClientId.slice(0, 5), 'last5:', qboClientId.slice(-5));
+    console.log('[qbo/oauth/callback] sec raw len:', rawSec.length, 'trim len:', qboClientSecret.length, 'first3:', qboClientSecret.slice(0, 3), 'last3:', qboClientSecret.slice(-3));
+    const basic = Buffer.from(`${qboClientId}:${qboClientSecret}`).toString('base64');
+    const body = new URLSearchParams({
+      grant_type: 'authorization_code',
+      code: String(code),
+      redirect_uri: QBO_REDIRECT_URI,
+    });
+    const tokenRes = await fetch('https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer', {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Authorization: `Basic ${basic}`,
+      },
+      body: body.toString(),
+    });
+    if (!tokenRes.ok) {
+      const text = await tokenRes.text();
+      console.error('[qbo/oauth/callback] token exchange failed:', tokenRes.status, text);
+      return res.status(500).send(`Token exchange failed: ${tokenRes.status} ${text}`);
+    }
+    const tokens: any = await tokenRes.json();
+
+    await db.collection('qboConnections').doc('global').set({
+      realmId: String(realmId),
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token,
+      accessTokenExpiresAt: Date.now() + (tokens.expires_in * 1000),
+      refreshTokenExpiresAt: Date.now() + (tokens.x_refresh_token_expires_in * 1000),
+      tokenType: tokens.token_type,
+      env: process.env.QBO_ENV || 'sandbox',
+      scope: 'com.intuit.quickbooks.accounting',
+      connectedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    res.send(`
+      <!doctype html>
+      <html><head><meta charset="utf-8"><title>QuickBooks connected</title>
+      <style>
+        body { font-family: -apple-system, sans-serif; max-width: 480px; margin: 80px auto; text-align: center; }
+        .check { font-size: 64px; color: #22c55e; }
+        a { display: inline-block; margin-top: 24px; padding: 12px 24px; background: #C9A96E; color: #141414; text-decoration: none; border-radius: 6px; font-weight: 600; }
+        code { background: #f3f4f6; padding: 2px 6px; border-radius: 4px; }
+      </style>
+      </head><body>
+        <div class="check">✓</div>
+        <h2>QuickBooks connected</h2>
+        <p>Skyeline OS is linked to your QuickBooks <strong>${process.env.QBO_ENV || 'sandbox'}</strong> company (realm <code>${realmId}</code>).</p>
+        <a href="${QBO_APP_BASE}/financials">Back to Skyeline OS</a>
+      </body></html>
+    `);
+  } catch (e: any) {
+    console.error('[qbo/oauth/callback] failed:', e);
+    res.status(500).send(`Callback failed: ${e?.message || 'unknown'}`);
+  }
+});
+
+// Catch-all 404 — must come AFTER all route registrations (QBO routes above included)
 app.use('*', (req: any, res: any) => {
   console.log(`❌ 404 - API endpoint not found: ${req.method} ${req.originalUrl}`);
-  res.status(404).json({ 
+  res.status(404).json({
     error: 'API endpoint not found',
     method: req.method,
     path: req.originalUrl,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   });
 });
 
-// API function — bound to Anthropic + Meta credentials via Secret Manager
+// API function — bound to Anthropic + Meta + QBO credentials via Secret Manager
 exports.api = onRequest(
   {
     cors: true,
@@ -1796,6 +2002,9 @@ exports.api = onRequest(
       'META_PAGE_ID',
       'META_IG_BUSINESS_ID',
       'META_PAGE_ACCESS_TOKEN',
+      'QBO_CLIENT_ID',
+      'QBO_CLIENT_SECRET',
+      'QBO_ENV',
     ],
     memory: '512MiB',
     timeoutSeconds: 540, // Reels can take 30-90s to process
@@ -1823,6 +2032,10 @@ export { oneShotContactAuthBackfill } from './auth/contactAuthBackfill';
 // ── Warranty reminders: when a project gets a moveInDate, auto-create
 //    reminders at 3 / 6 / 11 / 12 months from that date.
 export { createWarrantyReminders } from './projects/warrantyReminders';
+
+
+// (qboOAuth standalone removed — routes folded into the api Express app
+//  to avoid the org-IAM block on new public Cloud Functions.)
 
 // (analyzeBill standalone function removed — moved into api Express app at /api/analyze-bill
 //  to avoid org policy blocking allUsers IAM on a separate Cloud Run service)

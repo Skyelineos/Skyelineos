@@ -3,6 +3,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Edit, Trash2, User } from 'lucide-react';
+import { tradeLabel } from '@/lib/estimates/markup';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -142,7 +143,7 @@ export default function GanttView({ tasks, onEditTask, onDeleteTask }: GanttView
                         )}
                       </div>
                       <div className="flex items-center gap-2 text-sm text-gray-600">
-                        <span className="font-medium">{task.trade}</span>
+                        <span className="font-medium">{tradeLabel(task.trade)}</span>
                         {task.contactId && (
                           <span className="flex items-center gap-1">
                             <User className="h-3 w-3" />

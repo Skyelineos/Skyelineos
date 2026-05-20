@@ -80,6 +80,8 @@ const ProjectSiteLog = lazy(() => import("@/pages/ProjectSiteLog"));
 const ProjectBills = lazy(() => import("@/pages/ProjectBills"));
 const ProjectWalkthroughs = lazy(() => import("@/pages/ProjectWalkthroughs"));
 const ProjectMoveInBinder = lazy(() => import("@/pages/ProjectMoveInBinder"));
+const Tools = lazy(() => import("@/pages/Tools"));
+const LumberTakeoff = lazy(() => import("@/pages/LumberTakeoff"));
 
 function Router() {
   // Initialize performance optimizations for faster loading
@@ -156,6 +158,46 @@ function Router() {
           <RoleGuard allowedRoles={['admin', 'gc', 'projectManager', 'designer']} showNotAuthorized>
             <Suspense fallback={<MinimalSpinner title="Loading Takeoff" />}>
               <ProjectTakeoff />
+            </Suspense>
+          </RoleGuard>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/tools">
+        <ProtectedRoute>
+          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+            <Suspense fallback={<MinimalSpinner title="Loading Tools" />}>
+              <Tools />
+            </Suspense>
+          </RoleGuard>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/tools/lumber">
+        <ProtectedRoute>
+          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+            <Suspense fallback={<MinimalSpinner title="Loading Lumber Takeoff" />}>
+              <LumberTakeoff />
+            </Suspense>
+          </RoleGuard>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/tools/lumber/:projectId">
+        <ProtectedRoute>
+          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+            <Suspense fallback={<MinimalSpinner title="Loading Lumber Takeoff" />}>
+              <LumberTakeoff />
+            </Suspense>
+          </RoleGuard>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/tools/lumber/:projectId/:takeoffId">
+        <ProtectedRoute>
+          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+            <Suspense fallback={<MinimalSpinner title="Loading Lumber Takeoff" />}>
+              <LumberTakeoff />
             </Suspense>
           </RoleGuard>
         </ProtectedRoute>
@@ -341,7 +383,7 @@ function Router() {
         </ProtectedRoute>
       </Route>
       
-      <Route path="/financials">
+      <Route path="/financials/:tab?">
         <ProtectedRoute>
           <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
             <Suspense fallback={<MinimalSpinner title="Loading Financials" />}>

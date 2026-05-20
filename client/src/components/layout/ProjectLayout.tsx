@@ -1,4 +1,5 @@
 import { ReactNode, useState } from 'react';
+import { useLocation } from 'wouter';
 import { TopNavbar } from './TopNavbar';
 import { ProjectSidebar } from './ProjectSidebar';
 import { StageTrackerByProjectId } from '@/components/projects/StageTrackerByProjectId';
@@ -11,10 +12,16 @@ interface ProjectLayoutProps {
 
 export function ProjectLayout({ children, projectId, projectName }: ProjectLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [location] = useLocation();
 
   const toggleSidebar = () => {
     setSidebarOpen(!sidebarOpen);
   };
+
+  // Overview page renders its own (larger) stage tracker; the compact one in
+  // the layout would duplicate it there. Suppress the layout's tracker on
+  // Overview so it shows exactly once on any project page.
+  const hideCompactTracker = /\/projects\/[^/]+\/overview\b/.test(location);
 
   return (
     <div className="h-screen bg-gray-50 flex">
@@ -33,12 +40,15 @@ export function ProjectLayout({ children, projectId, projectName }: ProjectLayou
         {/* Top ribbon */}
         <TopNavbar onMenuToggle={toggleSidebar} currentProject={projectName} />
         
-        {/* Page content */}
+        {/* Page content. Compact stage tracker shows on every project sub-page
+            EXCEPT Overview (Overview renders its own larger tracker — duplicating
+            here is what Tyler hit). One tracker, exactly once, anywhere. */}
         <main className="flex-1 overflow-auto bg-gray-50">
-          {/* Compact lifecycle tracker shown on every project sub-page */}
-          <div className="px-4 pt-3">
-            <StageTrackerByProjectId projectId={projectId} compact />
-          </div>
+          {!hideCompactTracker && (
+            <div className="px-4 pt-3">
+              <StageTrackerByProjectId projectId={projectId} compact />
+            </div>
+          )}
           <div className="h-full">
             {children}
           </div>

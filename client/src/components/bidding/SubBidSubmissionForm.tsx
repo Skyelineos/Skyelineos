@@ -47,6 +47,35 @@ export function SubBidSubmissionForm({
 
   const subId = user?.id?.toString() || user?.email || '';
 
+  // Compliance gate — same source as the dashboard's compliance banner
+  // (the sub's user doc). Submitting a bid is blocked until W-9, insurance,
+  // and the subcontractor agreement are all on file.
+  const [compliance, setCompliance] = useState<{ w9Filed?: boolean; insuranceCurrent?: boolean; agreementSigned?: boolean }>({});
+  useEffect(() => {
+    if (!user?.firebaseUid && !user?.id) return;
+    const uid = (user as any).firebaseUid || user.id?.toString();
+    if (!uid) return;
+    (async () => {
+      try {
+        const snap = await getDoc(doc(db, 'users', uid));
+        if (snap.exists()) {
+          const d = snap.data() as any;
+          setCompliance({
+            w9Filed: !!d.w9Filed,
+            insuranceCurrent: !!d.insuranceCurrent,
+            agreementSigned: !!d.agreementSigned,
+          });
+        }
+      } catch { /* ignore */ }
+    })();
+  }, [user]);
+  const complianceMissing: string[] = [
+    !compliance.w9Filed && 'W-9',
+    !compliance.insuranceCurrent && 'Insurance',
+    !compliance.agreementSigned && 'Subcontractor agreement',
+  ].filter(Boolean) as string[];
+  const complianceComplete = complianceMissing.length === 0;
+
   // Submission path: build line items inside the form, or upload a finished PDF quote.
   const [bidMode, setBidMode] = useState<'lineItems' | 'pdfQuote'>('lineItems');
 
@@ -231,6 +260,14 @@ export function SubBidSubmissionForm({
 
   const handleSubmit = async () => {
     if (!user) return;
+    if (!complianceComplete) {
+      toast({
+        title: 'Compliance incomplete',
+        description: `Submit ${complianceMissing.join(', ')} before bidding.`,
+        variant: 'destructive',
+      });
+      return;
+    }
     const err = validate();
     if (err) {
       toast({ title: err, variant: 'destructive' });
@@ -774,17 +811,41 @@ export function SubBidSubmissionForm({
         </CardContent>
       </Card>
 
+      {/* Compliance gate banner — shown when any required doc is missing.
+          Submit button is disabled to enforce the policy on the client side;
+          server validation should mirror this in a Cloud Function for now. */}
+      {!complianceComplete && (
+        <div className="rounded-lg border border-red-300 bg-red-50 p-3 flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-red-900">
+              Compliance documents required before submitting a bid
+            </p>
+            <p className="text-xs text-red-800 mt-0.5">
+              Missing: {complianceMissing.join(', ')}. Complete your compliance profile to unlock bid submission — this protects you and Skyeline on every job.
+            </p>
+            <a
+              href="/subcontractor-portal/compliance"
+              className="inline-flex items-center gap-1 text-xs font-semibold text-red-900 mt-2 hover:underline"
+            >
+              Open compliance profile <ExternalLink className="w-3 h-3" />
+            </a>
+          </div>
+        </div>
+      )}
+
       {/* Submit */}
       <div className="flex justify-end gap-2 pt-2">
         <Button variant="outline" onClick={onClose}>Cancel</Button>
         <Button
           onClick={handleSubmit}
-          disabled={submitting}
+          disabled={submitting || !complianceComplete}
           className="gap-2 text-white"
-          style={{ backgroundColor: '#22c55e' }}
+          style={{ backgroundColor: complianceComplete ? '#22c55e' : '#9ca3af' }}
+          title={!complianceComplete ? `Submit ${complianceMissing.join(', ')} first` : undefined}
         >
           {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-          {submitting ? 'Submitting…' : 'Submit Bid'}
+          {submitting ? 'Submitting…' : !complianceComplete ? 'Compliance required' : 'Submit Bid'}
         </Button>
       </div>
     </div>

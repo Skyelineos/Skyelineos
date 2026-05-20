@@ -1,48 +1,136 @@
 import { useState, useEffect } from 'react';
 import {
-  collectionGroup, query, where, onSnapshot, orderBy, doc, getDoc,
+  collectionGroup, collection, query, where, onSnapshot, orderBy, doc, getDoc, getDocs, updateDoc, serverTimestamp,
 } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { db, auth } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { FileText, Calendar, Hammer, Clock, AlertTriangle, CheckCircle2, ExternalLink } from 'lucide-react';
+import { FileText, Calendar, Hammer, Clock, AlertTriangle, CheckCircle2, ExternalLink, Link2 } from 'lucide-react';
 import { SubBidSubmissionForm } from './SubBidSubmissionForm';
+import { ClaimContactDialog } from './ClaimContactDialog';
+import { Button } from '@/components/ui/button';
 import type { BidRequest } from './types';
 
 export function SubBidRequestsTab() {
   const { user } = useAuth();
-  const subId = user?.id?.toString() || user?.email || '';
+
+  // The GC invites subs by their **contact ID** (`contacts/{id}`) — NOT by
+  // the sub's Firebase Auth UID or user doc ID. To survive every shape of
+  // legacy data + registration flow, we gather EVERY plausible identifier
+  // for this sub (user uid, user doc id, email, plus every contact whose
+  // linkedUserId or email matches them) and let the bidRequest query do an
+  // array-contains-any over the full set.
+  const [subIds, setSubIds] = useState<string[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!user) { if (!cancelled) setSubIds([]); return; }
+      const ids = new Set<string>();
+      // Pull EVERY identifier we can find. Some Firestore user docs have a
+      // stale `email` field that disagrees with the live Firebase Auth token —
+      // when that happens, the auth email is the canonical one for bid invites.
+      const authUser = auth.currentUser;
+      const uid = authUser?.uid || (user as any).firebaseUid || '';
+      const userIdStr = user.id?.toString() || '';
+      const docEmail = (user.email || '').toLowerCase().trim();
+      const authEmail = (authUser?.email || '').toLowerCase().trim();
+      const emailRaw = (user.email || '').trim();
+      if (uid) ids.add(uid);
+      if (userIdStr) ids.add(userIdStr);
+      if (docEmail) ids.add(docEmail);
+      if (authEmail) ids.add(authEmail);
+      if (emailRaw && emailRaw.toLowerCase() !== docEmail) ids.add(emailRaw);
+      const email = authEmail || docEmail; // canonical for contact lookups
+      // Track which contact docs need auto-linking (matched by email but
+       // missing linkedUserId). Setting linkedUserId here is what makes
+       // future portal loads — and every other linkedUserId-based feature —
+       // resolve this sub without going through email matching again.
+      const needsLink: { id: string; data: any }[] = [];
+      try {
+        if (uid) {
+          const s = await getDocs(query(collection(db, 'contacts'), where('linkedUserId', '==', uid)));
+          s.docs.forEach(d => ids.add(d.id));
+        }
+        if (email) {
+          const s = await getDocs(query(collection(db, 'contacts'), where('email', '==', email)));
+          s.docs.forEach(d => {
+            ids.add(d.id);
+            const data = d.data() as any;
+            if (uid && !data.linkedUserId) needsLink.push({ id: d.id, data });
+          });
+          // Case-insensitive fallback — try the raw cased email too in case
+          // the contact was created with a different case.
+          if (emailRaw && emailRaw !== email) {
+            const s2 = await getDocs(query(collection(db, 'contacts'), where('email', '==', emailRaw)));
+            s2.docs.forEach(d => {
+              ids.add(d.id);
+              const data = d.data() as any;
+              if (uid && !data.linkedUserId) needsLink.push({ id: d.id, data });
+            });
+          }
+        }
+      } catch (e) {
+        console.warn('[bidRequests] contact resolve failed', e);
+      }
+      // Fire-and-forget auto-link. If Firestore rules reject it (sub-role
+      // trying to write a GC-owned contacts doc) we just log; the GC can
+      // still link manually.
+      if (needsLink.length > 0 && uid) {
+        for (const c of needsLink) {
+          try {
+            await updateDoc(doc(db, 'contacts', c.id), {
+              linkedUserId: uid,
+              linkedAt: serverTimestamp(),
+            });
+            console.log('[bidRequests] auto-linked contact', c.id, '→ user', uid);
+          } catch (e) {
+            console.warn('[bidRequests] auto-link failed for', c.id, e);
+          }
+        }
+      }
+      const arr = Array.from(ids).filter(Boolean);
+      console.log('[bidRequests] searching invitedSubIds for any of:', arr);
+      if (!cancelled) setSubIds(arr);
+    })();
+    return () => { cancelled = true; };
+  }, [user]);
 
   const [requests, setRequests] = useState<BidRequest[]>([]);
   const [submittedBidIds, setSubmittedBidIds] = useState<Set<string>>(new Set());
   const [activeRequest, setActiveRequest] = useState<BidRequest | null>(null);
+  const [claimOpen, setClaimOpen] = useState(false);
 
-  // Subscribe to bidRequests where I'm invited (collectionGroup query)
+  // Subscribe to bidRequests where any of the resolved IDs match. Firestore
+  // caps array-contains-any at 10 values per query, so we truncate (rare to
+  // hit in practice — a sub usually has 1–3 identifiers).
   useEffect(() => {
-    if (!subId) return;
-    // collectionGroup query — needs index on (invitedSubIds, createdAt) at the bidRequests subcollection
+    if (subIds.length === 0) return;
+    const search = subIds.slice(0, 10);
     const q = query(
       collectionGroup(db, 'bidRequests'),
-      where('invitedSubIds', 'array-contains', subId),
+      where('invitedSubIds', 'array-contains-any', search),
       orderBy('createdAt', 'desc'),
     );
     const unsub = onSnapshot(q, snap => {
+      console.log(`[bidRequests] query returned ${snap.docs.length} doc(s)`);
       setRequests(snap.docs.map(d => ({ id: d.id, ...d.data() } as BidRequest)));
     }, (err) => {
-      // Index might not exist yet — handle gracefully
-      console.warn('[bidRequests] query failed', err);
+      // Index might not exist yet — surface clearly so the missing-index
+      // link in the error message is easy to spot in DevTools.
+      console.warn('[bidRequests] query failed (likely missing Firestore index):', err);
     });
     return () => unsub();
-  }, [subId]);
+  }, [subIds]);
 
-  // Subscribe to my own submitted bids
+  // Subscribe to my own submitted bids (same union of identifiers).
   useEffect(() => {
-    if (!subId) return;
+    if (subIds.length === 0) return;
+    const search = subIds.slice(0, 10);
     const q = query(
       collectionGroup(db, 'bids'),
-      where('subContactId', '==', subId),
+      where('subContactId', 'in', search),
     );
     const unsub = onSnapshot(q, snap => {
       const ids = new Set<string>();
@@ -53,7 +141,7 @@ export function SubBidRequestsTab() {
       setSubmittedBidIds(ids);
     }, () => {});
     return () => unsub();
-  }, [subId]);
+  }, [subIds]);
 
   if (activeRequest) {
     return (
@@ -71,13 +159,20 @@ export function SubBidRequestsTab() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-          <Hammer className="w-5 h-5 text-[#C9A96E]" />
-          Bid Requests
-        </h2>
-        <p className="text-sm text-gray-500">Open requests are waiting on your bid. Click to view scope, plans, and submit.</p>
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+            <Hammer className="w-5 h-5 text-[#C9A96E]" />
+            Bid Requests
+          </h2>
+          <p className="text-sm text-gray-500">Open requests are waiting on your bid. Click to view scope, plans, and submit.</p>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => setClaimOpen(true)} className="gap-1.5">
+          <Link2 className="w-3.5 h-3.5" />
+          Claim profile
+        </Button>
       </div>
+      <ClaimContactDialog open={claimOpen} onClose={() => setClaimOpen(false)} />
 
       {open.length === 0 ? (
         <Card>
@@ -85,6 +180,26 @@ export function SubBidRequestsTab() {
             <FileText className="w-10 h-10 text-gray-300 mx-auto mb-2" />
             <p className="font-medium text-gray-700">No open bid requests</p>
             <p className="text-sm text-gray-400 mt-1">When the GC requests bids from you, they'll show up here.</p>
+            <details className="text-left mt-4 inline-block">
+              <summary className="text-[11px] text-gray-400 cursor-pointer hover:text-gray-600">
+                Expected a bid? Click here.
+              </summary>
+              <div className="mt-2 text-[11px] text-gray-500 bg-gray-50 rounded p-2 max-w-md mx-auto">
+                <p className="mb-1">Searched for invitations matching any of these IDs:</p>
+                <code className="break-all text-[10px] text-gray-700 block whitespace-pre-wrap">
+                  {subIds.length === 0 ? '(none — still loading)' : subIds.join('\n')}
+                </code>
+                <p className="mt-2">
+                  Auth email from token: <code className="text-gray-700">{user?.email || '(none)'}</code>
+                </p>
+                <p className="mt-2">
+                  Auth uid: <code className="text-gray-700 break-all">{(user as any)?.firebaseUid || '(none)'}</code>
+                </p>
+                <p className="mt-2">
+                  If your bid invitation is missing, the GC may have entered your contact under a different email. Click <strong>Claim profile</strong> above to find and claim your card.
+                </p>
+              </div>
+            </details>
           </CardContent>
         </Card>
       ) : (

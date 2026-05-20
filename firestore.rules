@@ -53,6 +53,26 @@ service cloud.firestore {
       allow read: if isGC();
       allow create, update: if isGC();
       allow delete: if isAdmin();
+      // Self-link (auto): signed-in user can stamp linkedUserId + linkedAt
+      // on a contact whose email matches their auth email — covers the
+      // happy-path auto-link on portal load.
+      allow update: if request.auth != null
+        && resource.data.email is string
+        && request.auth.token.email is string
+        && resource.data.email.lower() == request.auth.token.email.lower()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['linkedUserId', 'linkedAt'])
+        && request.resource.data.linkedUserId == request.auth.uid;
+
+      // Self-link (manual claim): signed-in user can claim an UNLINKED
+      // contact doc (one with no linkedUserId yet) even if the email doesn't
+      // match. Same field constraints — only linkedUserId + linkedAt can be
+      // touched, and the linkedUserId must equal request.auth.uid. This
+      // handles the case where a sub signs up with a different email from
+      // what the GC put on their contact card.
+      allow update: if request.auth != null
+        && !('linkedUserId' in resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['linkedUserId', 'linkedAt'])
+        && request.resource.data.linkedUserId == request.auth.uid;
     }
 
     // CRM pipeline — leads and clients
@@ -226,6 +246,30 @@ service cloud.firestore {
       allow delete: if isAdmin() || isGC();
     }
 
+    // Lumber takeoffs — semantic layer on top of measurements: which wall, which
+    // beam, materials math output. GC/admin only (designers don't need framing).
+    match /projects/{projectId}/lumberTakeoffs/{lumberTakeoffId} {
+      allow read: if isGC();
+      allow create, update: if isGC();
+      allow delete: if isAdmin() || isGC();
+    }
+
+    // Saved description templates — reusable scope-of-work text shared across
+    // the company. Used by the Estimate Details line-item picker.
+    match /companySettings/{settingsDoc}/descriptionTemplates/{templateId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isGC();
+    }
+
+    // Saved bid-package templates — reusable trade + scope groupings the GC
+    // recycles across similar projects. Invited subs and due dates are NOT
+    // captured (they're per-project). Read-broad so subs can preview what
+    // standard scopes look like; only GC can mutate.
+    match /bidPackageTemplates/{templateId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isGC();
+    }
+
     // Sub-scoped takeoffs — each subcontractor builds their own takeoff against
     // a project's plans for bidding purposes. Per-doc isolation: a sub can only
     // read/write their own takeoffs (matched on subUserId). GC can read all
@@ -242,9 +286,22 @@ service cloud.firestore {
 
     // Bid Requests — invitations sent to subs to bid on a project scope.
     // GC creates/manages; invited subs read only requests where they're listed.
+    // A user is matched if their Firebase Auth UID OR their auth email is in
+    // the invitedSubIds array — the GC writes the array with the recipient's
+    // contact ID + linkedUserId + email so any of those keys resolves.
+    //
+    // Note: we deliberately do NOT call isSub() here. Role lookups use a
+    // get() inside the rule, which Firestore restricts for collectionGroup
+    // queries — the rule can silently reject docs without surfacing an error,
+    // making "no bids show" debugging impossible. Being explicitly invited
+    // (by uid or auth email) is already a sufficient access gate.
     match /projects/{projectId}/bidRequests/{requestId} {
       allow read: if isGC() || isDesigner()
-        || (isSub() && request.auth.uid in resource.data.invitedSubIds);
+        || (isSignedIn() && (
+              request.auth.uid in resource.data.invitedSubIds
+              || (request.auth.token.email != null
+                  && request.auth.token.email.lower() in resource.data.invitedSubIds)
+            ));
       allow create, update: if isGC();
       allow delete: if isAdmin() || isGC();
     }
@@ -451,6 +508,19 @@ service cloud.firestore {
         || (isClient() && get(/databases/$(database)/documents/projects/$(projectId)).data.clientId == request.auth.uid);
       allow create, update: if isGC();
       allow delete: if isAdmin() || isGC();
+    }
+
+    // QuickBooks Online connection — single global doc holding access token,
+    // refresh token, and realmId. Admin-only read because tokens are
+    // sensitive; writes happen exclusively from the api Cloud Function via
+    // Admin SDK (which bypasses these rules). OAuth state tokens (short
+    // lived) live in a sibling collection, also Cloud-Function-managed.
+    match /qboConnections/{docId} {
+      allow read: if isAdmin();
+      allow write: if false; // Cloud Function only
+    }
+    match /qboOAuthStates/{docId} {
+      allow read, write: if false; // Cloud Function only
     }
 
     // Deny everything else

@@ -8,6 +8,8 @@
     "build": "vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
     "start": "NODE_ENV=production node dist/index.js",
     "check": "tsc",
+    "test:smoke": "node scripts/smoke-lumber.mjs",
+    "test:smoke:local": "node scripts/smoke-lumber.mjs --url http://localhost:5173",
     "db:push": "drizzle-kit push",
     "prepare": "husky"
   },
@@ -142,7 +144,7 @@
     "express-rate-limit": "^8.0.1",
     "express-request-id": "^3.0.0",
     "express-validator": "^7.2.1",
-    "firebase": "^11.10.0",
+    "firebase": "^12.13.0",
     "firebase-admin": "^13.5.0",
     "firebase-functions": "^6.4.0",
     "firebase-tools": "^14.12.1",

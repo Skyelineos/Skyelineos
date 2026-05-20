@@ -8,6 +8,10 @@
     ],
     "rewrites": [
       {
+        "source": "/qbo/oauth/**",
+        "function": "api"
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }

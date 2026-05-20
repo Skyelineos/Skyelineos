@@ -14,10 +14,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/auth/AuthContext';
+import { VcardImportZone } from '@/components/sales/VcardImportZone';
 import {
   Plus, Search, MoreVertical, Filter, X, ChevronUp, ChevronDown,
   ExternalLink, FolderOpen, List, LayoutGrid, Settings2, Trash2,
-  ArrowRight, Edit2,
+  ArrowRight, Edit2, User,
 } from 'lucide-react';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -259,11 +260,22 @@ function LinkProjectDialog({ client, open, onClose, onLinked }: {
 
 // ─── Lead Form Dialog ────────────────────────────────────────────────────────
 
-function LeadDialog({ open, editing, stages, teamMembers, onClose, onSave }: {
+interface LeadPrefill {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  phone?: string;
+  jobAddress?: string;
+  budget?: string;
+  notes?: string;
+}
+
+function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSave }: {
   open: boolean;
   editing: Client | null;
   stages: StageConfig[];
   teamMembers: TeamMember[];
+  prefill?: LeadPrefill;
   onClose: () => void;
   onSave: (data: Partial<Client>) => Promise<void>;
 }) {
@@ -320,12 +332,56 @@ function LeadDialog({ open, editing, stages, teamMembers, onClose, onSave }: {
           assignedToName: editing.assignedToName || '',
           tags: editing.tags || [],
         });
+      } else if (prefill) {
+        // Pre-fill new-lead form (e.g., from "Create lead from estimate" deep link
+        // or from the mobile contact picker).
+        setForm({
+          ...blank,
+          firstName:  prefill.firstName  ?? blank.firstName,
+          lastName:   prefill.lastName   ?? blank.lastName,
+          email:      prefill.email      ?? blank.email,
+          phone:      prefill.phone      ?? blank.phone,
+          jobAddress: prefill.jobAddress ?? blank.jobAddress,
+          budget:     prefill.budget     ?? blank.budget,
+          notes:      prefill.notes      ?? blank.notes,
+        });
       } else {
         setForm(blank);
       }
       setTagInput('');
     }
-  }, [open, editing]);
+  }, [open, editing, prefill]);
+
+  // ── Mobile contact picker — Web Contacts API ─────────────────────────────
+  // navigator.contacts is supported on Chrome Android (and some Edge mobile).
+  // iOS Safari doesn't expose it yet (Apple hasn't shipped the API). When
+  // unavailable, we hide the button — paste-as-text still works as fallback.
+  const contactPickerAvailable = typeof window !== 'undefined'
+    && 'contacts' in (navigator as any)
+    && typeof (navigator as any).contacts?.select === 'function';
+
+  const pickFromContacts = async () => {
+    try {
+      const result = await (navigator as any).contacts.select(
+        ['name', 'email', 'tel'],
+        { multiple: false },
+      );
+      if (!result || result.length === 0) return;
+      const c = result[0];
+      const fullName = Array.isArray(c.name) ? c.name[0] : c.name;
+      const [firstName, ...rest] = (fullName || '').split(/\s+/);
+      set('firstName', firstName || form.firstName);
+      set('lastName', rest.join(' ') || form.lastName);
+      const email = Array.isArray(c.email) ? c.email[0] : c.email;
+      const tel = Array.isArray(c.tel) ? c.tel[0] : c.tel;
+      if (email) set('email', email);
+      if (tel) set('phone', tel);
+      toast({ title: 'Contact imported', description: fullName || 'Filled in from your contacts' });
+    } catch (e: any) {
+      // Permission denied or user cancelled — silent
+      if (e?.name !== 'AbortError') toast({ title: 'Contact picker unavailable', description: e?.message || 'Try entering manually', variant: 'destructive' });
+    }
+  };
 
   const set = (k: string, v: any) => setForm(p => ({ ...p, [k]: v }));
 
@@ -375,6 +431,22 @@ function LeadDialog({ open, editing, stages, teamMembers, onClose, onSave }: {
         <DialogHeader>
           <DialogTitle>{editing ? 'Edit Lead' : 'Add New Lead'}</DialogTitle>
         </DialogHeader>
+
+        {/* Mobile contact picker — fills name/email/phone from a tap on the
+            phone's address book. Browser support is best on Android Chrome;
+            iOS Safari hides this button entirely (Apple hasn't shipped the API). */}
+        {contactPickerAvailable && !editing && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={pickFromContacts}
+            className="w-full justify-center gap-2 mb-2"
+            style={{ borderColor: 'rgba(201,169,110,0.5)', color: '#8B6F3F' }}
+          >
+            <User className="w-4 h-4" />
+            Pick from phone contacts
+          </Button>
+        )}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-2">
           {/* Name — split into first/last */}
@@ -909,7 +981,7 @@ function PipelineCard({ client, stages, onEdit, onDelete, onAdvance }: {
         draggable
         onDragStart={e => { e.dataTransfer.setData('clientId', client.id); e.dataTransfer.effectAllowed = 'move'; }}
         onDoubleClick={e => { e.preventDefault(); openProject(); }}
-        className="bg-white border border-gray-200 rounded-lg px-3 py-2.5 shadow-sm hover:shadow-md hover:border-gray-300 transition-all cursor-grab active:cursor-grabbing group relative overflow-hidden"
+        className="bg-white border border-gray-200 rounded-lg px-3 py-2.5 shadow-sm hover:shadow-md hover:border-gray-300 transition-all cursor-grab active:cursor-grabbing group relative"
         style={{ borderLeft: `3px solid ${priorityCfg.stripe}` }}
         title={`Priority: ${priorityCfg.label}`}
       >
@@ -1058,6 +1130,34 @@ export default function Sales() {
   const [leadDialogOpen, setLeadDialogOpen] = useState(false);
   const [editStagesOpen, setEditStagesOpen] = useState(false);
   const [editing, setEditing] = useState<Client | null>(null);
+  const [leadPrefill, setLeadPrefill] = useState<LeadPrefill | undefined>(undefined);
+
+  // ── Deep-link: open the new-lead dialog with prefilled fields ────────────
+  // Triggered by /sales?newLead=1&name=&address=&amount=&email=&phone= — used
+  // by the "Create lead from this estimate" action on orphan estimates and by
+  // any external integration that wants to seed a lead.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('newLead') !== '1') return;
+    const name = params.get('name') || '';
+    const [firstName, ...rest] = name.trim().split(/\s+/);
+    setLeadPrefill({
+      firstName,
+      lastName: rest.join(' '),
+      email: params.get('email') || undefined,
+      phone: params.get('phone') || undefined,
+      jobAddress: params.get('address') || undefined,
+      budget: params.get('amount') || undefined,
+      notes: params.get('fromEstimateId')
+        ? `Created from estimate ${params.get('fromEstimateId')}`
+        : undefined,
+    });
+    setEditing(null);
+    setLeadDialogOpen(true);
+    // Clean the URL so a refresh doesn't re-open the dialog.
+    window.history.replaceState({}, '', '/sales');
+  }, []);
 
   // Project creation prompt state. previousStage lets the dialog revert if the
   // drag was a mistake (e.g. user dragged a card to estimating but didn't mean to).
@@ -1085,14 +1185,124 @@ export default function Sales() {
     }
   };
 
-  // Load pipeline stages
+  // Load pipeline stages. Auto-migrates away from the legacy project-lifecycle
+  // stage set (Pre Construction / Active Build / Punchlist / Completed Build)
+  // that briefly shipped — those weren't sales pipeline stages and overrode
+  // the new DEFAULT_STAGES on every load. If detected, the doc is deleted and
+  // DEFAULT_STAGES is used. User can re-customize via Edit Stages anytime.
   useEffect(() => {
     getDoc(doc(db, 'settings', 'pipeline')).then(snap => {
-      if (snap.exists()) {
-        const d = snap.data();
-        if (Array.isArray(d.stages) && d.stages.length > 0) setStages(d.stages);
+      if (!snap.exists()) return;
+      const d = snap.data();
+      const stored = d.stages as StageConfig[] | undefined;
+      if (!Array.isArray(stored) || stored.length === 0) return;
+
+      const LEGACY_MARKERS = [
+        'Pre Construction', 'Active Build', 'Punchlist', 'Completed Build',
+        'Final Passed', 'In Punchlist', 'In Punch List', 'Warranty',
+      ];
+      const isLegacy = stored.some(s =>
+        LEGACY_MARKERS.some(m => (s.label || '').toLowerCase().includes(m.toLowerCase()))
+      );
+
+      if (isLegacy) {
+        // Remove the legacy doc so DEFAULT_STAGES is used.
+        deleteDoc(doc(db, 'settings', 'pipeline')).catch(() => {});
+        return;  // Keep DEFAULT_STAGES — don't apply the legacy data
       }
+      setStages(stored);
     }).catch(() => {});
+  }, []);
+
+  // ── One-time client-stage migration (option a + c from the cleanup conversation) ────
+  // Maps legacy client.stage values to current pipeline keys, and deletes the
+  // ghost demo leads Tyler flagged. Guarded by a settings/migrations flag so
+  // it only runs once per project. Idempotent if it runs again — the flag
+  // prevents writes, and orphaned-stage fixes are no-ops on already-correct data.
+  useEffect(() => {
+    (async () => {
+      try {
+        const flagRef = doc(db, 'settings', 'migrations');
+        const flagSnap = await getDoc(flagRef);
+        if (flagSnap.exists() && flagSnap.data()?.pipelineV2_migrated) return;
+
+        // Map of legacy stage values → new canonical keys
+        const STAGE_MAP: Record<string, string> = {
+          'estimating':       'in_estimating',
+          'in_estimating':    'in_estimating',
+          'contract':         'close_to_sign',
+          'close_to_signing': 'close_to_sign',
+          'close_to_sign':    'close_to_sign',
+          'pre_construction': 'won',
+          'preconstruction':  'won',
+          'active_build':     'won',
+          'final_passed':     'won',
+          'completed_build':  'won',
+          'in_punchlist':     'won',
+          'warranty':         'won',
+          'meeting_booked':   'meeting_booked',
+          'design_phase':     'design_phase',
+          'new_lead':         'new_lead',
+          'won':              'won',
+          'lost':             'lost',
+        };
+
+        // Demo / ghost leads to delete — DISABLED 2026-05-16 after Tyler asked
+        // to recover the deleted leads. Migration now only does the safe stage
+        // remap; nothing else gets deleted automatically.
+        const GHOST_NAMES: string[] = [];
+
+        const all = await getDocs(collection(db, 'clients'));
+        const updateBatch = writeBatch(db);
+        const toDelete: { id: string; ref: any }[] = [];
+        let mappedCount = 0;
+
+        for (const d of all.docs) {
+          const data = d.data() as any;
+          const name = (data.name || '').trim();
+          if (GHOST_NAMES.some(g => name.toLowerCase() === g.toLowerCase())) {
+            toDelete.push({ id: d.id, ref: d.ref });
+            continue;
+          }
+          const stage = (data.stage || '').toString();
+          const key = stage.toLowerCase().replace(/\s+/g, '_');
+          const mapped = STAGE_MAP[key];
+          if (mapped && mapped !== stage) {
+            updateBatch.update(d.ref, { stage: mapped });
+            mappedCount++;
+          }
+        }
+
+        // Phase 1: bulk update (allowed for any GC role).
+        if (mappedCount > 0) {
+          try { await updateBatch.commit(); } catch { /* permission or transient */ }
+        }
+
+        // Phase 2: deletes — individually so one permission-denied doesn't
+        // block the others. Firestore rules require admin for `clients` delete;
+        // for GC users the deletes simply no-op (without breaking the migration).
+        let deletedCount = 0;
+        for (const d of toDelete) {
+          try { await deleteDoc(d.ref); deletedCount++; } catch { /* swallow */ }
+        }
+
+        // Only mark migration as done if SOMETHING succeeded, so a partial run
+        // (e.g., as GC) can be completed later by an admin.
+        if (mappedCount > 0 || deletedCount > 0) {
+          await setDoc(flagRef, {
+            pipelineV2_migrated: deletedCount === toDelete.length,
+            ranAt: serverTimestamp(),
+            mappedCount,
+            deletedCount,
+            pendingDeletes: toDelete.length - deletedCount,
+          }, { merge: true });
+        }
+      } catch (e) {
+        // Migration failures are non-fatal — page still renders. Don't toast either,
+        // since this runs silently on background load.
+        void e;
+      }
+    })();
   }, []);
 
   // Load clients
@@ -1240,7 +1450,13 @@ export default function Sales() {
     setStages(newStages);
   };
 
-  const totalPipeline = filteredClients.reduce((s, c) => s + (c.budget || 0), 0);
+  // Pipeline total = only leads that actually appear in a known stage column.
+  // Older leads stuck on legacy stage names (e.g. "Pre Construction") used to
+  // inflate this number despite not being shown anywhere on the board.
+  const _knownStageKeys = new Set(stages.map(s => s.key));
+  const totalPipeline = filteredClients
+    .filter(c => _knownStageKeys.has(c.stage))
+    .reduce((s, c) => s + (c.budget || 0), 0);
 
   return (
     <AppLayout>
@@ -1291,6 +1507,16 @@ export default function Sales() {
                 </span>
               )}
             </Button>
+
+            {/* Import vCard */}
+            <VcardImportZone
+              defaultStage={stages[0]?.key || 'new_lead'}
+              onSinglePrefill={p => {
+                setLeadPrefill(p);
+                setEditing(null);
+                setLeadDialogOpen(true);
+              }}
+            />
 
             {/* Add Lead */}
             <Button
@@ -1400,7 +1626,8 @@ export default function Sales() {
         editing={editing}
         stages={stages}
         teamMembers={teamMembers}
-        onClose={() => { setLeadDialogOpen(false); setEditing(null); }}
+        prefill={leadPrefill}
+        onClose={() => { setLeadDialogOpen(false); setEditing(null); setLeadPrefill(undefined); }}
         onSave={handleSave}
       />
 

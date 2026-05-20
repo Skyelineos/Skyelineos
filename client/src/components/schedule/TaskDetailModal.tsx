@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
+import { tradeLabel } from '@/lib/estimates/markup';
 import {
   Building2,
   Calendar,
@@ -138,7 +139,7 @@ export default function TaskDetailModal({
                   </label>
                   <div className="flex items-center gap-2 mt-1">
                     <Wrench className="h-4 w-4 text-gray-500" />
-                    <p className="text-sm">{task.trade || 'General'}</p>
+                    <p className="text-sm">{task.trade ? tradeLabel(task.trade) : 'General'}</p>
                   </div>
                 </div>
               </div>

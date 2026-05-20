@@ -1,28 +1,31 @@
+import { useEffect } from 'react';
+import { useLocation } from 'wouter';
 import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ShieldX, ArrowLeft, Home } from 'lucide-react';
+import { getDefaultRouteForRole } from '@/utils/roleRedirects';
 
 export default function NotAuthorized() {
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
+  const [, setLocation] = useLocation();
+
+  // If a signed-in user lands here (stale bookmark, post-signin `next` pointed
+  // at a route they don't have access to, etc.) auto-bounce them to their own
+  // portal instead of leaving them on a dead-end screen.
+  useEffect(() => {
+    if (!isAuthenticated || !user?.role) return;
+    const home = getDefaultRouteForRole(user.role as any);
+    if (home && home !== '/sign-in') setLocation(home);
+  }, [isAuthenticated, user?.role, setLocation]);
 
   const handleGoBack = () => {
     window.history.back();
   };
 
   const handleGoHome = () => {
-    // Redirect based on user role
-    if (user?.role === 'admin' || user?.role === 'project_manager') {
-      window.location.href = '/dashboard';
-    } else if (user?.role === 'client') {
-      window.location.href = `/portal/client/${user.id}`;
-    } else if (user?.role === 'subcontractor') {
-      window.location.href = `/portal/subcontractor/${user.id}`;
-    } else if (user?.role === 'designer') {
-      window.location.href = `/portal/designer/${user.id}`;
-    } else {
-      window.location.href = '/login';
-    }
+    const home = user?.role ? getDefaultRouteForRole(user.role as any) : '/sign-in';
+    window.location.href = home;
   };
 
   return (

@@ -5,6 +5,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { useAdminView } from '@/contexts/AdminViewContext';
 import { TodaySection, TodayRow, greeting, todayLabel } from './TodaySection';
 import { Badge } from '@/components/ui/badge';
+import { StatCard } from '@/components/dashboard/StatCard';
 import {
   ClipboardList, Camera, FileText, Phone, Mail, MapPin,
   Hammer, AlertTriangle,
@@ -111,12 +112,24 @@ export function SubTodayFeed() {
         <p className="text-sm text-gray-500">{todayLabel()}</p>
       </div>
 
-      {/* Stats strip */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Stat icon={<AlertTriangle className="w-4 h-4" />} label="Overdue" value={tasksOverdue} color={tasksOverdue > 0 ? 'text-red-600' : 'text-gray-900'} />
-        <Stat icon={<ClipboardList className="w-4 h-4" />} label="Due today" value={tasksToday} color={tasksToday > 0 ? 'text-orange-600' : 'text-gray-900'} />
-        <Stat icon={<FileText className="w-4 h-4" />} label="Open invoices" value={myInvoices.length} />
-        <Stat icon={<Hammer className="w-4 h-4" />} label="Active bids" value={myBids.length} />
+      {/* Stats strip — uses the shared StatCard so it matches the rest of
+          the dashboard's design language. Semantic accents (red/amber) only
+          when the tile is communicating status. */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
+        <StatCard
+          icon={AlertTriangle}
+          label="Overdue"
+          value={tasksOverdue}
+          accent={tasksOverdue > 0 ? 'red' : 'gold'}
+        />
+        <StatCard
+          icon={ClipboardList}
+          label="Due today"
+          value={tasksToday}
+          accent={tasksToday > 0 ? 'amber' : 'gold'}
+        />
+        <StatCard icon={FileText} label="Open invoices" value={myInvoices.length} accent="gold" />
+        <StatCard icon={Hammer} label="Active bids" value={myBids.length} accent="gold" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -231,11 +244,3 @@ export function SubTodayFeed() {
   );
 }
 
-function Stat({ icon, label, value, color = 'text-gray-900' }: any) {
-  return (
-    <div className="bg-white rounded-lg border p-3 flex flex-col gap-1">
-      <div className="flex items-center gap-1.5 text-xs text-gray-500">{icon}<span>{label}</span></div>
-      <div className={`text-xl font-bold ${color}`}>{value}</div>
-    </div>
-  );
-}

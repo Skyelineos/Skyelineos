@@ -4,6 +4,7 @@ import { format } from 'date-fns';
 import { Calendar, Clock, CheckCircle, Circle, AlertCircle } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Badge } from '../ui/badge';
+import { tradeLabel } from '@/lib/estimates/markup';
 
 interface SimpleScheduleProps {
   projectId: number;
@@ -106,7 +107,7 @@ export default function SimpleSchedule({ projectId, readonly = false }: SimpleSc
 
                     {task.trade && (
                       <Badge variant="outline" className="text-xs">
-                        {task.trade}
+                        {tradeLabel(task.trade)}
                       </Badge>
                     )}
                   </div>

@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/hooks/use-auth';
 import {
   Home,
   Hammer,
@@ -12,7 +13,8 @@ import {
   MessageSquare,
   Camera,
   X,
-  Menu
+  Menu,
+  LogOut,
 } from 'lucide-react';
 
 const sidebarItems = [
@@ -84,6 +86,18 @@ interface SubcontractorSidebarProps {
 }
 
 export default function SubcontractorSidebar({ isOpen = false, onToggle }: SubcontractorSidebarProps) {
+  const { user, logout } = useAuth();
+  const displayCompany = (user as any)?.company || user?.name || 'Subcontractor';
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      // AuthContext clears state; Wouter will route to /sign-in via ProtectedRoute.
+      window.location.href = '/sign-in';
+    } catch (e) {
+      console.error('[sub-sidebar] logout failed', e);
+    }
+  };
   const [location, setLocation] = useLocation();
   // Extract the tab from URL like /subcontractor-portal/dashboard
   const pathParts = location.split('/').filter(Boolean);
@@ -112,65 +126,81 @@ export default function SubcontractorSidebar({ isOpen = false, onToggle }: Subco
         />
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar — matches the GC sidebar's brand-black background, gold
+          accents, and Inter typography for one consistent shell across every
+          portal. */}
       <aside
         className={cn(
-          "fixed left-0 top-0 z-50 h-screen w-64 bg-slate-900 text-white transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0 lg:z-auto",
+          "fixed left-0 top-0 z-50 h-screen w-64 flex flex-col transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0 lg:z-auto",
           isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         )}
+        style={{ backgroundColor: '#141414' }}
       >
         {/* Mobile close button */}
-        <div className="flex items-center justify-between p-4 lg:hidden border-b border-slate-700">
-          <div className="text-lg font-semibold">Subcontractor Portal</div>
+        <div
+          className="flex items-center justify-between px-5 py-4 lg:hidden flex-shrink-0"
+          style={{ borderBottom: '1px solid rgba(201,169,110,0.2)' }}
+        >
+          <div className="space-y-0.5">
+            <h2 className="text-base font-heading font-semibold text-white" style={{ letterSpacing: '0.04em' }}>
+              Subcontractor Portal
+            </h2>
+            <p
+              className="text-xs font-sans tracking-widest uppercase"
+              style={{ color: '#C9A96E', letterSpacing: '0.15em' }}
+            >
+              {displayCompany}
+            </p>
+          </div>
           <Button
             variant="ghost"
             size="icon"
             onClick={onToggle}
-            className="text-white hover:bg-slate-800"
+            className="text-white hover:bg-white/5"
           >
             <X className="h-5 w-5" />
           </Button>
         </div>
 
         {/* Desktop header */}
-        <div className="p-4 border-b border-slate-700 hidden lg:block">
-          <div className="space-y-1">
-            <h2 className="text-lg font-semibold text-white">
-              Subcontractor Portal
-            </h2>
-            <p className="text-sm text-slate-300">
-              Lopez Premium Flooring
-            </p>
-          </div>
-        </div>
-
-        {/* Mobile header */}
-        <div className="p-4 border-b border-slate-700 lg:hidden">
-          <div className="text-lg font-semibold text-white mb-2">
+        <div
+          className="px-5 py-5 hidden lg:block flex-shrink-0"
+          style={{ borderBottom: '1px solid rgba(201,169,110,0.2)' }}
+        >
+          <h2 className="text-xl font-heading font-semibold text-white" style={{ letterSpacing: '0.04em' }}>
+            Skyeline Homes
+          </h2>
+          <p
+            className="text-xs mt-0.5 font-sans font-light tracking-widest uppercase"
+            style={{ color: '#C9A96E', letterSpacing: '0.15em' }}
+          >
             Subcontractor Portal
-          </div>
-          <p className="text-sm text-slate-300">
-            Lopez Premium Flooring
+          </p>
+          <p className="text-sm font-sans mt-2 text-white/70 truncate">
+            {displayCompany}
           </p>
         </div>
 
         {/* Navigation Menu */}
-        <nav className="flex flex-col p-4 space-y-1">
+        <nav className="flex-1 px-3 py-5 space-y-0.5 overflow-y-auto">
           {sidebarItems.map(item => {
             const Icon = item.icon;
             const isActive = currentTab === item.path;
             const linkPath = `/subcontractor-portal/${item.path}`;
-            
+
             return (
               <Link
                 key={item.path}
                 href={linkPath}
                 className={cn(
-                  "group flex items-center space-x-3 px-3 py-3 text-sm font-medium rounded-lg transition-colors",
-                  isActive
-                    ? "bg-blue-600 text-white"
-                    : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                  'flex items-center gap-3 px-3 py-2 rounded-md text-sm font-sans font-medium transition-all duration-150',
+                  isActive ? 'text-white' : 'hover:text-white',
                 )}
+                style={
+                  isActive
+                    ? { backgroundColor: 'rgba(201,169,110,0.15)', color: '#C9A96E', borderLeft: '2px solid #C9A96E' }
+                    : { color: 'rgba(255,255,255,0.55)' }
+                }
                 onClick={() => {
                   // Close mobile sidebar when navigating
                   if (window.innerWidth < 1024 && onToggle) {
@@ -178,7 +208,7 @@ export default function SubcontractorSidebar({ isOpen = false, onToggle }: Subco
                   }
                 }}
               >
-                <Icon className="h-5 w-5 flex-shrink-0" />
+                <Icon className="h-4 w-4 flex-shrink-0" />
                 <span>{item.label}</span>
               </Link>
             );
@@ -186,11 +216,25 @@ export default function SubcontractorSidebar({ isOpen = false, onToggle }: Subco
         </nav>
 
         {/* Footer */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-slate-700">
-          <div className="text-xs text-slate-400 text-center">
-            <p>Subcontractor Portal</p>
-            <p className="mt-1">Skyeline Homes</p>
-          </div>
+        <div
+          className="px-5 py-4 flex-shrink-0 space-y-3"
+          style={{ borderTop: '1px solid rgba(201,169,110,0.15)' }}
+        >
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-sans font-medium transition-colors hover:text-white"
+            style={{ color: 'rgba(255,255,255,0.55)' }}
+          >
+            <LogOut className="h-4 w-4" />
+            Log out
+          </button>
+          <p
+            className="text-xs font-sans text-center"
+            style={{ color: 'rgba(255,255,255,0.2)', letterSpacing: '0.08em' }}
+          >
+            © {new Date().getFullYear()} Skyeline Homes
+          </p>
         </div>
       </aside>
     </>

@@ -1,8 +1,49 @@
 # Skyeline Odyssey — Session Checkpoint
-**Last updated:** 2026-05-07 (Session 7 — late-night build sprint)
+**Last updated:** 2026-05-12 (Session 9 — Tools section + Lumber Takeoff Calculator v1)
 **Live URL:** https://skyelineos.web.app
 **Firebase project:** skyelineos (**BLAZE** plan — upgraded 2026-05-06)
 **Deploy command:** `npm run build && firebase deploy --only hosting,firestore:rules,firestore:indexes,functions`
+
+---
+
+## Session 9 — Tools section + Lumber Takeoff Calculator v1 (2026-05-12)
+
+### Lumber Takeoff Calculator (v1.0)
+New top-level **Tools** section in the sidebar — landing page for Skyeline's standalone calculators. First tool shipped: Lumber Takeoff Calculator.
+
+**Routes:**
+- `/tools` → Tools landing page (cards: Lumber [Available], Tile/Millwork/Concrete [Coming Soon])
+- `/tools/lumber` → Project picker (every takeoff must be tied to a project)
+- `/tools/lumber/:projectId` → Takeoff list for that project + "New takeoff" button
+- `/tools/lumber/:projectId/:takeoffId` → 6-step wizard (Setup → Legend → Walls → Headers → Subfloor → Results)
+
+**Files added:**
+- `client/src/lib/lumber/types.ts` — `LumberTakeoff` doc, `WallRun`/`HeaderRun`/`SubfloorArea`, `BeamSpec`/`PostSpec`, `WIZARD_STEPS`
+- `client/src/lib/lumber/assemblies.ts` — `UTAH_DEFAULTS` (2x6 16"oc, OSB-1/2, 9' default, AdvanTech), stud precut lookup, sheathing display, waste helpers
+- `client/src/lib/lumber/calculate.ts` — pure function: `LumberTakeoff → LumberTakeoffResult` (categorized lines + summary + warnings)
+- `client/src/pages/Tools.tsx` — landing page
+- `client/src/pages/LumberTakeoff.tsx` — page with internal `ProjectPicker` / `TakeoffPicker` / `TakeoffEditor` routing
+- `client/src/components/lumber/LumberWizard.tsx` — wizard shell + all step components + tips panel + auto-save + CSV export
+
+**Files modified:**
+- `client/src/App.tsx` — lazy imports + 4 new routes (RoleGuard: admin/gc/projectManager)
+- `client/src/components/layout/Sidebar.tsx` — new "Tools" nav group between Field and Finance
+- `client/src/components/layout/MobileNav.tsx` — Tools entry under Catalogs
+- `firestore.rules` — `match /projects/{projectId}/lumberTakeoffs/{lumberTakeoffId}` (GC/admin only)
+
+**Data model:** Side-car doc at `projects/{projectId}/lumberTakeoffs/{takeoffId}` — keeps the generic Takeoff tool's `Measurement` types untouched. Lumber doc references measurements by id (future v1.5) OR holds numeric inputs directly (v1).
+
+**Math rules (v1):**
+- Studs: 1 stud/LF × 1.05 waste (industry quick-takeoff rule absorbs corners + T-intersections)
+- Plates: bottom 1× LF + top 2× LF = 3× total, with 10% splice waste, treated callout for bottom-on-slab
+- Sheathing/subfloor: area ÷ 32 sf/sheet + 10% waste, ceiling-rounded
+- Headers: each occurrence pulls its beam spec from the legend → emits `qty × length` per beam designation
+
+**Build verified:** `npm run check` returned only pre-existing `ModernTimelineBuilder.tsx` errors. `vite build` succeeded in 5.66s; both `Tools-*.js` and `LumberTakeoff-*.js` chunks emit clean.
+
+**Deferred to v1.5:** Wizard-driven markup on PDF (reusing PdfCanvas/MeasurementOverlay) so the user can draw walls/beams on the plan instead of typing LF. Each measurement gets tagged with kind/height/beam designation and feeds the same `calculate()` engine.
+
+**Deferred to v2:** Trimmer/king-stud breakout by P#, shear walls, holdowns, multi-floor stacking refinements, supplier pricing layer.
 
 ---
 

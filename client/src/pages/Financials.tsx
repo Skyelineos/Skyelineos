@@ -19,6 +19,7 @@ import AutomatedPOSystem from '@/components/financial/AutomatedPOSystem';
 import InvoiceMatchingSystem from '@/components/financial/InvoiceMatchingSystem';
 import PaymentProcessingCenter from '@/components/financial/PaymentProcessingCenter';
 import EnhancedFinancialDashboard from '@/components/financial/EnhancedFinancialDashboard';
+import { QboConnectionCard } from '@/components/settings/QboConnectionCard';
 
 export default function Financials() {
   const [selectedProjectId, setSelectedProjectId] = useState<number>(0); // 0 = company-wide
@@ -313,17 +314,14 @@ export default function Financials() {
       <div className="flex flex-col gap-2">
         <h1 className="text-3xl font-bold text-gray-900">Financial Settings</h1>
         <p className="text-gray-600">
-          Configure financial preferences and settings
+          Connect accounting tools and configure financial preferences
         </p>
       </div>
-      <Card className="bg-gray-50">
-        <CardHeader>
-          <CardTitle>Financial Preferences</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-gray-600">Settings configuration coming soon...</p>
-        </CardContent>
-      </Card>
+
+      <div>
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-500 mb-3">Integrations</h2>
+        <QboConnectionCard />
+      </div>
     </div>
   );
 

@@ -34,6 +34,7 @@ import {
 // Import section components
 import DocumentsSection from '@/components/client-portal/DocumentsSection';
 import ScheduleSection from '@/components/client-portal/ScheduleSection';
+import { StatCard } from '@/components/dashboard/StatCard';
 import { ProjectReviewBanner } from '@/components/reviews/ProjectReviewBanner';
 import CommunicationSection from '@/components/client-portal/CommunicationSection';
 import PunchlistSection from '@/components/client-portal/PunchlistSection';
@@ -241,7 +242,7 @@ export default function ClientPortal() {
     const pendingActions = getPendingActions();
 
     return (
-      <div className="space-y-6">
+      <div className="space-y-4 md:space-y-6">
         {/* Review prompt — only shows when project is at the end of its lifecycle
             and this client hasn't already submitted a review. */}
         <ProjectReviewBanner
@@ -250,17 +251,17 @@ export default function ClientPortal() {
           projectStatus={project.status}
         />
         {/* Project Header */}
-        <Card className="bg-gray-50">
-          <CardHeader>
-            <div className="flex justify-between items-start">
-              <div>
-                <CardTitle className="text-2xl">{project.name}</CardTitle>
-                <p className="text-gray-600 mt-1">
+        <Card className="rounded-xl hover:shadow-md transition-shadow">
+          <CardHeader className="p-4 md:p-6">
+            <div className="flex justify-between items-start gap-3 flex-wrap">
+              <div className="min-w-0 flex-1">
+                <CardTitle className="text-fluid-2xl">{project.name}</CardTitle>
+                <p className="text-gray-600 mt-1 text-sm">
                   Project Manager: {project.assignedProjectManager || 'Unassigned'}
                 </p>
               </div>
-              <div className="text-right">
-                <Badge variant="outline" className="mb-2">
+              <div className="text-right flex-shrink-0">
+                <Badge variant="outline" className="mb-2" style={{ borderColor: 'rgba(201,169,110,0.5)', color: '#8B6F3F' }}>
                   {project.status || 'Active'}
                 </Badge>
                 <p className="text-sm text-gray-500">
@@ -269,45 +270,42 @@ export default function ClientPortal() {
               </div>
             </div>
           </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-blue-50 p-4 rounded-lg">
-                <div className="flex items-center gap-2 mb-2">
-                  <Clock className="h-5 w-5 text-theme-primary" />
-                  <span className="font-medium">Current Phase</span>
-                </div>
-                <p className="text-lg font-semibold text-theme-primary">{currentPhase}</p>
-              </div>
-              <div className="bg-green-50 p-4 rounded-lg">
-                <div className="flex items-center gap-2 mb-2">
-                  <CheckCircle className="h-5 w-5 text-green-600" />
-                  <span className="font-medium">Progress</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Progress value={progress} className="flex-1" />
-                  <span className="text-lg font-semibold text-green-600">{progress}%</span>
-                </div>
-              </div>
-              <div className="bg-yellow-50 p-4 rounded-lg">
-                <div className="flex items-center gap-2 mb-2">
-                  <AlertCircle className="h-5 w-5 text-yellow-600" />
-                  <span className="font-medium">Action Items</span>
-                </div>
-                <p className="text-lg font-semibold text-yellow-600">
-                  {pendingActions.length} pending
-                </p>
-              </div>
-            </div>
-          </CardContent>
         </Card>
 
+        {/* Phase / Progress / Actions — unified stat cards. */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+          <StatCard label="Current Phase" value={currentPhase} icon={Clock} accent="gold" />
+          <Card className="rounded-xl transition-shadow">
+            <CardContent className="p-4 md:p-5">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-lg border bg-green-50 border-green-200 flex-shrink-0">
+                  <CheckCircle className="w-5 h-5 text-green-600" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <Progress value={progress} className="flex-1" />
+                    <span className="text-xl md:text-2xl font-bold tabular-nums text-gray-900">{progress}%</span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">Progress</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <StatCard
+            label="Action Items"
+            value={`${pendingActions.length} pending`}
+            icon={AlertCircle}
+            accent={pendingActions.length > 0 ? 'amber' : 'gray'}
+          />
+        </div>
+
         {/* Recent Activity & Pending Actions */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
           {/* Recent Activity */}
-          <Card className="bg-gray-50">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Calendar className="h-5 w-5" />
+          <Card className="rounded-xl hover:shadow-md transition-shadow">
+            <CardHeader className="p-4 md:p-6">
+              <CardTitle className="text-fluid-lg flex items-center gap-2">
+                <Calendar className="h-5 w-5 text-[#C9A96E]" />
                 Recent Activity
               </CardTitle>
             </CardHeader>
@@ -332,10 +330,10 @@ export default function ClientPortal() {
           </Card>
 
           {/* Pending Actions */}
-          <Card className="bg-gray-50">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <CheckSquare className="h-5 w-5" />
+          <Card className="rounded-xl hover:shadow-md transition-shadow">
+            <CardHeader className="p-4 md:p-6">
+              <CardTitle className="text-fluid-lg flex items-center gap-2">
+                <CheckSquare className="h-5 w-5 text-[#C9A96E]" />
                 Action Required
               </CardTitle>
             </CardHeader>
@@ -362,9 +360,9 @@ export default function ClientPortal() {
         </div>
 
         {/* Quick Access */}
-        <Card className="bg-gray-50">
-          <CardHeader>
-            <CardTitle>Quick Access</CardTitle>
+        <Card className="rounded-xl hover:shadow-md transition-shadow">
+          <CardHeader className="p-4 md:p-6">
+            <CardTitle className="text-fluid-lg">Quick Access</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

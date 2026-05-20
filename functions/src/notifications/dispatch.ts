@@ -39,10 +39,14 @@ interface UserDoc {
   email?: string;
   phone?: string;
   name?: string;
+  /** Device-registered FCM tokens for web push. Populated when the user
+   *  opts in via the "Enable phone notifications" button on the client. */
+  fcmTokens?: string[];
   notificationPrefs?: {
     email?: boolean;       // global opt-in (default: true)
     sms?: boolean;         // global opt-in (default: false unless explicitly set)
-    kinds?: Record<string, { email?: boolean; sms?: boolean }>; // per-kind override
+    push?: boolean;        // web push opt-in (default: true once tokens exist)
+    kinds?: Record<string, { email?: boolean; sms?: boolean; push?: boolean }>;
   };
 }
 
@@ -62,6 +66,15 @@ function shouldSendSms(user: UserDoc, kind: string): boolean {
   return false; // default OFF for SMS — opt-in only
 }
 
+function shouldSendPush(user: UserDoc, kind: string): boolean {
+  const prefs = user.notificationPrefs;
+  const perKind = prefs?.kinds?.[kind];
+  if (perKind?.push !== undefined) return perKind.push;
+  if (prefs?.push !== undefined) return prefs.push;
+  return true; // default ON once the user has opted in (which is what
+                // creates an FCM token in the first place)
+}
+
 export const dispatchNotification = onDocumentCreated(
   {
     document: 'notifications/{notificationId}',
@@ -74,6 +87,7 @@ export const dispatchNotification = onDocumentCreated(
     const errors: string[] = [];
     let emailSent = false;
     let smsSent = false;
+    let pushSent = false;
 
     if (!notif.userId) {
       console.warn('[dispatch] notification missing userId', event.params.notificationId);
@@ -91,12 +105,12 @@ export const dispatchNotification = onDocumentCreated(
       }
       const contact = contactSnap.data() as UserDoc;
       await sendAll(contact, notif, errors, (sent) => {
-        emailSent = sent.email; smsSent = sent.sms;
+        emailSent = sent.email; smsSent = sent.sms; pushSent = sent.push;
       });
     } else {
       const user = userSnap.data() as UserDoc;
       await sendAll(user, notif, errors, (sent) => {
-        emailSent = sent.email; smsSent = sent.sms;
+        emailSent = sent.email; smsSent = sent.sms; pushSent = sent.push;
       });
     }
 
@@ -105,6 +119,7 @@ export const dispatchNotification = onDocumentCreated(
       await snap.ref.update({
         emailSent,
         smsSent,
+        pushSent,
         errors: errors.length ? errors : admin.firestore.FieldValue.delete(),
         dispatchedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
@@ -118,10 +133,11 @@ async function sendAll(
   recipient: UserDoc,
   notif: NotificationDoc,
   errors: string[],
-  onResult: (sent: { email: boolean; sms: boolean }) => void,
+  onResult: (sent: { email: boolean; sms: boolean; push: boolean }) => void,
 ) {
   let emailSent = false;
   let smsSent = false;
+  let pushSent = false;
 
   // Email via SendGrid
   if (recipient.email && shouldSendEmail(recipient, notif.kind)) {
@@ -175,7 +191,74 @@ async function sendAll(
     }
   }
 
-  onResult({ email: emailSent, sms: smsSent });
+  // Web push via FCM
+  const tokens = Array.isArray(recipient.fcmTokens)
+    ? recipient.fcmTokens.filter(t => typeof t === 'string' && t.length > 0)
+    : [];
+  if (tokens.length > 0 && shouldSendPush(recipient, notif.kind)) {
+    try {
+      const link = notif.link
+        ? `${APP_BASE_URL.value() || 'https://skyelineos.web.app'}${notif.link}`
+        : `${APP_BASE_URL.value() || 'https://skyelineos.web.app'}/`;
+      const message = {
+        tokens,
+        notification: {
+          title: notif.title,
+          body: notif.body || '',
+        },
+        webpush: {
+          notification: {
+            icon: '/logos/logo-dark.png',
+            badge: '/logos/logo-dark.png',
+          },
+          fcmOptions: { link },
+        },
+        data: {
+          link,
+          title: notif.title,
+          body: notif.body || '',
+        },
+      };
+      const result = await admin.messaging().sendEachForMulticast(message);
+      pushSent = result.successCount > 0;
+      // Prune dead tokens so a registered device that's been uninstalled
+      // doesn't slow down future dispatches forever.
+      const dead: string[] = [];
+      result.responses.forEach((resp, idx) => {
+        if (!resp.success) {
+          const code = (resp.error as any)?.code || '';
+          if (
+            code.includes('registration-token-not-registered')
+            || code.includes('invalid-registration-token')
+          ) {
+            dead.push(tokens[idx]);
+          } else if (resp.error) {
+            errors.push(`FCM token ${idx} failed: ${resp.error.message}`);
+          }
+        }
+      });
+      if (dead.length > 0) {
+        try {
+          // Best-effort pruning — works whether the recipient lives in
+          // users/ or contacts/.
+          const userRef = db.collection('users').doc(notif.userId);
+          const userSnap = await userRef.get();
+          const ref = userSnap.exists
+            ? userRef
+            : db.collection('contacts').doc(notif.userId);
+          await ref.update({ fcmTokens: admin.firestore.FieldValue.arrayRemove(...dead) });
+        } catch (e: any) {
+          console.warn('[dispatch] pruning dead tokens failed', e?.message);
+        }
+      }
+    } catch (e: any) {
+      const msg = `Push failed: ${e.message || String(e)}`;
+      console.error('[dispatch]', msg);
+      errors.push(msg);
+    }
+  }
+
+  onResult({ email: emailSent, sms: smsSent, push: pushSent });
 }
 
 function buildEmailHtml(notif: NotificationDoc, link?: string): string {

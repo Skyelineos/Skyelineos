@@ -10,6 +10,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { addDays, format } from 'date-fns';
 import { Trash2 } from 'lucide-react';
+import { DEFAULT_TRADES, normalizeTradeId } from '@/lib/estimates/markup';
 
 interface ScheduleEditorModalProps {
   isOpen: boolean;
@@ -53,27 +54,14 @@ export default function ScheduleEditorModal({
     contact && typeof contact.role === 'string' && contact.role === 'subcontractor'
   ) : [];
 
-  // Common trade types
-  const tradeTypes = [
-    'Excavation',
-    'Foundation',
-    'Framing',
-    'Plumbing',
-    'Electrical',
-    'HVAC',
-    'Insulation',
-    'Drywall',
-    'Flooring',
-    'Cabinets',
-    'Painting',
-    'Final Inspection',
-  ];
+  // Canonical trade list shared with Estimating + Add Task modal.
+  const tradeTypes = DEFAULT_TRADES;
 
   useEffect(() => {
     if (task) {
       setFormData({
         title: task.title || '',
-        trade: task.trade || '',
+        trade: normalizeTradeId(task.trade || ''),
         contactId: task.contactId?.toString() || 'none',
         startDate: task.startDate ? format(new Date(task.startDate), 'yyyy-MM-dd') : '',
         duration: task.duration || 1,
@@ -216,8 +204,8 @@ export default function ScheduleEditorModal({
                   <SelectValue placeholder="Select a trade" />
                 </SelectTrigger>
                 <SelectContent>
-                  {tradeTypes.map(trade => (
-                    <SelectItem key={trade} value={trade}>{trade}</SelectItem>
+                  {tradeTypes.map(t => (
+                    <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

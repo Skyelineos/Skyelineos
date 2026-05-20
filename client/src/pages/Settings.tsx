@@ -1,4 +1,5 @@
 import { AppLayout } from '@/components/layout/AppLayout';
+import { QboConnectionCard } from '@/components/settings/QboConnectionCard';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -275,13 +276,18 @@ export default function Settings() {
 
         {/* Settings Tabs */}
         <Tabs defaultValue="profile" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="profile">Profile</TabsTrigger>
             <TabsTrigger value="theme">Theme</TabsTrigger>
             <TabsTrigger value="notifications">Notifications</TabsTrigger>
             <TabsTrigger value="company">Company</TabsTrigger>
+            <TabsTrigger value="integrations">Integrations</TabsTrigger>
             <TabsTrigger value="security">Security</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="integrations" className="space-y-6">
+            <QboConnectionCard />
+          </TabsContent>
 
           {/* Profile Settings */}
           <TabsContent value="profile" className="space-y-6">

@@ -21,6 +21,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { Plus, ListChecks, PenTool } from 'lucide-react';
 import { format, addDays } from 'date-fns';
+import { DEFAULT_TRADES, normalizeTradeId, tradeLabel } from '@/lib/estimates/markup';
 
 interface AddTaskModalProps {
   isOpen: boolean;
@@ -62,21 +63,9 @@ export function AddTaskModal({ isOpen, onClose, projectId }: AddTaskModalProps) 
     contact && typeof contact.role === 'string' && contact.role === 'subcontractor'
   ) : [];
 
-  // Common trade types
-  const tradeTypes = [
-    'Excavation',
-    'Foundation',
-    'Framing',
-    'Plumbing',
-    'Electrical',
-    'HVAC',
-    'Insulation',
-    'Drywall',
-    'Flooring',
-    'Cabinets',
-    'Painting',
-    'Final Inspection',
-  ];
+  // Canonical trade list (shared with Estimating module so per-trade analytics
+  // aggregate correctly across estimates + schedule + bills).
+  const tradeTypes = DEFAULT_TRADES;
 
   // Task colors
   const taskColors = [
@@ -94,7 +83,8 @@ export function AddTaskModal({ isOpen, onClose, projectId }: AddTaskModalProps) 
         ...prev,
         text: item.trade || item.description || 'Estimate Task',
         duration: duration,
-        trade: item.trade || '',
+        // Normalize so estimate items saved with legacy labels resolve to IDs.
+        trade: normalizeTradeId(item.trade || ''),
         category: item.category || '',
         // Recalculate end date based on new duration
         end: format(addDays(new Date(prev.start), duration), 'yyyy-MM-dd')
@@ -317,8 +307,8 @@ export function AddTaskModal({ isOpen, onClose, projectId }: AddTaskModalProps) 
                   <SelectValue placeholder="Select a trade" />
                 </SelectTrigger>
                 <SelectContent>
-                  {tradeTypes.map((trade) => (
-                    <SelectItem key={trade} value={trade}>{trade}</SelectItem>
+                  {tradeTypes.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

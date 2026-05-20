@@ -289,15 +289,30 @@ export function RequestBidsModal({ open, projectId, projectName, onClose }: Prop
           <div>
             <div className="flex items-center justify-between mb-2">
               <Label>Subs to Invite ({selectedSubIds.size} selected)</Label>
-              {selectedSubIds.size > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setSelectedSubIds(new Set())}
-                  className="text-xs text-gray-500 hover:text-gray-800"
-                >
-                  Clear all
-                </button>
-              )}
+              <div className="flex items-center gap-3">
+                {/* Add all subs matching the current filter (trade + text search).
+                    Useful when sending a bid request to every sub in a trade. */}
+                {filteredSubs.length > 0 && filteredSubs.some(s => !selectedSubIds.has(s.id)) && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedSubIds(new Set(filteredSubs.map(s => s.id)))}
+                    className="text-xs font-medium hover:underline"
+                    style={{ color: '#8B6F3F' }}
+                    title={`Select all ${filteredSubs.length} sub${filteredSubs.length === 1 ? '' : 's'} matching the current filter`}
+                  >
+                    + Add all ({filteredSubs.length})
+                  </button>
+                )}
+                {selectedSubIds.size > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedSubIds(new Set())}
+                    className="text-xs text-gray-500 hover:text-gray-800"
+                  >
+                    Clear all
+                  </button>
+                )}
+              </div>
             </div>
             <div className="relative mb-2">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />

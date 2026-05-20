@@ -1,4 +1,6 @@
 import { apiRequest } from './queryClient';
+import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
+import { db } from './firebase';
 
 export interface ProgressCalculation {
   completionPercentage: number;
@@ -40,19 +42,50 @@ export interface ScheduleTask {
  */
 export async function calculateLiveProgress(projectId: string | number): Promise<ProgressCalculation> {
   try {
-    // Processing operation
-    
-    // Fetch approved estimates (these represent the project scope)
-    const approvedEstimates = await apiRequest(`/api/estimates/approved/${projectId}`, 'GET');
-    // Development logging removed
-    
-    // Fetch project schedule tasks
-    const scheduleTasks = await apiRequest(`/api/projects/${projectId}/tasks`, 'GET');
-    // Development logging removed
-    
-    // Fetch project details for budget info
-    const project = await apiRequest(`/api/projects/${projectId}`, 'GET');
-    // Development logging removed
+    // Read directly from Firestore. The legacy /api/* endpoints used here
+    // were never deployed (the `api` Cloud Function doesn't include them),
+    // and Hosting fall-through to the SPA returned HTML that fed every
+    // caller a "non-JSON" error. Talking to Firestore directly is faster
+    // anyway — no round-trip through Cloud Functions.
+    const pid = String(projectId);
+
+    // 1. Approved estimate line items for this project.
+    //    Estimates store their items in `lineItems[]` on the parent doc;
+    //    "approved" estimates are status='approved' (or 'signed').
+    const estSnap = await getDocs(query(
+      collection(db, 'estimates'),
+      where('projectId', '==', pid),
+    ));
+    const approvedEstimates: any[] = [];
+    estSnap.docs.forEach(d => {
+      const data = d.data() as any;
+      const status = String(data.status || '').toLowerCase();
+      // Only count signed/approved estimates toward scope.
+      if (status !== 'approved' && status !== 'signed' && status !== 'won') return;
+      const items: any[] = Array.isArray(data.lineItems) ? data.lineItems : [];
+      items.forEach(item => approvedEstimates.push({
+        id: item.id,
+        title: item.description || item.title || '',
+        trade: item.trade || '',
+        estimatedCost: item.total || item.unitCost || 0,
+        status: item.status || 'Approved',
+        duration: item.duration || 1,
+      }));
+    });
+
+    // 2. Schedule tasks for this project.
+    const taskSnap = await getDocs(query(
+      collection(db, 'tasks'),
+      where('projectId', '==', pid),
+    ));
+    const scheduleTasks: any[] = taskSnap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+
+    // 3. Project doc for budget / actualCost.
+    let project: any = {};
+    try {
+      const projSnap = await getDoc(doc(db, 'projects', pid));
+      if (projSnap.exists()) project = projSnap.data();
+    } catch { /* non-fatal */ }
 
     if (!approvedEstimates || !Array.isArray(approvedEstimates)) {
       console.warn('No approved estimates found for progress calculation');
@@ -165,12 +198,10 @@ export async function calculateLiveProgress(projectId: string | number): Promise
     };
 
   } catch (error) {
-    console.error('Error calculating live progress:', error);
-    console.error('Error details:', {
-      message: error instanceof Error ? error.message : 'Unknown error',
-      stack: error instanceof Error ? error.stack : undefined,
-      projectId
-    });
+    // Fail quiet — Financials would render an entire dashboard's worth of
+    // projects, and one broken Firestore read shouldn't spam the console
+    // for every project. Log once at warn level instead of error.
+    console.warn('[progressUtils] live progress fell back to default for', projectId, error instanceof Error ? error.message : error);
     return getDefaultProgress();
   }
 }

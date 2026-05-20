@@ -129,6 +129,14 @@
       ]
     },
     {
+      "collectionGroup": "estimates",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "projectId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "templates",
       "queryScope": "COLLECTION",
       "fields": [

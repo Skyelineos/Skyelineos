@@ -86,6 +86,12 @@ const TEAM_NAV: NavGroup[] = [
     ],
   },
   {
+    label: 'Tools',
+    items: [
+      { label: 'Tools',  href: '/tools', icon: Hammer },
+    ],
+  },
+  {
     label: 'Finance',
     items: [
       { label: 'Finance', href: '/financials',  icon: DollarSign },

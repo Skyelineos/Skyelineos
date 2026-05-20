@@ -17,6 +17,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { TradeTypeComboBox } from '@/components/contacts/TradeTypeComboBox';
+import { BidPackageTemplatePicker } from './BidPackageTemplatePicker';
 import {
   Send, X, Hammer, FileText, Paperclip, Plus, Trash2, AlertCircle, Save, Sparkles,
 } from 'lucide-react';
@@ -340,7 +341,22 @@ export function SendBidPackageModal({ open, projectId, projectName, onClose }: P
             callouts: commonNotes.trim(),
             plans,
             dueDate: sec.dueDate?.trim() || commonDueDate,
-            invitedSubIds: Array.from(sec.selectedSubIds),
+            // invitedSubIds carries every identifier we might match the sub
+            // by on the portal side: their contact-doc ID, their linked
+            // Firebase Auth UID (if known), and their email. This way the
+            // sub-portal collectionGroup query resolves the request whether
+            // or not the contact has been linkedUserId-stamped yet.
+            invitedSubIds: (() => {
+              const out = new Set<string>();
+              for (const id of Array.from(sec.selectedSubIds)) {
+                out.add(id);
+                const s = allSubs.find(a => a.id === id);
+                if (s?.linkedUserId) out.add(s.linkedUserId);
+                if (s?.email) out.add(s.email.toLowerCase().trim());
+              }
+              return Array.from(out);
+            })(),
+            invitedSubContactIds: Array.from(sec.selectedSubIds),
             invitedByUserId: user.id?.toString() || user.email || 'unknown',
             invitedByName: user.name || 'GC',
             status: 'open',
@@ -493,6 +509,19 @@ export function SendBidPackageModal({ open, projectId, projectName, onClose }: P
                   />
                   Apply saved scopes
                 </label>
+                <BidPackageTemplatePicker
+                  currentSections={tradeSections.map(s => ({ trade: s.trade, scope: s.scope }))}
+                  currentNotes={commonNotes}
+                  onImport={({ tradeSections: imported, commonNotes: importedNotes }) => {
+                    setTradeSections(imported.map(s => ({
+                      key: newKey(),
+                      trade: s.trade,
+                      scope: s.scope,
+                      selectedSubIds: new Set(),
+                    })));
+                    if (importedNotes && !commonNotes.trim()) setCommonNotes(importedNotes);
+                  }}
+                />
                 <Button variant="outline" size="sm" onClick={broadcastToAllSubs} className="gap-1.5">
                   <Sparkles className="w-3.5 h-3.5" />
                   Broadcast to all subs
