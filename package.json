@@ -4,13 +4,15 @@
   "type": "module",
   "license": "MIT",
   "scripts": {
-    "dev": "NODE_ENV=development tsx server/index.ts",
-    "build": "vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
-    "start": "NODE_ENV=production node dist/index.js",
+    "dev": "vite",
+    "build": "vite build",
+    "deploy": "npm run build && firebase deploy --project skyelineos",
+    "deploy:hosting": "npm run build && firebase deploy --only hosting --project skyelineos",
+    "deploy:rules": "firebase deploy --only firestore:rules --project skyelineos",
+    "deploy:functions": "firebase deploy --only functions --project skyelineos",
     "check": "tsc",
     "test:smoke": "node scripts/smoke-lumber.mjs",
     "test:smoke:local": "node scripts/smoke-lumber.mjs --url http://localhost:5173",
-    "db:push": "drizzle-kit push",
     "prepare": "husky"
   },
   "dependencies": {
