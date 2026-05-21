@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 
 /**
- * Safe Firebase Deployment Script for Odyssey
+ * Safe Firebase Deployment Script for Skyelineos
  * Implements pre-deploy checks and staging workflow
  */
 
 import { spawn } from 'child_process';
 import fs from 'fs';
 
-const PROD_PROJECT = 'odyssey-cf118';
+const PROD_PROJECT = 'skyelineos';
 const DEV_PROJECT = 'custom-home-suite';
 
 function runCommand(command, args, options = {}) {
@@ -75,7 +75,7 @@ async function deployToStaging() {
     ]);
     
     console.log(`✅ Staging deployed to channel: ${channelId}`);
-    console.log(`🌐 Preview URL: https://odyssey-cf118--${channelId}.web.app`);
+    console.log(`🌐 Preview URL: https://skyelineos--${channelId}.web.app`);
     
     return channelId;
   } catch (error) {
@@ -95,7 +95,7 @@ async function deployToProd() {
     ]);
     
     console.log('✅ Production deployment completed!');
-    console.log('🌐 Live URL: https://odyssey-cf118.web.app');
+    console.log('🌐 Live URL: https://skyelineos.web.app');
   } catch (error) {
     console.error('❌ Production deployment failed:', error.message);
     throw error;

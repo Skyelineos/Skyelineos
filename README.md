@@ -1,4 +1,4 @@
-# Odessey Pro - Construction Management System
+# Skyelineos - Construction Management System
 
 > A comprehensive construction management platform designed for Skyeline Homes, featuring advanced project scheduling, timeline management, financial tracking, collaborative portals, robust authentication, and enterprise-grade security.
 
@@ -13,7 +13,7 @@
 ```bash
 # Clone the repository
 git clone <repository-url>
-cd odyssey
+cd skyelineos
 
 # Install dependencies
 npm install
@@ -351,7 +351,7 @@ The test suite has comprehensive test files but may require Jest configuration u
 3. **Environment Variables**: Ensure test environment variables are set:
    ```bash
    # Required for tests
-   TEST_DATABASE_URL="postgresql://user:pass@localhost:5432/odyssey_test"
+   TEST_DATABASE_URL="postgresql://user:pass@localhost:5432/skyelineos_test"
    TEST_JWT_SECRET="test-jwt-secret-32-chars"
    TEST_REFRESH_SECRET="test-refresh-secret-32-chars"
    ```

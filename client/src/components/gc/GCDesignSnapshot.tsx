@@ -13,6 +13,9 @@ import {
 } from 'lucide-react';
 import type { Selection, FloorLevel, ClientApprovalStatus, OrderStatus } from '@/types/selections';
 import { FLOOR_LEVELS, SELECTION_CATEGORIES } from '@/types/selections';
+import { useAuth } from '@/hooks/use-auth';
+import SeedSelectionsFromTemplate from '@/components/designer/SeedSelectionsFromTemplate';
+import PhaseTimelineView from '@/components/designer/PhaseTimelineView';
 
 const APPROVAL_COLORS: Record<ClientApprovalStatus, string> = {
   'Pending Options':    'bg-gray-100 text-gray-500',
@@ -35,6 +38,8 @@ interface GCDesignSnapshotProps {
 }
 
 export default function GCDesignSnapshot({ projectId, projectName }: GCDesignSnapshotProps) {
+  const { user } = useAuth();
+  const [showTimeline, setShowTimeline] = useState(false);
   const [expandedFloors, setExpandedFloors] = useState<Set<string>>(new Set(['Main Floor']));
   const [expandedRooms, setExpandedRooms] = useState<Set<string>>(new Set());
   const [expandedSels, setExpandedSels] = useState<Set<string>>(new Set());
@@ -128,11 +133,26 @@ export default function GCDesignSnapshot({ projectId, projectName }: GCDesignSna
               <div>Last fetched {new Date(dataUpdatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
             )}
           </div>
+          <Button variant="outline" size="sm" onClick={() => setShowTimeline(v => !v)} className="h-8 text-xs">
+            {showTimeline ? 'Hide phase timeline' : 'Phase timeline'}
+          </Button>
+          <SeedSelectionsFromTemplate
+            projectId={projectId}
+            projectName={projectName || 'this project'}
+            designerId={user?.firebaseUid || ''}
+            onSeeded={() => refetch()}
+          />
           <Button variant="outline" size="sm" onClick={() => refetch()} className="h-8 text-xs">
             <RefreshCw className="h-3.5 w-3.5 mr-1" /> Refresh
           </Button>
         </div>
       </div>
+
+      {showTimeline && (
+        <div className="border rounded-lg p-4 bg-gray-50">
+          <PhaseTimelineView projectId={projectId} />
+        </div>
+      )}
 
       {/* Designer + stats row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

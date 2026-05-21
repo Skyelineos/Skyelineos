@@ -1,4 +1,4 @@
-# Skyeline Odyssey — Session Checkpoint
+# Skyelineos — Session Checkpoint
 **Last updated:** 2026-05-12 (Session 9 — Tools section + Lumber Takeoff Calculator v1)
 **Live URL:** https://skyelineos.web.app
 **Firebase project:** skyelineos (**BLAZE** plan — upgraded 2026-05-06)

@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 
 /**
- * Firebase Backup Script for Odyssey Construction Management
+ * Firebase Backup Script for Skyelineos Construction Management
  * Run weekly to backup Firestore data
  */
 
 const { spawn } = require('child_process');
 
-const PROJECT_ID = 'odyssey-cf118';
-const BACKUP_BUCKET = 'gs://odyssey-cf118.appspot.com';
+const PROJECT_ID = 'skyelineos';
+const BACKUP_BUCKET = 'gs://skyelineos.appspot.com';
 
 function formatDate() {
   return new Date().toISOString().split('T')[0]; // YYYY-MM-DD

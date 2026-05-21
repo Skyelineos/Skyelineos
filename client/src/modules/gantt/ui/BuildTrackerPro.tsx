@@ -1,4 +1,4 @@
-// Odessey Pro Gantt - Main Dual-Engine Component
+// Skyelineos Gantt - Main Dual-Engine Component
 import React, { useState } from 'react';
 import { useGantt } from '../state';
 import { DhtmlxBuilder } from './DhtmlxBuilder';
@@ -67,7 +67,7 @@ export const BuildTrackerPro: React.FC = () => {
   const { toast } = useToast();
   
   // Resizable layout management
-  const { tableWidth, handleResize } = useResizableLayout(400, 'odyssey-gantt-table-width');
+  const { tableWidth, handleResize } = useResizableLayout(400, 'skyelineos-gantt-table-width');
 
   const criticalTaskCount = metrics ? metrics.criticalIds.size : 0;
   const totalTaskCount = tasks.length;
@@ -183,7 +183,7 @@ export const BuildTrackerPro: React.FC = () => {
   };
 
   return (
-    <div className="odyssey-gantt">
+    <div className="skyelineos-gantt">
       {/* Header */}
       <div className="border-b bg-white px-6 py-4">
         <div className="flex items-center justify-between">
@@ -396,7 +396,7 @@ export const BuildTrackerPro: React.FC = () => {
                 minWidth={250}
                 maxWidth={600}
                 onResize={handleResize}
-                storageKey="odyssey-gantt-table-width"
+                storageKey="skyelineos-gantt-table-width"
                 className="z-10"
               />
             </div>

@@ -1,4 +1,4 @@
-# Mobile Style Guide - Odessey Pro Construction Management
+# Mobile Style Guide - Skyelineos Construction Management
 
 ## Typography Scale
 Our mobile-first typography uses CSS `clamp()` for fluid scaling:

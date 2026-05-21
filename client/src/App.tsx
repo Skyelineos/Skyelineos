@@ -40,7 +40,7 @@ const Settings = lazy(() => import("@/pages/Settings"));
 const Contacts = lazy(() => import("@/pages/Contacts"));
 const Contracts = lazy(() => import("@/pages/Contracts"));
 const AdminPortal = lazy(() => import("@/pages/AdminPortal"));
-const OdysseyClientPortal = lazy(() => import("@/pages/OdysseyClientPortal"));
+const SkyelineClientPortal = lazy(() => import("@/pages/SkyelineClientPortal"));
 const SubcontractorPortal = lazy(() => import("@/pages/SubcontractorPortal"));
 const DesignerPortal = lazy(() => import("@/pages/DesignerPortal"));
 const PortalLogin = lazy(() => import("@/pages/PortalLogin"));
@@ -478,7 +478,7 @@ function Router() {
         <ProtectedRoute>
           <RoleGuard allowedRoles={['admin', 'client']} showNotAuthorized>
             <Suspense fallback={<MinimalSpinner title="Loading Client Portal" />}>
-              <OdysseyClientPortal />
+              <SkyelineClientPortal />
             </Suspense>
           </RoleGuard>
         </ProtectedRoute>
@@ -487,7 +487,7 @@ function Router() {
         <ProtectedRoute>
           <RoleGuard allowedRoles={['admin', 'client']} showNotAuthorized>
             <Suspense fallback={<MinimalSpinner title="Loading Client Portal" />}>
-              <OdysseyClientPortal />
+              <SkyelineClientPortal />
             </Suspense>
           </RoleGuard>
         </ProtectedRoute>
