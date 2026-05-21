@@ -82,6 +82,7 @@ const ProjectWalkthroughs = lazy(() => import("@/pages/ProjectWalkthroughs"));
 const ProjectMoveInBinder = lazy(() => import("@/pages/ProjectMoveInBinder"));
 const Tools = lazy(() => import("@/pages/Tools"));
 const LumberTakeoff = lazy(() => import("@/pages/LumberTakeoff"));
+const IngestionLab = lazy(() => import("@/pages/IngestionLab"));
 
 function Router() {
   // Initialize performance optimizations for faster loading
@@ -208,6 +209,16 @@ function Router() {
           <RoleGuard allowedRoles={['admin']} showNotAuthorized>
             <Suspense fallback={<MinimalSpinner title="Loading Subscriptions" />}>
               <Subscriptions />
+            </Suspense>
+          </RoleGuard>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/admin/ingestion-lab">
+        <ProtectedRoute>
+          <RoleGuard allowedRoles={['admin']} showNotAuthorized>
+            <Suspense fallback={<MinimalSpinner title="Loading Ingestion Lab" />}>
+              <IngestionLab />
             </Suspense>
           </RoleGuard>
         </ProtectedRoute>

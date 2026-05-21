@@ -36,6 +36,7 @@ import {
   Lightbulb,
   Sparkles,
   FileSignature,
+  Beaker,
 } from 'lucide-react';
 
 interface NavItem {
@@ -131,12 +132,13 @@ const TEAM_NAV: NavGroup[] = [
       { label: 'Import Center',  href: '/import-center',  icon: FileSpreadsheet },
       { label: 'Automations',    href: '/automations',    icon: Zap },
       { label: 'Subscriptions',  href: '/subscriptions',  icon: Wallet },
+      { label: 'Ingestion Lab',  href: '/admin/ingestion-lab', icon: Beaker },
     ],
   },
 ];
 
 // Management section only for admins
-const MANAGEMENT_HREFS = ['/users', '/templates', '/playbook', '/automations', '/import-center', '/subscriptions'];
+const MANAGEMENT_HREFS = ['/users', '/templates', '/playbook', '/automations', '/import-center', '/subscriptions', '/admin/ingestion-lab'];
 
 // Designer sidebar — focused on their work
 const DESIGNER_NAV: NavGroup[] = [
