@@ -12,6 +12,53 @@ Things a future Claude session should know before diving in. Specific file paths
 
 The errors look like a brace/paren mismatch around line 815, with the parser cascading the rest of the file as a single broken expression. The file imports cleanly (it's only used in a few timeline experiments) and `vite build` succeeds because esbuild is more permissive than `tsc`. **Production builds and ships fine** — but `npm run check` will always exit non-zero until these are fixed. Don't gate CI on `tsc` without addressing this first.
 
+## Session 12 — Ingestion Lab
+
+Built the admin-only AI ingestion pipeline at `/admin/ingestion-lab`. Full reference: `docs/ingestion-lab-schema.md`. Code under `functions/src/ingestionLab/` (backend) and `client/src/components/ingestionLab/` + `client/src/pages/IngestionLab.tsx` (UI).
+
+### What shipped
+- **Namespace + rules** (`firestore.rules` lines 526–558): one wildcard rule gates `ingestion_lab/**` on `isAdmin()` reads + Cloud-Function-only writes. One carve-out: admin can update five whitelisted review fields on `processed_items`.
+- **OAuth handlers** for Gmail + Drive (`oauthHandlers.ts`). `POST /start` is admin-token-gated and returns `{ url }` for client navigation; `GET /callback` verifies the state nonce (which carries `adminUid` from `/start`) and writes the tokens.
+- **Ingesters** for Gmail (`gmailIngester.ts`, label-filtered, MIME-tree text extraction, sender→project resolution via contacts_cache) and Drive (`driveIngester.ts`, two folders, recursive cap 5 deep / 500 files / 25 MB per file, per-mime extraction via pdf-parse v2 + Drive exports).
+- **Upload endpoint** (`uploadEndpoint.ts`) for future iMessage + iCloud scripts. Whitelists `source` and `projectHint`, enforces 900 KB per item, returns per-item errors so the script can retry just the failures.
+- **Brain pass** (`brainPass.ts`) — Claude Sonnet 4.6 with forced tool_use against `EXTRACTION_TOOL`. Daily $5 budget cap rolls on date change, aborts batches mid-loop if cap hit. Writes one `brain_runs` audit doc per invocation.
+- **Lane resolver** (`laneResolver.ts`) — module-load invariant throws if `REVIEW_REQUIRED_CATEGORIES` and `INFORMATIONAL_CATEGORIES` overlap. Auto-file threshold is **0.90 for the spike** — deliberately high.
+- **Extraction prompt** (`prompts/extractionPrompt.ts`) — first-draft with two text-rendered few-shot examples baked into the system prompt. Content is truncated to 30 K chars per item.
+- **UI** — Metrics strip + four tabs (Connectors, Auto-Filed, Review Queue with Approve/Correct/Reject, Ask Queue with Answer/Reject). Real-time onSnapshot listeners on `config`, `raw_items`, `processed_items`.
+
+### Operator prerequisites for first run
+
+Until all of these are done, the OAuth flow will hard-fail and ingestion can't run:
+
+1. **Google Cloud OAuth client.** Cloud Console → APIs & Services → Credentials → Create OAuth client ID, type: Web application. Authorized redirect URIs:
+   - `https://skyelineos.web.app/api/ingestionLab/oauth/gmail/callback`
+   - `https://skyelineos.web.app/api/ingestionLab/oauth/drive/callback`
+2. **Enable APIs.** Gmail API + Google Drive API on the same Cloud project.
+3. **Secret Manager.** `firebase functions:secrets:set GOOGLE_CLIENT_ID` and `…GOOGLE_CLIENT_SECRET`. These are already in the api function's `secrets:` array (`functions/src/index.ts:2009`).
+4. **OAuth consent screen.** External / Published, or your account added to Test users.
+5. **Probe the contacts cache.** Run `node scripts/refresh-ingestion-contacts-cache.mjs --list-projects` to find the live Giboney + Christensen project doc IDs, then re-run without the flag, passing them via env vars. Without this, the brain pass routes everything to Ask queue because it has no known contacts to match against.
+6. **Create the Gmail label.** Apply `Skyeline-Spike` to the threads you want ingested.
+
+### Deliberately NOT built this session (Session 13 work)
+
+- **Mac-side iMessage script.** Reads `chat.db`, filters to known contacts, POSTs to `/api/ingestionLab/upload`. Not started.
+- **Mac-side iCloud upload script.** Same shape, different source. Not started.
+- **Ask-queue re-pass.** Right now, an answered Ask item just stamps `clarificationAnswer` and stays in the Ask tab. Session 13 should wire the brain pass to detect `clarificationAnswer != null && reviewStatus == 'pending'` and re-process those items with the answer added to the prompt context.
+- **Prompt iteration.** The `extractionPrompt.ts` system prompt + two few-shots is a first draft. Tune against real Giboney + Christensen content after the first ingestion run. Watch for: items mis-categorized into REVIEW_REQUIRED that should be informational (or vice-versa), confidence calibration drift, projectId hallucinations.
+- **Auto-file threshold lowering.** Currently 0.90 — deliberately high to keep humans in the loop while the brain is unproven. Once accuracy is trusted, drop toward 0.75–0.80.
+- **PDF image OCR.** Drive ingester stores image refs only, no OCR this session. Scanned plans + image-heavy PDFs lose information until OCR is added.
+- **Cost tracking accuracy.** Sonnet pricing is hardcoded ($3 / $15 per M tokens) at `brainPass.ts:24`. Real billing comes from Anthropic; the local constants only drive the budget guardrail. Verify against current published pricing before relying on `costUsd` figures.
+
+### KMS-deferred: OAuth token storage
+
+`ingestion_lab/config.gmail.refreshToken` and `…drive.refreshToken` are stored with Firestore-native at-rest encryption only. Acceptable for the spike because reads are admin-only, writes are Cloud-Function-only, and the scopes are read-only + label/folder-restricted. **Before any non-Skyeline use of this lab, migrate tokens to Cloud KMS.** Same pattern as `qboConnections` (which is also Firestore-stored for now).
+
+### Surprises during the build
+
+- **`google-auth-library` typing skew.** Direct `import type { OAuth2Client } from 'google-auth-library'` resolves to a copy nested under `googleapis-common` that disagrees with the top-level install on the `gaxios` field. Workaround at `functions/src/ingestionLab/googleClient.ts:6`: bind the type to `InstanceType<typeof google.auth.OAuth2>` instead.
+- **`pdf-parse` v2 has a different API than v1.** v1 was `pdfParse(buffer).then(r => r.text)`. v2 is `new PDFParse({ data: buffer }).getText() → { text }`. Used at `driveIngester.ts`.
+- **`prompt=consent`** is set on the Google authorize URL so we always get a fresh refresh_token. Defensive code preserves the previous refresh_token if Google ever skips returning one — same approach as the qboConnections preservation logic.
+
 ## Structural oddities observed during Session 10 cleanup
 
 ### 1. `Sidebar.tsx` lives directly at `client/src/components/layout/Sidebar.tsx`

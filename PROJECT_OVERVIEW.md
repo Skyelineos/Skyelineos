@@ -27,6 +27,8 @@ Skyeline OS is a **single-tenant construction management app** built for Skyelin
 
 **Cross-cutting:** vCard import + contact claim flow (V1 + V2 email merge via Cloud Function) · Web push (FCM service worker + VAPID + dead-token pruning) · Role-aware redirects + RoleGuard + recipient-mismatch banner on email deep-links · Unified brand-black + gold sidebar across GC / Sub / Financials.
 
+**Ingestion Lab (admin-only, Session 12):** `/admin/ingestion-lab` — pulls from Gmail (label-filtered), two hardcoded Drive folders (Giboney, Christensen), and a generic JSON upload endpoint (future iMessage / iCloud Mac scripts) → Claude Sonnet 4.6 extraction via tool_use → three-lane review (Auto-Filed / Review Queue / Ask Queue). All state isolated under `ingestion_lab/` Firestore namespace; production collections never touched. Daily $5 spend cap enforced server-side. See `docs/ingestion-lab-schema.md`.
+
 ## What's partially built or not built
 
 - **Designer Portal** — page component exists at `client/src/pages/DesignerPortal.tsx`, but `/designer-portal` route is not wired in `client/src/App.tsx` (returns 404). Nicole has a real project in design phase; this lands AFTER the ingestion spike (see "Current direction").
@@ -52,6 +54,9 @@ Skyeline OS is a **single-tenant construction management app** built for Skyelin
 
 ## Current direction
 
-The next major work item is **not** the Designer Portal. It is an **ingestion lab spike** — admin-only, isolated, AI-powered extraction from Gmail / Google Drive / iMessage for two active projects (Giboney and Christensen, both in Mapleton UT). Writes to a separate `ingestion_lab` Firestore collection, never to live `projects`. Three-lane review model (auto-file / review queue / ask). See `CLAUDE.md` "Next session — Ingestion Lab Spike" section for full scope.
+The Ingestion Lab spike is **codebase-complete** (Session 12). The next session (13) focuses on:
+1. **Tuning the extraction prompt** against real Giboney + Christensen data once Tyler runs the first Gmail + Drive ingestion.
+2. **Wiring Ask-queue re-pass** — when an admin answers a clarification question, the brain should automatically re-process that item with the answer in context.
+3. **Building the Mac-side iMessage and iCloud upload scripts** that hit `POST /api/ingestionLab/upload`.
 
-Designer Portal lands AFTER the spike, informed by what the spike reveals about how design content actually flows through email and Drive.
+Designer Portal lands AFTER Session 13, informed by what the spike reveals about how design content actually flows through email and Drive.

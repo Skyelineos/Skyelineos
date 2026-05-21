@@ -14,6 +14,7 @@ Skyeline OS is a **single-tenant construction management app** built for Skyelin
 4. Check `CHECKPOINT.md` only if it exists for a mid-session resume
 
 ## Recent sessions
+- **Session 12 (Ingestion Lab spike):** Built the admin-only AI ingestion pipeline at `/admin/ingestion-lab`. Gmail (label-filtered) + Google Drive (two hardcoded folders) + a generic upload endpoint (future iMessage / iCloud scripts) → Claude Sonnet 4.6 extraction via tool_use → three-lane review (Auto-Filed / Review Queue / Ask Queue). Entirely isolated under the `ingestion_lab/` Firestore namespace; production collections untouched. See `docs/ingestion-lab-schema.md` for the durable reference and `SESSION_NOTES.md` Session 12 entry for operator prerequisites + deliberate deferrals.
 - **Session 10 (cleanup):** Removed dead `server/` directory (102 files, ~37k lines) and 11 stale bid components (~8k lines). Total ~45k lines deleted. `PortalBidsPanel` confirmed as canonical bid system. CLAUDE.md corrected. Three pre-existing TypeScript errors in `ModernTimelineBuilder.tsx` (lines 815, 816, 1342) remain — out of scope for this session.
 - **Session 10 (earlier work, same git snapshot):** Sidebar consistency pass (`Sidebar.tsx`, `SubcontractorSidebar.tsx`, `FinancialsSidebar.tsx` unified on brand-black + gold), shared `StatCard`, `progressUtils.ts` rewritten to read Firestore directly, role taxonomy audit + plan (`ROLE_AUDIT.md`), bidding module hardening, vCard import + claim flow, FCM web push, QBO OAuth scaffold, role-aware redirect + recipient-mismatch banner.
 
@@ -42,6 +43,7 @@ All Cloud Functions live in `functions/src/`:
 - `functions/src/bills/analyzeBill.ts` — Anthropic Claude vision OCR for bills (called via `/api/analyze-bill`).
 - `functions/src/projects/warrantyReminders.ts` — auto-create 3/6/11/12-month reminders when a project gets a `moveInDate`.
 - `functions/src/qbo/` — QuickBooks Online OAuth (routes folded into `api`).
+- `functions/src/ingestionLab/` — Ingestion Lab spike (Session 12). All routes fold into the shared `api` Express app: OAuth handlers (Gmail + Drive), per-source ingesters, the JSON upload endpoint, the brain pass, plus shared `adminAuth.ts` / `googleClient.ts` / `laneResolver.ts` / `prompts/extractionPrompt.ts` modules. See `docs/ingestion-lab-schema.md` for the namespace + route map.
 
 ## Bid system — single source of truth
 The canonical bid module lives at **`client/src/components/bidding/`** (14 files, all live):
@@ -97,19 +99,18 @@ There are 20 historical role-string variants scattered across the codebase plus 
 - **Brand colors:** `#C9A96E` (gold accent), `#141414` (brand black for sidebars).
 - **Bidding writes**: `bidRequests.invitedSubIds` should contain the recipient's contact ID + linkedUserId (if known) + email. The portal-side query resolves on any of the three.
 
-## Next session — Ingestion Lab Spike
+## Ingestion Lab (Session 12 — admin-only spike)
 
-The next major work item is NOT the Designer Portal. It is an **ingestion lab spike** — building an AI-powered system that extracts structured data from unstructured sources (emails, Google Drive, iMessage) for two active Skyeline projects: Giboney (Randy and Leslie, 364 W 350 S Mapleton UT) and Christensen (Jordan and Jessica, 279 N Clegg Canyon Loop Mapleton UT).
+Built and live at `/admin/ingestion-lab`. Pulls unstructured content from Gmail (label `Skyeline-Spike`), two hardcoded Drive folders (Giboney `1AR5kio4_DAmUFMMxW0xvuRxlMp_axuz6`, Christensen `1204VUtL4jOp28bksBcacQDaW_XnrLpaf`), and a generic JSON upload endpoint (for future iMessage / iCloud Mac scripts); runs each through Claude Sonnet 4.6 extraction via tool_use; routes results into Auto-Filed / Review Queue / Ask Queue lanes.
 
-The spike will:
-- Build at `/admin/ingestion-lab`, admin-only, isolated from production data
-- Write to a separate Firestore collection (`ingestion_lab`), never to live `projects` data
-- Use Gmail OAuth (read-only, scoped to a "Skyeline-Spike" label)
-- Use Google Drive OAuth (read-only, scoped to specific project folders)
-- Use an iMessage export script (Mac chat.db read, filtered to specific contacts)
-- Pass extracted content through an Anthropic Claude prompt that classifies, scopes to project, extracts structured payload, and assigns confidence
-- Use a three-lane review model: Auto-file (high confidence + low stakes), Review queue (anything involving money/decisions/commitments/low confidence), Ask (genuinely ambiguous)
+All state lives under the `ingestion_lab/` Firestore namespace — one wildcard rule (`match /ingestion_lab/{document=**}`) gates the whole tree on `isAdmin()` reads + Cloud-Function-only writes. The single carve-out: admins can update five whitelisted review fields on `processed_items` from the UI. Production collections are untouched.
 
-The Designer Portal comes AFTER the spike, informed by what the spike reveals about how design content flows through email and Drive.
+**Route prefix:** all endpoints fold into the shared `api` Express app under `/api/ingestionLab/...`. New standalone Cloud Run services are blocked by org IAM, so do NOT add new `onRequest` exports for lab features — register routes onto the shared app, same pattern as the `register*` calls near the top of `functions/src/index.ts`.
 
-Do not start the Designer Portal or any other major feature work before the ingestion spike is run.
+**Operator prerequisites for first run:** Google Cloud OAuth client + redirect URIs, Gmail + Drive APIs enabled, `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` in Secret Manager, OAuth consent screen configured, contacts cache populated via `scripts/refresh-ingestion-contacts-cache.mjs`. Full checklist in `SESSION_NOTES.md` Session 12 entry.
+
+**Reference docs:**
+- `docs/ingestion-lab-schema.md` — collections, routing rules, idempotency strategy, budget guard, prompt design
+- `SESSION_NOTES.md` Session 12 — operator setup, deliberate deferrals, Session 13 work, KMS-deferred caveat for OAuth token storage
+
+**Next major work (Session 13):** tune the extraction prompt against real Giboney / Christensen data, wire Ask-queue re-pass (answer → re-trigger brain pass with the answer in context), build the Mac-side iMessage and iCloud upload scripts. The Designer Portal lands AFTER Session 13, informed by what the spike reveals about how design content actually flows through email and Drive.
