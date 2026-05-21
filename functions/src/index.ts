@@ -6,6 +6,7 @@ import { registerIngestionLabOAuth } from './ingestionLab/oauthHandlers';
 import { registerGmailIngester } from './ingestionLab/gmailIngester';
 import { registerDriveIngester } from './ingestionLab/driveIngester';
 import { registerUploadEndpoint } from './ingestionLab/uploadEndpoint';
+import { registerBrainPass } from './ingestionLab/brainPass';
 
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -22,6 +23,7 @@ registerIngestionLabOAuth(app, db);  // /api/ingestionLab/oauth/{gmail|drive}/{s
 registerGmailIngester(app, db);      // POST /api/ingestionLab/ingest/gmail
 registerDriveIngester(app, db);      // POST /api/ingestionLab/ingest/drive
 registerUploadEndpoint(app, db);     // POST /api/ingestionLab/upload
+registerBrainPass(app, db);          // POST /api/ingestionLab/brain/process
 
 // Real Firestore API endpoints
 app.get('/api/projects', async (req: any, res: any) => {
