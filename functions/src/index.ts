@@ -3,6 +3,8 @@ const express = require("express");
 const cors = require("cors");
 const admin = require("firebase-admin");
 import { registerIngestionLabOAuth } from './ingestionLab/oauthHandlers';
+import { registerGmailIngester } from './ingestionLab/gmailIngester';
+import { registerDriveIngester } from './ingestionLab/driveIngester';
 
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -13,10 +15,11 @@ const app = express();
 app.use(cors({ origin: true }));
 app.use(express.json());
 
-// Ingestion Lab — Gmail + Drive OAuth routes (under /api/ingestionLab/oauth/**).
-// Registered early so they sit alongside other /api/** routes and resolve
-// before the catch-all 404 below.
-registerIngestionLabOAuth(app, db);
+// Ingestion Lab — registered early so the routes sit alongside other /api/**
+// routes and resolve before the catch-all 404 below.
+registerIngestionLabOAuth(app, db);  // /api/ingestionLab/oauth/{gmail|drive}/{start|callback}
+registerGmailIngester(app, db);      // POST /api/ingestionLab/ingest/gmail
+registerDriveIngester(app, db);      // POST /api/ingestionLab/ingest/drive
 
 // Real Firestore API endpoints
 app.get('/api/projects', async (req: any, res: any) => {

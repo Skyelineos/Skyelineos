@@ -22,6 +22,7 @@
 
 import * as admin from 'firebase-admin';
 import type { Express } from 'express';
+import { adminOnly } from './adminAuth';
 
 const APP_BASE = 'https://skyelineos.web.app';
 
@@ -47,31 +48,6 @@ function googleClientId(): string {
 }
 function googleClientSecret(): string {
   return (process.env.GOOGLE_CLIENT_SECRET || '').trim();
-}
-
-// adminOnly verifies the Firebase ID token and confirms the caller's
-// users/{uid}.role is 'admin'. Mirrors the pattern used by /api/admin/users
-// in index.ts:1064 — single source of truth is the Firestore role field,
-// not custom claims (claims can drift if a session is stale).
-async function adminOnly(req: any, res: any, next: any): Promise<void> {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    res.status(401).json({ error: 'No token' });
-    return;
-  }
-  try {
-    const decoded = await admin.auth().verifyIdToken(authHeader.substring(7));
-    const profile = await admin.firestore().collection('users').doc(decoded.uid).get();
-    const role = profile.exists ? (profile.data() || {}).role : null;
-    if (role !== 'admin') {
-      res.status(403).json({ error: 'Admin only' });
-      return;
-    }
-    req.user = decoded;
-    next();
-  } catch (e: any) {
-    res.status(401).json({ error: 'Invalid token' });
-  }
 }
 
 function statesRef(db: FirebaseFirestore.Firestore) {
