@@ -5,6 +5,7 @@ const admin = require("firebase-admin");
 import { registerIngestionLabOAuth } from './ingestionLab/oauthHandlers';
 import { registerGmailIngester } from './ingestionLab/gmailIngester';
 import { registerDriveIngester } from './ingestionLab/driveIngester';
+import { registerUploadEndpoint } from './ingestionLab/uploadEndpoint';
 
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -20,6 +21,7 @@ app.use(express.json());
 registerIngestionLabOAuth(app, db);  // /api/ingestionLab/oauth/{gmail|drive}/{start|callback}
 registerGmailIngester(app, db);      // POST /api/ingestionLab/ingest/gmail
 registerDriveIngester(app, db);      // POST /api/ingestionLab/ingest/drive
+registerUploadEndpoint(app, db);     // POST /api/ingestionLab/upload
 
 // Real Firestore API endpoints
 app.get('/api/projects', async (req: any, res: any) => {
