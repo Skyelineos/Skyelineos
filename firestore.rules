@@ -563,6 +563,13 @@ service cloud.firestore {
              ]);
     }
 
+    // ── Selections v2: per-user notification feed (in-app bell + banner) ──
+    match /users/{userId}/notifications/{notificationId} {
+      allow read, update: if request.auth != null && request.auth.uid == userId;
+      // Only Cloud Functions create / delete notifications (admin SDK).
+      allow create, delete: if false;
+    }
+
     // Deny everything else
     match /{document=**} {
       allow read, write: if false;

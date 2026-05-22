@@ -9,6 +9,7 @@ import {
   CheckCircle2, Clock, AlertTriangle, ChevronRight,
   Calendar, DollarSign, Home, Wrench, Palette
 } from 'lucide-react';
+import SelectionsNeededTile from '@/components/dashboard/SelectionsNeededTile';
 
 const PHASES = [
   'Pre-Construction', 'Site Prep', 'Foundation', 'Framing',
@@ -94,6 +95,13 @@ export default function ClientDashboard({ projectId, project, onNavigate }: Clie
           </div>
         </div>
       )}
+
+      {/* Selections Needed — live tile (v2) */}
+      <SelectionsNeededTile
+        projectId={projectId}
+        phaseDeadlines={project?.phaseDeadlines}
+        navigateTo="/client-portal/selections"
+      />
 
       {/* Project Progress */}
       <Card>

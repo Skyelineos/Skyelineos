@@ -4,6 +4,8 @@ import { collection, query, where, onSnapshot, orderBy, or } from 'firebase/fire
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { AdminPortalControls } from '@/components/admin/AdminPortalControls';
+import SelectionsBanner from '@/components/dashboard/SelectionsBanner';
+import InAppNotificationCenter from '@/components/notifications/InAppNotificationCenter';
 import { useAdminView } from '@/contexts/AdminViewContext';
 import { useAutoAdminView } from '@/hooks/useAutoAdminView';
 import { useToast } from '@/hooks/use-toast';
@@ -249,6 +251,14 @@ export default function SkyelineClientPortal() {
       <AdminPortalControls />
       <div className="min-h-screen bg-gray-50">
 
+        {/* Overdue selections banner (v2) */}
+        {selectedProjectId && (
+          <SelectionsBanner
+            projectId={selectedProjectId}
+            phaseDeadlines={selectedProject?.phaseDeadlines}
+          />
+        )}
+
         {/* Portal header */}
         <div className="bg-white border-b border-gray-200 sticky top-0 z-20">
           <div className="max-w-7xl mx-auto px-4 sm:px-6">
@@ -262,6 +272,9 @@ export default function SkyelineClientPortal() {
                 {selectedProject?.address && (
                   <p className="text-xs text-gray-500 mt-0.5">{selectedProject.address}</p>
                 )}
+              </div>
+              <div className="flex items-center gap-2">
+                <InAppNotificationCenter />
               </div>
               {projects.length > 1 && (
                 <div className="relative">

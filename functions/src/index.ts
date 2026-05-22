@@ -2055,6 +2055,13 @@ export { oneShotContactAuthBackfill } from './auth/contactAuthBackfill';
 //    reminders at 3 / 6 / 11 / 12 months from that date.
 export { createWarrantyReminders } from './projects/warrantyReminders';
 
+// ── Selections v2: dashboard tile + reminders + designer recommendations ──
+//    Scheduled daily digest (email + SMS + in-app), Firestore trigger for
+//    interesting selection state changes, admin bulk-seed.
+export { scheduledSelectionRemindersDaily } from './reminders/scheduledRemindersDaily';
+export { onSelectionUpdated }                from './reminders/onSelectionUpdated';
+export { bulkSeedSelections }                from './admin/bulkSeedSelections';
+
 
 // (qboOAuth standalone removed — routes folded into the api Express app
 //  to avoid the org-IAM block on new public Cloud Functions.)
