@@ -159,7 +159,7 @@ export function CreateUserModal({ open, onOpenChange }: CreateUserModalProps) {
           <DialogDescription>
             {createdUser 
               ? 'The user has been created with secure authentication. Share the temporary password securely.'
-              : 'Add a new user to the Odyssey Pro system. They will be created with secure server-side authentication.'
+              : 'Add a new user to the Skyelineos system. They will be created with secure server-side authentication.'
             }
           </DialogDescription>
         </DialogHeader>

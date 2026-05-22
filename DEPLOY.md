@@ -1,5 +1,5 @@
-# OdysseyPro — Firebase Deployment Guide
-### Skyeline Homes · odyssey-cf118
+# Skyelineos — Firebase Deployment Guide
+### Skyeline Homes · skyelineos
 
 This is a full-stack app: React frontend (Firebase Hosting) + Express API (Firebase Cloud Functions) + Firestore database.
 
@@ -25,14 +25,14 @@ npm --version
 npm install -g firebase-tools
 firebase login
 ```
-This opens a browser. Sign in with the Google account that owns the `odyssey-cf118` project.
+This opens a browser. Sign in with the Google account that owns the `skyelineos` project.
 
 ---
 
 ## STEP 3 — Get Your Firebase Config
 
 1. Go to https://console.firebase.google.com
-2. Open project **odyssey-cf118**
+2. Open project **skyelineos**
 3. Click the gear icon → **Project Settings**
 4. Scroll to **Your apps** → click your web app
 5. Copy the `firebaseConfig` values
@@ -73,10 +73,10 @@ This produces `dist/public/` (the frontend) and compiles the Cloud Functions.
 ## STEP 7 — Deploy to Firebase
 
 ```
-firebase deploy --project odyssey-cf118
+firebase deploy --project skyelineos
 ```
 This deploys:
-- **Hosting** → your React frontend (live URL: https://odyssey-cf118.web.app)
+- **Hosting** → your React frontend (live URL: https://skyelineos.web.app)
 - **Cloud Functions** → the API at `/api/*`
 - **Firestore rules** → security rules
 - **Storage rules**
@@ -85,7 +85,7 @@ This deploys:
 
 ## STEP 8 — Create Your Admin Account
 
-1. Go to https://console.firebase.google.com → odyssey-cf118 → **Authentication** → **Users**
+1. Go to https://console.firebase.google.com → skyelineos → **Authentication** → **Users**
 2. Click **Add User** → enter `info@skyelinehomes.com` and a strong password
 3. Copy the service account key:
    - Firebase Console → Project Settings → **Service Accounts** → **Generate new private key**
@@ -103,7 +103,7 @@ This deploys:
 
 ## STEP 9 — Sign In
 
-Visit https://odyssey-cf118.web.app → sign in with `info@skyelinehomes.com`.
+Visit https://skyelineos.web.app → sign in with `info@skyelinehomes.com`.
 
 You'll land on the **Admin/GC Portal** (full access to all modules).
 
@@ -152,4 +152,4 @@ Or use the **Admin Portal** inside the app → User Management → Create User.
 
 **Build fails on Vite** → Run `npm install` again. If it mentions Replit packages, those only load on Replit — the build will skip them automatically.
 
-**Cloud Functions fail** → Check `firebase functions:log --project odyssey-cf118` for error output.
+**Cloud Functions fail** → Check `firebase functions:log --project skyelineos` for error output.

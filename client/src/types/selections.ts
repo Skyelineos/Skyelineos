@@ -131,7 +131,9 @@ export interface Room {
   updatedAt: any;
 }
 
-export interface Selection {
+import type { SelectionTemplateFields } from './selections-template-extensions';
+
+export interface Selection extends SelectionTemplateFields {
   id: string;
   projectId: string;
   floor: FloorLevel;

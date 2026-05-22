@@ -11,7 +11,7 @@ export function initializeFrontendTracing() {
   try {
     // Create resource
     const resource = new Resource({
-      'service.name': 'odyssey-frontend',
+      'service.name': 'skyelineos-frontend',
       'service.version': '1.0.0',
       'deployment.environment': import.meta.env.MODE || 'development',
     });
@@ -53,7 +53,7 @@ export function initializeFrontendTracing() {
     });
 
     // Get tracer instance
-    tracer = trace.getTracer('odyssey-frontend', '1.0.0');
+    tracer = trace.getTracer('skyelineos-frontend', '1.0.0');
 
     // Search/lookup operation
     return { provider, tracer };

@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { collection, writeBatch, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { AppLayout } from '@/components/layout/AppLayout';
@@ -6,13 +6,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import {
   Upload, Download, CheckCircle2, AlertCircle, FileSpreadsheet,
   Users, FolderOpen, Calendar, Package, Building2, DollarSign,
   FileText, Wrench, ChevronDown, ChevronRight, X, Link as LinkIcon,
   Coins, ListChecks, Replace, Palette, ClipboardList, Receipt,
-  Award, Map, ScrollText, HardHat,
+  Award, Map as MapIcon, ScrollText, HardHat,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { SKYELINE_SUBCONTRACTOR_COUNT } from '@/lib/skyelineSubcontractors';
@@ -81,6 +83,65 @@ function col(row: Record<string, string>, ...aliases: string[]): string {
   return '';
 }
 
+// ─── Canonical Sales pipeline stages ────────────────────────────────────────
+// MUST stay in sync with DEFAULT_STAGES in Sales.tsx. Anything not in this
+// list is invisible on the pipeline board, so the importer normalises every
+// stage value down to one of these before writing.
+export const CANONICAL_STAGES = [
+  'new_lead', 'meeting_booked', 'design_phase', 'in_estimating',
+  'close_to_sign', 'won', 'lost',
+] as const;
+export type CanonicalStage = typeof CANONICAL_STAGES[number];
+
+// Friendly values importers / users commonly type, mapped to canonical keys.
+// Anything not in this map AND not already canonical triggers the
+// StageMappingDialog so the user can decide explicitly.
+const STAGE_AUTO_MAP: Record<string, CanonicalStage> = {
+  // ImportCenter README defaults — what Tyler's CSV exports tend to use
+  lead: 'new_lead',
+  'new lead': 'new_lead',
+  new_lead: 'new_lead',
+  proposal: 'close_to_sign',
+  active: 'won',
+  completed: 'won',
+  complete: 'won',
+  // Sales.tsx legacy values (kept in sync with its STAGE_MAP)
+  meeting_booked: 'meeting_booked',
+  'meeting booked': 'meeting_booked',
+  design_phase: 'design_phase',
+  'design phase': 'design_phase',
+  in_estimating: 'in_estimating',
+  'in estimating': 'in_estimating',
+  estimating: 'in_estimating',
+  close_to_sign: 'close_to_sign',
+  'close to sign': 'close_to_sign',
+  close_to_signing: 'close_to_sign',
+  'close to signing': 'close_to_sign',
+  contract: 'close_to_sign',
+  pre_construction: 'won',
+  preconstruction: 'won',
+  active_build: 'won',
+  final_passed: 'won',
+  completed_build: 'won',
+  in_punchlist: 'won',
+  warranty: 'won',
+  won: 'won',
+  lost: 'lost',
+};
+
+/**
+ * normalizeStage — best-effort map from a raw user-typed stage string to a
+ * canonical pipeline key. Returns null when no auto-mapping exists so the
+ * caller can decide whether to prompt the user.
+ */
+export function normalizeStage(raw: string): CanonicalStage | null {
+  if (!raw) return null;
+  const lower = raw.toString().toLowerCase().trim();
+  if (!lower) return null;
+  const collapsed = lower.replace(/\s+/g, '_');
+  return STAGE_AUTO_MAP[collapsed] ?? STAGE_AUTO_MAP[lower] ?? null;
+}
+
 // ─── Template definitions ────────────────────────────────────────────────────
 interface ImportTemplate {
   id: string;
@@ -112,14 +173,14 @@ const TEMPLATES: ImportTemplate[] = [
       { name: 'city',        aliases: ['city'],                                            required: false },
       { name: 'state',       aliases: ['state','st'],                                      required: false },
       { name: 'zip',         aliases: ['zip','zipcode','postal'],                          required: false },
-      { name: 'stage',       aliases: ['stage','status','pipeline','leadstage'],           required: false, notes: 'e.g. Lead, Proposal, Active, Completed' },
+      { name: 'stage',       aliases: ['stage','status','pipeline','leadstage'],           required: false, notes: 'Sales pipeline key. Canonical: new_lead, meeting_booked, design_phase, in_estimating, close_to_sign, won, lost. Friendly aliases (Lead, Proposal, Active, Completed, etc.) are auto-mapped — unrecognised values prompt for clarification before import.' },
       { name: 'budget',      aliases: ['budget','estimatedbudget','projectbudget'],        required: false },
       { name: 'source',      aliases: ['source','leadsource','referral'],                  required: false },
       { name: 'notes',       aliases: ['notes','comments','description'],                  required: false },
     ],
     sampleRows: [
-      { name: 'John & Sarah Miller', email: 'sarah@millers.com', phone: '(512) 555-0101', address: '445 Bluebell Dr', city: 'Austin', state: 'TX', zip: '78701', stage: 'Active', budget: '850000', source: 'Referral', notes: 'Custom ranch-style home' },
-      { name: 'Robert Chen',         email: 'rchen@email.com',   phone: '(512) 555-0192', address: '210 Elm St',       city: 'Round Rock', state: 'TX', zip: '78664', stage: 'Lead',   budget: '1200000', source: 'Website', notes: 'Modern farmhouse, 5BR' },
+      { name: 'John & Sarah Miller', email: 'sarah@millers.com', phone: '(512) 555-0101', address: '445 Bluebell Dr', city: 'Austin', state: 'TX', zip: '78701', stage: 'won',       budget: '850000', source: 'Referral', notes: 'Custom ranch-style home' },
+      { name: 'Robert Chen',         email: 'rchen@email.com',   phone: '(512) 555-0192', address: '210 Elm St',       city: 'Round Rock', state: 'TX', zip: '78664', stage: 'new_lead',  budget: '1200000', source: 'Website', notes: 'Modern farmhouse, 5BR' },
     ],
     transform: (row) => ({
       name: col(row,'name','clientname','fullname','contact'),
@@ -129,7 +190,7 @@ const TEMPLATES: ImportTemplate[] = [
       city: col(row,'city'),
       state: col(row,'state','st'),
       zip: col(row,'zip','zipcode','postal'),
-      stage: col(row,'stage','status','pipeline','leadstage') || 'Lead',
+      stage: normalizeStage(col(row,'stage','status','pipeline','leadstage')) || 'new_lead',
       budget: parseFloat(col(row,'budget','estimatedbudget','projectbudget').replace(/[^0-9.]/g,'')) || 0,
       source: col(row,'source','leadsource','referral'),
       notes: col(row,'notes','comments','description'),
@@ -696,7 +757,7 @@ const TEMPLATES: ImportTemplate[] = [
   {
     id: 'lots',
     label: 'Lot / Land Inventory',
-    icon: Map,
+    icon: MapIcon,
     color: 'bg-emerald-50 border-emerald-200 text-emerald-700',
     description: 'Import available lots — address, purchase price, utilities, assigned project.',
     collection: 'lots',
@@ -792,6 +853,86 @@ function downloadCSV(template: ImportTemplate) {
   a.click();
 }
 
+// ─── StageMappingDialog ──────────────────────────────────────────────────────
+// Shown when a CSV being imported into /clients contains stage values that
+// don't map cleanly to a canonical pipeline key. Forces the user to pick a
+// canonical key for each unknown value before the import is allowed to run.
+function StageMappingDialog({
+  open,
+  unknownStages,
+  onCancel,
+  onConfirm,
+}: {
+  open: boolean;
+  unknownStages: { value: string; count: number }[];
+  onCancel: () => void;
+  onConfirm: (mapping: Record<string, CanonicalStage>) => void;
+}) {
+  // Default each unknown to 'new_lead' so the user can one-click confirm if
+  // that's what they want. They still have to actively choose to proceed.
+  const [mapping, setMapping] = useState<Record<string, CanonicalStage>>({});
+  const allMapped = unknownStages.every(s => !!mapping[s.value]);
+
+  // Reset mapping when the dialog opens with a fresh set of unknowns.
+  useEffect(() => {
+    if (open) {
+      const init: Record<string, CanonicalStage> = {};
+      unknownStages.forEach(s => { init[s.value] = 'new_lead'; });
+      setMapping(init);
+    }
+  }, [open, unknownStages]);
+
+  return (
+    <Dialog open={open} onOpenChange={v => { if (!v) onCancel(); }}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Map unknown stage values</DialogTitle>
+          <DialogDescription>
+            Your CSV contains stage values that don't match a Sales pipeline column.
+            Choose where each one should land — otherwise those rows would be
+            invisible on the board.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3 py-2">
+          {unknownStages.map(s => (
+            <div key={s.value} className="flex items-center justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="font-mono text-sm text-gray-800 truncate">{s.value || '(blank)'}</div>
+                <div className="text-xs text-gray-400">{s.count} row{s.count === 1 ? '' : 's'}</div>
+              </div>
+              <Select
+                value={mapping[s.value] ?? 'new_lead'}
+                onValueChange={(v: CanonicalStage) => setMapping(m => ({ ...m, [s.value]: v }))}
+              >
+                <SelectTrigger className="w-52 h-9 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CANONICAL_STAGES.map(k => (
+                    <SelectItem key={k} value={k}>{k}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ))}
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={onCancel}>Cancel import</Button>
+          <Button
+            disabled={!allMapped}
+            onClick={() => onConfirm(mapping)}
+            style={{ backgroundColor: '#C9A96E', color: '#141414' }}
+          >
+            Apply mapping &amp; import
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── ImportCard ──────────────────────────────────────────────────────────────
 function ImportCard({ template }: { template: ImportTemplate }) {
   const { toast } = useToast();
@@ -802,7 +943,37 @@ function ImportCard({ template }: { template: ImportTemplate }) {
   const [expanded, setExpanded] = useState(false);
   const [sheetUrl, setSheetUrl] = useState('');
   const [fetchingSheet, setFetchingSheet] = useState(false);
+  // Stage-mapping prompt state — used only when template has a stage column
+  // (currently the 'clients' template) and the CSV contains values that
+  // don't auto-map to a canonical pipeline key.
+  const [stagePrompt, setStagePrompt] = useState<{ value: string; count: number }[] | null>(null);
   const Icon = template.icon;
+
+  // Helper — find the actual CSV column header that maps to "stage" given
+  // the template's alias list. Returns null if no stage column is present.
+  const stageColumnKey = (rows: Record<string, string>[]): string | null => {
+    if (rows.length === 0) return null;
+    const stageCol = template.columns.find(c => c.name === 'stage');
+    if (!stageCol) return null;
+    const aliases = stageCol.aliases.map(a => a.toLowerCase().replace(/[\s_-]/g, ''));
+    return Object.keys(rows[0]).find(h => aliases.includes(h.toLowerCase().replace(/[\s_-]/g, ''))) ?? null;
+  };
+
+  // Returns the list of distinct stage values in the preview that don't
+  // map to a canonical pipeline key. Empty values are ignored — those
+  // fall back to 'new_lead' in the transform.
+  const collectUnknownStages = (rows: Record<string, string>[]): { value: string; count: number }[] => {
+    const key = stageColumnKey(rows);
+    if (!key) return [];
+    const counts = new Map<string, number>();
+    for (const row of rows) {
+      const raw = (row[key] ?? '').toString().trim();
+      if (!raw) continue;
+      if (normalizeStage(raw)) continue;
+      counts.set(raw, (counts.get(raw) ?? 0) + 1);
+    }
+    return Array.from(counts.entries()).map(([value, count]) => ({ value, count }));
+  };
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -844,15 +1015,34 @@ function ImportCard({ template }: { template: ImportTemplate }) {
     }
   };
 
-  const handleImport = async () => {
-    if (!preview) return;
+  // Runs the actual Firestore batch writes. Optionally applies a
+  // stage-value override map (raw CSV value → canonical pipeline key)
+  // by rewriting the stage column on each row before transform.
+  const runImport = async (stageOverrides?: Record<string, CanonicalStage>) => {
+    if (!preview) {
+      // eslint-disable-next-line no-console
+      console.warn('[ImportCenter] runImport called with no preview');
+      return;
+    }
     setImporting(true);
+    // Reset the per-run progress counter so a previous run doesn't leave the
+    // "Imported N" badge stuck while the next run is still mid-flight.
+    setDone(0);
+    let count = 0;
     try {
+      const stageKey = stageOverrides ? stageColumnKey(preview.rows) : null;
       const BATCH_SIZE = 450;
-      let count = 0;
       for (let i = 0; i < preview.rows.length; i += BATCH_SIZE) {
         const batch = writeBatch(db);
         preview.rows.slice(i, i + BATCH_SIZE).forEach(row => {
+          // Apply any user-supplied stage override into the raw row before
+          // transform so the canonical key is what gets persisted.
+          if (stageOverrides && stageKey) {
+            const raw = (row[stageKey] ?? '').toString().trim();
+            if (raw && stageOverrides[raw]) {
+              row = { ...row, [stageKey]: stageOverrides[raw] };
+            }
+          }
           const data = template.transform(row);
           const ref = doc(collection(db, template.collection));
           batch.set(ref, data);
@@ -861,12 +1051,52 @@ function ImportCard({ template }: { template: ImportTemplate }) {
         count += Math.min(BATCH_SIZE, preview.rows.length - i);
         setDone(count);
       }
+      // eslint-disable-next-line no-console
+      console.log(`[ImportCenter] imported ${count} ${template.label} records`);
       toast({ title: `Imported ${count} ${template.label} records` });
       setPreview(null);
     } catch (err: any) {
-      toast({ title: `Import failed: ${err.message}`, variant: 'destructive' });
+      // Log the full error to the console — toasts can get dismissed before
+      // the user notices, and Firestore "permission-denied" failures here
+      // were silently swallowed in an earlier revision.
+      // eslint-disable-next-line no-console
+      console.error('[ImportCenter] import failed', err);
+      const detail = err?.code ? `${err.code} — ${err.message}` : (err?.message || String(err));
+      toast({
+        title: `Import failed (${count} of ${preview.rows.length} written)`,
+        description: detail,
+        variant: 'destructive',
+        duration: 10_000,
+      });
     } finally {
       setImporting(false);
+    }
+  };
+
+  const handleImport = async () => {
+    if (!preview) return;
+    try {
+      // For templates that carry a stage column, check the CSV for values
+      // that don't map cleanly to a canonical pipeline key. If any exist,
+      // prompt the user before writing — otherwise rows would be invisible
+      // on the pipeline board.
+      const unknown = collectUnknownStages(preview.rows);
+      // eslint-disable-next-line no-console
+      console.log(`[ImportCenter] handleImport — ${preview.rows.length} rows, ${unknown.length} unknown stage(s)`, unknown);
+      if (unknown.length > 0) {
+        setStagePrompt(unknown);
+        return;
+      }
+      await runImport();
+    } catch (err: any) {
+      // eslint-disable-next-line no-console
+      console.error('[ImportCenter] handleImport threw', err);
+      toast({
+        title: 'Import click failed',
+        description: err?.message || String(err),
+        variant: 'destructive',
+        duration: 10_000,
+      });
     }
   };
 
@@ -984,6 +1214,17 @@ function ImportCard({ template }: { template: ImportTemplate }) {
           )}
         </div>
       </CardContent>
+
+      {/* Stage-mapping prompt — only fires when CSV has unmapped stages */}
+      <StageMappingDialog
+        open={!!stagePrompt}
+        unknownStages={stagePrompt ?? []}
+        onCancel={() => setStagePrompt(null)}
+        onConfirm={async (mapping) => {
+          setStagePrompt(null);
+          await runImport(mapping);
+        }}
+      />
     </Card>
   );
 }
@@ -993,6 +1234,42 @@ export default function ImportCenter() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [seeding, setSeeding] = useState(false);
+
+  // Access gate — importing client/lead records modifies CRM data that
+  // other roles depend on. Only admin and gc users can use this page.
+  // The Firestore rules already enforce this server-side (allow create
+  // on /clients gated by isGC()), this UI-level gate just gives a clean
+  // message instead of letting writes silently fail at commit time.
+  const role = (user?.role ?? '').toLowerCase();
+  const canImport = role === 'admin' || role === 'gc';
+  if (!canImport) {
+    return (
+      <AppLayout>
+        <div className="p-6 max-w-2xl mx-auto">
+          <Card className="border-2 border-amber-200 bg-amber-50/40">
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <AlertCircle className="w-6 h-6 text-amber-600" />
+                <CardTitle className="text-base">Admin or staff access required</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm text-amber-900">
+              <p>
+                The Import Center can create, update, and delete client and lead
+                records. To use it your account needs the <strong>admin</strong> or
+                <strong> gc</strong> role.
+              </p>
+              <p className="text-amber-800">
+                Your current role: <code className="bg-amber-100 px-1 rounded">{user?.role || 'none'}</code>.
+                Ask an admin in your organization to upgrade your role from User
+                Management, then reload this page.
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      </AppLayout>
+    );
+  }
 
   const importSkyelineSubs = async () => {
     if (!confirm('Import the full Skyeline subcontractor list into Contacts? Duplicates by company name are skipped.')) return;

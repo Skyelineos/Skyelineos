@@ -13,6 +13,7 @@ import PhotosTab from '@/components/photos/PhotosTab';
 import { MessagingModule } from '@/components/messaging/MessagingModule';
 import ClientDashboard from '@/components/client-portal/ClientDashboard';
 import SelectionsBoard from '@/components/client-portal/SelectionsBoard';
+import ClientSelectionsTimeline from '@/components/client/ClientSelectionsTimeline';
 import ChangeOrdersTab from '@/components/client-portal/ChangeOrdersTab';
 import ClientFinancials from '@/components/client-portal/ClientFinancials';
 import ClientSiteLog from '@/components/site-log/ClientSiteLog';
@@ -51,7 +52,7 @@ const TABS = [
   { key: 'photos',        label: 'Photos',          icon: Image },
 ];
 
-export default function OdysseyClientPortal() {
+export default function SkyelineClientPortal() {
   const [location, navigate] = useLocation();
   const { user } = useAuth();
   const { toast } = useToast();
@@ -159,10 +160,19 @@ export default function OdysseyClientPortal() {
       case 'selections':
       case 'design':
         return (
-          <SelectionsBoard
-            projectId={selectedProjectId}
-            clientId={effectiveUid}
-          />
+          <div className="space-y-6 p-6">
+            <ClientSelectionsTimeline
+              projectId={selectedProjectId}
+              clientUserId={effectiveUid}
+            />
+            <div className="border-t pt-6">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">Designer's full selections board</h3>
+              <SelectionsBoard
+                projectId={selectedProjectId}
+                clientId={effectiveUid}
+              />
+            </div>
+          </div>
         );
 
       case 'change-orders':

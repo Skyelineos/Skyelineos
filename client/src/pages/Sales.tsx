@@ -31,6 +31,8 @@ interface StageConfig { key: string; label: string; color: string; }
 interface Client {
   id: string;
   name: string;
+  firstName?: string | null;
+  lastName?: string | null;
   email?: string | null;
   phone?: string | null;
   company?: string | null;
@@ -39,6 +41,13 @@ interface Client {
   source?: LeadSource;
   jobAddress?: string | null;
   city?: string | null;
+  state?: string | null;
+  zip?: string | null;
+  spouse?: {
+    name: string;
+    email?: string | null;
+    phone?: string | null;
+  } | null;
   budget?: number | null;
   squareFootage?: number | null;
   notes?: string | null;
@@ -47,6 +56,10 @@ interface Client {
   assignedToName?: string | null;
   tags?: string[];
   linkedJobId?: string;
+  // Set by ImportCenter on bulk import; cleared by the Review Imported Leads
+  // wizard once the operator has enriched the row.
+  importedAt?: any;
+  importReviewNeeded?: boolean;
   createdAt?: any;
   updatedAt?: any;
 }
@@ -266,6 +279,12 @@ interface LeadPrefill {
   email?: string;
   phone?: string;
   jobAddress?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+  spouseName?: string;
+  spouseEmail?: string;
+  spousePhone?: string;
   budget?: string;
   notes?: string;
 }
@@ -286,7 +305,12 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
 
   const blank = {
     firstName: '', lastName: '',
-    email: '', phone: '', company: '', jobAddress: '', city: '',
+    email: '', phone: '', company: '', jobAddress: '', city: '', state: '', zip: '',
+    // hasSpouse toggles the spouse fields. We keep the three spouse fields in
+    // state regardless so toggling off-then-on doesn't wipe entered text;
+    // the save handler only emits a spouse object when hasSpouse is true.
+    hasSpouse: false,
+    spouseName: '', spouseEmail: '', spousePhone: '',
     stage: stages[0]?.key || 'new_lead',
     projectType: 'custom_home' as ProjectType,
     source: 'referral' as LeadSource,
@@ -312,15 +336,26 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
   useEffect(() => {
     if (open) {
       if (editing) {
-        const { firstName, lastName } = splitName(editing.name || '');
+        // Prefer the stored firstName/lastName if present (set by recent
+        // saves). Fall back to splitting the legacy combined `name` field
+        // for older records that don't have the split pair yet.
+        const fn = editing.firstName ?? '';
+        const ln = editing.lastName ?? '';
+        const fallback = fn || ln ? { firstName: fn, lastName: ln } : splitName(editing.name || '');
         setForm({
-          firstName,
-          lastName,
+          firstName: fallback.firstName,
+          lastName: fallback.lastName,
           email: editing.email || '',
           phone: editing.phone || '',
           company: editing.company || '',
           jobAddress: editing.jobAddress || '',
           city: editing.city || '',
+          state: editing.state || '',
+          zip: editing.zip || '',
+          hasSpouse: !!(editing.spouse && editing.spouse.name),
+          spouseName: editing.spouse?.name || '',
+          spouseEmail: editing.spouse?.email || '',
+          spousePhone: editing.spouse?.phone || '',
           stage: editing.stage || stages[0]?.key || 'new_lead',
           projectType: editing.projectType || 'custom_home',
           source: editing.source || 'referral',
@@ -333,17 +368,24 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
           tags: editing.tags || [],
         });
       } else if (prefill) {
-        // Pre-fill new-lead form (e.g., from "Create lead from estimate" deep link
-        // or from the mobile contact picker).
+        // Pre-fill new-lead form (e.g., from "Create lead from estimate" deep link,
+        // mobile contact picker, or the Review Imported Leads wizard).
         setForm({
           ...blank,
-          firstName:  prefill.firstName  ?? blank.firstName,
-          lastName:   prefill.lastName   ?? blank.lastName,
-          email:      prefill.email      ?? blank.email,
-          phone:      prefill.phone      ?? blank.phone,
-          jobAddress: prefill.jobAddress ?? blank.jobAddress,
-          budget:     prefill.budget     ?? blank.budget,
-          notes:      prefill.notes      ?? blank.notes,
+          firstName:   prefill.firstName   ?? blank.firstName,
+          lastName:    prefill.lastName    ?? blank.lastName,
+          email:       prefill.email       ?? blank.email,
+          phone:       prefill.phone       ?? blank.phone,
+          jobAddress:  prefill.jobAddress  ?? blank.jobAddress,
+          city:        prefill.city        ?? blank.city,
+          state:       prefill.state       ?? blank.state,
+          zip:         prefill.zip         ?? blank.zip,
+          hasSpouse:   !!prefill.spouseName,
+          spouseName:  prefill.spouseName  ?? blank.spouseName,
+          spouseEmail: prefill.spouseEmail ?? blank.spouseEmail,
+          spousePhone: prefill.spousePhone ?? blank.spousePhone,
+          budget:      prefill.budget      ?? blank.budget,
+          notes:       prefill.notes       ?? blank.notes,
         });
       } else {
         setForm(blank);
@@ -399,6 +441,17 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
     setSaving(true);
     try {
       const assignedMember = teamMembers.find(m => m.id === form.assignedTo);
+      // Emit a spouse object only when the toggle is on AND there's a name.
+      // Toggling off (or leaving the name blank) writes spouse: null so the
+      // edit dialog reads cleanly on the next open.
+      const spousePayload =
+        form.hasSpouse && form.spouseName.trim()
+          ? {
+              name: form.spouseName.trim(),
+              email: form.spouseEmail.trim() || null,
+              phone: form.spousePhone.trim() || null,
+            }
+          : null;
       await onSave({
         name: fullName,
         firstName: form.firstName.trim() || null,
@@ -408,6 +461,9 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
         company: form.company || null,
         jobAddress: form.jobAddress || null,
         city: form.city || null,
+        state: form.state || null,
+        zip: form.zip || null,
+        spouse: spousePayload,
         stage: form.stage,
         projectType: form.projectType,
         source: form.source,
@@ -486,14 +542,73 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
             </Select>
           </div>
 
-          {/* Address */}
-          <div>
+          {/* Address — full row for street, then City / State / Zip on one row */}
+          <div className="sm:col-span-2">
             <Label>Job Address</Label>
             <Input value={form.jobAddress} onChange={e => set('jobAddress', e.target.value)} placeholder="—" className="placeholder:text-gray-300" />
           </div>
-          <div>
-            <Label>City</Label>
-            <Input value={form.city} onChange={e => set('city', e.target.value)} placeholder="—" className="placeholder:text-gray-300" />
+          <div className="sm:col-span-2 grid grid-cols-6 gap-3">
+            <div className="col-span-3">
+              <Label>City</Label>
+              <Input value={form.city} onChange={e => set('city', e.target.value)} placeholder="—" className="placeholder:text-gray-300" />
+            </div>
+            <div className="col-span-1">
+              <Label>State</Label>
+              <Input value={form.state} onChange={e => set('state', e.target.value.toUpperCase().slice(0, 2))} placeholder="UT" maxLength={2} className="placeholder:text-gray-300" />
+            </div>
+            <div className="col-span-2">
+              <Label>Zip</Label>
+              <Input value={form.zip} onChange={e => set('zip', e.target.value)} placeholder="—" className="placeholder:text-gray-300" />
+            </div>
+          </div>
+
+          {/* Spouse — hidden by default; "+ Add Spouse" reveals three fields.
+              Toggling off clears emission on save but keeps the values in
+              local state in case the user re-toggles on. */}
+          <div className="sm:col-span-2">
+            {!form.hasSpouse ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => set('hasSpouse', true)}
+                className="gap-2"
+              >
+                <Plus className="w-4 h-4" /> Add Spouse
+              </Button>
+            ) : (
+              <div className="border rounded-lg p-3 bg-gray-50/50 space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-semibold">Spouse</Label>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      set('hasSpouse', false);
+                      set('spouseName', '');
+                      set('spouseEmail', '');
+                      set('spousePhone', '');
+                    }}
+                    className="h-7 text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
+                  >
+                    <X className="w-3 h-3 mr-1" /> Remove
+                  </Button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="sm:col-span-2">
+                    <Label>Spouse Name</Label>
+                    <Input value={form.spouseName} onChange={e => set('spouseName', e.target.value)} placeholder="—" className="placeholder:text-gray-300" />
+                  </div>
+                  <div>
+                    <Label>Spouse Email</Label>
+                    <Input type="email" value={form.spouseEmail} onChange={e => set('spouseEmail', e.target.value)} placeholder="—" className="placeholder:text-gray-300" />
+                  </div>
+                  <div>
+                    <Label>Spouse Phone</Label>
+                    <Input value={form.spousePhone} onChange={e => set('spousePhone', e.target.value)} placeholder="—" className="placeholder:text-gray-300" />
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Budget & Sqft */}
@@ -1028,6 +1143,11 @@ function PipelineCard({ client, stages, onEdit, onDelete, onAdvance }: {
         <p className="text-base font-bold text-gray-900 leading-snug line-clamp-3 pr-7 [overflow-wrap:normal] [word-break:keep-all] hyphens-none" title={client.name}>
           {client.name}
         </p>
+        {client.spouse?.name && (
+          <p className="text-xs text-gray-500 mt-0.5" title={`Spouse: ${client.spouse.name}`}>
+            & {client.spouse.name}
+          </p>
+        )}
         {client.assignedToName && (
           <p className="text-xs text-gray-500 truncate mt-1" title={client.assignedToName}>
             {client.assignedToName}
