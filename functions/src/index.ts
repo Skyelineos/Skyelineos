@@ -2032,8 +2032,11 @@ exports.api = onRequest(
 // ── Phase 3: Notification dispatch (email + SMS) ─────────────────────────────
 export { dispatchNotification } from './notifications/dispatch';
 
-// ── Bid requests: send rough/final bid request emails + SMS to external vendors ─
-export { sendBidRequest } from './bids/sendBidRequest';
+// ── Bid requests: send rough/final bid request emails + SMS to external vendors
+//    Folded into the api Express app (avoids the org-IAM block on new standalone
+//    functions). Route: POST /api/bid-requests/send
+import { registerBidRequestRoute } from './bids/sendBidRequestRoute';
+registerBidRequestRoute(app, admin.firestore());
 
 // ── Phase 3: Scheduled due-date sweep (7am MT daily) ─────────────────────────
 export { dueSweep } from './notifications/scheduledDueSweep';

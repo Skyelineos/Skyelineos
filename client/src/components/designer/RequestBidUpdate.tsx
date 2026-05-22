@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { doc, updateDoc, arrayUnion, serverTimestamp } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { getAuth } from 'firebase/auth';
 import { db } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -107,24 +107,27 @@ export default function RequestBidUpdate({
         updatedAt: serverTimestamp(),
       });
 
-      // Prefer the Cloud Function (sends via SendGrid + Twilio when configured).
-      // Falls back to mailto: if the function isn't deployed or returns an error.
+      // Prefer the server-side sender (SendGrid + Twilio when configured).
+      // Falls back to mailto: if the endpoint isn't deployed or returns no sends.
       let cloudSent = false;
       try {
-        const fn = httpsCallable(getFunctions(undefined, 'us-central1'), 'sendBidRequest');
-        const resp: any = await fn({
-          projectId,
-          selectionId,
-          selectionTitle,
-          selectionSpecs,
-          stage,
-          vendors: chosen.map(v => ({ contactId: v.id, vendorName: v.name, email: v.email, phone: v.phone })),
-          customMessage: customMessage || undefined,
-          dueDays,
-          projectName,
-          requesterName,
-        });
-        cloudSent = resp?.data?.ok && (resp.data.sentEmails > 0 || resp.data.sentSms > 0);
+        const token = await getAuth().currentUser?.getIdToken();
+        if (token) {
+          const resp = await fetch('/api/bid-requests/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({
+              projectId, selectionId, selectionTitle, selectionSpecs, stage,
+              vendors: chosen.map(v => ({ contactId: v.id, vendorName: v.name, email: v.email, phone: v.phone })),
+              customMessage: customMessage || undefined,
+              dueDays, projectName, requesterName,
+            }),
+          });
+          if (resp.ok) {
+            const json = await resp.json();
+            cloudSent = json?.ok && ((json.sentEmails ?? 0) > 0 || (json.sentSms ?? 0) > 0);
+          }
+        }
       } catch {
         cloudSent = false;
       }
