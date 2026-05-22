@@ -16,6 +16,7 @@ import { FLOOR_LEVELS, SELECTION_CATEGORIES } from '@/types/selections';
 import { useAuth } from '@/hooks/use-auth';
 import SeedSelectionsFromTemplate from '@/components/designer/SeedSelectionsFromTemplate';
 import PhaseTimelineView from '@/components/designer/PhaseTimelineView';
+import ContractorSignoffQueue from '@/components/gc/ContractorSignoffQueue';
 
 const APPROVAL_COLORS: Record<ClientApprovalStatus, string> = {
   'Pending Options':    'bg-gray-100 text-gray-500',
@@ -153,6 +154,9 @@ export default function GCDesignSnapshot({ projectId, projectName }: GCDesignSna
           <PhaseTimelineView projectId={projectId} />
         </div>
       )}
+
+      {/* Contractor sign-off queue — surfaces selections that have bids in and need cost+design approval */}
+      <ContractorSignoffQueue projectId={projectId} />
 
       {/* Designer + stats row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
