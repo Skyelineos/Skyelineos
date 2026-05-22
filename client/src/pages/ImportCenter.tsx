@@ -14,7 +14,7 @@ import {
   Users, FolderOpen, Calendar, Package, Building2, DollarSign,
   FileText, Wrench, ChevronDown, ChevronRight, X, Link as LinkIcon,
   Coins, ListChecks, Replace, Palette, ClipboardList, Receipt,
-  Award, Map, ScrollText, HardHat,
+  Award, Map as MapIcon, ScrollText, HardHat,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { SKYELINE_SUBCONTRACTOR_COUNT } from '@/lib/skyelineSubcontractors';
@@ -757,7 +757,7 @@ const TEMPLATES: ImportTemplate[] = [
   {
     id: 'lots',
     label: 'Lot / Land Inventory',
-    icon: Map,
+    icon: MapIcon,
     color: 'bg-emerald-50 border-emerald-200 text-emerald-700',
     description: 'Import available lots — address, purchase price, utilities, assigned project.',
     collection: 'lots',
@@ -1019,12 +1019,19 @@ function ImportCard({ template }: { template: ImportTemplate }) {
   // stage-value override map (raw CSV value → canonical pipeline key)
   // by rewriting the stage column on each row before transform.
   const runImport = async (stageOverrides?: Record<string, CanonicalStage>) => {
-    if (!preview) return;
+    if (!preview) {
+      // eslint-disable-next-line no-console
+      console.warn('[ImportCenter] runImport called with no preview');
+      return;
+    }
     setImporting(true);
+    // Reset the per-run progress counter so a previous run doesn't leave the
+    // "Imported N" badge stuck while the next run is still mid-flight.
+    setDone(0);
+    let count = 0;
     try {
       const stageKey = stageOverrides ? stageColumnKey(preview.rows) : null;
       const BATCH_SIZE = 450;
-      let count = 0;
       for (let i = 0; i < preview.rows.length; i += BATCH_SIZE) {
         const batch = writeBatch(db);
         preview.rows.slice(i, i + BATCH_SIZE).forEach(row => {
@@ -1044,10 +1051,23 @@ function ImportCard({ template }: { template: ImportTemplate }) {
         count += Math.min(BATCH_SIZE, preview.rows.length - i);
         setDone(count);
       }
+      // eslint-disable-next-line no-console
+      console.log(`[ImportCenter] imported ${count} ${template.label} records`);
       toast({ title: `Imported ${count} ${template.label} records` });
       setPreview(null);
     } catch (err: any) {
-      toast({ title: `Import failed: ${err.message}`, variant: 'destructive' });
+      // Log the full error to the console — toasts can get dismissed before
+      // the user notices, and Firestore "permission-denied" failures here
+      // were silently swallowed in an earlier revision.
+      // eslint-disable-next-line no-console
+      console.error('[ImportCenter] import failed', err);
+      const detail = err?.code ? `${err.code} — ${err.message}` : (err?.message || String(err));
+      toast({
+        title: `Import failed (${count} of ${preview.rows.length} written)`,
+        description: detail,
+        variant: 'destructive',
+        duration: 10_000,
+      });
     } finally {
       setImporting(false);
     }
@@ -1055,16 +1075,29 @@ function ImportCard({ template }: { template: ImportTemplate }) {
 
   const handleImport = async () => {
     if (!preview) return;
-    // For templates that carry a stage column, check the CSV for values
-    // that don't map cleanly to a canonical pipeline key. If any exist,
-    // prompt the user before writing — otherwise rows would be invisible
-    // on the pipeline board.
-    const unknown = collectUnknownStages(preview.rows);
-    if (unknown.length > 0) {
-      setStagePrompt(unknown);
-      return;
+    try {
+      // For templates that carry a stage column, check the CSV for values
+      // that don't map cleanly to a canonical pipeline key. If any exist,
+      // prompt the user before writing — otherwise rows would be invisible
+      // on the pipeline board.
+      const unknown = collectUnknownStages(preview.rows);
+      // eslint-disable-next-line no-console
+      console.log(`[ImportCenter] handleImport — ${preview.rows.length} rows, ${unknown.length} unknown stage(s)`, unknown);
+      if (unknown.length > 0) {
+        setStagePrompt(unknown);
+        return;
+      }
+      await runImport();
+    } catch (err: any) {
+      // eslint-disable-next-line no-console
+      console.error('[ImportCenter] handleImport threw', err);
+      toast({
+        title: 'Import click failed',
+        description: err?.message || String(err),
+        variant: 'destructive',
+        duration: 10_000,
+      });
     }
-    await runImport();
   };
 
   return (

@@ -199,6 +199,14 @@ service cloud.firestore {
     }
 
     // Project sub-collections: selections, schedules
+    // Bid requests — audit log of outgoing bid requests to vendors
+    // (Cloud Function writes these; GC/designer read; nobody else)
+    match /projects/{projectId}/bidRequests/{requestId} {
+      allow read: if isGC() || isDesigner();
+      // Only Cloud Functions (admin SDK) write here; clients shouldn't.
+      allow write: if false;
+    }
+
     match /projects/{projectId}/selections/{selectionId} {
       allow read: if isGC()
         || isDesigner()

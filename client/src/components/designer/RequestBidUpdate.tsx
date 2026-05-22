@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { doc, updateDoc, arrayUnion, serverTimestamp } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -102,27 +103,58 @@ export default function RequestBidUpdate({
       }));
       await updateDoc(ref, {
         bids: arrayUnion(...newBids),
-        lifecycle: stage === 'rough' ? 'Awaiting-Bids' : 'Awaiting-Bids',
+        lifecycle: 'Awaiting-Bids',
         updatedAt: serverTimestamp(),
       });
-      // Open mailto: for vendors with emails — browser opens 1 per click in this tab,
-      // so we batch them as a single comma-separated TO line for now.
-      const toLine = chosen.filter(v => v.email).map(v => v.email).join(',');
-      if (toLine) {
-        const subject = encodeURIComponent(emailSubject);
-        const body = encodeURIComponent(emailBody('team'));
-        window.open(`mailto:${toLine}?subject=${subject}&body=${body}`, '_blank');
+
+      // Prefer the Cloud Function (sends via SendGrid + Twilio when configured).
+      // Falls back to mailto: if the function isn't deployed or returns an error.
+      let cloudSent = false;
+      try {
+        const fn = httpsCallable(getFunctions(undefined, 'us-central1'), 'sendBidRequest');
+        const resp: any = await fn({
+          projectId,
+          selectionId,
+          selectionTitle,
+          selectionSpecs,
+          stage,
+          vendors: chosen.map(v => ({ contactId: v.id, vendorName: v.name, email: v.email, phone: v.phone })),
+          customMessage: customMessage || undefined,
+          dueDays,
+          projectName,
+          requesterName,
+        });
+        cloudSent = resp?.data?.ok && (resp.data.sentEmails > 0 || resp.data.sentSms > 0);
+      } catch {
+        cloudSent = false;
       }
-      return { count: chosen.length, smsTargets: chosen.filter(v => v.phone && !v.email) };
+
+      // mailto fallback for vendors with emails
+      if (!cloudSent) {
+        const toLine = chosen.filter(v => v.email).map(v => v.email).join(',');
+        if (toLine) {
+          const subject = encodeURIComponent(emailSubject);
+          const body = encodeURIComponent(emailBody('team'));
+          window.open(`mailto:${toLine}?subject=${subject}&body=${body}`, '_blank');
+        }
+      }
+      return {
+        count: chosen.length,
+        smsTargets: chosen.filter(v => v.phone && !v.email),
+        cloudSent,
+      };
     },
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: ['signoff-queue', projectId] });
       qc.invalidateQueries({ queryKey: ['gc-design-snapshot', projectId] });
+      const desc = r.cloudSent
+        ? `Sent automatically via Skyelineos (SendGrid${r.smsTargets.length ? ' + Twilio' : ''}).`
+        : r.smsTargets.length
+          ? `${r.smsTargets.length} vendor(s) have phone only — copy the SMS body to send manually.`
+          : 'Email draft opened in your mail client.';
       toast({
         title: `Logged ${r.count} bid request${r.count === 1 ? '' : 's'}`,
-        description: r.smsTargets.length
-          ? `${r.smsTargets.length} vendor(s) have phone only — copy the SMS body to send manually.`
-          : 'Email draft opened in your mail client.',
+        description: desc,
       });
       setOpen(false);
     },

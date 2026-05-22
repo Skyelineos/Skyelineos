@@ -9,7 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
-import { Users, Search, Download, Upload, Plus, TrendingUp, Building, UserCheck, Wrench, Edit, Trash2, Mail, Phone, MoreVertical, User } from 'lucide-react';
+import { Users, Search, Download, Upload, Plus, TrendingUp, Building, UserCheck, Wrench, Edit, Trash2, Mail, Phone, MoreVertical, User, Star } from 'lucide-react';
+import PreferredCategoriesEditor from '@/components/contacts/PreferredCategoriesEditor';
 import { MultiTradeSelector } from '@/components/contacts/MultiTradeSelector';
 import { EditContactModal } from '@/components/contacts/EditContactModal';
 import ContactImportModal from '@/components/contacts/ContactImportModal';
@@ -60,6 +61,7 @@ export default function Contacts() {
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [showContactDetail, setShowContactDetail] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
+  const [preferredFor, setPreferredFor] = useState<Contact | null>(null);
 
   // Firestore data
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -757,6 +759,12 @@ export default function Contacts() {
                                 <User className="h-4 w-4 mr-2" />
                                 View Details
                               </DropdownMenuItem>
+                              {(contact.role === 'subcontractor' || contact.role === 'vendor') && (
+                                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setPreferredFor(contact); }}>
+                                  <Star className="h-4 w-4 mr-2" />
+                                  Preferred Categories
+                                </DropdownMenuItem>
+                              )}
                               <DropdownMenuItem
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -1133,6 +1141,16 @@ export default function Contacts() {
           open={!!editingContact}
           onClose={() => setEditingContact(null)}
         />
+
+        {preferredFor && (
+          <PreferredCategoriesEditor
+            contactId={preferredFor.id}
+            contactName={preferredFor.name || preferredFor.company || 'Vendor'}
+            initial={Array.isArray((preferredFor as any).preferredCategories) ? (preferredFor as any).preferredCategories : []}
+            open={!!preferredFor}
+            onClose={() => setPreferredFor(null)}
+          />
+        )}
       </div>
     </AppLayout>
   );
