@@ -167,7 +167,19 @@ function JobEstVsActualReport({ projects, estimates, contracts, bills }: {
       <CardHeader><CardTitle>Job Estimated vs Actual</CardTitle></CardHeader>
       <CardContent>
         {rows.length === 0 ? (
-          <p className="text-sm text-gray-400 text-center py-8">No projects with financial data yet.</p>
+          <div className="text-center py-8">
+            <p className="font-medium text-gray-700">No projects with financial data yet</p>
+            <p className="text-sm mt-1 text-gray-500">
+              Add an estimate, contract, or bill to a project and it'll appear here for comparison.
+            </p>
+            <button
+              onClick={() => window.location.assign('/projects')}
+              className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium"
+              style={{ backgroundColor: '#C9A96E' }}
+            >
+              Open projects
+            </button>
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

@@ -190,8 +190,24 @@ export default function DesignBoard() {
 
         {/* Masonry Grid */}
         {filtered.length === 0 ? (
-          <div className="text-center py-16 text-gray-400">
-            {selectedProject ? 'No selections found for this project' : 'Select a project to view selections'}
+          <div className="text-center py-16">
+            <p className="font-medium text-gray-700">
+              {selectedProject ? 'No selections yet for this project' : 'Select a project to view selections'}
+            </p>
+            {selectedProject && (
+              <>
+                <p className="text-sm mt-1 text-gray-500">
+                  Add selections from the project's Selections tab — they'll show up here once they're created.
+                </p>
+                <button
+                  onClick={() => window.location.assign(`/projects/${selectedProject}/selections`)}
+                  className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium"
+                  style={{ backgroundColor: '#C9A96E' }}
+                >
+                  Open project selections
+                </button>
+              </>
+            )}
           </div>
         ) : (
           <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4 space-y-0">

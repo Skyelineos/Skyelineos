@@ -1658,9 +1658,16 @@ export default function Sales() {
           /* ── List View ──────────────────────────────────────────── */
           <div className="space-y-2 overflow-y-auto flex-1">
             {filteredClients.length === 0 ? (
-              <div className="text-center py-16 text-gray-400">
-                <p className="font-medium">No leads found</p>
-                <p className="text-sm mt-1">Try adjusting your filters</p>
+              <div className="text-center py-16">
+                <p className="font-medium text-gray-700">No leads yet</p>
+                <p className="text-sm mt-1 text-gray-500">Add your first lead to start tracking the sales pipeline.</p>
+                <button
+                  onClick={() => { setEditing(null); setLeadDialogOpen(true); }}
+                  className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium"
+                  style={{ backgroundColor: '#C9A96E' }}
+                >
+                  <Plus className="w-4 h-4" /> Add lead
+                </button>
               </div>
             ) : (
               filteredClients.map(c => (
