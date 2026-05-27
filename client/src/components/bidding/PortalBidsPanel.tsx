@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import {
-  Hammer, Send, Award, Clock, CheckCircle2, Eye, FileText, Shield, Building2, Trash2,
+  Hammer, Send, Award, Clock, CheckCircle2, Eye, FileText, Shield, Building2, Trash2, Plus,
 } from 'lucide-react';
 import { SendBidPackageModal } from './SendBidPackageModal';
 import { AwardBidModal } from './AwardBidModal';
@@ -116,8 +116,8 @@ export function PortalBidsPanel({ projectId, projectName }: Props) {
   return (
     <div className="space-y-4">
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0">
-          <div>
+        <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+          <div className="min-w-0 flex-1">
             <CardTitle className="flex items-center gap-2">
               <Hammer className="w-5 h-5 text-[#C9A96E]" />
               Bid Packages
@@ -126,12 +126,19 @@ export function PortalBidsPanel({ projectId, projectName }: Props) {
               Open packages, sub responses, and reminders — click a tile to see who's been invited and who's submitted.
             </CardDescription>
           </div>
+          {/* Responsive CTA — full text on sm+, icon-only on narrow viewports
+              so the heading + description never get clipped or overlapped.
+              Keeps the same handler + test id so e2e tests still target it. */}
           <Button
+            data-testid="open-send-bid-package"
             onClick={() => setRequestModalOpen(true)}
-            className="gap-1.5 text-white"
+            aria-label="Create new bid package"
+            title="Create new bid package"
+            className="gap-1.5 text-white flex-shrink-0 px-2.5 sm:px-4"
             style={{ backgroundColor: '#C9A96E' }}
           >
-            <Send className="w-4 h-4" /> Create new bid package
+            <Plus className="w-4 h-4" />
+            <span className="hidden sm:inline">Create new bid package</span>
           </Button>
         </CardHeader>
         <CardContent>

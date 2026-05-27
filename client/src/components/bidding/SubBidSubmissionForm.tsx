@@ -102,6 +102,10 @@ export function SubBidSubmissionForm({
   const [quoteProgress, setQuoteProgress] = useState(0);
   const quoteInputRef = useRef<HTMLInputElement>(null);
 
+  // Estimated duration — "a close guess is fine". Required so the GC has a
+  // schedulable number when comparing bids. Stored as integer business days.
+  const [daysToComplete, setDaysToComplete] = useState<number>(0);
+
   // Project documents (read-only) — anything attached to the project that subs
   // invited to a bid can reference. Loaded when the form mounts.
   const [projectDocs, setProjectDocs] = useState<{ id: string; name: string; fileUrl: string; category?: string }[]>([]);
@@ -260,6 +264,7 @@ export function SubBidSubmissionForm({
       if (!quoteFile) return 'Upload your quote PDF';
       if (!quoteTotal || quoteTotal <= 0) return 'Enter the total bid amount';
     }
+    if (!daysToComplete || daysToComplete <= 0) return 'Enter estimated business days to complete';
     if (!insurance.carrier.trim()) return 'Insurance carrier is required';
     if (!insurance.policyNumber.trim()) return 'Insurance policy number is required';
     if (!insurance.expiration) return 'Insurance expiration date is required';
@@ -298,6 +303,9 @@ export function SubBidSubmissionForm({
         lineItems: validLines,
         subtotal: total,
         totalAmount: total,
+        // Estimated business days from start to finish (sub's best guess —
+        // gives the GC a schedulable number when comparing bids).
+        daysToComplete: Math.round(daysToComplete),
         notes: notes.trim(),
         attachments,
         attachedMeasurements,
@@ -678,11 +686,27 @@ export function SubBidSubmissionForm({
         </CardContent>
       </Card>
 
-      {/* Notes + attachments */}
+      {/* Timeline + notes + attachments */}
       <Card>
         <CardContent className="pt-6 space-y-3">
+          <div className="max-w-xs">
+            <Label htmlFor="days-to-complete">
+              Estimated business days from start to finish <span className="text-red-500 font-bold">*</span>
+            </Label>
+            <Input
+              id="days-to-complete"
+              type="number"
+              min={1}
+              step={1}
+              value={daysToComplete || ''}
+              onChange={e => setDaysToComplete(parseInt(e.target.value, 10) || 0)}
+              placeholder="e.g. 10"
+              className="mt-1.5"
+            />
+            <p className="text-[11px] text-gray-500 mt-1">A close guess is fine — the GC uses this to slot your work into the schedule.</p>
+          </div>
           <div>
-            <Label htmlFor="notes">Notes / Exclusions</Label>
+            <Label htmlFor="notes">What's included, what's not (optional)</Label>
             <Textarea
               id="notes"
               rows={2}

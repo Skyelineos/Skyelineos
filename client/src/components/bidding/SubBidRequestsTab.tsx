@@ -4,17 +4,24 @@ import {
 } from 'firebase/firestore';
 import { db, auth } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
+import { useAdminView } from '@/contexts/AdminViewContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { FileText, Calendar, Hammer, Clock, AlertTriangle, CheckCircle2, ExternalLink, Link2 } from 'lucide-react';
 import { SubBidSubmissionForm } from './SubBidSubmissionForm';
 import { ClaimContactDialog } from './ClaimContactDialog';
-import { Button } from '@/components/ui/button';
 import type { BidRequest } from './types';
 
 export function SubBidRequestsTab() {
   const { user } = useAuth();
+  // Admin impersonation: when an admin is "viewing as" a specific sub, the
+  // search set must use THAT sub's identifiers, not the admin's own. Without
+  // this swap the query matches nothing (the admin is not on any
+  // invitedSubIds array) and the portal shows "No bids found" even though
+  // bid invites exist. Source of the original bug report.
+  const { isAdminView, portalType, viewedUser } = useAdminView();
+  const impersonatingSub = isAdminView && portalType === 'subcontractor' && !!viewedUser;
 
   // The GC invites subs by their **contact ID** (`contacts/{id}`) — NOT by
   // the sub's Firebase Auth UID or user doc ID. To survive every shape of
@@ -28,20 +35,72 @@ export function SubBidRequestsTab() {
     (async () => {
       if (!user) { if (!cancelled) setSubIds([]); return; }
       const ids = new Set<string>();
-      // Pull EVERY identifier we can find. Some Firestore user docs have a
-      // stale `email` field that disagrees with the live Firebase Auth token —
-      // when that happens, the auth email is the canonical one for bid invites.
-      const authUser = auth.currentUser;
-      const uid = authUser?.uid || (user as any).firebaseUid || '';
-      const userIdStr = user.id?.toString() || '';
-      const docEmail = (user.email || '').toLowerCase().trim();
-      const authEmail = (authUser?.email || '').toLowerCase().trim();
-      const emailRaw = (user.email || '').trim();
-      if (uid) ids.add(uid);
-      if (userIdStr) ids.add(userIdStr);
-      if (docEmail) ids.add(docEmail);
-      if (authEmail) ids.add(authEmail);
-      if (emailRaw && emailRaw.toLowerCase() !== docEmail) ids.add(emailRaw);
+      // ── Identifier collection ─────────────────────────────────────────
+      // Two modes:
+      //   1) Real sub signed in — pull every identifier we can find about
+      //      THEM (auth uid, user doc id, email casings, linked contact ids)
+      //      so the query resolves whether the GC invited by contactId,
+      //      linkedUserId, or email.
+      //   2) Admin impersonating a specific sub — pull the VIEWED sub's
+      //      identifiers (contact id + email + linkedUserId from the contact
+      //      doc). The admin's own uid/email are useless here because the
+      //      admin is not on any invitedSubIds array.
+      let uid = '';
+      let docEmail = '';
+      let authEmail = '';
+      let emailRaw = '';
+      let userIdStr = '';
+
+      if (impersonatingSub && viewedUser) {
+        // Use the impersonated sub's contact id as the primary identifier.
+        // Also pull email + linkedUserId off the contact doc so the
+        // array-contains-any search hits every legacy field shape.
+        const contactId = viewedUser.id;
+        if (contactId) ids.add(contactId);
+        try {
+          const cSnap = await getDoc(doc(db, 'contacts', contactId));
+          if (cSnap.exists()) {
+            const c = cSnap.data() as any;
+            const linkedUid = (c.linkedUserId || '').trim();
+            if (linkedUid) {
+              ids.add(linkedUid);
+              uid = linkedUid; // for the optional bids subscription below
+            }
+            const cEmail = (c.email || viewedUser.email || '').toLowerCase().trim();
+            const cEmailRaw = (c.email || viewedUser.email || '').trim();
+            if (cEmail) {
+              ids.add(cEmail);
+              docEmail = cEmail;
+              authEmail = cEmail;
+              emailRaw = cEmailRaw;
+            }
+          } else if (viewedUser.email) {
+            // No contact doc readable from the admin's perspective? Fall back
+            // to the viewedUser.email (the admin set this when entering view).
+            ids.add(viewedUser.email.toLowerCase().trim());
+            ids.add(viewedUser.email.trim());
+            docEmail = viewedUser.email.toLowerCase().trim();
+            authEmail = docEmail;
+          }
+        } catch (e) {
+          console.warn('[bidRequests] impersonated contact lookup failed', e);
+        }
+      } else {
+        // Real sub path. Some Firestore user docs have a stale `email` that
+        // disagrees with the live Firebase Auth token — when that happens,
+        // the auth email is the canonical one for bid invites.
+        const authUser = auth.currentUser;
+        uid = authUser?.uid || (user as any).firebaseUid || '';
+        userIdStr = user.id?.toString() || '';
+        docEmail = (user.email || '').toLowerCase().trim();
+        authEmail = (authUser?.email || '').toLowerCase().trim();
+        emailRaw = (user.email || '').trim();
+        if (uid) ids.add(uid);
+        if (userIdStr) ids.add(userIdStr);
+        if (docEmail) ids.add(docEmail);
+        if (authEmail) ids.add(authEmail);
+        if (emailRaw && emailRaw.toLowerCase() !== docEmail) ids.add(emailRaw);
+      }
       const email = authEmail || docEmail; // canonical for contact lookups
       // Track which contact docs need auto-linking (matched by email but
        // missing linkedUserId). Setting linkedUserId here is what makes
@@ -76,8 +135,9 @@ export function SubBidRequestsTab() {
       }
       // Fire-and-forget auto-link. If Firestore rules reject it (sub-role
       // trying to write a GC-owned contacts doc) we just log; the GC can
-      // still link manually.
-      if (needsLink.length > 0 && uid) {
+      // still link manually. Skip entirely when impersonating — the admin
+      // shouldn't be stamping linkedUserId on contacts they don't own.
+      if (!impersonatingSub && needsLink.length > 0 && uid) {
         for (const c of needsLink) {
           try {
             await updateDoc(doc(db, 'contacts', c.id), {
@@ -91,11 +151,12 @@ export function SubBidRequestsTab() {
         }
       }
       const arr = Array.from(ids).filter(Boolean);
-      console.log('[bidRequests] searching invitedSubIds for any of:', arr);
+      console.log('[bidRequests] searching invitedSubIds for any of:', arr,
+        impersonatingSub ? `(impersonating ${viewedUser?.name || viewedUser?.id})` : '');
       if (!cancelled) setSubIds(arr);
     })();
     return () => { cancelled = true; };
-  }, [user]);
+  }, [user, impersonatingSub, viewedUser?.id]);
 
   const [requests, setRequests] = useState<BidRequest[]>([]);
   const [submittedBidIds, setSubmittedBidIds] = useState<Set<string>>(new Set());
