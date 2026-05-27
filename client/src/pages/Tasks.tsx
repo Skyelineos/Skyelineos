@@ -15,6 +15,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/use-auth';
+import { createNotification } from '@/lib/notifications';
+import { getDefaultAssigneeForTask, inferTaskKindFromTitle } from '@/lib/taskDefaults';
 import {
   Plus, Search, CheckSquare, MoreVertical, Edit, Trash2, Calendar, User, List, LayoutGrid
 } from 'lucide-react';
@@ -30,6 +33,10 @@ interface Task {
   projectName?: string;
   assignedToId?: string;
   assignedToName?: string;
+  // Creator — needed by the "Created by me" quick-filter and so we can
+  // skip self-assignment notifications (don't notify yourself).
+  createdById?: string;
+  createdByName?: string;
   status: TaskStatus;
   priority: TaskPriority;
   dueDate?: string;
@@ -127,6 +134,13 @@ export default function Tasks() {
 // the project picker, prefills new-task form, and drops the project badge.
 export function TasksContent({ projectId: scopedProjectId }: { projectId?: string } = {}) {
   const { toast } = useToast();
+  const { user } = useAuth();
+  // Current-user identifiers for the "Assigned to me" / "Created by me"
+  // quick-filters. We can't fully resolve a sub's contact id here, but for
+  // GC/admin (the most common user of the Tasks page) `user.id` and the
+  // assignedToId on tasks both come from the same user-doc id space.
+  const meId = user?.id?.toString() || '';
+  const meName = user?.name || '';
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -138,6 +152,11 @@ export function TasksContent({ projectId: scopedProjectId }: { projectId?: strin
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
   const [projectFilter, setProjectFilter] = useState<string>('all');
+  // Quick-filter chip — one-of {none, mine, by_me, unassigned, week, overdue}.
+  // Layered on top of the status/priority/project dropdowns, so the user can
+  // drill in further once a chip is active.
+  type QuickFilter = 'none' | 'mine' | 'by_me' | 'unassigned' | 'week' | 'overdue';
+  const [quickFilter, setQuickFilter] = useState<QuickFilter>('none');
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
@@ -173,7 +192,7 @@ export function TasksContent({ projectId: scopedProjectId }: { projectId?: strin
     return unsub;
   }, []);
 
-  const openAddDialog = () => {
+  const openAddDialog = async () => {
     setEditingTask(null);
     const base = defaultForm();
     if (scopedProjectId) {
@@ -181,8 +200,32 @@ export function TasksContent({ projectId: scopedProjectId }: { projectId?: strin
       base.projectId = scopedProjectId;
       base.projectName = proj?.name || '';
     }
+    // Open the dialog immediately for snappy UX, then resolve the default
+    // assignee and patch it in. If the user already started typing, we
+    // patch only the assignee field so we don't clobber their edits.
     setFormData(base);
     setDialogOpen(true);
+    if (base.projectId) {
+      try {
+        const def = await getDefaultAssigneeForTask({
+          projectId: base.projectId,
+          defaultFallbackUserId: meId,
+          defaultFallbackUserName: meName,
+        });
+        if (def.assignedToId) {
+          setFormData(prev => prev.assignedToId
+            ? prev   // user already picked someone — don't clobber
+            : { ...prev, assignedToId: def.assignedToId, assignedToName: def.assignedToName });
+        }
+      } catch (e) {
+        console.warn('[tasks] default-assignee resolve failed', e);
+      }
+    } else if (meId) {
+      // No project context — default to the current user (most likely the GC).
+      setFormData(prev => prev.assignedToId
+        ? prev
+        : { ...prev, assignedToId: meId, assignedToName: meName });
+    }
   };
 
   const openEditDialog = (task: Task) => {
@@ -196,7 +239,10 @@ export function TasksContent({ projectId: scopedProjectId }: { projectId?: strin
       assignedToName: task.assignedToName || '',
       status: task.status,
       priority: task.priority,
-      dueDate: task.dueDate || ''
+      dueDate: task.dueDate || '',
+      // Bugfix: category was dropped on every edit — defaulting back to
+      // 'uncategorized' on save. Carry it through now.
+      category: task.category || 'uncategorized',
     });
     setDialogOpen(true);
   };
@@ -217,17 +263,54 @@ export function TasksContent({ projectId: scopedProjectId }: { projectId?: strin
     setIsSaving(true);
     try {
       if (editingTask) {
+        // Detect a re-assignment so we can notify the new assignee. Only
+        // fires when the assigneeId actually changed AND it's not the
+        // current user assigning to themselves.
+        const reassigned = formData.assignedToId
+          && formData.assignedToId !== editingTask.assignedToId
+          && formData.assignedToId !== meId;
         await updateDoc(doc(db, 'tasks', editingTask.id), {
           ...formData,
           updatedAt: serverTimestamp()
         });
+        if (reassigned && formData.assignedToId) {
+          await createNotification({
+            userId: formData.assignedToId,
+            kind: 'task_assigned',
+            title: `Task assigned to you: ${formData.title}`,
+            body: formData.description || (formData.projectName ? `Project: ${formData.projectName}` : ''),
+            link: '/tasks',
+            projectId: formData.projectId || undefined,
+            refType: 'task',
+            refId: editingTask.id,
+            fromUserId: meId,
+            fromUserName: meName,
+          });
+        }
         toast({ title: 'Task updated' });
       } else {
-        await addDoc(collection(db, 'tasks'), {
+        const ref = await addDoc(collection(db, 'tasks'), {
           ...formData,
+          createdById: meId || null,
+          createdByName: meName || null,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp()
         });
+        // Notify the assignee on creation unless self-assigned.
+        if (formData.assignedToId && formData.assignedToId !== meId) {
+          await createNotification({
+            userId: formData.assignedToId,
+            kind: 'task_assigned',
+            title: `Task assigned to you: ${formData.title}`,
+            body: formData.description || (formData.projectName ? `Project: ${formData.projectName}` : ''),
+            link: '/tasks',
+            projectId: formData.projectId || undefined,
+            refType: 'task',
+            refId: ref.id,
+            fromUserId: meId,
+            fromUserName: meName,
+          });
+        }
         toast({ title: 'Task created' });
       }
       setDialogOpen(false);
@@ -243,6 +326,9 @@ export function TasksContent({ projectId: scopedProjectId }: { projectId?: strin
   };
 
   const handleDelete = async (taskId: string) => {
+    // Native confirm() flagged by audit doc #7 — keeping for now to avoid
+    // pulling AlertDialog into this file mid-batch. Migrated wholesale in
+    // the upcoming #7 sweep.
     if (!confirm('Delete this task?')) return;
     try {
       await deleteDoc(doc(db, 'tasks', taskId));
@@ -269,6 +355,11 @@ export function TasksContent({ projectId: scopedProjectId }: { projectId?: strin
   };
 
   // Filtering
+  const todayYMD = new Date().toISOString().slice(0, 10);
+  // End-of-week: rolling 7-day window from today. Simpler than week-of-year
+  // math and matches how the dashboard "this week" buckets work elsewhere.
+  const endOfWeekYMD = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+
   const filteredTasks = tasks.filter(t => {
     const matchSearch = searchTerm === '' ||
       t.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -278,7 +369,30 @@ export function TasksContent({ projectId: scopedProjectId }: { projectId?: strin
     const matchPriority = priorityFilter === 'all' || t.priority === priorityFilter;
     const matchScoped = !scopedProjectId || t.projectId === scopedProjectId;
     const matchProject = projectFilter === 'all' || t.projectId === projectFilter;
-    return matchScoped && matchSearch && matchStatus && matchPriority && matchProject;
+
+    // Quick-filter chip — layered on top of the dropdown filters. Each chip
+    // is a one-of (no multi-select) to keep the mental model simple.
+    let matchQuick = true;
+    switch (quickFilter) {
+      case 'mine':
+        matchQuick = !!meId && t.assignedToId === meId;
+        break;
+      case 'by_me':
+        matchQuick = !!meId && t.createdById === meId;
+        break;
+      case 'unassigned':
+        matchQuick = !t.assignedToId;
+        break;
+      case 'week':
+        // Due in the next 7 days, not yet done.
+        matchQuick = !!t.dueDate && t.dueDate >= todayYMD && t.dueDate <= endOfWeekYMD && t.status !== 'done';
+        break;
+      case 'overdue':
+        matchQuick = !!t.dueDate && t.dueDate < todayYMD && t.status !== 'done';
+        break;
+    }
+
+    return matchScoped && matchSearch && matchStatus && matchPriority && matchProject && matchQuick;
   });
 
   const tasksByStatus = (status: TaskStatus) => filteredTasks.filter(t => t.status === status);
@@ -376,6 +490,36 @@ export function TasksContent({ projectId: scopedProjectId }: { projectId?: strin
               </SelectContent>
             </Select>
           )}
+        </div>
+
+        {/* Quick-filter chip row — one-of selection so the mental model
+            stays simple. Tapping the active chip clears it back to 'none'. */}
+        <div className="flex flex-wrap gap-2 -mt-2">
+          {(
+            [
+              { key: 'mine',       label: 'Assigned to me' },
+              { key: 'by_me',      label: 'Created by me' },
+              { key: 'unassigned', label: 'Unassigned' },
+              { key: 'week',       label: 'Due this week' },
+              { key: 'overdue',    label: 'Overdue' },
+            ] as { key: QuickFilter; label: string }[]
+          ).map(chip => {
+            const active = quickFilter === chip.key;
+            return (
+              <button
+                key={chip.key}
+                type="button"
+                onClick={() => setQuickFilter(active ? 'none' : chip.key)}
+                className={`px-3 py-1 text-xs rounded-full border transition-colors ${
+                  active
+                    ? 'bg-[#141414] text-white border-[#141414]'
+                    : 'bg-white text-gray-700 border-gray-200 hover:border-[#C9A96E] hover:text-[#141414]'
+                }`}
+              >
+                {chip.label}
+              </button>
+            );
+          })}
         </div>
 
         {/* Content */}
