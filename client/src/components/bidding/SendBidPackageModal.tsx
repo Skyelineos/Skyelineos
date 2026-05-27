@@ -530,7 +530,7 @@ export function SendBidPackageModal({ open, projectId, projectName, onClose }: P
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Hammer className="w-5 h-5 text-[#C9A96E]" />
-            Send Bid Package
+            Create new bid package
           </DialogTitle>
           <DialogDescription>
             Send a project-wide bid package across multiple trades. Each trade gets its own scope and sub list.{' '}
@@ -814,7 +814,7 @@ export function SendBidPackageModal({ open, projectId, projectName, onClose }: P
             <Send className="w-4 h-4" />
             {submitting
               ? 'Sending…'
-              : `Send package (${totalInvitedSubs} sub${totalInvitedSubs === 1 ? '' : 's'})`}
+              : `Send to ${totalInvitedSubs} sub${totalInvitedSubs === 1 ? '' : 's'}`}
           </Button>
         </DialogFooter>
       </DialogContent>

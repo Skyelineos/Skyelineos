@@ -131,7 +131,7 @@ export function PortalBidsPanel({ projectId, projectName }: Props) {
             className="gap-1.5 text-white"
             style={{ backgroundColor: '#C9A96E' }}
           >
-            <Send className="w-4 h-4" /> Send Bid Package
+            <Send className="w-4 h-4" /> Create new bid package
           </Button>
         </CardHeader>
         <CardContent>
@@ -191,7 +191,7 @@ export function PortalBidsPanel({ projectId, projectName }: Props) {
           {/* Bids comparison grouped by trade */}
           {trades.length === 0 ? (
             <div className="text-center py-8 text-sm text-gray-400">
-              No portal bids yet. Click <strong>Send Bid Package</strong> to invite subs.
+              No portal bids yet. Click <strong>Create new bid package</strong> to invite subs.
             </div>
           ) : (
             <div className="space-y-4">

@@ -53,6 +53,7 @@ interface SubCompliance {
   w9Filed?: boolean;
   insuranceCurrent?: boolean;
   agreementSigned?: boolean;
+  contractorLicenseNumber?: string;     // D-016: fourth required item, gates award
 }
 
 export default function BidRespond() {
@@ -92,11 +93,11 @@ export default function BidRespond() {
     })();
   }, [token]);
 
-  // Load compliance flags if signed-in sub
+  // Load compliance flags if signed-in sub. Used for the advisory checklist —
+  // NOT a gate on bid submission (D-016: gating moved to award time only).
+  const uid = (user as any)?.firebaseUid || (user as any)?.id?.toString();
   useEffect(() => {
-    if (!isAuthenticated || !user) return;
-    const uid = (user as any).firebaseUid || (user as any).id?.toString();
-    if (!uid) return;
+    if (!isAuthenticated || !uid) return;
     (async () => {
       try {
         const snap = await getDoc(doc(db, 'users', uid));
@@ -106,13 +107,44 @@ export default function BidRespond() {
             w9Filed: !!d.w9Filed,
             insuranceCurrent: !!d.insuranceCurrent,
             agreementSigned: !!d.agreementSigned,
+            contractorLicenseNumber: typeof d.contractorLicenseNumber === 'string'
+              ? d.contractorLicenseNumber.trim()
+              : undefined,
           });
         }
       } catch {
         /* best effort */
       }
     })();
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated, uid]);
+
+  // Inline license-number save (writes to users/{uid} — Firestore rules allow
+  // a signed-in user to write their own user doc, so no API endpoint needed).
+  const [licenseInput, setLicenseInput] = useState('');
+  const [savingLicense, setSavingLicense] = useState(false);
+  useEffect(() => {
+    if (compliance.contractorLicenseNumber && !licenseInput) {
+      setLicenseInput(compliance.contractorLicenseNumber);
+    }
+  }, [compliance.contractorLicenseNumber, licenseInput]);
+  async function saveLicense() {
+    if (!uid) return;
+    const trimmed = licenseInput.trim();
+    if (!trimmed) return;
+    setSavingLicense(true);
+    try {
+      const { updateDoc, serverTimestamp } = await import('firebase/firestore');
+      await updateDoc(doc(db, 'users', uid), {
+        contractorLicenseNumber: trimmed,
+        contractorLicenseUpdatedAt: serverTimestamp(),
+      });
+      setCompliance(prev => ({ ...prev, contractorLicenseNumber: trimmed }));
+    } catch (e) {
+      console.error('save license failed', e);
+    } finally {
+      setSavingLicense(false);
+    }
+  }
 
   // ── States ────────────────────────────────────────────────────────────────
 
@@ -286,8 +318,9 @@ export default function BidRespond() {
               Sign in or create account
             </Button>
             <p className="text-xs text-muted-foreground">
-              First-time subs will be guided through a brief sign-up + document upload
-              (W-9, Certificate of Insurance, Subcontractor Agreement) before submitting bids.
+              You can submit your bid as soon as you sign in. W-9, Certificate of Insurance,
+              Subcontractor Agreement, and contractor license number are needed before Skyeline
+              can award the work — but you don't need them on file to submit a bid.
             </p>
           </CardContent>
         </Card>
@@ -295,52 +328,26 @@ export default function BidRespond() {
     );
   }
 
-  // Signed in — check verification status
-  const verified = !!(compliance.w9Filed && compliance.insuranceCurrent && compliance.agreementSigned);
-  if (!verified) {
-    return (
-      <PageFrame>
-        {header}
-        <Card className="max-w-3xl mx-auto">
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <ShieldCheck className="h-6 w-6 text-amber-600" />
-              <CardTitle>Verification required before submitting</CardTitle>
-            </div>
-            <CardDescription>
-              To submit bids, we need three things on file:
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <ChecklistRow done={!!compliance.w9Filed} label="W-9 tax form" />
-            <ChecklistRow done={!!compliance.insuranceCurrent} label="Certificate of Insurance (general liability + workers' comp)" />
-            <ChecklistRow done={!!compliance.agreementSigned} label="Signed Subcontractor Agreement" />
-            <div className="pt-3">
-              <Button onClick={() => setLocation('/sub/onboarding')}>
-                Complete verification
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground pt-2">
-              Skyeline typically reviews new submissions within 1 business day. We'll notify you
-              when you're cleared to bid.
-            </p>
-          </CardContent>
-        </Card>
-      </PageFrame>
-    );
-  }
+  // Signed in. Per D-016, bid submission is NOT gated on compliance any more —
+  // we render the response CTA unconditionally + an advisory compliance section.
+  // The award endpoint is the gate.
+  const allComplianceOk = !!(
+    compliance.w9Filed &&
+    compliance.insuranceCurrent &&
+    compliance.agreementSigned &&
+    compliance.contractorLicenseNumber
+  );
 
-  // Verified + signed-in + not yet responded → ready to submit
-  // The actual response form is built in Slice 2. For Slice 1 we direct them
-  // to the existing sub portal where bid requests appear.
   return (
     <PageFrame>
       {header}
-      <Card className="max-w-3xl mx-auto">
+
+      {/* Primary action — always available to any signed-in sub. */}
+      <Card className="max-w-3xl mx-auto mb-4">
         <CardHeader>
           <div className="flex items-center gap-3">
             <CheckCircle2 className="h-6 w-6 text-green-600" />
-            <CardTitle>You're ready to submit</CardTitle>
+            <CardTitle>Ready to submit your bid</CardTitle>
           </div>
           <CardDescription>
             Open your portal to enter your bid amount{ctx.type === 'general' ? ', tier breakdown, ' : ' '}
@@ -355,6 +362,69 @@ export default function BidRespond() {
           >
             Open my portal & submit bid
           </Button>
+        </CardContent>
+      </Card>
+
+      {/* Advisory compliance section — NOT a wall. */}
+      <Card className="max-w-3xl mx-auto">
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <ShieldCheck className={`h-6 w-6 ${allComplianceOk ? 'text-green-600' : 'text-amber-600'}`} />
+            <CardTitle className="text-base">
+              {allComplianceOk ? 'You\'re fully verified' : 'Verification needed before award'}
+            </CardTitle>
+          </div>
+          <CardDescription>
+            {allComplianceOk
+              ? 'All four items are on file. If Skyeline awards your bid, the contract can be issued right away.'
+              : 'You can submit your bid now — but Skyeline can\'t award the work until these four items are on file.'}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <ChecklistRow done={!!compliance.w9Filed} label="W-9 tax form" />
+          <ChecklistRow done={!!compliance.insuranceCurrent} label="Certificate of Insurance (general liability + workers' comp)" />
+          <ChecklistRow done={!!compliance.agreementSigned} label="Signed Subcontractor Agreement" />
+          <ChecklistRow
+            done={!!compliance.contractorLicenseNumber}
+            label={
+              compliance.contractorLicenseNumber
+                ? `Contractor license — ${compliance.contractorLicenseNumber}`
+                : 'Contractor license number'
+            }
+          />
+
+          {/* Inline editor for the license number — the one thing the sub can
+              resolve right here without an upload UI (those land in Phase 1D
+              Slice 3). For W-9 / COI / Agreement we show status only. */}
+          <div className="pt-3 border-t mt-3 space-y-2">
+            <label className="text-sm font-medium block">
+              {compliance.contractorLicenseNumber ? 'Update' : 'Add'} your contractor license number
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={licenseInput}
+                onChange={(e) => setLicenseInput(e.target.value)}
+                placeholder="e.g. CA Lic# 1234567"
+                className="flex-1 px-3 py-2 border rounded-md text-sm"
+              />
+              <Button
+                onClick={saveLicense}
+                disabled={
+                  savingLicense ||
+                  !licenseInput.trim() ||
+                  licenseInput.trim() === (compliance.contractorLicenseNumber || '')
+                }
+              >
+                {savingLicense ? 'Saving…' : 'Save'}
+              </Button>
+            </div>
+          </div>
+
+          <p className="text-xs text-muted-foreground pt-2">
+            W-9, Certificate of Insurance, and Subcontractor Agreement uploads land in your portal
+            soon. For now Skyeline will collect those by email or in person — submit your bid first.
+          </p>
         </CardContent>
       </Card>
     </PageFrame>

@@ -634,6 +634,69 @@ A reusable React component + backend audit-trail system for in-app contract sign
 
 ---
 
+## D-016 — Compliance gate moves from bid-submit to bid-award
+
+**Decided:** 2026-05-28.
+**Supersedes:** D-012-d (which required email verification + doc upload before submit) and the implicit "no bid without compliance" gate that lived in `SubBidSubmissionForm.tsx`.
+**Touches:** `BidRespond.tsx`, `SubBidSubmissionForm.tsx`, `AwardBidModal.tsx`, new `functions/src/bids/awardBidRoute.ts`, `users/{uid}` schema.
+
+### What
+
+**Any signed-in sub can submit a bid, with zero compliance items on file.** Compliance is checked at AWARD time — Skyeline cannot mark a bid as awarded unless the winning sub has all four items on their `users/{uid}` doc:
+
+1. `w9Filed === true` — W-9 tax form
+2. `insuranceCurrent === true` — Certificate of Insurance (general liability + workers' comp)
+3. `agreementSigned === true` — Signed Subcontractor Agreement
+4. `contractorLicenseNumber` non-empty string — **NEW** in D-016
+
+### Why this is better than the old gate
+
+- **Subs aren't dead-ended.** A new sub who clicks a magic link can submit a competitive number even if their docs aren't on file yet. We capture market interest first; compliance is collected once we've decided to actually do business.
+- **Skyeline still controls risk** — no work is awarded to a non-compliant sub. The award button on the GC side surfaces missing items explicitly.
+- **The earlier UX was broken.** The "Complete verification" button on `BidRespond.tsx` pointed to `/sub/onboarding` which never existed → user landed on a 404 page. Killed.
+- **Soft prompts beat walls.** The advisory section on `BidRespond.tsx` still lists each item with green / amber status so subs know what's coming, but the prompt is "needed before award" not "needed before submit."
+
+### Server-side enforcement
+
+`POST /api/bids/award` (new — `functions/src/bids/awardBidRoute.ts`):
+- Auth: staff role only (`gc` / `projectManager` / `admin`).
+- Resolves the bid → the sub's `users/{uid}` doc (tries `submittedByUid`, `subContactId` → `linkedUserId`, falls back to `subId`).
+- Checks all four compliance items.
+- Returns `400 { error, missingItems: [...] }` if any are missing — the GC's `AwardBidModal` surfaces this as a toast naming each missing item.
+- On success, atomically: flips `bids/{id}.status = 'awarded'`, parent `projects/{p}/bidRequests/{br}.status = 'awarded'`, notifies the winning sub.
+
+The previous client-side direct-write path in `AwardBidModal.markBidAwarded()` is gone — every award goes through this endpoint. Firestore rules continue to allow signed-in staff to write `bids/*`, but the path-of-least-resistance for the UI is the endpoint with the gate.
+
+### Where each item is captured
+
+| Item | Where the sub enters it | Where it's read at award time |
+|---|---|---|
+| `w9Filed` | Sub portal compliance upload UI (Phase 1D Slice 3, not yet built — for now: GC sets this flag manually after collecting the W-9 by email) | `users/{uid}.w9Filed` |
+| `insuranceCurrent` | Same — Phase 1D Slice 3 upload; GC manual flip for now | `users/{uid}.insuranceCurrent` |
+| `agreementSigned` | Tied to the D-015 native signature widget once that ships; GC manual flip for now | `users/{uid}.agreementSigned` |
+| `contractorLicenseNumber` | **Inline form on `BidRespond.tsx`** — the sub fills this in directly on the bid landing page. Writes go straight to `users/{uid}.contractorLicenseNumber` via the existing user-self-write Firestore rule. No Cloud Function needed. | `users/{uid}.contractorLicenseNumber` (string, trimmed, non-empty) |
+
+### What changes in the UI
+
+- `BidRespond.tsx` — "Verification required before submitting" wall removed. Always renders the response CTA for signed-in subs. Advisory section below shows checklist + inline license-number input.
+- `SubBidSubmissionForm.tsx` — submit button no longer disabled on incomplete compliance. Banner restyled amber (not red), copy now says "Verification needed before Skyeline can award this work" instead of "required before submitting."
+- `AwardBidModal.tsx` — `markBidAwarded()` now POSTs to `/api/bids/award`. On 400, the toast reads e.g. `"Can't award — Acme Plumbing is missing: Contractor license number, Signed Subcontractor Agreement."`
+
+### Open follow-ups
+
+- **D-016-a — Upload UI for W-9 / COI / Agreement.** Currently the only sub-side resolver is the license number. The other three are still GC-manually-flipped. Phase 1D Slice 3 builds the actual upload UI + admin verification queue. Until then the GC enters the field by hand after collecting by email.
+- **D-016-b — Expiration tracking.** The COI has an expiration date the GC will eventually want to enforce ("flag stale insurance") — currently we only check the boolean. Folded into Slice 3.
+- **D-016-c — Sub portal display.** The award notification currently links to `/sub`. Should eventually link to a specific awarded-contract view. Phase 1D Slice 4.
+
+### Cross-references
+
+- `client/src/pages/BidRespond.tsx` — the user-facing rework.
+- `client/src/components/bidding/SubBidSubmissionForm.tsx` — gate removed.
+- `client/src/components/bidding/AwardBidModal.tsx` — routes through new endpoint.
+- `functions/src/bids/awardBidRoute.ts` — new server-side gate.
+
+---
+
 ## Index of decisions
 
 | ID | Decision | Doc(s) impacted |
@@ -653,6 +716,7 @@ A reusable React component + backend audit-trail system for in-app contract sign
 | D-013 | Cost-plus pricing: 12% baseline / 15% with internal hard design; soft design separate; GC review gate before client-visible publish; `publishedClientPrice` locked at publish | `docs/selections-design.md` (update), new `docs/pricing-design.md` (deferred), project + selection schemas |
 | D-014 | Client Onboarding Wizard: tier qualification + POH intent + photo preference quiz + Pinterest/upload + contract sign. AI-generated placeholder library for v1. | New `docs/client-onboarding-design.md`; project schema; new `inspirationLibrary` collection |
 | D-015 | Native in-app contract signing widget — replaces DocuSign assumption. Cross-cutting infra used by client/sub/designer contracts. ESIGN/UETA compliant. | `contracts/` collection; new `<SignaturePad />`; finalized PDF generation via `pdf-lib` |
+| D-016 | Compliance gate moves from bid-submit to bid-award. Any sub can submit; only awards are gated. Adds `contractorLicenseNumber` as a fourth required item enforced server-side at `/api/bids/award`. | `BidRespond.tsx`, `SubBidSubmissionForm.tsx`, `AwardBidModal.tsx`, new `functions/src/bids/awardBidRoute.ts`, `users/{uid}` schema |
 
 ---
 

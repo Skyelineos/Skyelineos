@@ -59,3 +59,9 @@ drizzle/
 
 # Local files
 *.local
+# Tokens / PATs — catch typos like .claude-push-tokenT alongside the canonical name
+.claude-push-token*
+*-token
+*-token.*
+*.pem
+*.key

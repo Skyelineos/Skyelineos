@@ -2033,6 +2033,11 @@ registerBidPackageDispatchRoute(app, admin.firestore());
 import { registerDeleteBidRequestRoute } from './bids/deleteBidRequestRoute';
 registerDeleteBidRequestRoute(app, admin.firestore());
 
+// Bid award with server-side compliance gate (D-016).
+// Route: POST /api/bids/award
+import { registerAwardBidRoute } from './bids/awardBidRoute';
+registerAwardBidRoute(app, admin.firestore());
+
 // Catch-all 404 — must come AFTER all route registrations (QBO routes above included)
 app.use('*', (req: any, res: any) => {
   console.log(`❌ 404 - API endpoint not found: ${req.method} ${req.originalUrl}`);

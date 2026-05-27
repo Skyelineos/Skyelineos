@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   collection, addDoc, doc, updateDoc, serverTimestamp, query, where, onSnapshot,
 } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { db, auth } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { createNotification } from '@/lib/notifications';
@@ -154,34 +154,31 @@ export function AwardBidModal({ open, bid, onClose }: Props) {
   };
 
   const markBidAwarded = async () => {
-    await updateDoc(doc(db, 'bids', bid.id), {
-      status: 'awarded',
-      awardedAt: serverTimestamp(),
-      awardedByUserId: user?.id?.toString() || user?.email || 'unknown',
+    // Award goes through the server-side endpoint which enforces the D-016
+    // compliance gate (W-9, COI, Subcontractor Agreement, contractor license)
+    // before the bid status can flip to 'awarded'. If any item is missing,
+    // the endpoint returns 400 with { error, missingItems }; we surface that
+    // to the GC as a destructive toast and abort.
+    const idToken = await auth.currentUser?.getIdToken();
+    if (!idToken) throw new Error('Not signed in');
+    const res = await fetch('/api/bids/award', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        bidId: bid.id,
+        projectId: bid.projectId,
+        bidRequestId: bid.bidRequestId,
+      }),
     });
-    if (bid.bidRequestId && bid.projectId) {
-      try {
-        await updateDoc(doc(db, 'projects', bid.projectId, 'bidRequests', bid.bidRequestId), {
-          status: 'awarded',
-          awardedBidId: bid.id,
-          updatedAt: serverTimestamp(),
-        });
-      } catch { /* bidRequest may not exist */ }
-    }
-    if (bid.subContactId) {
-      try {
-        await createNotification({
-          userId: bid.subContactId,
-          kind: 'system',
-          title: `Bid awarded: ${bid.trade}`,
-          body: `Your bid for ${bid.projectName || 'this project'} was awarded. You'll receive the subcontractor agreement before work begins.`,
-          link: '/subcontractor-portal/bids',
-          projectId: bid.projectId,
-          refType: 'task',
-          refId: bid.id,
-          fromUserName: user?.name || 'Skyeline Homes',
-        });
-      } catch { /* notification is non-critical */ }
+    const data = await res.json().catch(() => ({} as any));
+    if (!res.ok || !data.ok) {
+      // Pass the server's error string through verbatim — it lists the
+      // exact missing compliance items (e.g. "Can't award — Acme Plumbing
+      // is missing: Contractor license number, Signed Subcontractor Agreement.")
+      throw new Error(data?.error || `Award failed (status ${res.status})`);
     }
   };
 
@@ -431,7 +428,7 @@ export function AwardBidModal({ open, bid, onClose }: Props) {
           <Button variant="outline" onClick={onClose} disabled={working}>Cancel</Button>
           <Button
             onClick={handleAward}
-            disabled={working || (!estimateId && estimates.length > 0) || (estimateId && estimateId !== NEW_ESTIMATE && !lineId)}
+            disabled={working || (!estimateId && estimates.length > 0) || Boolean(estimateId && estimateId !== NEW_ESTIMATE && !lineId)}
             className="gap-2 text-white"
             style={{ backgroundColor: '#C9A96E' }}
           >

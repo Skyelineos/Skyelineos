@@ -47,13 +47,18 @@ export function SubBidSubmissionForm({
 
   const subId = user?.id?.toString() || user?.email || '';
 
-  // Compliance gate — same source as the dashboard's compliance banner
-  // (the sub's user doc). Submitting a bid is blocked until W-9, insurance,
-  // and the subcontractor agreement are all on file.
-  const [compliance, setCompliance] = useState<{ w9Filed?: boolean; insuranceCurrent?: boolean; agreementSigned?: boolean }>({});
+  // Compliance status — loaded for the advisory banner, but per D-016 it is
+  // NOT a gate on bid submission. The submit button works for any signed-in
+  // sub. Compliance is enforced server-side at AWARD time only.
+  const [compliance, setCompliance] = useState<{
+    w9Filed?: boolean;
+    insuranceCurrent?: boolean;
+    agreementSigned?: boolean;
+    contractorLicenseNumber?: string;
+  }>({});
   useEffect(() => {
-    if (!user?.firebaseUid && !user?.id) return;
-    const uid = (user as any).firebaseUid || user.id?.toString();
+    if (!(user as any)?.firebaseUid && !user?.id) return;
+    const uid = (user as any)?.firebaseUid || user?.id?.toString();
     if (!uid) return;
     (async () => {
       try {
@@ -64,6 +69,9 @@ export function SubBidSubmissionForm({
             w9Filed: !!d.w9Filed,
             insuranceCurrent: !!d.insuranceCurrent,
             agreementSigned: !!d.agreementSigned,
+            contractorLicenseNumber: typeof d.contractorLicenseNumber === 'string'
+              ? d.contractorLicenseNumber.trim()
+              : undefined,
           });
         }
       } catch { /* ignore */ }
@@ -73,7 +81,9 @@ export function SubBidSubmissionForm({
     !compliance.w9Filed && 'W-9',
     !compliance.insuranceCurrent && 'Insurance',
     !compliance.agreementSigned && 'Subcontractor agreement',
+    !compliance.contractorLicenseNumber && 'Contractor license number',
   ].filter(Boolean) as string[];
+  // Kept for the banner only — never used to disable the submit button.
   const complianceComplete = complianceMissing.length === 0;
 
   // Submission path: build line items inside the form, or upload a finished PDF quote.
@@ -260,14 +270,9 @@ export function SubBidSubmissionForm({
 
   const handleSubmit = async () => {
     if (!user) return;
-    if (!complianceComplete) {
-      toast({
-        title: 'Compliance incomplete',
-        description: `Submit ${complianceMissing.join(', ')} before bidding.`,
-        variant: 'destructive',
-      });
-      return;
-    }
+    // Per D-016 the compliance gate moved from bid-submit to bid-award. Subs
+    // can submit bids any time; Skyeline simply can't AWARD an incomplete sub.
+    // (The /api/bids/award endpoint enforces the four-item check server-side.)
     const err = validate();
     if (err) {
       toast({ title: err, variant: 'destructive' });
@@ -814,19 +819,22 @@ export function SubBidSubmissionForm({
       {/* Compliance gate banner — shown when any required doc is missing.
           Submit button is disabled to enforce the policy on the client side;
           server validation should mirror this in a Cloud Function for now. */}
+      {/* Advisory banner only — submission is no longer gated on compliance.
+          Per D-016 the gate runs server-side at AWARD time instead. */}
       {!complianceComplete && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-3 flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-amber-700 flex-shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-red-900">
-              Compliance documents required before submitting a bid
+            <p className="text-sm font-semibold text-amber-900">
+              Verification needed before Skyeline can award this work
             </p>
-            <p className="text-xs text-red-800 mt-0.5">
-              Missing: {complianceMissing.join(', ')}. Complete your compliance profile to unlock bid submission — this protects you and Skyeline on every job.
+            <p className="text-xs text-amber-800 mt-0.5">
+              You can submit your bid now. Skyeline can't award the job until these are on file:{' '}
+              {complianceMissing.join(', ')}.
             </p>
             <a
               href="/subcontractor-portal/compliance"
-              className="inline-flex items-center gap-1 text-xs font-semibold text-red-900 mt-2 hover:underline"
+              className="inline-flex items-center gap-1 text-xs font-semibold text-amber-900 mt-2 hover:underline"
             >
               Open compliance profile <ExternalLink className="w-3 h-3" />
             </a>
@@ -839,13 +847,12 @@ export function SubBidSubmissionForm({
         <Button variant="outline" onClick={onClose}>Cancel</Button>
         <Button
           onClick={handleSubmit}
-          disabled={submitting || !complianceComplete}
+          disabled={submitting}
           className="gap-2 text-white"
-          style={{ backgroundColor: complianceComplete ? '#22c55e' : '#9ca3af' }}
-          title={!complianceComplete ? `Submit ${complianceMissing.join(', ')} first` : undefined}
+          style={{ backgroundColor: '#22c55e' }}
         >
           {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-          {submitting ? 'Submitting…' : !complianceComplete ? 'Compliance required' : 'Submit Bid'}
+          {submitting ? 'Submitting…' : 'Submit Bid'}
         </Button>
       </div>
     </div>

@@ -54,7 +54,7 @@ export default function ProjectEstimates() {
             data-testid="open-send-bid-package"
           >
             <Send className="h-4 w-4 mr-2" />
-            Send Bid Package
+            Create new bid package
           </Button>
         </div>
 
