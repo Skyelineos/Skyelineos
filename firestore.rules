@@ -16,8 +16,46 @@ service cloud.firestore {
       return isSignedIn() && getUserRole() == 'admin';
     }
 
-    function isGC() {
+    // ROLE PREDICATES — read together as a unit
+    //
+    // Per docs/decisions.md §D-001: projectManager is a real role that acts as
+    // GC's delegate for project-operational work. It is NOT permitted for billing,
+    // settings, role management, or selection lock-break.
+    //
+    // The pragmatic implementation: isGC() includes projectManager for the
+    // vast majority of rules (which are project-operational). Use the new
+    // isGCOnly() predicate for billing/settings/admin paths that the PM
+    // must NOT touch.
+    //
+    // This minimizes the change surface — existing isGC() usage everywhere
+    // automatically grants PM the right access for project-operational paths.
+    // The few financial/admin paths that need GC-only access are explicitly
+    // listed in the comments below the helpers.
+
+    function isProjectManager() {
+      return isSignedIn() && getUserRole() == 'projectManager';
+    }
+
+    // isGCOnly() — true GC carve-out. Use for: billing writes, settings,
+    // admin operations, selection-lock-break. PMs explicitly fail this.
+    function isGCOnly() {
       return isSignedIn() && (getUserRole() == 'admin' || getUserRole() == 'gc');
+    }
+
+    // isGC() — includes admin + gc + projectManager. The default predicate
+    // for project-operational rules. Most rules in this file use this.
+    function isGC() {
+      return isSignedIn() && (
+        getUserRole() == 'admin'
+        || getUserRole() == 'gc'
+        || getUserRole() == 'projectManager'
+      );
+    }
+
+    // Convenience alias — same as isGC(). Kept for clarity in newer rules
+    // that want explicit "staff" semantics (selections-design.md uses this).
+    function isStaff() {
+      return isGC();
     }
 
     function isClient() {
@@ -25,11 +63,11 @@ service cloud.firestore {
     }
 
     function isDesigner() {
-      return isSignedIn() && (getUserRole() == 'designer' || isGC());
+      return isSignedIn() && (getUserRole() == 'designer' || isStaff());
     }
 
     function isSub() {
-      return isSignedIn() && (getUserRole() == 'sub' || isGC());
+      return isSignedIn() && (getUserRole() == 'sub' || isStaff());
     }
 
     // Users — each user reads/writes their own profile; admins can write any profile
@@ -99,13 +137,13 @@ service cloud.firestore {
     match /estimates/{estimateId} {
       allow read: if isGC()
         || (isClient() && resource.data.clientId == request.auth.uid);
-      allow write: if isGC();
+      allow write: if isGCOnly();
       allow delete: if isAdmin();
 
       match /lineItems/{lineItemId} {
         allow read: if isGC()
           || (isClient() && get(/databases/$(database)/documents/estimates/$(estimateId)).data.clientId == request.auth.uid);
-        allow write: if isGC();
+        allow write: if isGCOnly();
         allow delete: if isAdmin();
       }
     }
@@ -114,7 +152,7 @@ service cloud.firestore {
     match /invoices/{invoiceId} {
       allow read: if isGC()
         || (isClient() && resource.data.clientId == request.auth.uid);
-      allow write: if isGC();
+      allow write: if isGCOnly();
       allow delete: if isAdmin();
     }
 
@@ -155,7 +193,7 @@ service cloud.firestore {
     // Financial data
     match /financials/{docId} {
       allow read: if isGC();
-      allow write: if isGC();
+      allow write: if isGCOnly();
       allow delete: if isAdmin();
     }
 
@@ -171,8 +209,8 @@ service cloud.firestore {
     match /changeOrders/{orderId} {
       allow read: if isGC()
         || (isClient() && resource.data.clientId == request.auth.uid);
-      allow create: if isGC() || isClient(); // clients create COs when approving overages
-      allow update, delete: if isGC();
+      allow create: if isGCOnly() || isClient(); // clients create COs when approving overages
+      allow update, delete: if isGCOnly();
     }
 
     // Safety forms
@@ -205,6 +243,25 @@ service cloud.firestore {
       allow read: if isGC() || isDesigner();
       // Only Cloud Functions (admin SDK) write here; clients shouldn't.
       allow write: if false;
+    }
+
+    // Bid invite tokens — root-level lookup table for magic-link bid responses.
+    // Per docs/sub-portal-design.md Slice 1. The token IS the auth for
+    // looking up the bid request from the public endpoint. Clients must
+    // never read this collection directly — Cloud Functions only.
+    match /bidInviteTokens/{token} {
+      allow read: if false;
+      allow write: if false;
+    }
+
+    // Link review queue — staff-side queue of new sub signups whose contact
+    // record couldn't be auto-linked. Per docs/decisions.md D-012-h.
+    // Cloud Function writes entries; staff reads + resolves.
+    match /linkReviewQueue/{entryId} {
+      allow read: if isGC() || isAdmin();
+      allow create: if false;          // Cloud Function only (admin SDK)
+      allow update: if isGC() || isAdmin();   // staff marks resolved
+      allow delete: if isAdmin();
     }
 
     match /projects/{projectId}/selections/{selectionId} {
@@ -266,7 +323,7 @@ service cloud.firestore {
     // the company. Used by the Estimate Details line-item picker.
     match /companySettings/{settingsDoc}/descriptionTemplates/{templateId} {
       allow read: if isSignedIn();
-      allow create, update, delete: if isGC();
+      allow create, update, delete: if isGCOnly();
     }
 
     // Saved bid-package templates — reusable trade + scope groupings the GC
@@ -275,7 +332,7 @@ service cloud.firestore {
     // standard scopes look like; only GC can mutate.
     match /bidPackageTemplates/{templateId} {
       allow read: if isSignedIn();
-      allow create, update, delete: if isGC();
+      allow create, update, delete: if isGCOnly();
     }
 
     // Sub-scoped takeoffs — each subcontractor builds their own takeoff against
@@ -345,7 +402,7 @@ service cloud.firestore {
     // Single-doc settings (e.g., settings/google with placeId). GC manages.
     match /settings/{settingId} {
       allow read: if isSignedIn();
-      allow write: if isGC();
+      allow write: if isGCOnly();
     }
 
     // Playbook — Tyler's private internal journal of best practices, delay
@@ -430,7 +487,7 @@ service cloud.firestore {
     // App-wide settings (pipeline stages, etc.)
     match /settings/{docId} {
       allow read: if isSignedIn();
-      allow write: if isGC();
+      allow write: if isGCOnly();
     }
 
     // Site observation logs — GC/admin see all; clients create and read their own
@@ -473,7 +530,7 @@ service cloud.firestore {
 
     // Automations
     match /automations/{autoId} {
-      allow read: if isGC();
+      allow read: if isGCOnly();
       allow create, update: if isAdmin();
       allow delete: if isAdmin();
     }
@@ -489,8 +546,8 @@ service cloud.firestore {
     match /purchaseOrders/{poId} {
       allow read: if isGC()
         || (isSub() && resource.data.subId == request.auth.uid);
-      allow create, update: if isGC();
-      allow delete: if isAdmin() || isGC();
+      allow create, update: if isGCOnly();
+      allow delete: if isAdmin() || isGCOnly();
     }
 
     // Communications log
@@ -506,7 +563,7 @@ service cloud.firestore {
     match /contracts/{contractId} {
       allow read: if isGC()
         || (isSignedIn() && resource.data.other.userId == request.auth.uid);
-      allow create, update: if isGC();
+      allow create, update: if isGCOnly();
       allow delete: if isAdmin();
     }
 

@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import {
-  collection, addDoc, serverTimestamp, getDocs, query, orderBy, doc, updateDoc, where,
+  collection, addDoc, setDoc, serverTimestamp, getDocs, query, orderBy, doc, updateDoc, where,
 } from 'firebase/firestore';
 import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '@/lib/firebase';
+import { db, storage, auth } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
-import { createNotificationsBatch } from '@/lib/notifications';
+// Note: in-app notification fan-out moved to a deliberate no-op below.
+// The styled HTML email from /api/bid-requests/send IS the notification now.
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from '@/components/ui/dialog';
@@ -308,6 +309,13 @@ export function SendBidPackageModal({ open, projectId, projectName, onClose }: P
     try {
       // Create the bid package doc. Stays at projects/{projectId}/bidPackages
       // so it travels with the project.
+      //
+      // Use setDoc(ref, payload) instead of addDoc so the doc's path ID and
+      // the `id` content field stay in sync. The prior addDoc + doc() pattern
+      // generated two different IDs (the doc landed at one auto-ID while
+      // pkgPayload.id pointed at a different orphaned ref) — meaning
+      // bidPackageId references on child bidRequests didn't resolve to a real
+      // doc path. Fixed here so the bidPackages parent is actually addressable.
       const pkgRef = doc(collection(db, 'projects', projectId, 'bidPackages'));
       const pkgPayload = {
         id: pkgRef.id,
@@ -324,90 +332,190 @@ export function SendBidPackageModal({ open, projectId, projectName, onClose }: P
         createdByName: user.name || 'GC',
         updatedAt: serverTimestamp(),
       };
-      await addDoc(collection(db, 'projects', projectId, 'bidPackages'), pkgPayload);
+      await setDoc(pkgRef, pkgPayload);
 
-      // Create one bidRequest per trade. Each carries the package id so the
-      // bid-management view can group them.
-      const requestRefs: { id: string; trade: string; subIds: string[] }[] = [];
+      // Two-step dispatch:
+      //   1. Per trade: call /api/bid-requests/send with skipDispatch=true.
+      //      Creates the bidRequest doc + per-vendor magic-link tokens but
+      //      does NOT send any notifications.
+      //   2. Once all trades are persisted, call /api/bid-packages/dispatch
+      //      with the bidPackageId. Server-side, it groups vendors across
+      //      trades and sends ONE consolidated HTML email + ONE SMS per
+      //      vendor listing every trade they're invited to.
+      //
+      // Net effect: a sub invited to 3 trades in one package gets 1 email,
+      // not 3. The button URL uses one of their tokens; the portal shows
+      // every bid request they're invited to after sign-in.
+      const idToken = await auth.currentUser?.getIdToken();
+      if (!idToken) throw new Error('Not signed in — please refresh and try again');
+
+      interface VendorLink {
+        vendorName: string;
+        contactId: string | null;
+        email: string | null;
+        inviteToken: string;
+        magicLink: string;
+      }
+      interface SendResponse {
+        ok: boolean;
+        bidRequestId: string;
+        sentEmails: number;
+        sentSms: number;
+        total: number;
+        vendorLinks: VendorLink[];
+        error?: string;
+      }
+
+      const requestRefs: {
+        id: string;
+        trade: string;
+        subIds: string[];
+        vendorLinks: VendorLink[];
+      }[] = [];
+      const droppedNoContact: string[] = [];  // names of subs skipped for missing email + phone
+
       for (const sec of validSections) {
-        const reqRef = await addDoc(
-          collection(db, 'projects', projectId, 'bidRequests'),
-          {
+        const subIds = Array.from(sec.selectedSubIds);
+        const allVendors = subIds.map(id => {
+          const s = allSubs.find(a => a.id === id);
+          return {
+            contactId: id,
+            vendorName: s?.name || '(unnamed vendor)',
+            email: s?.email || undefined,
+            phone: s?.phone || undefined,
+            // Pass linkedUserId so the backend can include it in invitedSubIds.
+            // The existing SubcontractorPortal's collectionGroup query matches
+            // signed-in subs by UID, so without this an already-portal-signed-in
+            // sub wouldn't see the bid request in their portal tab (they'd
+            // still get the email + magic link though).
+            linkedUserId: s?.linkedUserId || undefined,
+          };
+        });
+        // Track which vendors are getting silently dropped so the GC can fix
+        // their contact records later (warning surfaced after send).
+        for (const v of allVendors) {
+          if (!v.email && !v.phone) droppedNoContact.push(`${v.vendorName} (${sec.trade.trim()})`);
+        }
+        const vendors = allVendors.filter(v => v.email || v.phone);
+
+        if (vendors.length === 0) continue; // no contactable vendors for this trade
+
+        const res = await fetch('/api/bid-requests/send', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${idToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
             projectId,
             projectName: projectName || '',
             bidPackageId: pkgRef.id,
+            type: 'item',
+            stage: 'rough',
             trade: sec.trade.trim(),
             scope: sec.scope.trim(),
             callouts: commonNotes.trim(),
+            customMessage: commonNotes.trim() || undefined,
             plans,
-            dueDate: sec.dueDate?.trim() || commonDueDate,
-            // invitedSubIds carries every identifier we might match the sub
-            // by on the portal side: their contact-doc ID, their linked
-            // Firebase Auth UID (if known), and their email. This way the
-            // sub-portal collectionGroup query resolves the request whether
-            // or not the contact has been linkedUserId-stamped yet.
-            invitedSubIds: (() => {
-              const out = new Set<string>();
-              for (const id of Array.from(sec.selectedSubIds)) {
-                out.add(id);
-                const s = allSubs.find(a => a.id === id);
-                if (s?.linkedUserId) out.add(s.linkedUserId);
-                if (s?.email) out.add(s.email.toLowerCase().trim());
-              }
-              return Array.from(out);
-            })(),
-            invitedSubContactIds: Array.from(sec.selectedSubIds),
-            invitedByUserId: user.id?.toString() || user.email || 'unknown',
-            invitedByName: user.name || 'GC',
-            status: 'open',
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          },
-        );
-        requestRefs.push({ id: reqRef.id, trade: sec.trade.trim(), subIds: Array.from(sec.selectedSubIds) });
-      }
+            dueDate: sec.dueDate?.trim() || commonDueDate || undefined,
+            requesterName: user.name || 'Skyeline Homes',
+            vendors,
+            // Suppress per-trade email/SMS — we'll batch one email per
+            // vendor across all trades via /api/bid-packages/dispatch below.
+            skipDispatch: true,
+          }),
+        });
 
-      // Notify each invited sub (deduped across trades — one notification per
-      // sub even if invited to multiple trades in the same package).
-      // Address by linkedUserId (Firebase Auth UID) when available so the
-      // in-app bell shows it. The Cloud Function dispatcher falls back to the
-      // contact doc for email lookup when the userId isn't a real user UID.
-      const notifiedSubIds = new Set<string>();
-      const notifications: Parameters<typeof createNotificationsBatch>[0] = [];
-      for (const r of requestRefs) {
-        for (const subId of r.subIds) {
-          if (notifiedSubIds.has(subId)) continue;
-          notifiedSubIds.add(subId);
-          const sub = allSubs.find(s => s.id === subId);
-          const recipientId = sub?.linkedUserId || subId;
-          // Deep-link to the bids tab and carry the request ID + the sub's
-          // email as query params. The portal can highlight the specific
-          // request; the sign-in form (if not yet authenticated) pre-fills
-          // the email. ProtectedRoute preserves the full path+query as
-          // ?next=<url> through the sign-in bounce so they land back here.
-          const qs = new URLSearchParams();
-          qs.set('bidRequest', r.id);
-          if (sub?.email) qs.set('email', sub.email);
-          const deepLink = `/subcontractor-portal/bids?${qs.toString()}`;
-          notifications.push({
-            userId: recipientId,
-            kind: 'system',
-            title: `New bid package: ${pkgPayload.name}`,
-            body: `Project: ${projectName || ''}. Click "View in Skyeline OS" below to open this bid request and submit your quote.`,
-            link: deepLink,
-            projectId,
-            refType: 'task',
-            refId: r.id,
-            fromUserName: user.name || 'Skyeline Homes',
-          });
+        const json = (await res.json()) as SendResponse;
+        if (!res.ok || !json.ok) {
+          throw new Error(json?.error || `Trade "${sec.trade}" failed to send (${res.status})`);
         }
+        requestRefs.push({
+          id: json.bidRequestId,
+          trade: sec.trade.trim(),
+          subIds,
+          vendorLinks: json.vendorLinks || [],
+        });
       }
-      if (notifications.length > 0) await createNotificationsBatch(notifications);
 
+      // Step 2: dispatch ONE consolidated email per vendor across all trades.
+      // The endpoint reads all bidRequests under this package, groups vendors
+      // by contactId/email, and sends a single styled HTML email + SMS per
+      // vendor listing all the trades they're invited to.
+      interface DispatchResponse {
+        ok: boolean;
+        uniqueVendors: number;
+        sentEmails: number;
+        sentSms: number;
+        droppedNoContact: string[];
+        error?: string;
+      }
+      let dispatchSummary: DispatchResponse | null = null;
+      if (requestRefs.length > 0) {
+        const dispatchRes = await fetch('/api/bid-packages/dispatch', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${idToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            projectId,
+            bidPackageId: pkgRef.id,
+            requesterName: user.name || 'Skyeline Homes',
+          }),
+        });
+        const dispatchJson = (await dispatchRes.json()) as DispatchResponse;
+        if (!dispatchRes.ok || !dispatchJson.ok) {
+          throw new Error(dispatchJson?.error || `Dispatch failed (${dispatchRes.status})`);
+        }
+        dispatchSummary = dispatchJson;
+      }
+
+      // NOTE: We deliberately do NOT call createNotificationsBatch here.
+      //
+      // Previously SendBidPackageModal fired both the in-app notification path
+      // (which triggers an HTML email via the dispatcher) AND a direct
+      // plain-text email from /api/bid-requests/send — subs received TWO
+      // emails per package send ("New bid package" notification + per-trade
+      // "Bid request" emails). After this consolidation, /api/bid-requests/send
+      // emits a single styled HTML email per trade with the same "View in
+      // Skyeline OS" button + Skyeline brand chrome, so the notification path
+      // is redundant and was producing the duplicate inbox clutter.
+      //
+      // If we want in-app bell entries (no email) later, add a separate
+      // notification-only path (e.g., createNotificationsBatch with a
+      // suppressEmail flag, plus a dispatcher-side guard).
+
+      // Guardrail: if every trade was skipped (no contactable vendors anywhere),
+      // surface that loudly rather than showing a misleading "sent" toast.
+      if (requestRefs.length === 0) {
+        toast({
+          title: 'Nothing sent',
+          description: droppedNoContact.length > 0
+            ? `No selected subs have an email or phone on file. Missing contact info for: ${droppedNoContact.join(', ')}.`
+            : 'No valid trade + sub combinations to send.',
+          variant: 'destructive',
+        });
+        return; // keep the modal open so the user can fix + retry
+      }
+
+      // Use the server-side dispatch summary for accurate per-vendor numbers
+      // (uniqueVendors dedups across trades).
+      const vendorCount = dispatchSummary?.uniqueVendors ?? requestRefs.length;
       toast({
         title: 'Bid package sent',
-        description: `${validSections.length} trade${validSections.length === 1 ? '' : 's'}, ${notifiedSubIds.size} sub${notifiedSubIds.size === 1 ? '' : 's'} invited.`,
+        description: `${requestRefs.length} trade${requestRefs.length === 1 ? '' : 's'} sent to ${vendorCount} sub${vendorCount === 1 ? '' : 's'}.`,
       });
+      const allDropped = Array.from(new Set([
+        ...droppedNoContact,
+        ...(dispatchSummary?.droppedNoContact ?? []),
+      ]));
+      if (allDropped.length > 0) {
+        toast({
+          title: 'Some subs skipped',
+          description: `Missing email or phone on contact for: ${allDropped.join(', ')}. Update their contact info to invite them next time.`,
+        });
+      }
       onClose();
     } catch (e: any) {
       toast({ title: 'Send failed', description: e.message, variant: 'destructive' });

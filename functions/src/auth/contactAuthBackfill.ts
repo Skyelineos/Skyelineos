@@ -26,7 +26,9 @@ function deriveUserRole(contactRole: string | undefined): string {
       return 'designer';
     case 'team':
     case 'employee':
-      return 'pending_team';
+      // Per docs/decisions.md §D-001: `pending_team` was a dead-letter state.
+      // Routed to `pending_gc` so the admin sees them in the existing approval queue.
+      return 'pending_gc';
     case 'subcontractor':
     case 'sub':
     case 'vendor':

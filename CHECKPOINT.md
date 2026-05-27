@@ -1,8 +1,108 @@
 # Skyelineos — Session Checkpoint
-**Last updated:** 2026-05-12 (Session 9 — Tools section + Lumber Takeoff Calculator v1)
+**Last updated:** 2026-05-22 (refresh against git history through commit `28f9cd0`)
 **Live URL:** https://skyelineos.web.app
 **Firebase project:** skyelineos (**BLAZE** plan — upgraded 2026-05-06)
-**Deploy command:** `npm run build && firebase deploy --only hosting,firestore:rules,firestore:indexes,functions`
+**Deploy command:** `npm run deploy` (or `:hosting` / `:rules` / `:functions` variants — see `package.json`)
+**Authoritative docs:** `CLAUDE.md`, `PROJECT_OVERVIEW.md`, `SESSION_NOTES.md` (in that order). This file is a session-checkpoint snapshot; the other three are the durable references.
+
+---
+
+## Current state (as of 2026-05-22)
+
+Production `main` is at commit `28f9cd0`. Everything below is shipped on `main` unless marked otherwise.
+
+**Unmerged work:** `origin/feat/selections-v2-dashboard-reminders` (`6b09bd6`, 2026-05-22) — dashboard tile + reminders + designer recommendations. Sits outside `main` because its data model assumes `clientApprovalStatus = 'Checking w/ Client'`, which conflicts with main's contractor-signoff rework. **Decide whether to port forward onto the lifecycle model or revert main before merging.**
+
+### Selections + bidding (current shape on main)
+- **1,195-item template** at `client/src/data/selectionsTemplate.ts`, idempotent per-project seeder (`SeedSelectionsFromTemplate`).
+- **Lifecycle state machine** (in `selections-template-extensions.ts`): Not Started → Designer-Curating → Client-Reviewing → Awaiting-Bids → Bids-Received → GC-Approved → Ordered → Received → Installed.
+- **Client view is collaborative, not approval-based**: `ClientSelectionsTimeline` lets the client mark a preference + leave a note. There is no client "Approve" button.
+- **Two-stage vendor bidding**: `SelectionBid[]` per selection with `stage: 'rough' | 'final'`. Rough bids land off plans; final bids land once specs lock.
+- **Preferred vendors per category** on contacts via `preferredCategories[]`; `usePreferredVendors(category)` hook resolves matches. `PreferredCategoriesEditor` dialog reachable from contact action menu.
+- **Bid request flow** (`RequestBidUpdate` + `RequestBidUpdateAuto`): tries `POST /api/bid-requests/send`, falls back to `mailto:` per-vendor. Server route at `functions/src/bids/sendBidRequestRoute.ts` (folded into the Express api app, NOT a standalone callable — org IAM blocks new public functions).
+- **Contractor sign-off queue** (`ContractorSignoffQueue`, mounted under `PhaseTimelineView` in `GCDesignSnapshot`): separate cost and design sign-offs; both must be checked for `gcApproved = true`.
+- **Phase timeline view** with overdue + allowance-vs-actual roll-up across phases.
+- **Firestore rules + indexes**: selections subcollection rules (`firestore.rules:210`), bidRequests subcollection rules, three composite selections indexes.
+
+### Sessions in production (chronological, with commits)
+
+- **`2558ab3` (initial commit)** — Skyline OS through Session 7. DesignerPortal, AIRenderingStudio (Coming Soon), SelectionsCatalog, all per-project tabs, ClientPortal/SubcontractorPortal/AdminPortal, 19 schedule components, real-time messaging, safety forms, site log, comms log, trades, catalogs, templates, automations (schema only), notifications Phase 1-3, subscriptions tracker.
+- **`606e7a8` Session 8 — Takeoff, bidding, scheduling, playbook, reviews (2026-05-11).** Takeoff tool pinch zoom + fullscreen + halve-pages + measurement title + color picker; multi-trade bid packages, sub bid response, award flow; First/Last contact split + spouse linking + portal invite; dashboard missing-trade alerts + unsigned-schedule banner + pending reviews; playbook + project review form.
+- **`40cf0c8` Session 9 — Contracts, lifecycle, reports, bills workflow, Jack import (2026-05-12).** New `contracts/` module (per-party portal visibility, ContractEditor with allowances/draws/COs/retainage/designer fee/employment fields, MyContractsView shared by Client/Sub/Designer, ContractProfitCard, SoftBudgetBadge); ProjectStageTracker (lead → design → estimating → contract → construction → move-in → warranty → completed); move-in binder + warranty reminders; reports + bills workflow + Jack import.
+- **`bf409ed` Session 10 — sidebar consistency + progressUtils + role audit (2026-05-19).** Pre-cleanup snapshot of Session 10 work: Sidebar/SubcontractorSidebar/FinancialsSidebar unified on brand-black + gold + MobileNav + ProjectLayout alignment; shared StatCard; progressUtils rewritten to read Firestore directly (was hitting non-existent /api/* endpoints); bidding module hardening (AwardBidModal rewrite, BidRequestDetailModal w/ add-sub + reminders, ClaimContactDialog w/ replace/add email merge, RecipientMismatchBanner, BidPackageTemplatePicker); SubBidRequestsTab multi-ID resolution + auto-link + diagnostic panel; estimate builder polish; vCard import + manage leads + recipient prefill; **Lumber Takeoff module** (lib + wizard + PDF stage — what was originally written up as "Session 9"); Draws module + Trade Draws Panel; FCM web push service worker + EnablePushButton + dispatch pipeline; QBO OAuth scaffold; RoleGuard fail-closed.
+- **`d162314` Cleanup — remove dead server/ + 11 stale bid components (2026-05-19).** ~45k lines deleted. `server/` directory (91 files, legacy Express + Drizzle/Postgres) gone. 11 "bid-processes" UI components calling endpoints that didn't exist on the deployed api function gone. **`PortalBidsPanel.tsx` is now the only canonical bid screen.**
+- **`e5ec776` Session 10 docs (2026-05-19).** CLAUDE.md rewrite, PROJECT_OVERVIEW.md rewrite, SESSION_NOTES.md created.
+- **`b787f7a` → `c4a7b46` Session 12 — Ingestion Lab (2026-05-20).** Admin-only AI ingestion at `/admin/ingestion-lab`. Namespace `ingestion_lab/**` (wildcard rule, admin reads + Cloud-Function-only writes); OAuth handlers for Gmail + Drive (folded into api app); Gmail ingester (label `Skyeline-Spike`); Drive ingester (two hardcoded folders — Giboney + Christensen); JSON upload endpoint (for future iMessage / iCloud Mac scripts); brain pass (Claude Sonnet 4.6, forced tool_use, daily $5 budget cap); lane resolver (REVIEW_REQUIRED_CATEGORIES vs INFORMATIONAL_CATEGORIES, auto-file threshold 0.90); UI with Connectors / Auto-Filed / Review Queue / Ask Queue tabs. Full reference: `docs/ingestion-lab-schema.md`.
+- **`717cbf7` Selections portal foundations + Odyssey→Skyelineos rename (2026-05-21).** Applied the original `skyelineos-portal-patch/` (1,195-item template, seed button, PhaseTimelineView, ClientSelectionsTimeline, selections-template-extensions, indexes + rules). `OdysseyClientPortal.tsx` → `SkyelineClientPortal.tsx`. `package.json` name = `skyelineos`. localStorage key + Firebase scripts + UI strings all renamed. `ROLE_AUDIT.md` retains historical Odyssey notes intentionally.
+- **`21dd262` Rework approval flow: contractor signs off, not client (2026-05-21).** Removed client approval CTAs; introduced `SelectionLifecycle` + `SelectionBid`; added `ContractorSignoffQueue` + `RequestBidUpdate`; reworked `ClientSelectionsTimeline` to preference + note instead of approve.
+- **`24e6637` Preferred vendors per category + sendBidRequest Cloud Function (2026-05-21).** `preferredCategories[]` on contacts, `PreferredCategoriesEditor`, `usePreferredVendors` hook, `RequestBidUpdateAuto` wrapper, standalone `sendBidRequest` callable, bidRequests subcollection rules.
+- **`2aadbb7` Merge selections-portal (2026-05-21).** Squash-merge of the selections-portal work into main.
+- **`28f9cd0` Fold sendBidRequest into Express api app (2026-05-21).** New route `POST /api/bid-requests/send` registered on the shared `api` Express app. Standalone `sendBidRequest` callable removed (org IAM blocks new public functions). **Deploy note:** api function redeploy is blocked until `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` are in Secret Manager.
+
+### Lumber Takeoff Calculator (v1.0, landed in Session 10 cleanup snapshot `bf409ed`)
+New top-level **Tools** section in the sidebar. First tool: Lumber Takeoff Calculator.
+
+**Routes:**
+- `/tools` → Tools landing page (cards: Lumber [Available], Tile/Millwork/Concrete [Coming Soon])
+- `/tools/lumber` → Project picker
+- `/tools/lumber/:projectId` → Takeoff list + "New takeoff" button
+- `/tools/lumber/:projectId/:takeoffId` → 6-step wizard (Setup → Legend → Walls → Headers → Subfloor → Results)
+
+**Files added (Session 10 cleanup snapshot):**
+- `client/src/lib/lumber/types.ts`, `assemblies.ts`, `calculate.ts`
+- `client/src/pages/Tools.tsx`, `LumberTakeoff.tsx`
+- `client/src/components/lumber/LumberWizard.tsx`
+
+**Data model:** Side-car doc at `projects/{projectId}/lumberTakeoffs/{takeoffId}`.
+
+**Math rules (v1):** 1 stud/LF × 1.05 waste; plates 3× LF with 10% splice waste; sheathing area÷32 + 10% waste; headers pull beam specs from legend.
+
+**Deferred to v1.5:** Wizard-driven markup on PDF (reuse PdfCanvas/MeasurementOverlay).
+**Deferred to v2:** Trimmer/king breakout, shear walls, holdowns, multi-floor stacking, supplier pricing.
+
+---
+
+## Open threads (deploy blockers, stale docs, known issues)
+
+### Deploy / live-site blockers
+1. **`api` function redeploy is blocked** until `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` are set in Secret Manager. Per commit `28f9cd0`. Run: `firebase functions:secrets:set GOOGLE_CLIENT_ID` then `…GOOGLE_CLIENT_SECRET`.
+2. **`api` function does NOT bind `SENDGRID_*` / `TWILIO_*` secrets** (`functions/src/index.ts:2011`). `sendBidRequestRoute` reads `process.env.SENDGRID_API_KEY` etc., which will be `undefined` in production. Bid request emails/SMS silently fall through to mailto. **One-line fix** — add the six names (`SENDGRID_API_KEY`, `SENDGRID_FROM_EMAIL`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`, `APP_BASE_URL`) to the secrets array on the `api` onRequest config. (The standalone `dispatchNotification` function already has them via `functions/src/notifications/dispatch.ts:81`.)
+3. **Ingestion Lab first-run prerequisites unmet.** Per `SESSION_NOTES.md` Session 12: Google Cloud OAuth client + redirect URIs + Gmail/Drive APIs enabled + OAuth consent screen + contacts cache probe + Gmail label. Until done, ingestion can't run.
+
+### Stale docs
+4. **`PROJECT_OVERVIEW.md` says the `/designer-portal` route is not wired in `App.tsx`** — it is, at `client/src/App.tsx:515`, behind `RoleGuard(['admin', 'designer'])`. Fix the doc.
+
+### Known issues (per SESSION_NOTES.md, none of these are new)
+5. **3 pre-existing TS errors** in `client/src/components/timeline/ModernTimelineBuilder.tsx` (lines 815, 816, 1342). Brace mismatch around 815 cascades. `npm run check` will always exit non-zero until fixed. `vite build` succeeds because esbuild is more permissive.
+6. **RoleGuard isLoading bug** (`client/src/components/auth/RoleGuard.tsx:45`) — destructures `isLoading` but `useAuth` exposes `loading`. Loading-state guard never short-circuits. Benign in practice.
+7. **`shared/types.ts:240` redefines `UserRole`** identically to `shared/auth-types.ts:16`. Roll into the role-taxonomy refactor.
+8. **Dead role `pending_team`** — written by `ensureContactAuth.ts:34` and `contactAuthBackfill.ts:29`, never recognized by any UI. Users with this role have no portal.
+9. **212 prod deps**, multiple Gantt + PDF libraries, at least one of each unused. Dep audit would shrink the install.
+10. **AuthContext test-mode bypass** at `client/src/auth/AuthContext.tsx:70-95` — `localStorage.testMode === 'true'` injects fake admin. If you're debugging mysterious admin access, check there first.
+
+### "Coming Soon" placeholders still on screen
+- `Tools.tsx:139` — Tile/Millwork/Concrete calculators
+- `ClientPortal.tsx:436` — design selection interface (this is partially obsoleted by `ClientSelectionsTimeline` in `SkyelineClientPortal.tsx` — confirm which client portal is the live one)
+- `Financials.tsx:305` — financial reporting features
+- `SubcontractorPortal.tsx:502` — document upload
+- `DependencyManager.tsx:522` — interactive network diagram
+- `UltimateTimelineBuilder.tsx:541` — advanced analytics
+- `AIRenderingStudio.tsx:42` — Coming Soon dialog
+- `DocumentTemplateEditor.tsx:182` — PDF export
+
+---
+
+## Test accounts (unchanged)
+- gc: `testgc@skyelineos.com` / `SkyeTest2024!`
+- designer: `testdesigner@skyelineos.com` / `SkyeTest2024!`
+- client: `testclient@skyelineos.com` / `SkyeTest2024!`
+- Tyler: `tyler@skyelinehomes.com` (admin)
+
+---
+
+## Pre-current-session history (preserved verbatim below)
+
+The content below was the previous CHECKPOINT.md (last updated 2026-05-12, Session 9 framing). Useful for archaeology — the canonical narrative above replaces it, but many of the per-feature details (notification dispatch, subscriptions tracker, mobile sidebar fix, etc.) still match what's on `main`. Treat conflicts in favor of the canonical narrative above.
 
 ---
 

@@ -45,6 +45,8 @@ const SubcontractorPortal = lazy(() => import("@/pages/SubcontractorPortal"));
 const DesignerPortal = lazy(() => import("@/pages/DesignerPortal"));
 const PortalLogin = lazy(() => import("@/pages/PortalLogin"));
 const SignIn = lazy(() => import("@/pages/SignIn"));
+const BidRespond = lazy(() => import("@/pages/BidRespond"));
+const AdminLinkQueue = lazy(() => import("@/pages/AdminLinkQueue"));
 const NotFound = lazy(() => import("@/pages/not-found"));
 const NotAuthorized = lazy(() => import("@/pages/NotAuthorized"));
 const Unauthorized = lazy(() => import("@/pages/Unauthorized"));
@@ -101,7 +103,26 @@ function Router() {
           <SignIn />
         </Suspense>
       </Route>
-      
+
+      {/* Public magic-link bid response landing — no auth wrapper.
+          BidRespond manages its own signed-in / not-signed-in / verified states. */}
+      <Route path="/bid/respond/:token">
+        <Suspense fallback={<MinimalSpinner title="Loading bid request" />}>
+          <BidRespond />
+        </Suspense>
+      </Route>
+
+      {/* Staff link review queue — sub-to-contact link resolution. D-012-h. */}
+      <Route path="/admin/link-queue">
+        <ProtectedRoute>
+          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+            <Suspense fallback={<MinimalSpinner title="Loading link queue" />}>
+              <AdminLinkQueue />
+            </Suspense>
+          </RoleGuard>
+        </ProtectedRoute>
+      </Route>
+
       <Route path="/dashboard">
         <ProtectedRoute>
           <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>

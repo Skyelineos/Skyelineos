@@ -1080,7 +1080,9 @@ app.get('/api/admin/users', async (req: any, res: any) => {
     if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'No token' });
     const decoded = await admin.auth().verifyIdToken(authHeader.substring(7));
     const caller = await resolveUserProfile(decoded);
-    if (caller.role !== 'admin' && caller.role !== 'gc') {
+    // Per docs/decisions.md §D-001: projectManager is GC's delegate for project-operational work
+    // including sub management. Listing users (for assignment to projects, contracts, etc.) is operational.
+    if (caller.role !== 'admin' && caller.role !== 'gc' && caller.role !== 'projectManager') {
       return res.status(403).json({ error: 'Forbidden' });
     }
     const snapshot = await db.collection('users').get();
@@ -1632,7 +1634,8 @@ app.patch('/api/designer/access-requests/:reqId', authMiddleware, async (req: an
   try {
     const { status } = req.body; // 'approved' | 'denied'
     const role = req.user.role;
-    if (role !== 'admin' && role !== 'gc') return res.status(403).json({ error: 'Admin only' });
+    // PM is GC's delegate for project-operational work — approving a designer's access to a project qualifies.
+    if (role !== 'admin' && role !== 'gc' && role !== 'projectManager') return res.status(403).json({ error: 'Admin only' });
     if (!['approved', 'denied'].includes(status)) return res.status(400).json({ error: 'Invalid status' });
 
     const reqDoc = await db.collection('accessRequests').doc(req.params.reqId).get();
@@ -1993,6 +1996,43 @@ app.get('/qbo/oauth/callback', async (req: any, res: any) => {
   }
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Late-bound bid + auth route registrations. These MUST be added before the
+// catch-all 404 below (Express runs middleware in registration order — anything
+// registered after the catch-all is unreachable).
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Bid requests: send rough/final bid request emails + SMS to external vendors
+// (Phase 1D Slice 1 magic-link flow). Route: POST /api/bid-requests/send
+import { registerBidRequestRoute } from './bids/sendBidRequestRoute';
+registerBidRequestRoute(app, admin.firestore());
+
+// Public token-resolution endpoint for the magic-link bid response flow.
+// Route: GET /api/bid-requests/by-token/:token (public, no auth)
+import { registerBidTokenEndpoint } from './bids/bidTokenEndpoint';
+registerBidTokenEndpoint(app, admin.firestore());
+
+// Post-signup contact linking for new subs (D-012-h).
+// Route: POST /api/sub/post-signup-link
+import { registerPostSignupLinkRoute } from './auth/postSignupLinkRoute';
+registerPostSignupLinkRoute(app, admin.firestore());
+
+// Staff-side resolver for linkReviewQueue entries.
+// Route: POST /api/sub/link-queue/:id/resolve
+import { registerLinkQueueResolveRoute } from './auth/linkQueueResolveRoute';
+registerLinkQueueResolveRoute(app, admin.firestore());
+
+// Bid package dispatch: ONE consolidated email per vendor across all trades
+// in a package. Called after per-trade /api/bid-requests/send with skipDispatch.
+// Route: POST /api/bid-packages/dispatch
+import { registerBidPackageDispatchRoute } from './bids/bidPackageDispatchRoute';
+registerBidPackageDispatchRoute(app, admin.firestore());
+
+// Bid request deletion with token + orphan-package cascade.
+// Route: POST /api/bid-requests/delete
+import { registerDeleteBidRequestRoute } from './bids/deleteBidRequestRoute';
+registerDeleteBidRequestRoute(app, admin.firestore());
+
 // Catch-all 404 — must come AFTER all route registrations (QBO routes above included)
 app.use('*', (req: any, res: any) => {
   console.log(`❌ 404 - API endpoint not found: ${req.method} ${req.originalUrl}`);
@@ -2021,6 +2061,14 @@ exports.api = onRequest(
       // Ingestion Lab OAuth — Gmail + Drive use one Google OAuth client.
       'GOOGLE_CLIENT_ID',
       'GOOGLE_CLIENT_SECRET',
+      // Bid request route (/api/bid-requests/send) reads these via process.env.
+      // Same secret names as the standalone dispatchNotification function uses.
+      'SENDGRID_API_KEY',
+      'SENDGRID_FROM_EMAIL',
+      'TWILIO_ACCOUNT_SID',
+      'TWILIO_AUTH_TOKEN',
+      'TWILIO_FROM_NUMBER',
+      'APP_BASE_URL',
     ],
     memory: '512MiB',
     timeoutSeconds: 540, // Reels can take 30-90s to process
@@ -2032,11 +2080,11 @@ exports.api = onRequest(
 // ── Phase 3: Notification dispatch (email + SMS) ─────────────────────────────
 export { dispatchNotification } from './notifications/dispatch';
 
-// ── Bid requests: send rough/final bid request emails + SMS to external vendors
-//    Folded into the api Express app (avoids the org-IAM block on new standalone
-//    functions). Route: POST /api/bid-requests/send
-import { registerBidRequestRoute } from './bids/sendBidRequestRoute';
-registerBidRequestRoute(app, admin.firestore());
+// (The /api/bid-requests/send, /api/bid-requests/by-token/:token,
+//  /api/sub/post-signup-link, and /api/sub/link-queue/:id/resolve routes
+//  are registered above, just before the catch-all 404. Don't add them again
+//  here — Express middleware runs in registration order and the catch-all
+//  swallows anything added after it.)
 
 // ── Phase 3: Scheduled due-date sweep (7am MT daily) ─────────────────────────
 export { dueSweep } from './notifications/scheduledDueSweep';

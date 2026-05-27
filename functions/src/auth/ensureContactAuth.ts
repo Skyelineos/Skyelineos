@@ -31,7 +31,12 @@ function deriveUserRole(contactRole: string | undefined): string {
       return 'designer';
     case 'team':
     case 'employee':
-      return 'pending_team'; // require admin approval for staff
+      // Per docs/decisions.md §D-001 + ROLE_AUDIT.md: `pending_team` was a dead-letter
+      // state — no UI ever recognized it, so anyone tagged `team` or `employee` got
+      // stuck with no portal. Routing to `pending_gc` puts them on the existing
+      // pending-approval screen, where the admin can promote them to `gc` or
+      // `projectManager`.
+      return 'pending_gc';
     case 'subcontractor':
     case 'sub':
     case 'vendor':

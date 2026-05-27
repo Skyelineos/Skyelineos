@@ -31,14 +31,14 @@ Skyeline OS is a **single-tenant construction management app** built for Skyelin
 
 ## What's partially built or not built
 
-- **Designer Portal** — page component exists at `client/src/pages/DesignerPortal.tsx`, but `/designer-portal` route is not wired in `client/src/App.tsx` (returns 404). Nicole has a real project in design phase; this lands AFTER the ingestion spike (see "Current direction").
+- **Designer Portal** — page component at `client/src/pages/DesignerPortal.tsx` is wired at `/designer-portal/:tab*` in `client/src/App.tsx:515` behind `RoleGuard(['admin', 'designer'])`. Functional; UX work remains.
 - **Role taxonomy refactor** — 20 historical role strings + 4 parallel `UserRole` types + 5 disagreeing normalizers. Audit and 6-phase migration plan in `ROLE_AUDIT.md`. Not executed.
 - **Compliance gate on bid submission** — client-side only; a sub can bypass via direct Firestore write. Needs server-side mirror (rule or Cloud Function).
 - **Takeoff → multi-line spawn** — `onPushToEstimate` accepts an array but consumes only the first measurement; the rest are discarded.
 - **QBO two-way sync** — OAuth wired, but invoices/bills/journal entries don't flow between Skyeline and QuickBooks yet.
 - **Per-sub `additionalEmails`** — Cloud Function writes them on claim, but Contacts edit UI doesn't surface them.
 - **FCM device management** — Tokens captured on opt-in, no "registered devices" / "revoke from this device" UI.
-- **Reports tab, PDF document export, dependency network diagram, sub-portal document upload, client-portal design selection UI** — all show "coming soon" placeholders.
+- **Coming-soon placeholders still on-screen for users:** Tile/Millwork/Concrete calculators (`Tools.tsx:139`), financial reporting (`Financials.tsx:305`), sub-portal document upload (`SubcontractorPortal.tsx:502`), dependency network diagram and advanced analytics inside `UltimateTimelineBuilder.tsx` (lines 541 + `DependencyManager.tsx:522`), PDF export from the document template editor (`DocumentTemplateEditor.tsx:182`). **Client-portal design selection UI is shipped** via `SkyelineClientPortal.tsx` → `ClientSelectionsTimeline` + `SelectionsBoard` (the legacy `ClientPortal.tsx` "Design selection interface coming soon..." string at line 436 is in a file that is no longer imported by `App.tsx` — dead code, safe to delete next cleanup). `AIRenderingStudio.tsx` is also no longer imported anywhere — same dead-code status.
 - **Critical-path engine** — `client/src/modules/gantt/engine/criticalPath.ts` is 7 lines (coloring only); actual CPM algorithm missing.
 - **TooltipProvider disabled** in `components/ui/sidebar.tsx:24` and `components/projects/EditProjectForm.tsx:16` due to a React-hook error.
 - **CI** — no test runner runs on push. Playwright scripts exist as ops/smoke tools, not as a regression suite.

@@ -728,6 +728,7 @@ export function ModernTimelineBuilder({ projectId, readonly = false }: ModernTim
     const tradeColor = getTradeColor(task.trade);
     
     return (
+      <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>
             <div

@@ -1,0 +1,57 @@
+# Auto-deploy to Firebase on every push to main.
+#
+# One-time setup required (already done):
+#   1. On your local Mac: firebase login:ci
+#      → opens browser, returns a long token after auth
+#   2. In the GitHub repo: Settings → Secrets and variables → Actions → New secret
+#   3. Name: FIREBASE_TOKEN
+#   4. Value: paste the token from step 1
+#   5. Save
+#
+# After that, every push to main triggers this workflow.
+# Functions + hosting + firestore rules all deploy. Total runtime ~4-5 minutes.
+
+name: Deploy to Firebase
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:  # also allow manual triggers from the Actions tab
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install root dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Install functions dependencies
+        working-directory: functions
+        run: npm ci --no-audit --no-fund
+
+      - name: Build functions (tsc)
+        working-directory: functions
+        run: npm run build
+
+      - name: Build hosting bundle (vite)
+        run: npm run build
+
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools
+
+      # Single combined deploy: hosting + functions + firestore rules.
+      # --force skips the "delete obsolete functions?" interactive prompt
+      # (we have orphan claimContact / sendBidRequest functions in prod
+      # that aren't in source; we want them auto-cleaned during CI).
+      # --non-interactive makes any remaining prompts fail loudly rather
+      # than hang the runner.
+      - name: Deploy
+        run: firebase deploy --only hosting,functions,firestore:rules --project skyelineos --force --non-interactive --token "$FIREBASE_TOKEN"
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}

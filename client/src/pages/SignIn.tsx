@@ -6,7 +6,7 @@ import {
   sendPasswordResetEmail,
   signOut,
 } from "firebase/auth";
-import { doc, setDoc, getDoc, addDoc, collection, getDocs, query, serverTimestamp } from "firebase/firestore";
+import { doc, setDoc, getDoc, addDoc, collection, getDocs, query, where, serverTimestamp } from "firebase/firestore";
 import { useLocation } from "wouter";
 import { useAuth } from "@/auth/AuthContext";
 import { getDefaultRouteForRole } from "@/utils/roleRedirects";
@@ -399,6 +399,29 @@ export default function SignIn() {
         requestedPermissions: accountType === 'team' ? regPermissions : [],
         createdAt: serverTimestamp(),
       });
+
+      // For sub registrations, ask the backend to attempt deeper contact
+      // linking (fuzzy match on name + phone + company) for cases the
+      // client-side matcher above couldn't resolve by exact match. The
+      // endpoint is idempotent — if linkedContactId is already set, no-op.
+      // Fuzzy candidates land in linkReviewQueue for staff review (D-012-h).
+      if (accountType === 'sub') {
+        try {
+          const idToken = await cred.user.getIdToken();
+          fetch('/api/sub/post-signup-link', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${idToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              vendorName: regName,
+              phone: regPhone,
+              company: regCompany,
+            }),
+          }).catch(() => { /* best-effort; portal still works without linkage */ });
+        } catch { /* best-effort */ }
+      }
 
       setRegisterOpen(false);
 

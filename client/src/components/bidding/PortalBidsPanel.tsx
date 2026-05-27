@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react';
 import {
   collection, query, where, onSnapshot, orderBy,
 } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { db, auth } from '@/lib/firebase';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { useToast } from '@/hooks/use-toast';
 import {
-  Hammer, Send, Award, Clock, CheckCircle2, Eye, FileText, Shield, Building2,
+  Hammer, Send, Award, Clock, CheckCircle2, Eye, FileText, Shield, Building2, Trash2,
 } from 'lucide-react';
 import { SendBidPackageModal } from './SendBidPackageModal';
 import { AwardBidModal } from './AwardBidModal';
@@ -26,6 +27,48 @@ export function PortalBidsPanel({ projectId, projectName }: Props) {
   const [awardingBid, setAwardingBid] = useState<PortalBid | null>(null);
   const [viewingBid, setViewingBid] = useState<PortalBid | null>(null);
   const [viewingRequest, setViewingRequest] = useState<BidRequest | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const { toast } = useToast();
+
+  async function handleDeleteRequest(req: BidRequest) {
+    const ok = window.confirm(
+      `Delete this bid request?\n\n  ${req.trade} — sent ${(req.createdAt as any)?.toDate?.()?.toLocaleDateString?.() || ''}\n\nThis will remove the request, any pending invite links, and (if no other trades remain in this package) the parent package shell. Sub-side bid submissions stay intact.`
+    );
+    if (!ok) return;
+    setDeletingId(req.id);
+    try {
+      const idToken = await auth.currentUser?.getIdToken();
+      if (!idToken) throw new Error('Not signed in');
+      const res = await fetch('/api/bid-requests/delete', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ projectId, bidRequestId: req.id }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data?.error || `Delete failed (${res.status})`);
+      // Optimistic local removal — the onSnapshot listener will also pick up
+      // the deletion within a moment, but updating local state immediately
+      // makes the tile vanish without waiting on the Firestore round-trip.
+      setRequests(prev => prev.filter(r => r.id !== req.id));
+      toast({
+        title: 'Bid request deleted',
+        description: data.parentPackageDeleted
+          ? `${req.trade} removed (parent package also cleaned up — it had no other trades).`
+          : `${req.trade} removed. ${data.deletedTokens} invite link${data.deletedTokens === 1 ? '' : 's'} invalidated.`,
+      });
+    } catch (e: any) {
+      toast({
+        title: 'Could not delete',
+        description: e?.message || 'Unknown error',
+        variant: 'destructive',
+      });
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   // Bid requests for this project
   useEffect(() => {
@@ -34,9 +77,17 @@ export function PortalBidsPanel({ projectId, projectName }: Props) {
       collection(db, 'projects', projectId, 'bidRequests'),
       orderBy('createdAt', 'desc'),
     );
-    return onSnapshot(q, snap => {
-      setRequests(snap.docs.map(d => ({ id: d.id, ...d.data() } as BidRequest)));
-    }, () => {});
+    return onSnapshot(
+      q,
+      snap => {
+        setRequests(snap.docs.map(d => ({ id: d.id, ...d.data() } as BidRequest)));
+      },
+      err => {
+        // Log instead of silently swallowing — a permissions or query error
+        // here was previously invisible and would leave stale tiles on screen.
+        console.error('[PortalBidsPanel] bidRequests snapshot error:', err);
+      },
+    );
   }, [projectId]);
 
   // Portal-submitted bids for this project
@@ -92,27 +143,45 @@ export function PortalBidsPanel({ projectId, projectName }: Props) {
             <div className="mb-4">
               <p className="text-xs uppercase tracking-wide text-gray-500 mb-2">Open Packages</p>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                {requests.filter(r => r.status === 'open').slice(0, 6).map(r => {
+                {requests.filter(r => r.status === 'open').map(r => {
                   const reqDate = (r.createdAt as any)?.toDate?.()?.toLocaleDateString?.() || '—';
                   const submittedCount = bids.filter(b => (b as any).bidRequestId === r.id).length;
+                  const isDeleting = deletingId === r.id;
                   return (
-                    <button
+                    <div
                       key={r.id}
-                      type="button"
-                      onClick={() => setViewingRequest(r)}
-                      className="border rounded-lg p-2.5 bg-gray-50 hover:bg-amber-50/40 hover:border-[#C9A96E] transition-colors text-left"
+                      className={`relative border rounded-lg bg-gray-50 hover:bg-amber-50/40 hover:border-[#C9A96E] transition-colors ${isDeleting ? 'opacity-50 pointer-events-none' : ''}`}
                     >
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="font-medium text-sm">{r.trade}</span>
-                        <Badge variant="outline" className="text-[10px]">
-                          {submittedCount} / {r.invitedSubIds.length}
-                        </Badge>
-                      </div>
-                      <div className="text-xs text-gray-500 flex items-center justify-between">
-                        <span>Sent {reqDate}</span>
-                        <span>Due {r.dueDate}</span>
-                      </div>
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => setViewingRequest(r)}
+                        className="w-full p-2.5 pr-9 text-left"
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-medium text-sm">{r.trade}</span>
+                          <Badge variant="outline" className="text-[10px]">
+                            {submittedCount} / {r.invitedSubIds.length}
+                          </Badge>
+                        </div>
+                        <div className="text-xs text-gray-500 flex items-center justify-between">
+                          <span>Sent {reqDate}</span>
+                          <span>Due {r.dueDate}</span>
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="Delete bid request"
+                        title="Delete this bid request"
+                        disabled={isDeleting}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteRequest(r);
+                        }}
+                        className="absolute top-1.5 right-1.5 p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   );
                 })}
               </div>

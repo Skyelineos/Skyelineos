@@ -237,7 +237,10 @@ export interface BidUploadData {
 export type SortDirection = 'asc' | 'desc';
 export type ProjectStatus = 'planning' | 'active' | 'on_hold' | 'completed' | 'cancelled';
 export type EstimateStatus = 'Estimating' | 'Bidding' | 'Waiting Approval' | 'Approved' | 'Rejected' | 'Client Signed';
-export type UserRole = 'admin' | 'project_manager' | 'accountant' | 'client' | 'subcontractor' | 'designer';
+// UserRole moved to ./auth-types.ts to eliminate the duplicate definitions that
+// disagreed on member sets (project_manager vs projectManager; accountant inclusion).
+// Per docs/decisions.md §D-001 + ROLE_AUDIT.md, canonical source is shared/auth-types.ts.
+export type { UserRole } from './auth-types';
 
 // Validation Schemas
 export const projectFormSchema = z.object({

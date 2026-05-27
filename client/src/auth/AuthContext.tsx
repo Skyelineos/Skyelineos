@@ -67,8 +67,19 @@ const AuthCtx = createContext<AuthContextType>({
   refreshTokens: async () => false,
 });
 
-// Check test mode synchronously at module load
+// Check test mode synchronously at module load.
+//
+// SECURITY: Test mode is DEV-ONLY. Previously this code ran in production builds,
+// which meant any user who could open DevTools could grant themselves admin by
+// setting two localStorage keys. Per `docs/decisions.md` §D-008/D-009, this is
+// now gated behind import.meta.env.DEV so it's a no-op in production builds.
+//
+// Activating in dev: localStorage.setItem('testMode', 'true'); localStorage.setItem('testUser', JSON.stringify({ role: 'admin', email: 'me@dev.local' }));
 const getInitialTestModeState = (): { isTestMode: boolean; testUser: BackendUser | null } => {
+  // Hard gate: only available in development builds.
+  if (!import.meta.env.DEV) {
+    return { isTestMode: false, testUser: null };
+  }
   try {
     const testMode = localStorage.getItem('testMode') === 'true';
     if (testMode) {

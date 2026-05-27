@@ -1,0 +1,87 @@
+Phase 1D Slice 1: sub portal magic-link funnel end-to-end
+
+Backend (functions/src):
+- bids/sendBidRequestRoute.ts: rewritten. Per-vendor 24-char base64url
+  invite-token generation, /bidInviteTokens/{token} lookup docs, HTML email
+  with View in Skyeline OS button, general (3-tier) + item bid types, legacy
+  bidPackage fields preserved for the existing GC dashboard, Twilio init
+  isolated so a bad SID can't kill email, skipDispatch flag for the
+  bid-package consolidation flow, diagnostic logging on token writes.
+- bids/bidTokenEndpoint.ts (NEW): public GET /api/bid-requests/by-token/:token
+  for the magic-link landing page. FieldValue.serverTimestamp() inside the
+  vendors[] array swapped to Timestamp.now() (Firestore rejects sentinels
+  inside arrays). Improved 404 messages for withdrawn / deleted invitations.
+- bids/bidPackageDispatchRoute.ts (NEW): POST /api/bid-packages/dispatch.
+  Groups vendors across all trades in a package, sends ONE consolidated
+  styled HTML email per vendor listing every trade they're invited to.
+- bids/deleteBidRequestRoute.ts (NEW): POST /api/bid-requests/delete.
+  Staff-only. Cascades: bidRequest doc + every bidInviteTokens/{token} +
+  orphan parent bidPackages/{id} if no sibling trades remain.
+- auth/postSignupLinkRoute.ts (NEW): POST /api/sub/post-signup-link.
+  Email exact match → contact link; fuzzy match (name + phone + company)
+  falls back to linkReviewQueue for staff resolution.
+- auth/linkQueueResolveRoute.ts (NEW): POST /api/sub/link-queue/:id/resolve.
+  Staff action: link to existing contact, create new contact, or no-match.
+- auth/ensureContactAuth.ts + contactAuthBackfill.ts: pending_team ->
+  pending_gc role normalization (D-001).
+- index.ts: all new routes registered BEFORE the catch-all 404 (Express
+  middleware runs in registration order; routes after the catch-all are
+  unreachable - initial registration was after, which silently 404'd
+  every new endpoint).
+
+Client (client/src):
+- pages/BidRespond.tsx (NEW): public magic-link landing page. Handles
+  signed-out -> sign-in/up redirect, signed-in but unverified -> onboarding
+  CTA, signed-in + verified -> portal CTA, already-responded summary,
+  expired-token state.
+- pages/AdminLinkQueue.tsx (NEW): staff queue UI for unresolved sub
+  signups with fuzzy-match candidates + per-candidate Link action.
+- components/bidding/SendBidPackageModal.tsx: rewired through magic-link
+  endpoint (skipDispatch + consolidated dispatch). One email per vendor
+  instead of one per trade. setDoc(pkgRef, payload) instead of addDoc to
+  fix the prior ID-mismatch bug (parent doc was at one auto-ID while
+  payload.id pointed at another). linkedUserId propagated to backend so
+  invitedSubIds still matches the existing portal collectionGroup query.
+- components/bidding/PortalBidsPanel.tsx: trash icon per tile with
+  cascade delete via /api/bid-requests/delete; optimistic local removal;
+  all open packages shown (slice cap removed); snapshot errors logged.
+- pages/ProjectEstimates.tsx: top-level Send Bid Package button so the
+  flow is discoverable without digging into an estimate-edit dialog tab.
+- pages/SignIn.tsx: post-signup link call for sub registrations; missing
+  'where' import added (pre-existing bug that would crash the
+  /sign-in?invite=<token> path).
+- auth/AuthContext.tsx: test-mode bypass gated behind import.meta.env.DEV
+  (D-008/D-009 - was a production security hole).
+- components/timeline/ModernTimelineBuilder.tsx: TooltipProvider tag
+  pairing fix (TS1005).
+- App.tsx: new routes /bid/respond/:token (public) + /admin/link-queue
+  (staff-only).
+
+Config:
+- firebase.json: /api/** rewrite to the api function (was missing - every
+  /api/* call from the client was falling through to index.html, breaking
+  the magic-link flow end-to-end on the live site).
+- firestore.rules: locked down /bidInviteTokens (server-only) and
+  /linkReviewQueue (staff-only). isProjectManager() helper.
+- shared/auth-types.ts: canonical UserRole enum with normalizeRole()
+  alias map (D-001).
+- shared/types.ts: removed duplicate UserRole; re-exports from auth-types.
+- .env.example: rewritten from legacy Odyssey content to current
+  VITE_FIREBASE_* / app-check / google-client / stripe / sentry / owm.
+
+Docs:
+- docs/decisions.md (NEW): D-001 through D-015 - projectManager role,
+  four-stakeholder selections, change orders, AI rendering, multi-tenant
+  horizon, AuthContext bypass kill, v2 branch port, 2-year SaaS, sub
+  portal architecture, cost-plus pricing, client onboarding wizard,
+  native signature widget.
+- docs/sub-portal-design.md (NEW), docs/client-onboarding-design.md
+  (NEW), docs/ai-rendering-studio-design.md (NEW), docs/setup-runbook.md
+  (NEW), docs/selections-design.md (rewritten), docs/open-questions.md
+  (updated).
+- CHECKPOINT.md + PROJECT_OVERVIEW.md: refreshed.
+
+CI:
+- .github/workflows/deploy-on-push.yml (NEW): every push to main runs
+  npm ci + tsc + vite build + firebase deploy --only
+  hosting,functions,firestore:rules using the FIREBASE_TOKEN repo secret.
