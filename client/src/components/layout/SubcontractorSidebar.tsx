@@ -213,9 +213,28 @@ export default function SubcontractorSidebar({ isOpen = false, onToggle }: Subco
               </Link>
             );
           })}
+
+          {/* Sign Out — also placed inline at the end of the scrollable
+              nav (in addition to the footer button below) so the action
+              is always reachable on small mobile viewports where the
+              fixed-footer logout can fall below the iOS chrome / home
+              indicator. Divider + dimmer color keep it visually distinct
+              from the destination nav items above. */}
+          <div className="pt-3 mt-3" style={{ borderTop: '1px solid rgba(201,169,110,0.15)' }}>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-sans font-medium transition-colors hover:text-white"
+              style={{ color: 'rgba(255,255,255,0.55)' }}
+            >
+              <LogOut className="h-4 w-4 flex-shrink-0" />
+              <span>Sign Out</span>
+            </button>
+          </div>
         </nav>
 
-        {/* Footer */}
+        {/* Footer (desktop primarily — mobile users get the inline button
+            inside <nav> above, which won't be clipped by iOS chrome). */}
         <div
           className="px-5 py-4 flex-shrink-0 space-y-3"
           style={{ borderTop: '1px solid rgba(201,169,110,0.15)' }}
@@ -227,7 +246,7 @@ export default function SubcontractorSidebar({ isOpen = false, onToggle }: Subco
             style={{ color: 'rgba(255,255,255,0.55)' }}
           >
             <LogOut className="h-4 w-4" />
-            Log out
+            Sign Out
           </button>
           <p
             className="text-xs font-sans text-center"

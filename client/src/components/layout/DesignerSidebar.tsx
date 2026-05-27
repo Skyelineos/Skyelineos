@@ -10,6 +10,7 @@ import {
   Calendar,
   FileText,
   Home,
+  LogOut,
   X,
   Menu
 } from 'lucide-react';
@@ -61,8 +62,19 @@ interface DesignerSidebarProps {
 export default function DesignerSidebar({ isOpen = false, onToggle }: DesignerSidebarProps) {
   const [location, setLocation] = useLocation();
   const currentTab = location.split('/')[2] || 'projects';
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const designerName = user?.name || 'Designer';
+
+  // Hard redirect to /sign-in after logout so any cached portal state is
+  // dropped. Matches the pattern in SubcontractorSidebar + TopNavbar.
+  const handleLogout = async () => {
+    try {
+      await logout();
+      window.location.href = '/sign-in';
+    } catch (e) {
+      console.error('[designer-sidebar] logout failed', e);
+    }
+  };
 
 
 
@@ -148,6 +160,21 @@ export default function DesignerSidebar({ isOpen = false, onToggle }: DesignerSi
               </Link>
             );
           })}
+
+          {/* Sign Out — separated by a divider so it reads as an account
+              action, not a destination. Placed inside the scrollable nav
+              (not the absolute footer) so it's always reachable on small
+              mobile viewports. */}
+          <div className="pt-3 mt-3 border-t border-white/10">
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="w-full flex items-center space-x-3 px-3 py-3 text-sm font-medium rounded-lg transition-colors text-slate-400 hover:text-white hover:bg-slate-800"
+            >
+              <LogOut className="h-5 w-5 flex-shrink-0" />
+              <span>Sign Out</span>
+            </button>
+          </div>
         </nav>
 
         {/* Footer */}

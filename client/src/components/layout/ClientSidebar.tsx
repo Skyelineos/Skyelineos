@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/hooks/use-auth';
 import {
   Home,
   FileText,
@@ -13,6 +14,7 @@ import {
   DollarSign,
   FileSignature,
   ArrowLeft,
+  LogOut,
   X,
   Menu
 } from 'lucide-react';
@@ -81,10 +83,23 @@ interface ClientSidebarProps {
 
 export default function ClientSidebar({ isOpen = false, onToggle }: ClientSidebarProps) {
   const [location, setLocation] = useLocation();
+  const { logout } = useAuth();
   const currentTab = location.split('/')[2] || 'dashboard';
 
   const handleBackClick = () => {
     setLocation('/dashboard');
+  };
+
+  // Hard redirect to /sign-in after logout so any cached portal state is
+  // dropped. Matches the pattern already used in SubcontractorSidebar
+  // and TopNavbar's user menu.
+  const handleLogout = async () => {
+    try {
+      await logout();
+      window.location.href = '/sign-in';
+    } catch (e) {
+      console.error('[client-sidebar] logout failed', e);
+    }
   };
 
   return (
@@ -182,6 +197,22 @@ export default function ClientSidebar({ isOpen = false, onToggle }: ClientSideba
               </Link>
             );
           })}
+
+          {/* Sign Out — visually separated from the nav by a divider so it
+              reads as an account action, not another destination. Placed
+              inside the scrollable nav (not the absolute footer) so it
+              stays reachable on small mobile viewports where the footer
+              can fall below the chrome. */}
+          <div className="pt-3 mt-3 border-t border-white/10">
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="w-full flex items-center space-x-3 px-3 py-3 text-sm font-medium rounded-lg transition-colors text-slate-400 hover:text-white hover:bg-slate-800"
+            >
+              <LogOut className="h-5 w-5 flex-shrink-0" />
+              <span>Sign Out</span>
+            </button>
+          </div>
         </nav>
 
         {/* Footer */}
