@@ -172,7 +172,7 @@ export function registerAwardBidRoute(
             kind: 'system',
             title: `Bid awarded: ${bid.trade || 'your trade'}`,
             body: `Your bid for ${bid.projectName || 'this project'} was awarded. Skyeline will follow up with next steps.`,
-            link: '/sub',
+            link: '/subcontractor-portal/bids',
             projectId: data.projectId,
             refType: 'bid',
             refId: data.bidId,

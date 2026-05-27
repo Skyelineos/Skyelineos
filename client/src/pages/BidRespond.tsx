@@ -288,7 +288,7 @@ export default function BidRespond() {
           </CardHeader>
           {isAuthenticated && (
             <CardContent>
-              <Button onClick={() => setLocation('/sub')}>Go to your portal</Button>
+              <Button onClick={() => setLocation('/subcontractor-portal')}>Go to your portal</Button>
             </CardContent>
           )}
         </Card>
@@ -358,7 +358,7 @@ export default function BidRespond() {
           <Button
             size="lg"
             className="w-full"
-            onClick={() => setLocation(`/sub`)}
+            onClick={() => setLocation(`/subcontractor-portal/bids`)}
           >
             Open my portal & submit bid
           </Button>
