@@ -63,6 +63,16 @@
     --theme-primary: #C9A96E;
     --theme-primary-hover: #B8935A;
     --theme-primary-active: #A8864A;
+
+    /* Sidebar/nav surface — single source of truth for every left-rail and
+       mobile slide-out background. Set to the EXACT background of the
+       Skyeline Homes logo (logos/logo-dark-cropped.png) so the logo block
+       and the sidebar around it read as one continuous surface, no seam.
+       Sampled programmatically: edge pixels and dominant color both
+       resolve to #1b1b1b (rgb 27,27,27). Was previously drifting between
+       #141414, #0f172a / bg-slate-900 (navy regression), and the logo's
+       real #1b1b1b. Update this var to retheme every sidebar in one place. */
+    --color-sidebar-bg: #1b1b1b;
   }
   
   .dark {

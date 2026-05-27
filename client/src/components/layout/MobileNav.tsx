@@ -96,7 +96,9 @@ export function MobileNav({ isOpen, onOpenChange }: MobileNavProps) {
         side="left"
         className="w-72 p-0 border-r"
         style={{
-          backgroundColor: '#0f172a', // slate-900
+          // Brand black via CSS var — was slate-900 (#0f172a) which
+          // rendered as navy and clashed with the desktop left rail.
+          backgroundColor: 'var(--color-sidebar-bg)',
           color: '#ffffff',
           borderColor: 'rgba(201,169,110,0.2)',
         }}

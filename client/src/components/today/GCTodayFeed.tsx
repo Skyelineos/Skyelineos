@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'wouter';
 import { collection, query, where, onSnapshot, orderBy, limit } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
@@ -166,31 +167,38 @@ export function GCTodayFeed() {
         <p className="text-sm text-gray-500">{todayLabel()}</p>
       </div>
 
-      {/* Quick stats strip */}
+      {/* Quick stats strip — each tile drills into its detail page. */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Stat
           icon={<ClipboardList className="w-4 h-4" />}
           label="Tasks today"
           value={tasksToday.length}
           color={tasksToday.length > 5 ? 'text-orange-600' : 'text-gray-900'}
+          href="/tasks"
         />
         <Stat
           icon={<DollarSign className="w-4 h-4" />}
           label="Bills this week"
           value={`$${(totalBillsDue / 1000).toFixed(1)}k`}
           sublabel={`${billsDueWeek.length} bills`}
+          href="/bills"
         />
         <Stat
           icon={<MessageSquare className="w-4 h-4" />}
           label="Unread notifs"
           value={unreadNotifs.length}
           color={unreadNotifs.length > 0 ? 'text-blue-600' : 'text-gray-900'}
+          href="/messages"
         />
+        {/* TODO: no dedicated draws tab yet — point at /financials/payments
+            (closest existing surface) until a Draws tab lands. Audit doc
+            #5 (Financials → Reports tab) is the parent of this gap. */}
         <Stat
           icon={<Wallet className="w-4 h-4" />}
           label="Draws pending"
           value={drawsPending.length}
           color={drawsPending.length > 0 ? 'text-amber-600' : 'text-gray-900'}
+          href="/financials/payments"
         />
       </div>
 
@@ -347,18 +355,36 @@ export function GCTodayFeed() {
 }
 
 // ─── Stat tile ───────────────────────────────────────────────────────────────
+// When `href` is supplied the whole tile renders as a wouter <Link> with a
+// subtle hover background — matches the TodayRow pattern used elsewhere in
+// this feed so the click affordance feels consistent.
 
 function Stat({
-  icon, label, value, sublabel, color = 'text-gray-900',
-}: { icon: React.ReactNode; label: string; value: string | number; sublabel?: string; color?: string }) {
-  return (
-    <div className="bg-white rounded-lg border p-3 flex flex-col gap-1">
+  icon, label, value, sublabel, color = 'text-gray-900', href,
+}: { icon: React.ReactNode; label: string; value: string | number; sublabel?: string; color?: string; href?: string }) {
+  const body = (
+    <>
       <div className="flex items-center gap-1.5 text-xs text-gray-500">
         {icon}
         <span>{label}</span>
       </div>
       <div className={`text-xl font-bold ${color}`}>{value}</div>
       {sublabel && <div className="text-[10px] text-gray-400">{sublabel}</div>}
-    </div>
+    </>
   );
+
+  const baseClass = 'bg-white rounded-lg border p-3 flex flex-col gap-1';
+
+  if (href) {
+    return (
+      <Link
+        href={href}
+        className={`${baseClass} cursor-pointer transition-colors hover:bg-gray-50 hover:border-[#C9A96E]/40`}
+      >
+        {body}
+      </Link>
+    );
+  }
+
+  return <div className={baseClass}>{body}</div>;
 }

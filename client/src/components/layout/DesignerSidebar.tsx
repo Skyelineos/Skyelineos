@@ -79,9 +79,10 @@ export default function DesignerSidebar({ isOpen = false, onToggle }: DesignerSi
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed left-0 top-0 z-50 h-screen w-64 bg-slate-900 text-white transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0 lg:z-auto",
+          "fixed left-0 top-0 z-50 h-screen w-64 text-white transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0 lg:z-auto",
           isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         )}
+        style={{ backgroundColor: 'var(--color-sidebar-bg)' }}
       >
         {/* Mobile close button */}
         <div className="flex items-center justify-between p-4 lg:hidden border-b border-slate-700">

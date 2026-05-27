@@ -254,7 +254,7 @@ export function Sidebar({ isOpen, onToggle }: SidebarProps) {
   const homeRoute = user?.role ? getDefaultRouteForRole(user.role) : '/';
 
   return (
-    <aside className="flex flex-col h-full w-64 overflow-y-auto" style={{ backgroundColor: '#141414' }}>
+    <aside className="flex flex-col h-full w-64 overflow-y-auto" style={{ backgroundColor: 'var(--color-sidebar-bg)' }}>
       {/* Brand header — clickable, returns to role-aware home */}
       <div className="flex items-center justify-between px-5 py-5 flex-shrink-0" style={{ borderBottom: '1px solid rgba(201,169,110,0.2)' }}>
         <Link href={homeRoute} className="cursor-pointer transition-opacity hover:opacity-80" aria-label="Go to dashboard">
