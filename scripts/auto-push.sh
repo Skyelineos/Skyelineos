@@ -109,7 +109,8 @@ echo "→ Syncing workspace state"
 rsync -a --delete \
   --exclude='.git/' \
   --exclude='node_modules/' \
-  --exclude='lib/' \
+  --exclude='/lib/' \
+  --exclude='/functions/lib/' \
   --exclude='dist/' \
   --exclude='.firebase/' \
   --exclude='.claude-push-token*' \
