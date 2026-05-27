@@ -2,6 +2,7 @@ import { Link, useLocation } from 'wouter';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/use-auth';
 import { useAutoAdminView } from '@/hooks/useAutoAdminView';
+import { getDefaultRouteForRole } from '@/utils/roleRedirects';
 
 import {
   LayoutDashboard,
@@ -248,16 +249,20 @@ export function Sidebar({ isOpen, onToggle }: SidebarProps) {
   const navDisabled = user?.navDisabled ?? [];
   const navGroups = getNavForRole(role, navDisabled);
 
+  // Role-aware home destination — wraps the brand title so users can click
+  // it from anywhere to land on their default dashboard.
+  const homeRoute = user?.role ? getDefaultRouteForRole(user.role) : '/';
+
   return (
     <aside className="flex flex-col h-full w-64 overflow-y-auto" style={{ backgroundColor: '#141414' }}>
-      {/* Brand header */}
+      {/* Brand header — clickable, returns to role-aware home */}
       <div className="flex items-center justify-between px-5 py-5 flex-shrink-0" style={{ borderBottom: '1px solid rgba(201,169,110,0.2)' }}>
-        <div>
-          <span className="text-xl font-heading font-semibold text-white" style={{ letterSpacing: '0.04em' }}>Skyeline Homes</span>
+        <Link href={homeRoute} className="cursor-pointer transition-opacity hover:opacity-80" aria-label="Go to dashboard">
+          <span className="text-xl font-heading font-semibold text-white block" style={{ letterSpacing: '0.04em' }}>Skyeline Homes</span>
           <p className="text-xs mt-0.5 font-sans font-light tracking-widest uppercase" style={{ color: '#C9A96E', letterSpacing: '0.15em' }}>
             {role === 'designer' ? 'Designer Portal' : role === 'client' ? 'Client Portal' : role === 'sub' ? 'Subcontractor Portal' : 'Project Portal'}
           </p>
-        </div>
+        </Link>
         <button
           onClick={onToggle}
           className="lg:hidden p-1 transition-colors"

@@ -2,6 +2,7 @@ import { Link, useLocation } from 'wouter';
 import { useAuth } from '@/hooks/use-auth';
 import { useAutoAdminView } from '@/hooks/useAutoAdminView';
 import { cn } from '@/lib/utils';
+import { getDefaultRouteForRole } from '@/utils/roleRedirects';
 import {
   Sheet,
   SheetContent,
@@ -74,13 +75,16 @@ const getNavigationItems = () => [
 
 export function MobileNav({ isOpen, onOpenChange }: MobileNavProps) {
   const [location] = useLocation();
-  const { hasRole } = useAuth();
+  const { user, hasRole } = useAuth();
   useAutoAdminView();
 
   const navigationItems = getNavigationItems();
   const filteredItems = navigationItems.filter(item =>
     item.roles.some(role => hasRole(role))
   );
+
+  // Role-aware home destination for the brand-area logo click.
+  const homeRoute = user?.role ? getDefaultRouteForRole(user.role) : '/';
 
   const handleLinkClick = () => {
     onOpenChange(false);
@@ -99,12 +103,19 @@ export function MobileNav({ isOpen, onOpenChange }: MobileNavProps) {
       >
         <SheetHeader className="px-4 py-4 border-b" style={{ borderColor: 'rgba(201,169,110,0.2)' }}>
           <SheetTitle className="text-left">
-            <img
-              src="/logos/logo-dark-cropped.png"
-              alt="Skyeline Homes"
-              className="w-auto object-contain"
-              style={{ height: '76px', maxWidth: '240px' }}
-            />
+            <Link
+              href={homeRoute}
+              onClick={handleLinkClick}
+              className="cursor-pointer transition-opacity hover:opacity-80 inline-block"
+              aria-label="Go to dashboard"
+            >
+              <img
+                src="/logos/logo-dark-cropped.png"
+                alt="Skyeline Homes"
+                className="w-auto object-contain"
+                style={{ height: '76px', maxWidth: '240px' }}
+              />
+            </Link>
           </SheetTitle>
           <SheetDescription className="text-left text-xs font-medium tracking-widest uppercase" style={{ color: 'rgba(201,169,110,0.85)', letterSpacing: '0.12em' }}>
             Project Portal

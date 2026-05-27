@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { useLocation } from 'wouter';
+import { Link, useLocation } from 'wouter';
 import { useAuth } from '@/hooks/use-auth';
 import { useBranding } from '@/contexts/BrandingContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { Button } from '@/components/ui/button';
+import { getDefaultRouteForRole } from '@/utils/roleRedirects';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -42,6 +43,12 @@ export function TopNavbar({ onMenuToggle, currentProject }: TopNavbarProps) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [preferencesOpen, setPreferencesOpen] = useState(false);
 
+  // Role-aware home destination — admins/PMs land on /dashboard or /projects,
+  // clients on /client-portal, subs on /subcontractor-portal, etc.
+  // Falls back to '/' if there's no authenticated user (won't actually
+  // navigate — the logo only renders inside authenticated layouts).
+  const homeRoute = user?.role ? getDefaultRouteForRole(user.role) : '/';
+
   const getPageTitle = () => {
     // Always show company name on mobile/smaller views
     return 'Skyeline Homes';
@@ -70,25 +77,25 @@ export function TopNavbar({ onMenuToggle, currentProject }: TopNavbarProps) {
             <span className="sr-only">Open navigation menu</span>
           </Button>
 
-          {/* Desktop logo */}
-          <div className="hidden lg:block">
+          {/* Desktop logo — clickable, returns to role-aware home */}
+          <Link href={homeRoute} className="hidden lg:block cursor-pointer transition-opacity hover:opacity-80" aria-label="Go to dashboard">
             <img
               src="/logos/logo-transparent-cropped.png"
               alt="Skyeline Homes"
               className="w-auto object-contain"
               style={{ height: '80px', maxWidth: '360px' }}
             />
-          </div>
+          </Link>
 
-          {/* Mobile logo */}
-          <div className="lg:hidden min-w-0">
+          {/* Mobile logo — clickable, returns to role-aware home */}
+          <Link href={homeRoute} className="lg:hidden min-w-0 cursor-pointer transition-opacity hover:opacity-80" aria-label="Go to dashboard">
             <img
               src="/logos/logo-transparent-cropped.png"
               alt="Skyeline Homes"
               className="w-auto object-contain"
               style={{ height: '60px', maxWidth: '260px' }}
             />
-          </div>
+          </Link>
 
           {/* Project badge (if in project context) */}
           {currentProject && (

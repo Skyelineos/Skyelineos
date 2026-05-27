@@ -19,8 +19,8 @@ export default {
     extend: {
       fontFamily: {
         'sans': ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'sans-serif'],
-        'heading': ['Cormorant Garant', 'Georgia', 'serif'],
-        'display': ['Cormorant Garant', 'Georgia', 'serif'],
+        'heading': ['Cormorant Garamond', 'Georgia', 'serif'],
+        'display': ['Cormorant Garamond', 'Georgia', 'serif'],
       },
       borderRadius: {
         lg: "var(--radius)",
