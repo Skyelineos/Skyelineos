@@ -124,6 +124,24 @@ rsync -a --delete \
   --exclude='.DS_Store' \
   "$REPO_ROOT/" "$TMP_CLONE/"
 
+# Apply the deny-list: files that were deleted from the canonical repo
+# but still exist in the workspace (the Cowork sandbox can't `rm` workspace
+# files — they only get removed from the clone here, every push).
+# Without this step, rsync re-adds them on every push.
+DENY_LIST="$REPO_ROOT/scripts/deleted-files.txt"
+if [ -f "$DENY_LIST" ]; then
+  echo "→ Applying deny-list from scripts/deleted-files.txt"
+  while IFS= read -r path; do
+    # skip blanks + comments
+    case "$path" in
+      ''|'#'*) continue ;;
+    esac
+    if [ -e "$TMP_CLONE/$path" ]; then
+      rm -rf "$TMP_CLONE/$path" && echo "    removed: $path"
+    fi
+  done < "$DENY_LIST"
+fi
+
 # Belt-and-suspenders: if any file containing a literal "github_pat_" or
 # "ghp_" prefix snuck through the rsync exclusions (typo paths, weird
 # names), nuke it before commit. GitHub's secret scanner will reject the

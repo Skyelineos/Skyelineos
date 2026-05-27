@@ -1,0 +1,15 @@
+# Files that have been deleted from the canonical repo and should NOT be
+# re-introduced by auto-push.sh, even if they still exist in the workspace
+# (the Cowork sandbox can't `rm` workspace files — they only get deleted
+# from the clone before commit).
+#
+# Each line = one path relative to the repo root. Comments (lines starting
+# with #) and blank lines are ignored.
+
+client/src/pages/ProjectsOverview.tsx
+client/src/pages/ClientPortal.tsx
+client/src/pages/Accounting.tsx
+client/src/App-full-no-auth.tsx
+client/src/components/dashboard/WeatherForecast.tsx
+client/src/components/designer/AIRenderingStudio.tsx
+client/src/App-minimal.tsx.restore
