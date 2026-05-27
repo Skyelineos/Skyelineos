@@ -197,7 +197,7 @@ export function ClientTodayFeed() {
           count={outstandingInvoices.length}
           icon={<DollarSign className="w-4 h-4" />}
           emptyState="No invoices waiting."
-          viewAllHref="/client-portal/invoices"
+          viewAllHref="/client-portal/financials"
         >
           {outstandingInvoices.slice(0, 5).map(i => (
             <TodayRow
@@ -210,7 +210,7 @@ export function ClientTodayFeed() {
                   {i.dueDate && <span className="text-gray-400 ml-1.5">· due {i.dueDate}</span>}
                 </span>
               }
-              href="/client-portal/invoices"
+              href="/client-portal/financials"
             />
           ))}
         </TodaySection>
@@ -221,7 +221,7 @@ export function ClientTodayFeed() {
           count={upcomingMilestones.length}
           icon={<Calendar className="w-4 h-4" />}
           emptyState="No upcoming milestones shared yet."
-          viewAllHref="/client-portal/schedule"
+          viewAllHref="/client-portal/site-log"
         >
           {upcomingMilestones.map(t => (
             <TodayRow
@@ -229,7 +229,7 @@ export function ClientTodayFeed() {
               primary={<span className="font-medium">{t.name}</span>}
               secondary={t.description || ''}
               meta={<span>{t.dueDate || ''}</span>}
-              href="/client-portal/schedule"
+              href="/client-portal/site-log"
             />
           ))}
         </TodaySection>

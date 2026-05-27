@@ -255,7 +255,7 @@ export function Sidebar({ isOpen, onToggle }: SidebarProps) {
         <div>
           <span className="text-xl font-heading font-semibold text-white" style={{ letterSpacing: '0.04em' }}>Skyeline Homes</span>
           <p className="text-xs mt-0.5 font-sans font-light tracking-widest uppercase" style={{ color: '#C9A96E', letterSpacing: '0.15em' }}>
-            {role === 'designer' ? 'Design Portal' : role === 'client' ? 'Owner Portal' : role === 'sub' ? 'Sub Portal' : 'Project Portal'}
+            {role === 'designer' ? 'Designer Portal' : role === 'client' ? 'Client Portal' : role === 'sub' ? 'Subcontractor Portal' : 'Project Portal'}
           </p>
         </div>
         <button

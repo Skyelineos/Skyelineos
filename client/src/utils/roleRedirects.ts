@@ -44,9 +44,11 @@ export function getPortalTypeFromRoute(path: string): 'client' | 'subcontractor'
 }
 
 export function isAdminOnlyRoute(path: string): boolean {
+  // '/accounting' was a phantom route — never registered in App.tsx (the
+  // canonical page is '/financials'). Keeping it here previously routed
+  // any admin who landed on /accounting to a 404.
   const adminOnlyRoutes = [
     '/dashboard',
-    '/accounting'
   ];
   
   return adminOnlyRoutes.some(route => path.startsWith(route));

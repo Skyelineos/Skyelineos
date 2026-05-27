@@ -54,7 +54,8 @@ export default function Dashboard() {
 
   // Real-time event subscriptions removed - using modern messaging system instead
 
-  const navigateToAccounting = () => setLocation('/accounting');
+  // Removed: navigateToAccounting → /accounting was a phantom route. Canonical
+  // financial page is /financials. Use setLocation('/financials') if needed.
   const navigateToProjects = () => setLocation('/projects');
   const navigateToSchedule = () => setLocation('/schedule');
   // Remove navigateToProject function - now handled by ActiveProjectsCard component

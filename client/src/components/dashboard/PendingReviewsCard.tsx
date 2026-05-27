@@ -116,7 +116,7 @@ export function PendingReviewsCard() {
       + `Your review:\n${reviewText}\n\n`
       + (googleReviewUrl
           ? `Tap here to post it on Google (you'll sign in with your own Google account):\n${googleReviewUrl}\n\n`
-          : `(Google review link coming soon — we'll send a follow-up once it's set up.)\n\n`)
+          : '')
       + `Thanks again,\nTyler\nSkyeline Homes`,
     );
     return `mailto:${encodeURIComponent(r.clientEmail || '')}?subject=${subject}&body=${body}`;

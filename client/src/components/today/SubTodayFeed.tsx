@@ -139,7 +139,7 @@ export function SubTodayFeed() {
           count={myTasks.length}
           icon={<ClipboardList className="w-4 h-4" />}
           emptyState="Nothing on your plate. New work will appear here."
-          viewAllHref="/subcontractor-portal/tasks"
+          viewAllHref="/subcontractor-portal"
         >
           {myTasks.slice(0, 8).map(t => {
             const isOverdue = t.dueDate && t.dueDate < todayYMD;
@@ -161,7 +161,7 @@ export function SubTodayFeed() {
                       ? <span className="text-orange-600">today</span>
                       : <span>{t.dueDate || ''}</span>
                 }
-                href="/subcontractor-portal/tasks"
+                href="/subcontractor-portal"
                 highlight={isOverdue}
               />
             );
@@ -198,7 +198,7 @@ export function SubTodayFeed() {
           count={myInvoices.length}
           icon={<FileText className="w-4 h-4" />}
           emptyState="No open invoices."
-          viewAllHref="/subcontractor-portal/invoices"
+          viewAllHref="/subcontractor-portal"
         >
           {myInvoices.slice(0, 5).map(i => (
             <TodayRow
@@ -211,7 +211,7 @@ export function SubTodayFeed() {
                   <span className="font-mono">${(i.amount || 0).toLocaleString()}</span>
                 </span>
               }
-              href="/subcontractor-portal/invoices"
+              href="/subcontractor-portal"
             />
           ))}
         </TodaySection>
