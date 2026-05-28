@@ -2,24 +2,29 @@
 #
 # One-time setup required (already done):
 #   1. On your local Mac: firebase login:ci
-#      → opens browser, returns a long token after auth
-#   2. In the GitHub repo: Settings → Secrets and variables → Actions → New secret
-#   3. Name: FIREBASE_TOKEN
-#   4. Value: paste the token from step 1
-#   5. Save
+#   2. GitHub repo → Settings → Secrets and variables → Actions
+#   3. Add secret named FIREBASE_TOKEN with the token from step 1
 #
-# After that, every push to main triggers this workflow.
-# Functions + hosting + firestore rules all deploy. Total runtime ~4-5 minutes.
+# Safety:
+#   - Only triggers on push to main + manual dispatch. No pull_request trigger.
+#   - `concurrency:` cancels stale runs when a newer push lands.
+#   - The deploy step has an explicit `if:` guard as belt-and-suspenders.
+#   - Pre-flight verifies FIREBASE_TOKEN is set so we fail fast.
 
 name: Deploy to Firebase
 on:
   push:
     branches: [main]
-  workflow_dispatch:  # also allow manual triggers from the Actions tab
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v4
 
@@ -27,6 +32,18 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
+
+      - name: Verify FIREBASE_TOKEN is set
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+        run: |
+          if [ -z "$FIREBASE_TOKEN" ]; then
+            echo "::error::FIREBASE_TOKEN secret is missing or empty."
+            echo "Fix: run 'firebase login:ci' locally, then update the secret at"
+            echo "  Settings → Secrets and variables → Actions → FIREBASE_TOKEN"
+            exit 1
+          fi
+          echo "FIREBASE_TOKEN present (length: ${#FIREBASE_TOKEN})"
 
       - name: Install root dependencies
         run: npm ci --no-audit --no-fund
@@ -43,14 +60,8 @@ jobs:
         run: npm run build
 
       - name: Install Firebase CLI
-        run: npm install -g firebase-tools
+        run: npm install -g firebase-tools@13
 
-      # Single combined deploy: hosting + functions + firestore rules.
-      # --force skips the "delete obsolete functions?" interactive prompt
-      # (we have orphan claimContact / sendBidRequest functions in prod
-      # that aren't in source; we want them auto-cleaned during CI).
-      # --non-interactive makes any remaining prompts fail loudly rather
-      # than hang the runner.
       - name: Deploy
         run: firebase deploy --only hosting,functions,firestore:rules --project skyelineos --force --non-interactive --token "$FIREBASE_TOKEN"
         env:
