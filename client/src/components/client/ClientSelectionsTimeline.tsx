@@ -13,19 +13,7 @@ import { Heart, MessageSquare, Clock, CheckCircle2, Lock, Sparkles, Wand2 } from
 import { PHASES, type BuildPhase } from '@/data/selectionsTemplate';
 import { SelectionsWizard } from './SelectionsWizard';
 import { SelectionsCelebration } from './SelectionsCelebration';
-
-/**
- * "Done from the homeowner's POV" — they've expressed a preference OR the
- * selection is locked in by the GC. Used to drive the progress bar at the
- * top of the page and to filter out items the wizard shouldn't re-walk.
- */
-function isSelectionCompletedByClient(s: { gcApproved?: boolean; clientPreference?: { optionId?: string }; selectedOptionId?: string; lifecycle?: string }): boolean {
-  if (s.gcApproved) return true;
-  if (s.clientPreference?.optionId) return true;
-  if (s.selectedOptionId) return true;
-  const finalStates = ['GC-Approved', 'Ordered', 'Received', 'Installed'];
-  return !!s.lifecycle && finalStates.includes(s.lifecycle);
-}
+import { isSelectionCompletedByClient, progressToneHex } from '@/lib/selectionsProgress';
 
 interface Props {
   projectId: string;
@@ -166,12 +154,10 @@ export default function ClientSelectionsTimeline({ projectId, clientUserId, phas
   }, [percent, totalCount, projectId]);
 
   // Bar color shifts with progress so the homeowner gets visual reward as
-  // they work through the list. Brand palette only — no rainbow.
-  const barTone =
-    percent >= 100 ? '#22c55e' :        // green — done
-    percent >= 66  ? '#C9A96E' :        // brand gold — strong progress
-    percent >= 33  ? '#D9C291' :        // soft gold — mid
-                     '#E8DCC2';         // pale gold — early
+  // they work through the list. Brand palette only — pulled from the
+  // shared progress helper so the GC's project-overview card uses the
+  // same tones for the same %.
+  const barTone = progressToneHex(percent);
 
   if (isLoading) return <div className="p-6 text-sm text-muted-foreground">Loading your selections…</div>;
 

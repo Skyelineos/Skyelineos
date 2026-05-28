@@ -32,6 +32,7 @@ import { ProjectFinancialsCard } from '@/components/projects/ProjectFinancialsCa
 import { ProjectStageTracker, deriveStageFromProject } from '@/components/projects/ProjectStageTracker';
 import { SoftBudgetBadge } from '@/components/projects/SoftBudgetBadge';
 import { ContractProfitCard } from '@/components/projects/ContractProfitCard';
+import { SelectionsProgressCard } from '@/components/projects/SelectionsProgressCard';
 
 
 
@@ -270,6 +271,11 @@ export default function ProjectOverview() {
           projectName={transformedProject.name}
           spent={transformedProject.spent || 0}
         />
+
+        {/* Live selections-progress bar — same scale + tones as the
+            homeowner's client-portal bar, so a glance tells the GC
+            how close the client is to "everything picked." */}
+        <SelectionsProgressCard projectId={projectId!} />
 
         {/* Trades on this project — derived from task data. */}
         <Card>
