@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { collection, getDocs, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -7,9 +7,25 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
-import { Heart, MessageSquare, Clock, CheckCircle2, Lock } from 'lucide-react';
+import { Heart, MessageSquare, Clock, CheckCircle2, Lock, Sparkles, Wand2 } from 'lucide-react';
 import { PHASES, type BuildPhase } from '@/data/selectionsTemplate';
+import { SelectionsWizard } from './SelectionsWizard';
+import { SelectionsCelebration } from './SelectionsCelebration';
+
+/**
+ * "Done from the homeowner's POV" — they've expressed a preference OR the
+ * selection is locked in by the GC. Used to drive the progress bar at the
+ * top of the page and to filter out items the wizard shouldn't re-walk.
+ */
+function isSelectionCompletedByClient(s: { gcApproved?: boolean; clientPreference?: { optionId?: string }; selectedOptionId?: string; lifecycle?: string }): boolean {
+  if (s.gcApproved) return true;
+  if (s.clientPreference?.optionId) return true;
+  if (s.selectedOptionId) return true;
+  const finalStates = ['GC-Approved', 'Ordered', 'Received', 'Installed'];
+  return !!s.lifecycle && finalStates.includes(s.lifecycle);
+}
 
 interface Props {
   projectId: string;
@@ -100,22 +116,149 @@ export default function ClientSelectionsTimeline({ projectId, clientUserId, phas
     onError: (e: any) => toast({ title: 'Could not send', description: e?.message, variant: 'destructive' }),
   });
 
+  // Progress math — drives the bar + the celebration. We count any
+  // selection the homeowner has weighed in on (preference set) OR that's
+  // been locked by the GC. Selections without options yet still count
+  // toward the *total* because they're decisions the homeowner will
+  // eventually own.
+  const completedCount = useMemo(
+    () => selections.filter(isSelectionCompletedByClient).length,
+    [selections]
+  );
+  const totalCount = selections.length;
+  const percent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+
+  // Selections eligible for the wizard — has options + no preference yet.
+  const wizardCandidates = useMemo(
+    () => selections.filter(s => (s.items?.length || 0) > 0 && !s.clientPreference?.optionId && !s.gcApproved),
+    [selections]
+  );
+
+  const [wizardOpen, setWizardOpen] = useState(false);
+
+  // Mini celebration — fire once when the user crosses 100% within this
+  // session. sessionStorage keeps it from re-firing on every render once
+  // it's been dismissed. Re-firing across sessions is fine — the homeowner
+  // deserves the dopamine each time they reload after completing.
+  const [celebrate, setCelebrate] = useState(false);
+  const lastSeenPercent = useRef<number | null>(null);
+  useEffect(() => {
+    if (totalCount === 0) return;
+    // First render after data load — capture baseline, don't fire.
+    if (lastSeenPercent.current === null) {
+      lastSeenPercent.current = percent;
+      // Suppress if we already hit 100% in a prior render of this session
+      const key = `selections-celebrated:${projectId}`;
+      if (percent === 100 && sessionStorage.getItem(key) === '1') return;
+      if (percent === 100) {
+        sessionStorage.setItem(key, '1');
+        setCelebrate(true);
+      }
+      return;
+    }
+    // Subsequent updates — fire when crossing 0–99 → 100.
+    if (lastSeenPercent.current < 100 && percent === 100) {
+      const key = `selections-celebrated:${projectId}`;
+      sessionStorage.setItem(key, '1');
+      setCelebrate(true);
+    }
+    lastSeenPercent.current = percent;
+  }, [percent, totalCount, projectId]);
+
+  // Bar color shifts with progress so the homeowner gets visual reward as
+  // they work through the list. Brand palette only — no rainbow.
+  const barTone =
+    percent >= 100 ? '#22c55e' :        // green — done
+    percent >= 66  ? '#C9A96E' :        // brand gold — strong progress
+    percent >= 33  ? '#D9C291' :        // soft gold — mid
+                     '#E8DCC2';         // pale gold — early
+
   if (isLoading) return <div className="p-6 text-sm text-muted-foreground">Loading your selections…</div>;
 
   return (
     <div className="space-y-4">
+      {/* Celebration overlay — auto-dismisses after a few seconds */}
+      <SelectionsCelebration show={celebrate} onDismiss={() => setCelebrate(false)} />
+
+      {/* Wizard — opens when user clicks "Walk me through these" */}
+      <SelectionsWizard
+        open={wizardOpen}
+        onClose={() => setWizardOpen(false)}
+        selections={wizardCandidates}
+        onPick={async (selectionId, optionId) => {
+          await preferMutation.mutateAsync({ selectionId, optionId });
+        }}
+      />
+
+      {/* Progress card — replaces the old stats grid. Big number, filled
+          bar, total count, plus the "Walk me through these" CTA. */}
       <Card>
-        <CardHeader className="pb-3"><CardTitle className="text-base">Your selections at a glance</CardTitle></CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-            <Stat label="Active right now" value={active.length} tone={active.length > 0 ? 'attention' : 'neutral'} />
-            <Stat label="Coming up" value={upcoming.length} />
-            <Stat label="Locked in" value={lockedIn.length} />
-            <Stat label="Total selections" value={selections.length} />
+        <CardContent className="pt-5 pb-4 space-y-3">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div className="min-w-0">
+              <p className="text-xs uppercase tracking-wide text-gray-500">Your selections</p>
+              <p className="text-2xl font-heading font-semibold text-[#141414] mt-0.5">
+                {completedCount} <span className="text-gray-400 font-normal">of</span> {totalCount}
+                <span className="text-gray-400 font-normal text-base ml-1">completed</span>
+              </p>
+              {percent === 100 && totalCount > 0 ? (
+                <p className="text-xs text-green-700 flex items-center gap-1 mt-1">
+                  <Sparkles className="w-3 h-3" /> Every selection is in — your team can move on.
+                </p>
+              ) : (
+                <p className="text-xs text-gray-500 mt-1">
+                  Pick what you love, leave a note where you want one. Your designer and contractor sign off on the final pieces after bids come in.
+                </p>
+              )}
+            </div>
+            {wizardCandidates.length > 0 && (
+              <Button
+                onClick={() => setWizardOpen(true)}
+                className="gap-1.5 text-white"
+                style={{ backgroundColor: '#C9A96E' }}
+                size="sm"
+              >
+                <Wand2 className="w-4 h-4" />
+                Walk me through these
+                <Badge variant="secondary" className="ml-1 bg-white/20 text-white border-white/30">
+                  {wizardCandidates.length}
+                </Badge>
+              </Button>
+            )}
           </div>
-          <p className="text-xs text-muted-foreground mt-3">
-            Your designer and contractor put options together; you share your preferences here. The contractor signs off on the final cost and design once vendor bids come in.
-          </p>
+
+          <div className="space-y-1.5">
+            <Progress
+              value={percent}
+              className="h-3"
+              // Override the indicator color via inline style on a wrapper so
+              // we don't have to touch the shared Progress primitive.
+              style={{ ['--progress-fg' as any]: barTone }}
+            />
+            {/* Custom-painted bar layer that uses the tonal color above —
+                sits on top of the radix Progress to provide the gold-tinted
+                fill without forking the shared shadcn component. */}
+            <div className="relative -mt-3 h-3 w-full rounded-full overflow-hidden pointer-events-none">
+              <div
+                className="h-full transition-all duration-500 ease-out"
+                style={{ width: `${percent}%`, backgroundColor: barTone }}
+              />
+            </div>
+            <div className="flex items-center justify-between text-[11px] text-gray-500">
+              <span>{percent}% complete</span>
+              {totalCount > 0 && completedCount < totalCount && (
+                <span>{totalCount - completedCount} left</span>
+              )}
+            </div>
+          </div>
+
+          {/* Compact stat row — kept below the bar so the bar is the
+              focal element, not buried under 4 number boxes. */}
+          <div className="grid grid-cols-3 gap-3 pt-2 border-t text-xs">
+            <MiniStat label="Active" value={active.length} tone={active.length > 0 ? 'attention' : 'neutral'} />
+            <MiniStat label="Coming up" value={upcoming.length} />
+            <MiniStat label="Locked in" value={lockedIn.length} />
+          </div>
         </CardContent>
       </Card>
 
@@ -202,12 +345,12 @@ export default function ClientSelectionsTimeline({ projectId, clientUserId, phas
   );
 }
 
-function Stat({ label, value, tone = 'neutral' }: { label: string; value: any; tone?: 'neutral' | 'attention' }) {
-  const cls = tone === 'attention' ? 'text-amber-600' : '';
+function MiniStat({ label, value, tone = 'neutral' }: { label: string; value: any; tone?: 'neutral' | 'attention' }) {
+  const cls = tone === 'attention' ? 'text-amber-600' : 'text-gray-900';
   return (
-    <div>
-      <div className="text-xs text-muted-foreground uppercase tracking-wide">{label}</div>
-      <div className={`text-2xl font-semibold ${cls}`}>{value}</div>
+    <div className="flex items-baseline justify-between gap-2">
+      <span className="text-gray-500 uppercase tracking-wide">{label}</span>
+      <span className={`text-sm font-semibold ${cls}`}>{value}</span>
     </div>
   );
 }
