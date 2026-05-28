@@ -7,6 +7,7 @@ import { db } from '@/lib/firebase';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirm } from '@/hooks/use-confirm';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -352,6 +353,7 @@ function EditModal({
 export default function Subscriptions() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const confirm = useConfirm();
   const [items, setItems] = useState<Subscription[]>([]);
   const [editing, setEditing] = useState<Subscription | null>(null);
   const [showModal, setShowModal] = useState(false);
@@ -389,7 +391,13 @@ export default function Subscriptions() {
   }, [user, seeded, toast]);
 
   const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`Remove "${name}" from subscriptions?`)) return;
+    const ok = await confirm({
+      title: `Remove "${name}"?`,
+      description: 'Removes this subscription from the tracker. The vendor account itself is not cancelled.',
+      confirmText: 'Remove',
+      variant: 'destructive',
+    });
+    if (!ok) return;
     try {
       await deleteDoc(doc(db, 'subscriptions', id));
       toast({ title: 'Removed' });

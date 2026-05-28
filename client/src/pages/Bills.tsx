@@ -8,6 +8,7 @@ import { getAuth } from 'firebase/auth';
 import { db, storage } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirm } from '@/hooks/use-confirm';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -112,6 +113,7 @@ export default function Bills() {
 export function BillsContent({ projectId: scopedProjectId }: { projectId?: string } = {}) {
   const { user } = useAuth();
   const { toast } = useToast();
+  const confirm = useConfirm();
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [bills, setBills] = useState<Bill[]>([]);
@@ -275,7 +277,13 @@ export function BillsContent({ projectId: scopedProjectId }: { projectId?: strin
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Delete this bill?')) return;
+    const ok = await confirm({
+      title: 'Delete this bill?',
+      description: 'This cannot be undone.',
+      confirmText: 'Delete',
+      variant: 'destructive',
+    });
+    if (!ok) return;
     try {
       await deleteDoc(doc(db, 'financials', id));
       toast({ title: 'Deleted' });

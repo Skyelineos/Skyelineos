@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirm } from '@/hooks/use-confirm';
 import {
   FileSignature, Plus, Search, Filter, AlertTriangle, CheckCircle2, Clock,
 } from 'lucide-react';
@@ -40,6 +41,7 @@ function statusBadgeClass(s: ContractStatus): string {
 export default function ContractsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const confirm = useConfirm();
   const [rows, setRows] = useState<Contract[]>([]);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<'all' | ContractType>('all');
@@ -109,7 +111,13 @@ export default function ContractsPage() {
   };
 
   const handleDelete = async (c: Contract) => {
-    if (!confirm(`Delete this ${CONTRACT_TYPE_LABEL[c.type]}? This cannot be undone.`)) return;
+    const ok = await confirm({
+      title: `Delete this ${CONTRACT_TYPE_LABEL[c.type]}?`,
+      description: 'This cannot be undone.',
+      confirmText: 'Delete',
+      variant: 'destructive',
+    });
+    if (!ok) return;
     try {
       await deleteContract(c.id);
       toast({ title: 'Contract deleted' });

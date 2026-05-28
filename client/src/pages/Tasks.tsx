@@ -16,6 +16,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
+import { useConfirm } from '@/hooks/use-confirm';
 import { createNotification } from '@/lib/notifications';
 import { getDefaultAssigneeForTask, inferTaskKindFromTitle } from '@/lib/taskDefaults';
 import {
@@ -135,6 +136,7 @@ export default function Tasks() {
 export function TasksContent({ projectId: scopedProjectId }: { projectId?: string } = {}) {
   const { toast } = useToast();
   const { user } = useAuth();
+  const confirm = useConfirm();
   // Current-user identifiers for the "Assigned to me" / "Created by me"
   // quick-filters. We can't fully resolve a sub's contact id here, but for
   // GC/admin (the most common user of the Tasks page) `user.id` and the
@@ -326,10 +328,13 @@ export function TasksContent({ projectId: scopedProjectId }: { projectId?: strin
   };
 
   const handleDelete = async (taskId: string) => {
-    // Native confirm() flagged by audit doc #7 — keeping for now to avoid
-    // pulling AlertDialog into this file mid-batch. Migrated wholesale in
-    // the upcoming #7 sweep.
-    if (!confirm('Delete this task?')) return;
+    const ok = await confirm({
+      title: 'Delete this task?',
+      description: 'This cannot be undone.',
+      confirmText: 'Delete',
+      variant: 'destructive',
+    });
+    if (!ok) return;
     try {
       await deleteDoc(doc(db, 'tasks', taskId));
       toast({ title: 'Task deleted' });

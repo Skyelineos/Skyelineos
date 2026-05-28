@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirm } from '@/hooks/use-confirm';
 import { GmailBidImporter } from '@/components/estimates/GmailBidImporter';
 import { EstimateCostingsTab } from '@/components/estimates/EstimateCostingsTab';
 import { LineDescriptionButton } from '@/components/estimates/LineDescriptionButton';
@@ -1562,6 +1563,7 @@ interface EstimateBuilderContentProps {
 
 export function EstimateBuilderContent({ projectId, projectName, embedded = false }: EstimateBuilderContentProps) {
   const { toast } = useToast();
+  const confirm = useConfirm();
   const [, setLocation] = useLocation();
   const [estimates, setEstimates]   = useState<Estimate[]>([]);
   const [clients, setClients]       = useState<CRMClient[]>([]);
@@ -1653,7 +1655,13 @@ export function EstimateBuilderContent({ projectId, projectName, embedded = fals
   };
 
   const handleDelete = async (est: Estimate) => {
-    if (!confirm(`Delete "${est.title}"?`)) return;
+    const ok = await confirm({
+      title: `Delete "${est.title}"?`,
+      description: 'This cannot be undone.',
+      confirmText: 'Delete',
+      variant: 'destructive',
+    });
+    if (!ok) return;
     await deleteDoc(doc(db, 'estimates', est.id));
     toast({ title: 'Deleted' });
   };

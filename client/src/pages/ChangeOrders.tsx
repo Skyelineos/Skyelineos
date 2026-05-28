@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirm } from '@/hooks/use-confirm';
 import {
   Plus, Search, FileText, MoreVertical, CheckCircle, XCircle, Eye,
   TrendingUp, Clock, DollarSign, Calendar
@@ -119,6 +120,7 @@ export default function ChangeOrders() {
 
 export function ChangeOrdersContent({ projectId: scopedProjectId }: { projectId?: string } = {}) {
   const { toast } = useToast();
+  const confirm = useConfirm();
 
   const [changeOrders, setChangeOrders] = useState<ChangeOrder[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -231,7 +233,13 @@ export function ChangeOrdersContent({ projectId: scopedProjectId }: { projectId?
   };
 
   const handleReject = async (co: ChangeOrder) => {
-    if (!confirm(`Reject change order "${co.title}"?`)) return;
+    const ok = await confirm({
+      title: `Reject "${co.title}"?`,
+      description: 'The submitter will be notified that the change order was rejected.',
+      confirmText: 'Reject',
+      variant: 'destructive',
+    });
+    if (!ok) return;
     try {
       await updateDoc(doc(db, 'changeOrders', co.id), { status: 'rejected' });
       toast({ title: 'Change order rejected' });
@@ -245,7 +253,13 @@ export function ChangeOrdersContent({ projectId: scopedProjectId }: { projectId?
   };
 
   const handleVoid = async (co: ChangeOrder) => {
-    if (!confirm(`Void change order "${co.title}"?`)) return;
+    const ok = await confirm({
+      title: `Void "${co.title}"?`,
+      description: 'Voided change orders are kept for audit but no longer count toward the project total.',
+      confirmText: 'Void',
+      variant: 'destructive',
+    });
+    if (!ok) return;
     try {
       await updateDoc(doc(db, 'changeOrders', co.id), { status: 'voided' });
       toast({ title: 'Change order voided' });

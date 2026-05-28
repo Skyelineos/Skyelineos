@@ -7,6 +7,7 @@ import { useAuth } from "@/auth/AuthContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { UserPreferencesProvider } from "@/contexts/UserPreferencesContext";
 import { AdminViewProvider } from "@/contexts/AdminViewContext";
+import { ConfirmProvider } from "@/hooks/use-confirm";
 import { BrandingProvider } from "@/contexts/BrandingContext";
 // Firebase sign-in page imported below
 import { NotificationCenter } from "@/components/notifications/NotificationCenter";
@@ -771,8 +772,10 @@ export default function App() {
         <UserPreferencesProvider>
           <BrandingProvider>
             <AdminViewProvider>
-              <AppContent />
-              <Toaster />
+              <ConfirmProvider>
+                <AppContent />
+                <Toaster />
+              </ConfirmProvider>
             </AdminViewProvider>
           </BrandingProvider>
         </UserPreferencesProvider>

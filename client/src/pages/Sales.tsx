@@ -13,6 +13,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirm } from '@/hooks/use-confirm';
 import { useAuth } from '@/auth/AuthContext';
 import { VcardImportZone } from '@/components/sales/VcardImportZone';
 import {
@@ -1240,6 +1241,7 @@ function ListRow({ client, stages, onEdit, onDelete }: {
 export default function Sales() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const confirm = useConfirm();
   const [clients, setClients] = useState<Client[]>([]);
   const [stages, setStages] = useState<StageConfig[]>(DEFAULT_STAGES);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
@@ -1541,7 +1543,13 @@ export default function Sales() {
   };
 
   const handleDelete = async (client: Client) => {
-    if (!confirm(`Delete "${client.name}"? This cannot be undone.`)) return;
+    const ok = await confirm({
+      title: `Delete "${client.name}"?`,
+      description: 'This cannot be undone.',
+      confirmText: 'Delete',
+      variant: 'destructive',
+    });
+    if (!ok) return;
     await deleteDoc(doc(db, 'clients', client.id));
     toast({ title: 'Lead deleted' });
   };
