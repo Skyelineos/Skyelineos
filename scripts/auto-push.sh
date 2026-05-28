@@ -123,6 +123,8 @@ rsync -a --delete \
   --exclude='.env' \
   --exclude='.env.local' \
   --exclude='.DS_Store' \
+  --exclude='vite.config.ts.timestamp-*' \
+  --exclude='*.timestamp-*.mjs' \
   "$REPO_ROOT/" "$TMP_CLONE/"
 
 # Apply the deny-list: files that were deleted from the canonical repo

@@ -13,3 +13,9 @@ client/src/App-full-no-auth.tsx
 client/src/components/dashboard/WeatherForecast.tsx
 client/src/components/designer/AIRenderingStudio.tsx
 client/src/App-minimal.tsx.restore
+
+# Vite dev-mode timestamp artifacts. Created when running `vite build` in the
+# sandbox; they should never reach the repo. Anchored by name so we don't
+# match real files. Listed individually because the deny-list does literal
+# path matches, not globs — but the rsync exclude above also catches them.
+vite.config.ts.timestamp-1779929255162-d63d57d8efc8a.mjs
