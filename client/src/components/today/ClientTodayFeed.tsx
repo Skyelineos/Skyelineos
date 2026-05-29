@@ -333,10 +333,47 @@ export function ClientTodayFeed() {
                   className="aspect-square rounded-md overflow-hidden bg-gray-100 hover:opacity-90 transition-opacity"
                 >
                   {p.mediaType === 'photo' ? (
-                    <img src={p.mediaUrl} alt="" className="w-full h-full object-cover" />
+                    <img
+                      src={p.mediaUrl}
+                      alt=""
+                      className="w-full h-full object-cover"
+                      // Bad URL / expired token / Storage permission denial
+                      // would otherwise render the browser's broken-image
+                      // icon. Swap to a brand placeholder so the grid keeps
+                      // its visual rhythm even when an image fails.
+                      onError={(e) => {
+                        const img = e.currentTarget;
+                        img.style.display = 'none';
+                        const parent = img.parentElement;
+                        if (parent && !parent.querySelector('[data-img-fallback]')) {
+                          const ph = document.createElement('div');
+                          ph.setAttribute('data-img-fallback', 'true');
+                          ph.className = 'w-full h-full flex items-center justify-center bg-gray-100 text-gray-400 text-[10px] text-center px-1';
+                          ph.textContent = "Couldn't load this photo";
+                          parent.appendChild(ph);
+                        }
+                      }}
+                    />
                   ) : (
                     <div className="relative w-full h-full">
-                      <video src={p.mediaUrl} className="w-full h-full object-cover" />
+                      <video
+                        src={p.mediaUrl}
+                        className="w-full h-full object-cover"
+                        // Same defensive fallback for videos — bad URL
+                        // shouldn't blow up the grid layout.
+                        onError={(e) => {
+                          const v = e.currentTarget;
+                          v.style.display = 'none';
+                          const parent = v.parentElement;
+                          if (parent && !parent.querySelector('[data-vid-fallback]')) {
+                            const ph = document.createElement('div');
+                            ph.setAttribute('data-vid-fallback', 'true');
+                            ph.className = 'w-full h-full flex items-center justify-center bg-gray-100 text-gray-400 text-[10px] text-center px-1';
+                            ph.textContent = "Couldn't load this video";
+                            parent.appendChild(ph);
+                          }
+                        }}
+                      />
                       <div className="absolute inset-0 flex items-center justify-center bg-black/30 text-white text-xs font-bold">▶</div>
                     </div>
                   )}

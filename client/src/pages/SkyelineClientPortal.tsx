@@ -7,6 +7,7 @@ import { AdminPortalControls } from '@/components/admin/AdminPortalControls';
 import { useAdminView } from '@/contexts/AdminViewContext';
 import { useAutoAdminView } from '@/hooks/useAutoAdminView';
 import { useToast } from '@/hooks/use-toast';
+import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 
 import DocumentsTab from '@/components/documents/DocumentsTab';
 import PhotosTab from '@/components/photos/PhotosTab';
@@ -310,9 +311,14 @@ export default function SkyelineClientPortal() {
           </div>
         </div>
 
-        {/* Content */}
+        {/* Content — wrapped in ErrorBoundary so a thrown error in one
+            tab doesn't blank out the whole portal. The header + nav stay
+            outside the boundary so the homeowner can navigate to another
+            tab even if the current one breaks. */}
         <div className="max-w-7xl mx-auto">
-          {renderContent()}
+          <ErrorBoundary>
+            {renderContent()}
+          </ErrorBoundary>
         </div>
       </div>
     </>
