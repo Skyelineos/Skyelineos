@@ -336,18 +336,31 @@ export default function SubcontractorPortal() {
     <div className="space-y-4">
       <RecipientMismatchBanner />
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <h2 className="text-xl font-bold text-gray-900">Bid Management</h2>
+        {/* Heading was "Bid Management" — which was misleading. This tab
+            shows ONLY the bids the sub has already SUBMITTED. Incoming
+            invitations live on the separate Bid Requests tab. */}
+        <h2 className="text-xl font-bold text-gray-900">My Submitted Bids</h2>
         <EnablePushButton />
       </div>
       <p className="text-[11px] text-gray-500 -mt-2">
-        Enable phone notifications to receive bid invites and reminders directly on this device — works even if you don't get email or SMS.
+        Bids you've sent in response to invitations. To see new invitations from Skyeline Homes, go to <strong>Bid Requests</strong> in the left menu.
       </p>
       {bids.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
             <Briefcase className="w-10 h-10 mx-auto mb-3 text-gray-300" />
-            <p className="text-gray-400 font-medium">No bids found</p>
-            <p className="text-sm text-gray-400 mt-1">Bid invitations from Skyeline Homes will appear here.</p>
+            <p className="text-gray-700 font-medium">No bids submitted yet</p>
+            <p className="text-sm text-gray-500 mt-1 max-w-md mx-auto">
+              When you respond to a Skyeline Homes bid invitation, your submission shows up here.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-4 gap-1.5"
+              onClick={() => setLocation('/subcontractor-portal/bid-requests')}
+            >
+              See open bid requests
+            </Button>
           </CardContent>
         </Card>
       ) : (

@@ -110,6 +110,21 @@ export function SubBidSubmissionForm({
   // invited to a bid can reference. Loaded when the form mounts.
   const [projectDocs, setProjectDocs] = useState<{ id: string; name: string; fileUrl: string; category?: string }[]>([]);
 
+  // Project-level context — address, sqft, scope statement, special
+  // considerations. The bid request doc itself only carries the per-trade
+  // scope; without these the sub can't really "review as a project" — they
+  // just see one trade in isolation.
+  const [projectContext, setProjectContext] = useState<{
+    address?: string;
+    squareFootage?: number;
+    estimatedBudget?: number;
+    startDate?: string;
+    targetCompletion?: string;
+    scopeStatement?: string;
+    specialConsiderations?: string;
+    finishTier?: string;
+  } | null>(null);
+
   // Compliance
   const [insurance, setInsurance] = useState<BidInsurance>({
     carrier: '', policyNumber: '', expiration: '',
@@ -169,6 +184,35 @@ export function SubBidSubmissionForm({
       } catch {
         // Permission errors here just mean the sub can't see project docs;
         // they can still use the plans attached directly to the bid request.
+      }
+    })();
+  }, [request.projectId]);
+
+  // Load project-level context (address, sqft, scope statement, special
+  // considerations). Without this the sub only sees the per-trade scope —
+  // they can't meaningfully bid because they don't know what the *project*
+  // is. Soft-fails on permission denial so a sub with read access only to
+  // bidRequests still gets the form (just without the project banner).
+  useEffect(() => {
+    if (!request.projectId) return;
+    (async () => {
+      try {
+        const snap = await getDoc(doc(db, 'projects', request.projectId));
+        if (snap.exists()) {
+          const d = snap.data() as any;
+          setProjectContext({
+            address: d.address,
+            squareFootage: d.squareFootage,
+            estimatedBudget: d.estimatedBudget,
+            startDate: d.startDate,
+            targetCompletion: d.targetCompletion,
+            scopeStatement: d.scopeStatement,
+            specialConsiderations: d.specialConsiderations,
+            finishTier: d.finishTier,
+          });
+        }
+      } catch (e) {
+        console.warn('[sub-bid-form] project context load failed (permission?)', e);
       }
     })();
   }, [request.projectId]);
@@ -366,6 +410,55 @@ export function SubBidSubmissionForm({
           <CardContent className="p-3 text-sm text-green-900 flex items-center gap-2">
             <Shield className="w-4 h-4" />
             You've already submitted a bid for this request. Submitting again will create a revised bid.
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Project context — top-of-form summary so the sub reads this as
+          "a project I'm bidding on" not just "one trade in isolation".
+          Pulled live from the project doc; soft-fails if the sub can't
+          read projects/* (just hides the banner). */}
+      {projectContext && (
+        <Card className="border-[#C9A96E]/40 bg-[#FFF8E7]/40">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Building2 className="w-4 h-4 text-[#C9A96E]" />
+              {request.projectName || 'Project context'}
+            </CardTitle>
+            {projectContext.address && (
+              <CardDescription className="text-sm">{projectContext.address}</CardDescription>
+            )}
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex flex-wrap gap-x-6 gap-y-1.5 text-xs">
+              {projectContext.squareFootage ? (
+                <span><span className="text-gray-500">Size:</span> <strong>{projectContext.squareFootage.toLocaleString()} sqft</strong></span>
+              ) : null}
+              {projectContext.estimatedBudget ? (
+                <span><span className="text-gray-500">Budget:</span> <strong>${projectContext.estimatedBudget.toLocaleString()}</strong></span>
+              ) : null}
+              {projectContext.finishTier ? (
+                <span><span className="text-gray-500">Tier:</span> <strong>{projectContext.finishTier}</strong></span>
+              ) : null}
+              {projectContext.startDate ? (
+                <span><span className="text-gray-500">Starts:</span> <strong>{projectContext.startDate}</strong></span>
+              ) : null}
+              {projectContext.targetCompletion ? (
+                <span><span className="text-gray-500">Target finish:</span> <strong>{projectContext.targetCompletion}</strong></span>
+              ) : null}
+            </div>
+            {projectContext.scopeStatement && (
+              <div>
+                <Label className="text-xs uppercase tracking-wide text-gray-500">Project description</Label>
+                <p className="text-sm text-gray-800 whitespace-pre-wrap mt-0.5">{projectContext.scopeStatement}</p>
+              </div>
+            )}
+            {projectContext.specialConsiderations && (
+              <div className="bg-amber-50 border border-amber-200 rounded p-2.5">
+                <Label className="text-xs uppercase tracking-wide text-amber-700">Special considerations</Label>
+                <p className="text-sm text-amber-900 whitespace-pre-wrap mt-0.5">{projectContext.specialConsiderations}</p>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
