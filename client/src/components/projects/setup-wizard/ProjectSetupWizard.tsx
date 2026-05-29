@@ -14,6 +14,10 @@ import { computeProjectCompleteness } from '@/lib/projectSetup';
 import { Step1Identity } from './Step1Identity';
 import { Step2Clients } from './Step2Clients';
 import { Step3Team } from './Step3Team';
+import { Step4Budget } from './Step4Budget';
+import { Step5Plans } from './Step5Plans';
+import { Step6Timeline } from './Step6Timeline';
+import { Step7Scope } from './Step7Scope';
 
 /**
  * Project Setup Wizard — guides the GC through creating a project so
@@ -41,10 +45,10 @@ interface ProjectSetupWizardProps {
   onCancel?: () => void;
 }
 
-const ACTIVE_STEPS: WizardStepId[] = ['identity', 'clients', 'team'];
+const ACTIVE_STEPS: WizardStepId[] = ['identity', 'clients', 'team', 'budget', 'plans', 'timeline', 'scope'];
 // Steps in WIZARD_STEPS that haven't shipped yet — shown disabled in the
 // progress tracker so users can see the road ahead.
-const PLANNED_STEPS: WizardStepId[] = ['budget', 'plans', 'timeline', 'scope', 'review'];
+const PLANNED_STEPS: WizardStepId[] = ['review'];
 
 export function ProjectSetupWizard({ draftId, onPublished, onCancel }: ProjectSetupWizardProps) {
   const { user } = useAuth();
@@ -243,6 +247,10 @@ export function ProjectSetupWizard({ draftId, onPublished, onCancel }: ProjectSe
           {currentStep === 'identity' && <Step1Identity draft={draft} onChange={setDraft} />}
           {currentStep === 'clients' && <Step2Clients draft={draft} onChange={setDraft} />}
           {currentStep === 'team' && <Step3Team draft={draft} onChange={setDraft} />}
+          {currentStep === 'budget' && <Step4Budget draft={draft} onChange={setDraft} />}
+          {currentStep === 'plans' && <Step5Plans draft={draft} onChange={setDraft} />}
+          {currentStep === 'timeline' && <Step6Timeline draft={draft} onChange={setDraft} />}
+          {currentStep === 'scope' && <Step7Scope draft={draft} onChange={setDraft} />}
         </CardContent>
       </Card>
 
