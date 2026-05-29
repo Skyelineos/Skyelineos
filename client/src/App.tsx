@@ -26,6 +26,7 @@ const Dashboard = lazy(() => import("@/pages/Dashboard"));
 const Projects = lazy(() => import("@/pages/Projects"));
 const ProjectDetail = lazy(() => import("@/pages/ProjectDetail"));
 const ProjectOverview = lazy(() => import("@/pages/ProjectOverview"));
+const ProjectSetup = lazy(() => import("@/pages/ProjectSetup"));
 const ProjectEstimates = lazy(() => import("@/pages/ProjectEstimates"));
 const ProjectBids = lazy(() => import("@/pages/ProjectBids"));
 const ProjectSchedule = lazy(() => import("@/pages/ProjectSchedule"));
@@ -143,7 +144,29 @@ function Router() {
           </RoleGuard>
         </ProtectedRoute>
       </Route>
-      
+
+      {/* Project Setup Wizard — guided multi-step project creation. The
+          plain `/projects/setup` route starts a fresh draft; the
+          `:draftId` variant resumes an in-progress draft. */}
+      <Route path="/projects/setup">
+        <ProtectedRoute>
+          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+            <Suspense fallback={<MinimalSpinner title="Loading Project Setup" />}>
+              <ProjectSetup />
+            </Suspense>
+          </RoleGuard>
+        </ProtectedRoute>
+      </Route>
+      <Route path="/projects/setup/:draftId">
+        <ProtectedRoute>
+          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+            <Suspense fallback={<MinimalSpinner title="Loading Project Setup" />}>
+              <ProjectSetup />
+            </Suspense>
+          </RoleGuard>
+        </ProtectedRoute>
+      </Route>
+
       <Route path="/projects/:id">
         <ProtectedRoute>
           <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>

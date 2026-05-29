@@ -564,14 +564,25 @@ export default function Projects() {
                 Manage and track all your construction projects
               </p>
             </div>
-            <div className="flex gap-2">
-              <Button 
+            <div className="flex gap-2 flex-wrap">
+              <Button
                 variant="accent"
+                className="self-start sm:self-auto"
+                onClick={() => setLocation('/projects/setup')}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                New Project (guided)
+              </Button>
+              {/* Legacy single-page form — kept so any habit-formed flow
+                  still works. The guided wizard is the recommended path
+                  and will become the only path in a follow-up update. */}
+              <Button
+                variant="outline"
                 className="self-start sm:self-auto"
                 onClick={() => setIsNewProjectFormOpen(true)}
               >
                 <Plus className="mr-2 h-4 w-4" />
-                New Project
+                Quick add
               </Button>
               <Button 
                 variant="outline"
