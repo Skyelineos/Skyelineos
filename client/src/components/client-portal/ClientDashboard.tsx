@@ -210,16 +210,11 @@ export default function ClientDashboard({ projectId, project, onNavigate }: Clie
           )}
         </button>
 
-        <button onClick={() => onNavigate('schedule')}
-          className="flex items-center gap-4 p-4 bg-white rounded-xl border border-gray-200 hover:border-green-300 hover:shadow-sm transition-all text-left">
-          <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center flex-shrink-0">
-            <Calendar className="h-5 w-5 text-green-600" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-gray-900">Project Schedule</p>
-            <p className="text-xs text-gray-500 mt-0.5">View your build timeline</p>
-          </div>
-        </button>
+        {/* "Project Schedule" button removed — the schedule tab was never
+            wired in SkyelineClientPortal's tab switch, so clicking this
+            quietly reloaded the dashboard. A real client-facing schedule
+            view is queued for a later batch; for now we hide the dead
+            entry point rather than leaving it as a trust-eroding stub. */}
       </div>
     </div>
   );

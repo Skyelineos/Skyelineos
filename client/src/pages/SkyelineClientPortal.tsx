@@ -166,7 +166,13 @@ export default function SkyelineClientPortal() {
               clientUserId={effectiveUid}
             />
             <div className="border-t pt-6">
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">Designer's full selections board</h3>
+              {/* Detailed approval board — this is the homeowner's full
+                  finish-selections surface (organized floor → room → item).
+                  Label was previously "Designer's full selections board"
+                  which read like an internal tool; the component itself
+                  is client-facing (header "Finish Selections", Approve
+                  buttons gated to the 'Checking w/ Client' state). */}
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">All your selections (detailed view)</h3>
               <SelectionsBoard
                 projectId={selectedProjectId}
                 clientId={effectiveUid}

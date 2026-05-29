@@ -153,14 +153,22 @@ export const AdminPortalControls = () => {
     }
   };
 
+  // Red, unmistakable chrome when an admin is in another role's portal —
+  // chosen specifically so screenshots make it obvious this is admin UI,
+  // NOT something the client should ever see. Amber blended too easily
+  // with normal-state banners; red + "DO NOT SHARE" is impossible to miss
+  // in a screenshot review.
   return (
-    <div className="bg-amber-100 border-b-2 border-amber-400 px-4 py-3">
+    <div className="bg-red-100 border-b-2 border-red-500 px-4 py-3">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 flex-wrap">
           <div className="flex items-center gap-2">
-            <Eye className="h-4 w-4 text-amber-700" />
-            <span className="text-sm font-bold text-amber-900 uppercase tracking-wide">
+            <Eye className="h-4 w-4 text-red-700" />
+            <span className="text-sm font-bold text-red-900 uppercase tracking-wide">
               Admin viewing {getPortalDisplayName(currentPortalType)}
+            </span>
+            <span className="text-[10px] font-semibold text-white bg-red-600 rounded px-1.5 py-0.5 uppercase tracking-wider">
+              Do not share with client
             </span>
           </div>
           
