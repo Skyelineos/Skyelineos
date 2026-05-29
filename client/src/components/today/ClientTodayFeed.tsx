@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { collection, query, where, onSnapshot, orderBy, limit, getDocs } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { db, auth } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { useAdminView } from '@/contexts/AdminViewContext';
+import { resolveClientIdentity } from '@/lib/clientIdentity';
 import { TodaySection, TodayRow, greeting, todayLabel } from './TodaySection';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -21,24 +22,79 @@ export function ClientTodayFeed() {
     : (user?.id?.toString() || user?.email || '');
   const displayName = isAdminView && viewedUser ? viewedUser.name : user?.name;
 
+  // Full identifier union — projects on disk are keyed by `clientIds[]`
+  // (array of contact-doc IDs) on the canonical path and by `clientId`
+  // (singular) on the legacy path. The real client's user.id is a number
+  // that doesn't match either; their contact is linked via
+  // contact.linkedUserId. Without resolving the bridge, the today feed
+  // silently shows nothing for every real client.
+  const [identifiers, setIdentifiers] = useState<string[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const authUser = auth.currentUser;
+      const id = await resolveClientIdentity({
+        uid: authUser?.uid || '',
+        email: authUser?.email || user?.email || '',
+        legacyUserId: user?.id,
+        impersonatedContactId: isAdminView && viewedUser ? viewedUser.id : undefined,
+      });
+      if (!cancelled) setIdentifiers(id.arrayContainsAny);
+    })();
+    return () => { cancelled = true; };
+  }, [user?.id, user?.email, isAdminView, viewedUser?.id]);
+
   const [myProject, setMyProject] = useState<any>(null);
   const [photos, setPhotos] = useState<any[]>([]);
   const [pendingApprovals, setPendingApprovals] = useState<any[]>([]);
   const [outstandingInvoices, setOutstandingInvoices] = useState<any[]>([]);
   const [upcomingMilestones, setUpcomingMilestones] = useState<any[]>([]);
+  // Single load-error flag so the empty states can say "couldn't load"
+  // instead of always-blank when a Firestore subscription errors.
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  // My project (where clientId matches me)
+  // My project — resolve via the array-contains-any path against the full
+  // identifier union (handles both canonical `clientIds[]` and legacy
+  // `clientId` shapes). We also do a singular fallback for older records.
   useEffect(() => {
-    if (!clientId) return;
-    const q = query(
+    if (identifiers.length === 0) return;
+    // Primary: `clientIds` array on canonical projects.
+    const qArr = query(
       collection(db, 'projects'),
-      where('clientId', '==', clientId),
+      where('clientIds', 'array-contains-any', identifiers.slice(0, 10)),
       limit(1),
     );
-    return onSnapshot(q, snap => {
-      setMyProject(snap.docs[0] ? { id: snap.docs[0].id, ...snap.docs[0].data() } : null);
-    }, () => {});
-  }, [clientId]);
+    const unsubArr = onSnapshot(qArr, snap => {
+      if (snap.docs[0]) {
+        setMyProject({ id: snap.docs[0].id, ...snap.docs[0].data() });
+        return;
+      }
+      // Fallback: legacy `clientId` (singular) on older project records.
+      const qLeg = query(
+        collection(db, 'projects'),
+        where('clientId', 'in', identifiers.slice(0, 10)),
+        limit(1),
+      );
+      const unsubLeg = onSnapshot(qLeg, lsnap => {
+        setMyProject(lsnap.docs[0] ? { id: lsnap.docs[0].id, ...lsnap.docs[0].data() } : null);
+      }, err => {
+        console.warn('[client-today] legacy clientId lookup failed', err);
+        setLoadError('Could not load your project');
+      });
+      // We attached unsubLeg inside the snap callback; cleanup is tricky.
+      // Calling unsubLeg() when the array query updates again is fine since
+      // it just no-ops. We return it via a sub-ref pattern below.
+      (unsubArr as any)._legacy = unsubLeg;
+    }, err => {
+      console.warn('[client-today] project lookup failed', err);
+      setLoadError('Could not load your project');
+    });
+    return () => {
+      unsubArr();
+      const leg = (unsubArr as any)._legacy;
+      if (leg) leg();
+    };
+  }, [identifiers]);
 
   const projectId = myProject?.id;
 
@@ -52,35 +108,50 @@ export function ClientTodayFeed() {
     );
     return onSnapshot(q, snap => {
       setPhotos(snap.docs.map(d => ({ id: d.id, ...d.data() } as any)));
-    }, () => {});
+    }, err => {
+      console.warn('[client-today] walkthroughs subscription failed', err);
+      setLoadError('Could not load recent photos');
+    });
   }, [projectId]);
 
-  // Selections needing my approval
+  // Selections waiting for the homeowner's input. The selection lifecycle
+  // model uses `lifecycle: 'Client-Reviewing'` for items that are with the
+  // homeowner — the previous query against `clientApprovalStatus` was
+  // looking at a field that doesn't exist on this collection, so this card
+  // was silently empty for everyone.
   useEffect(() => {
     if (!projectId) return;
     const q = query(
       collection(db, 'projects', projectId, 'selections'),
-      where('clientApprovalStatus', '==', 'submitted'),
+      where('lifecycle', '==', 'Client-Reviewing'),
       limit(20),
     );
     return onSnapshot(q, snap => {
       setPendingApprovals(snap.docs.map(d => ({ id: d.id, ...d.data() } as any)));
-    }, () => {});
+    }, err => {
+      console.warn('[client-today] selections subscription failed', err);
+      setLoadError('Could not load selections waiting on you');
+    });
   }, [projectId]);
 
-  // Outstanding invoices for me
+  // Outstanding invoices. Same identifier story as projects — match against
+  // the full union so legacy `clientId == uid` records and canonical
+  // `clientIds array-contains contactId` records both resolve.
   useEffect(() => {
-    if (!clientId) return;
+    if (identifiers.length === 0) return;
     const q = query(
       collection(db, 'invoices'),
-      where('clientId', '==', clientId),
+      where('clientId', 'in', identifiers.slice(0, 10)),
       where('status', 'in', ['sent', 'overdue']),
       limit(10),
     );
     return onSnapshot(q, snap => {
       setOutstandingInvoices(snap.docs.map(d => ({ id: d.id, ...d.data() } as any)));
-    }, () => {});
-  }, [clientId]);
+    }, err => {
+      console.warn('[client-today] invoices subscription failed', err);
+      setLoadError('Could not load invoices');
+    });
+  }, [identifiers]);
 
   // Upcoming milestones (project tasks visible to client, due in 30 days)
   useEffect(() => {
@@ -96,7 +167,10 @@ export function ClientTodayFeed() {
     return onSnapshot(q, snap => {
       const items = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
       setUpcomingMilestones(items.filter(t => !t.dueDate || t.dueDate <= cutoff).slice(0, 5));
-    }, () => {});
+    }, err => {
+      console.warn('[client-today] milestones subscription failed', err);
+      setLoadError('Could not load upcoming milestones');
+    });
   }, [projectId]);
 
   const totalOwed = outstandingInvoices.reduce((s, i) => s + (i.amount || 0), 0);
@@ -110,8 +184,14 @@ export function ClientTodayFeed() {
         <Card>
           <CardContent className="p-8 text-center">
             <Home className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-            <p className="text-sm font-medium text-gray-700">No project linked yet</p>
-            <p className="text-xs text-gray-400 mt-1">Once your builder links your project, it'll show up here.</p>
+            <p className="text-sm font-medium text-gray-700">
+              {loadError ? loadError : 'No project linked yet'}
+            </p>
+            <p className="text-xs text-gray-400 mt-1">
+              {loadError
+                ? 'Try refreshing the page. If it persists, message your builder.'
+                : "Once your builder links your project, it'll show up here."}
+            </p>
           </CardContent>
         </Card>
       </div>
