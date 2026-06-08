@@ -161,7 +161,10 @@ service cloud.firestore {
     match /bids/{bidId} {
       allow read: if isGC()
         || (isSub() && resource.data.subContactId == request.auth.uid);
-      allow create: if true; // open create — Firestore field validations gate misuse
+      // Must be signed in; cannot self-award at creation time. (Was `if true`,
+      // which allowed unauthenticated writes to the bids collection.)
+      allow create: if isSignedIn()
+        && request.resource.data.status != 'awarded';
       allow update: if isGC()
         || (isSub() && resource.data.subContactId == request.auth.uid
             && request.resource.data.status != 'awarded'); // sub can revise but not self-award
@@ -178,7 +181,12 @@ service cloud.firestore {
 
     // Messages and threads
     match /messages/{messageId} {
-      allow read: if isSignedIn();
+      // Author + staff only. (Was `if isSignedIn()`, which let any signed-in
+      // user read every message in the system.) The live messaging UI reads
+      // through the admin-SDK API, not direct Firestore reads, so this is a
+      // direct-access hardening with no client-behavior change.
+      allow read: if isGC()
+        || (isSignedIn() && resource.data.authorId == request.auth.uid);
       allow create: if isSignedIn();
       allow update, delete: if isGC() || resource.data.authorId == request.auth.uid;
     }
