@@ -16,6 +16,9 @@ export interface RFIAttachment {
   name: string;
   url: string;
   storagePath: string;
+  /** MIME type captured at upload (e.g. "image/jpeg", "video/mp4") so the UI
+   *  can render a photo thumbnail vs. an inline video player vs. a file link. */
+  contentType?: string;
 }
 
 export interface RFI {
