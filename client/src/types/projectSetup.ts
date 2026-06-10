@@ -110,6 +110,7 @@ export interface ProjectSetupDraft {
 
   // ── Step 6: Timeline ────────────────────────────────────────────────
   startDate?: string;
+  scheduleTemplateId?: string;   // standard schedule template seeded into the project Gantt
   milestones?: ProjectMilestone[];
 
   // ── Step 7: Scope ───────────────────────────────────────────────────
