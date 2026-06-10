@@ -557,7 +557,10 @@ export default function Contacts() {
 
             {/* Summary Stats */}
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-              <Card>
+              <Card
+                onClick={() => setRoleFilter('all')}
+                className={`cursor-pointer transition-shadow hover:shadow-md ${roleFilter === 'all' ? 'ring-2 ring-[#C9A96E]' : ''}`}
+              >
                 <CardContent className="p-4">
                   <div className="flex items-center space-x-2">
                     <TrendingUp className="h-4 w-4 text-blue-600" />
@@ -568,7 +571,10 @@ export default function Contacts() {
                   </div>
                 </CardContent>
               </Card>
-              <Card>
+              <Card
+                onClick={() => setRoleFilter('client')}
+                className={`cursor-pointer transition-shadow hover:shadow-md ${roleFilter === 'client' ? 'ring-2 ring-[#C9A96E]' : ''}`}
+              >
                 <CardContent className="p-4">
                   <div className="flex items-center space-x-2">
                     <UserCheck className="h-4 w-4 text-green-600" />
@@ -579,7 +585,10 @@ export default function Contacts() {
                   </div>
                 </CardContent>
               </Card>
-              <Card>
+              <Card
+                onClick={() => setRoleFilter('subcontractor')}
+                className={`cursor-pointer transition-shadow hover:shadow-md ${roleFilter === 'subcontractor' ? 'ring-2 ring-[#C9A96E]' : ''}`}
+              >
                 <CardContent className="p-4">
                   <div className="flex items-center space-x-2">
                     <Wrench className="h-4 w-4 text-orange-600" />
@@ -590,7 +599,10 @@ export default function Contacts() {
                   </div>
                 </CardContent>
               </Card>
-              <Card>
+              <Card
+                onClick={() => setRoleFilter('supplier')}
+                className={`cursor-pointer transition-shadow hover:shadow-md ${roleFilter === 'supplier' ? 'ring-2 ring-[#C9A96E]' : ''}`}
+              >
                 <CardContent className="p-4">
                   <div className="flex items-center space-x-2">
                     <Building className="h-4 w-4 text-purple-600" />
@@ -601,7 +613,10 @@ export default function Contacts() {
                   </div>
                 </CardContent>
               </Card>
-              <Card>
+              <Card
+                onClick={() => setRoleFilter('all')}
+                className="cursor-pointer transition-shadow hover:shadow-md"
+              >
                 <CardContent className="p-4">
                   <div className="flex items-center space-x-2">
                     <Users className="h-4 w-4 text-indigo-600" />
