@@ -26,19 +26,22 @@ export interface EstimateForSchedule {
   lineItems?: ScheduleLineInput[];
 }
 
-// One trade's slot in the schedule (a future task), with computed dates.
+// One trade/step slot in the schedule (a future task), with computed dates.
+// `phase` is a free string so it works for both estimate-derived phases
+// (BuildPhase values) and arbitrary template phase names (e.g. "Gunite").
 export interface ScheduledTrade {
   trade: string;
-  phase: BuildPhase;
+  phase: string;
   amount: number;
   lineCount: number;
   startDate: string;   // ISO YYYY-MM-DD
   endDate: string;     // ISO YYYY-MM-DD
   durationDays: number;
+  decision?: boolean;  // a client/owner decision step (selection) — surfaced in UI
 }
 
 export interface ScheduledPhase {
-  phase: BuildPhase;
+  phase: string;
   startDate: string;
   endDate: string;
   durationDays: number;
