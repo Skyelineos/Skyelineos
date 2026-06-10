@@ -7,7 +7,7 @@
 // Everyone on a project can RAISE an RFI; GC + Designer can ANSWER and CLOSE.
 // The panel adapts its actions to the signed-in user's role.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/auth/AuthContext';
 import {
   subscribeProjectRFIs,
@@ -18,7 +18,8 @@ import {
   nextRFINumber,
   type RFIAuthor,
 } from '@/lib/rfi/firestore';
-import type { RFI, RFIStatus, RFIPriority } from '@/types/rfi';
+import { uploadRFIAttachment } from '@/lib/rfi/upload';
+import type { RFI, RFIStatus, RFIPriority, RFIAttachment } from '@/types/rfi';
 import { RFI_STATUS_LABELS } from '@/types/rfi';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -32,6 +33,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import {
   HelpCircle, Plus, Clock, CheckCircle2, AlertTriangle, MessageSquareReply, Lock, Undo2,
+  Paperclip, X, Loader2, FileText, Camera,
 } from 'lucide-react';
 
 interface Props {
@@ -173,6 +175,11 @@ export function RFIPanel({ projectId, projectName }: Props) {
                               {overdue && <AlertTriangle className="w-3 h-3" />}· due {r.dueDate}
                             </span>
                           )}
+                          {r.attachments && r.attachments.length > 0 && (
+                            <span className="flex items-center gap-0.5">
+                              · <Paperclip className="w-3 h-3" /> {r.attachments.length}
+                            </span>
+                          )}
                         </div>
                       </div>
                       <Badge variant="outline" className={`flex-shrink-0 text-[10px] ${STATUS_STYLES[r.status]}`}>
@@ -213,6 +220,60 @@ export function RFIPanel({ projectId, projectName }: Props) {
   );
 }
 
+// ─── Attachment helpers (photos + videos from phone or desktop) ──────────────
+
+const isImage = (a: RFIAttachment) =>
+  a.contentType?.startsWith('image/') || /\.(png|jpe?g|gif|webp|heic|heif)$/i.test(a.name);
+const isVideo = (a: RFIAttachment) =>
+  a.contentType?.startsWith('video/') || /\.(mp4|mov|webm|m4v|avi)$/i.test(a.name);
+
+/** Thumbnail grid for RFI attachments — image previews, inline video players,
+ *  and a file-link fallback. Pass `onRemove` for the editable (create) view. */
+function AttachmentGrid({
+  attachments, onRemove,
+}: {
+  attachments: RFIAttachment[];
+  onRemove?: (index: number) => void;
+}) {
+  if (!attachments?.length) return null;
+  return (
+    <div className="grid grid-cols-3 gap-2">
+      {attachments.map((a, i) => (
+        <div key={i} className="relative border rounded-lg overflow-hidden bg-gray-50 aspect-square">
+          {isImage(a) ? (
+            <a href={a.url} target="_blank" rel="noopener noreferrer" title={a.name}>
+              <img src={a.url} alt={a.name} className="w-full h-full object-cover" />
+            </a>
+          ) : isVideo(a) ? (
+            <video src={a.url} controls preload="metadata" className="w-full h-full object-cover bg-black" />
+          ) : (
+            <a
+              href={a.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex flex-col items-center justify-center w-full h-full p-1 text-center"
+              title={a.name}
+            >
+              <FileText className="w-6 h-6 text-gray-400 mb-1" />
+              <span className="text-[10px] text-gray-500 truncate w-full px-1">{a.name}</span>
+            </a>
+          )}
+          {onRemove && (
+            <button
+              type="button"
+              onClick={() => onRemove(i)}
+              className="absolute top-1 right-1 bg-black/60 text-white rounded-full p-0.5 hover:bg-black/80"
+              aria-label="Remove attachment"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ─── Create RFI modal ────────────────────────────────────────────────────────
 
 function CreateRFIModal({
@@ -231,9 +292,33 @@ function CreateRFIModal({
   const [location, setLocation] = useState('');
   const [priority, setPriority] = useState<RFIPriority>('normal');
   const [dueDate, setDueDate] = useState('');
+  const [attachments, setAttachments] = useState<RFIAttachment[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [uploadPct, setUploadPct] = useState(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState(false);
 
-  const canSubmit = subject.trim().length > 1 && question.trim().length > 1 && !saving;
+  const canSubmit = subject.trim().length > 1 && question.trim().length > 1 && !saving && !uploading;
+
+  // Upload each chosen photo/video to Storage, appending as it completes so the
+  // user sees thumbnails fill in. Sequential keeps the progress bar meaningful.
+  async function handleFiles(files: FileList | null) {
+    if (!files || files.length === 0) return;
+    setUploading(true);
+    try {
+      for (const file of Array.from(files)) {
+        setUploadPct(0);
+        const att = await uploadRFIAttachment(projectId, file, setUploadPct);
+        setAttachments(prev => [...prev, att]);
+      }
+    } catch (e: any) {
+      toast({ title: 'Upload failed', description: e?.message || 'Could not upload file', variant: 'destructive' });
+    } finally {
+      setUploading(false);
+      setUploadPct(0);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  }
 
   async function handleSubmit() {
     if (!canSubmit) return;
@@ -241,7 +326,7 @@ function CreateRFIModal({
     try {
       await createRFI(
         projectId,
-        { subject, question, discipline, location, priority, dueDate },
+        { subject, question, discipline, location, priority, dueDate, attachments },
         author,
         nextNumber,
       );
@@ -298,9 +383,46 @@ function CreateRFIModal({
               <Input id="rfi-due" type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} />
             </div>
           </div>
+
+          {/* Photo / video attachments. On phones, accept="image/*,video/*"
+              (no capture attribute) lets the OS offer "Take Photo or Video"
+              AND the gallery, so a field crew can shoot or pick existing media. */}
+          <div>
+            <Label>Photos / Videos</Label>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*,video/*"
+              multiple
+              className="hidden"
+              onChange={e => handleFiles(e.target.files)}
+            />
+            <div className="mt-1.5">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className="gap-1.5 w-full sm:w-auto"
+              >
+                {uploading
+                  ? <><Loader2 className="w-4 h-4 animate-spin" /> Uploading… {Math.round(uploadPct)}%</>
+                  : <><Camera className="w-4 h-4" /> Add photo / video</>}
+              </Button>
+              <p className="text-[11px] text-gray-400 mt-1">Take a photo or video, or pick from your library.</p>
+            </div>
+            {attachments.length > 0 && (
+              <div className="mt-2">
+                <AttachmentGrid
+                  attachments={attachments}
+                  onRemove={i => setAttachments(prev => prev.filter((_, idx) => idx !== i))}
+                />
+              </div>
+            )}
+          </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button variant="outline" onClick={onClose} disabled={saving || uploading}>Cancel</Button>
           <Button onClick={handleSubmit} disabled={!canSubmit} className="text-white" style={{ backgroundColor: '#C9A96E' }}>
             {saving ? 'Submitting…' : 'Submit RFI'}
           </Button>
@@ -382,6 +504,15 @@ function RFIDetailModal({
             <p className="text-sm whitespace-pre-wrap">{rfi.question}</p>
             {rfi.dueDate && <p className="text-xs text-gray-500 mt-2 flex items-center gap-1"><Clock className="w-3 h-3" /> Needed by {rfi.dueDate}</p>}
           </div>
+
+          {rfi.attachments && rfi.attachments.length > 0 && (
+            <div>
+              <p className="text-xs uppercase tracking-wide text-gray-500 mb-1.5 flex items-center gap-1">
+                <Paperclip className="w-3 h-3" /> Attachments ({rfi.attachments.length})
+              </p>
+              <AttachmentGrid attachments={rfi.attachments} />
+            </div>
+          )}
 
           {/* Answer block: shows existing answer, or an entry box for answerers. */}
           {rfi.status === 'open' && !canAnswer && (
