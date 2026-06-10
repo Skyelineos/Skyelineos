@@ -19,10 +19,12 @@ import ChangeOrdersTab from '@/components/client-portal/ChangeOrdersTab';
 import ClientFinancials from '@/components/client-portal/ClientFinancials';
 import ClientSiteLog from '@/components/site-log/ClientSiteLog';
 import { ClientTodayFeed } from '@/components/today/ClientTodayFeed';
+import { ScheduleTimeline } from '@/components/schedule/ScheduleTimeline';
+import type { GeneratedSchedule } from '@/lib/schedule/types';
 
 import {
   LayoutDashboard, Palette, DollarSign, FileText, MessageSquare,
-  Image, ClipboardList, ChevronDown, ClipboardCheck,
+  Image, ClipboardList, ChevronDown, ClipboardCheck, CalendarClock,
 } from 'lucide-react';
 
 interface FirestoreProject {
@@ -40,10 +42,13 @@ interface FirestoreProject {
   startDate?: string;
   estimatedCompletion?: string;
   actualCompletion?: string;
+  estimatedSchedule?: GeneratedSchedule;       // published estimated timeline
+  estimatedSchedulePublishedAt?: any;
 }
 
 const TABS = [
   { key: 'dashboard',     label: 'Dashboard',      icon: LayoutDashboard },
+  { key: 'schedule',      label: 'Schedule',        icon: CalendarClock },
   { key: 'financials',    label: 'Financials',      icon: DollarSign },
   { key: 'selections',    label: 'Selections',      icon: Palette },
   { key: 'change-orders', label: 'Change Orders',   icon: ClipboardList },
@@ -147,6 +152,27 @@ export default function SkyelineClientPortal() {
               project={selectedProject}
               onNavigate={handleNavigate}
             />
+          </div>
+        );
+
+      case 'schedule':
+        return (
+          <div className="p-6">
+            {selectedProject?.estimatedSchedule ? (
+              <div className="rounded-xl border border-gray-200 bg-white p-5 max-w-3xl">
+                <ScheduleTimeline schedule={selectedProject.estimatedSchedule} />
+              </div>
+            ) : (
+              <div className="flex items-center justify-center h-64 text-center">
+                <div>
+                  <CalendarClock className="h-8 w-8 text-gray-300 mx-auto mb-3" />
+                  <p className="text-gray-500 font-medium">Your schedule isn't ready yet</p>
+                  <p className="text-sm text-gray-400 mt-1">
+                    Your estimated build timeline will appear here once your estimate is finalized.
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         );
 
