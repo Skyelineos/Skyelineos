@@ -1313,5 +1313,416 @@ export const STARTER_SCHEDULE_TEMPLATES: StarterScheduleTemplate[] = [
         "type": "FS"
       }
     ]
+  },
+  {
+    "key": "kitchen_remodel",
+    "name": "Kitchen Remodel",
+    "description": "Cabinet-to-finish kitchen renovation (~7 weeks). Edit in the Gantt editor.",
+    "tasks": [
+      {
+        "id": "kitchen_remodel_pre_build_selections",
+        "name": "Pre-Build & Selections",
+        "startDate": "2025-01-06",
+        "endDate": "2025-01-09",
+        "durationDays": 4,
+        "isPhase": true
+      },
+      {
+        "id": "kitchen_remodel_sign_contract_deposit",
+        "name": "Sign contract & deposit",
+        "startDate": "2025-01-06",
+        "endDate": "2025-01-07",
+        "durationDays": 2
+      },
+      {
+        "id": "kitchen_remodel_confirm_cabinet_countert",
+        "name": "Confirm cabinet & countertop selections",
+        "startDate": "2025-01-08",
+        "endDate": "2025-01-08",
+        "durationDays": 1,
+        "status": "pending_approval",
+        "decision": true
+      },
+      {
+        "id": "kitchen_remodel_order_cabinets_long_lead",
+        "name": "Order cabinets (long-lead)",
+        "startDate": "2025-01-09",
+        "endDate": "2025-01-09",
+        "durationDays": 1
+      },
+      {
+        "id": "kitchen_remodel_demo_rough_in",
+        "name": "Demo & Rough-In",
+        "startDate": "2025-01-10",
+        "endDate": "2025-01-16",
+        "durationDays": 7,
+        "isPhase": true
+      },
+      {
+        "id": "kitchen_remodel_demo_old_kitchen",
+        "name": "Demo old kitchen",
+        "startDate": "2025-01-10",
+        "endDate": "2025-01-12",
+        "durationDays": 3
+      },
+      {
+        "id": "kitchen_remodel_plumbing_rough_in_change",
+        "name": "Plumbing rough-in changes",
+        "startDate": "2025-01-13",
+        "endDate": "2025-01-14",
+        "durationDays": 2
+      },
+      {
+        "id": "kitchen_remodel_electrical_rough_in_chan",
+        "name": "Electrical rough-in changes",
+        "startDate": "2025-01-15",
+        "endDate": "2025-01-16",
+        "durationDays": 2
+      },
+      {
+        "id": "kitchen_remodel_drywall_paint",
+        "name": "Drywall & Paint",
+        "startDate": "2025-01-17",
+        "endDate": "2025-01-22",
+        "durationDays": 6,
+        "isPhase": true
+      },
+      {
+        "id": "kitchen_remodel_drywall_patch_repair",
+        "name": "Drywall patch & repair",
+        "startDate": "2025-01-17",
+        "endDate": "2025-01-19",
+        "durationDays": 3
+      },
+      {
+        "id": "kitchen_remodel_paint_walls_ceiling",
+        "name": "Paint walls & ceiling",
+        "startDate": "2025-01-20",
+        "endDate": "2025-01-22",
+        "durationDays": 3
+      },
+      {
+        "id": "kitchen_remodel_cabinets_countertops",
+        "name": "Cabinets & Countertops",
+        "startDate": "2025-01-23",
+        "endDate": "2025-02-02",
+        "durationDays": 11,
+        "isPhase": true
+      },
+      {
+        "id": "kitchen_remodel_cabinets_install",
+        "name": "Cabinets install",
+        "startDate": "2025-01-23",
+        "endDate": "2025-01-26",
+        "durationDays": 4,
+        "status": "pending_approval",
+        "decision": true
+      },
+      {
+        "id": "kitchen_remodel_countertop_template",
+        "name": "Countertop template",
+        "startDate": "2025-01-27",
+        "endDate": "2025-01-27",
+        "durationDays": 1
+      },
+      {
+        "id": "kitchen_remodel_countertop_install",
+        "name": "Countertop install",
+        "startDate": "2025-01-28",
+        "endDate": "2025-01-30",
+        "durationDays": 3,
+        "status": "pending_approval",
+        "decision": true
+      },
+      {
+        "id": "kitchen_remodel_backsplash_tile",
+        "name": "Backsplash tile",
+        "startDate": "2025-01-31",
+        "endDate": "2025-02-02",
+        "durationDays": 3
+      },
+      {
+        "id": "kitchen_remodel_finishes",
+        "name": "Finishes",
+        "startDate": "2025-02-03",
+        "endDate": "2025-02-07",
+        "durationDays": 5,
+        "isPhase": true
+      },
+      {
+        "id": "kitchen_remodel_plumbing_fixtures_applia",
+        "name": "Plumbing fixtures & appliances",
+        "startDate": "2025-02-03",
+        "endDate": "2025-02-05",
+        "durationDays": 3,
+        "status": "pending_approval",
+        "decision": true
+      },
+      {
+        "id": "kitchen_remodel_electrical_fixtures_outl",
+        "name": "Electrical fixtures & outlets",
+        "startDate": "2025-02-06",
+        "endDate": "2025-02-07",
+        "durationDays": 2
+      },
+      {
+        "id": "kitchen_remodel_closeout",
+        "name": "Closeout",
+        "startDate": "2025-02-08",
+        "endDate": "2025-02-11",
+        "durationDays": 4,
+        "isPhase": true
+      },
+      {
+        "id": "kitchen_remodel_punch_list_final_clean",
+        "name": "Punch list & final clean",
+        "startDate": "2025-02-08",
+        "endDate": "2025-02-10",
+        "durationDays": 3
+      },
+      {
+        "id": "kitchen_remodel_final_walkthrough",
+        "name": "Final walkthrough",
+        "startDate": "2025-02-11",
+        "endDate": "2025-02-11",
+        "durationDays": 1,
+        "status": "pending_approval",
+        "decision": true
+      }
+    ],
+    "links": [
+      {
+        "id": "l_kitchen_remodel_pre_build_selections_kitchen_remodel_demo_rough_in",
+        "sourceId": "kitchen_remodel_pre_build_selections",
+        "targetId": "kitchen_remodel_demo_rough_in",
+        "type": "FS"
+      },
+      {
+        "id": "l_kitchen_remodel_demo_rough_in_kitchen_remodel_drywall_paint",
+        "sourceId": "kitchen_remodel_demo_rough_in",
+        "targetId": "kitchen_remodel_drywall_paint",
+        "type": "FS"
+      },
+      {
+        "id": "l_kitchen_remodel_drywall_paint_kitchen_remodel_cabinets_countertops",
+        "sourceId": "kitchen_remodel_drywall_paint",
+        "targetId": "kitchen_remodel_cabinets_countertops",
+        "type": "FS"
+      },
+      {
+        "id": "l_kitchen_remodel_cabinets_countertops_kitchen_remodel_finishes",
+        "sourceId": "kitchen_remodel_cabinets_countertops",
+        "targetId": "kitchen_remodel_finishes",
+        "type": "FS"
+      },
+      {
+        "id": "l_kitchen_remodel_finishes_kitchen_remodel_closeout",
+        "sourceId": "kitchen_remodel_finishes",
+        "targetId": "kitchen_remodel_closeout",
+        "type": "FS"
+      }
+    ]
+  },
+  {
+    "key": "bathroom_remodel",
+    "name": "Bathroom Remodel",
+    "description": "Full bath gut-and-finish remodel (~5 weeks). Edit in the Gantt editor.",
+    "tasks": [
+      {
+        "id": "bathroom_remodel_pre_build_selections",
+        "name": "Pre-Build & Selections",
+        "startDate": "2025-01-06",
+        "endDate": "2025-01-08",
+        "durationDays": 3,
+        "isPhase": true
+      },
+      {
+        "id": "bathroom_remodel_sign_contract_deposit",
+        "name": "Sign contract & deposit",
+        "startDate": "2025-01-06",
+        "endDate": "2025-01-07",
+        "durationDays": 2
+      },
+      {
+        "id": "bathroom_remodel_confirm_tile_plumbing_fi",
+        "name": "Confirm tile & plumbing fixture selections",
+        "startDate": "2025-01-08",
+        "endDate": "2025-01-08",
+        "durationDays": 1,
+        "status": "pending_approval",
+        "decision": true
+      },
+      {
+        "id": "bathroom_remodel_demo_rough_in",
+        "name": "Demo & Rough-In",
+        "startDate": "2025-01-09",
+        "endDate": "2025-01-14",
+        "durationDays": 6,
+        "isPhase": true
+      },
+      {
+        "id": "bathroom_remodel_demo",
+        "name": "Demo",
+        "startDate": "2025-01-09",
+        "endDate": "2025-01-10",
+        "durationDays": 2
+      },
+      {
+        "id": "bathroom_remodel_plumbing_rough_in",
+        "name": "Plumbing rough-in",
+        "startDate": "2025-01-11",
+        "endDate": "2025-01-12",
+        "durationDays": 2
+      },
+      {
+        "id": "bathroom_remodel_electrical_rough_in",
+        "name": "Electrical rough-in",
+        "startDate": "2025-01-13",
+        "endDate": "2025-01-14",
+        "durationDays": 2
+      },
+      {
+        "id": "bathroom_remodel_waterproofing_drywall",
+        "name": "Waterproofing & Drywall",
+        "startDate": "2025-01-15",
+        "endDate": "2025-01-18",
+        "durationDays": 4,
+        "isPhase": true
+      },
+      {
+        "id": "bathroom_remodel_shower_pan_waterproofing",
+        "name": "Shower pan & waterproofing",
+        "startDate": "2025-01-15",
+        "endDate": "2025-01-16",
+        "durationDays": 2
+      },
+      {
+        "id": "bathroom_remodel_drywall_cement_board",
+        "name": "Drywall & cement board",
+        "startDate": "2025-01-17",
+        "endDate": "2025-01-18",
+        "durationDays": 2
+      },
+      {
+        "id": "bathroom_remodel_tile",
+        "name": "Tile",
+        "startDate": "2025-01-19",
+        "endDate": "2025-01-24",
+        "durationDays": 6,
+        "isPhase": true
+      },
+      {
+        "id": "bathroom_remodel_tile_install",
+        "name": "Tile install",
+        "startDate": "2025-01-19",
+        "endDate": "2025-01-22",
+        "durationDays": 4,
+        "status": "pending_approval",
+        "decision": true
+      },
+      {
+        "id": "bathroom_remodel_grout_sealing",
+        "name": "Grout & sealing",
+        "startDate": "2025-01-23",
+        "endDate": "2025-01-24",
+        "durationDays": 2
+      },
+      {
+        "id": "bathroom_remodel_finishes",
+        "name": "Finishes",
+        "startDate": "2025-01-25",
+        "endDate": "2025-02-02",
+        "durationDays": 9,
+        "isPhase": true
+      },
+      {
+        "id": "bathroom_remodel_paint",
+        "name": "Paint",
+        "startDate": "2025-01-25",
+        "endDate": "2025-01-26",
+        "durationDays": 2
+      },
+      {
+        "id": "bathroom_remodel_vanity_countertop_instal",
+        "name": "Vanity & countertop install",
+        "startDate": "2025-01-27",
+        "endDate": "2025-01-28",
+        "durationDays": 2,
+        "status": "pending_approval",
+        "decision": true
+      },
+      {
+        "id": "bathroom_remodel_plumbing_fixtures_toilet",
+        "name": "Plumbing fixtures (toilet, faucets, trim)",
+        "startDate": "2025-01-29",
+        "endDate": "2025-01-30",
+        "durationDays": 2,
+        "status": "pending_approval",
+        "decision": true
+      },
+      {
+        "id": "bathroom_remodel_electrical_fixtures",
+        "name": "Electrical fixtures",
+        "startDate": "2025-01-31",
+        "endDate": "2025-01-31",
+        "durationDays": 1
+      },
+      {
+        "id": "bathroom_remodel_glass_shower_enclosure",
+        "name": "Glass shower enclosure",
+        "startDate": "2025-02-01",
+        "endDate": "2025-02-02",
+        "durationDays": 2,
+        "status": "pending_approval",
+        "decision": true
+      },
+      {
+        "id": "bathroom_remodel_closeout",
+        "name": "Closeout",
+        "startDate": "2025-02-03",
+        "endDate": "2025-02-05",
+        "durationDays": 3,
+        "isPhase": true
+      },
+      {
+        "id": "bathroom_remodel_punch_list_clean",
+        "name": "Punch list & clean",
+        "startDate": "2025-02-03",
+        "endDate": "2025-02-05",
+        "durationDays": 3
+      }
+    ],
+    "links": [
+      {
+        "id": "l_bathroom_remodel_pre_build_selections_bathroom_remodel_demo_rough_in",
+        "sourceId": "bathroom_remodel_pre_build_selections",
+        "targetId": "bathroom_remodel_demo_rough_in",
+        "type": "FS"
+      },
+      {
+        "id": "l_bathroom_remodel_demo_rough_in_bathroom_remodel_waterproofing_drywall",
+        "sourceId": "bathroom_remodel_demo_rough_in",
+        "targetId": "bathroom_remodel_waterproofing_drywall",
+        "type": "FS"
+      },
+      {
+        "id": "l_bathroom_remodel_waterproofing_drywall_bathroom_remodel_tile",
+        "sourceId": "bathroom_remodel_waterproofing_drywall",
+        "targetId": "bathroom_remodel_tile",
+        "type": "FS"
+      },
+      {
+        "id": "l_bathroom_remodel_tile_bathroom_remodel_finishes",
+        "sourceId": "bathroom_remodel_tile",
+        "targetId": "bathroom_remodel_finishes",
+        "type": "FS"
+      },
+      {
+        "id": "l_bathroom_remodel_finishes_bathroom_remodel_closeout",
+        "sourceId": "bathroom_remodel_finishes",
+        "targetId": "bathroom_remodel_closeout",
+        "type": "FS"
+      }
+    ]
   }
 ];

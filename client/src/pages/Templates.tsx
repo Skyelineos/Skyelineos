@@ -386,68 +386,6 @@ function DetailView({
           <h1 className="text-xl font-bold text-gray-900 truncate">{meta.label}</h1>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          {category === 'job' && (
-            <Button
-              variant="outline"
-              onClick={async () => {
-                try {
-                  const { seedStarterJobTemplates } = await import('@/lib/starterJobTemplates');
-                  const { created, skipped, totalTasks } = await seedStarterJobTemplates();
-                  if (created === 0) {
-                    toast({
-                      title: 'Already seeded',
-                      description: `All ${skipped} starter templates already exist. You can edit them above.`,
-                    });
-                  } else {
-                    toast({
-                      title: 'Starter templates added',
-                      description: `${created} template${created === 1 ? '' : 's'} created with ${totalTasks} tasks total. Edit any to customize for your business.`,
-                    });
-                  }
-                } catch (e: any) {
-                  toast({
-                    title: 'Seed failed',
-                    description: e?.message || 'Could not create starter templates.',
-                    variant: 'destructive',
-                  });
-                }
-              }}
-              className="gap-2"
-            >
-              <Plus className="w-4 h-4" /> Add Starter Templates
-            </Button>
-          )}
-          {category === 'schedule' && (
-            <Button
-              variant="outline"
-              onClick={async () => {
-                try {
-                  const { seedMasterCustomHomeScheduleTemplate } = await import('@/lib/skyelineMasterSchedule');
-                  const { created, taskCount } = await seedMasterCustomHomeScheduleTemplate(user?.email || '');
-                  if (!created) {
-                    toast({
-                      title: 'Already seeded',
-                      description: 'Skyeline Custom Home Build — Master Schedule already exists.',
-                    });
-                  } else {
-                    toast({
-                      title: 'Master schedule added',
-                      description: `${taskCount} tasks loaded. Open any project's Schedule tab → Load Template to apply it.`,
-                    });
-                  }
-                } catch (e: any) {
-                  toast({
-                    title: 'Seed failed',
-                    description: e?.message || 'Could not create master schedule.',
-                    variant: 'destructive',
-                  });
-                }
-              }}
-              className="gap-2"
-            >
-              <Plus className="w-4 h-4" /> Add Skyeline Master Schedule
-            </Button>
-          )}
           {category === 'schedule' && (
             <Button
               variant="outline"
@@ -460,20 +398,20 @@ function DetailView({
                   if (refreshed) parts.push(`${refreshed} refreshed`);
                   if (skipped) parts.push(`${skipped} left as-is`);
                   toast({
-                    title: created || refreshed ? 'Project-type schedules updated' : 'No changes',
-                    description: `${parts.join(' · ') || 'Nothing to do'} — open House Build to edit in the Gantt.`,
+                    title: created || refreshed ? 'Standard templates updated' : 'No changes',
+                    description: `${parts.join(' · ') || 'Nothing to do'} — open any to edit in the Gantt.`,
                   });
                 } catch (e: any) {
                   toast({
                     title: 'Seed failed',
-                    description: e?.message || 'Could not create starter schedules.',
+                    description: e?.message || 'Could not create standard templates.',
                     variant: 'destructive',
                   });
                 }
               }}
               className="gap-2"
             >
-              <Plus className="w-4 h-4" /> Add Project-Type Schedules
+              <Plus className="w-4 h-4" /> Add Standard Templates
             </Button>
           )}
           <Button
