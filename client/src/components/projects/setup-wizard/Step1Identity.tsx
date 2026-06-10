@@ -1,4 +1,5 @@
 import { Input } from '@/components/ui/input';
+import { AddressAutocomplete } from '@/components/common/AddressAutocomplete';
 import { Label } from '@/components/ui/label';
 import type { ProjectSetupDraft } from '@/types/projectSetup';
 
@@ -53,10 +54,10 @@ export function Step1Identity({ draft, onChange }: Props) {
           <Label htmlFor="proj-address">
             Jobsite address <span className="text-red-500 font-bold">*</span>
           </Label>
-          <Input
+          <AddressAutocomplete
             id="proj-address"
             value={draft.address}
-            onChange={e => patch({ address: e.target.value })}
+            onChange={v => patch({ address: v })}
             placeholder="e.g. 482 N 1500 W, Mapleton UT"
             className="mt-1.5"
           />
