@@ -13,6 +13,7 @@ import type {
 import {
   PHASE_ORDER, ALWAYS_INCLUDE, PHASE_DEFAULT_DAYS, PHASE_PLACEHOLDER_TASK, phaseForTrade,
 } from './tradePhaseMap';
+import { rollupFinancials } from './scheduleFinancials';
 
 // ── date helpers (calendar days, ISO YYYY-MM-DD, timezone-safe) ───────────────
 function parseISO(d: string): Date {
@@ -34,9 +35,11 @@ function daysBetween(a: string, b: string): number {
 export interface ScheduleOptions {
   targetStart: string;                              // ISO YYYY-MM-DD anchor
   phaseDays?: Partial<Record<BuildPhase, number>>;  // per-phase duration overrides
+  totalRevenue?: number;                            // scale phase revenue to the
+                                                    // estimate's true client total
 }
 
-interface TradeAgg { trade: string; amount: number; lineCount: number; }
+interface TradeAgg { trade: string; amount: number; lineCount: number; cost: number; }
 
 /**
  * Generate a phase-grouped schedule from an estimate's line items.
@@ -55,8 +58,9 @@ export function estimateToSchedule(
     const status = l.lineStatus ?? 'inc';
     if (status === 'ex' || status === 'note') continue;
     const trade = (l.trade && l.trade.trim()) || 'General';
-    const agg = byTrade.get(trade) ?? { trade, amount: 0, lineCount: 0 };
+    const agg = byTrade.get(trade) ?? { trade, amount: 0, lineCount: 0, cost: 0 };
     agg.amount += l.total ?? 0;
+    agg.cost += (l.qty ?? 0) * (l.subCost ?? 0);  // internal cost basis
     agg.lineCount += 1;
     byTrade.set(trade, agg);
   }
@@ -119,11 +123,25 @@ export function estimateToSchedule(
 
   const endDate = phases.length ? phases[phases.length - 1].endDate : targetStart;
 
-  return {
+  // 5. Money: allocate revenue across phases by trade weight (so phase revenues
+  //    sum to the estimate's true client total); cost = Σ internal sub costs.
+  const totalWeight = Array.from(byTrade.values()).reduce((s, a) => s + a.amount, 0);
+  const totalCostAll = Array.from(byTrade.values()).reduce((s, a) => s + a.cost, 0);
+  const totalRevenue = opts.totalRevenue && opts.totalRevenue > 0 ? opts.totalRevenue : totalWeight;
+  for (const p of phases) {
+    const aggs = tradesByPhase.get(p.phase as BuildPhase) ?? [];
+    const w = aggs.reduce((s, a) => s + a.amount, 0);
+    p.revenue = totalWeight > 0 ? (w / totalWeight) * totalRevenue : 0;
+    if (totalCostAll > 0) p.cost = aggs.reduce((s, a) => s + a.cost, 0);
+  }
+
+  const schedule: GeneratedSchedule = {
     startDate: targetStart,
     endDate,
     totalDays: daysBetween(targetStart, endDate),
     phases,
     tradeCount,
   };
+  rollupFinancials(schedule);
+  return schedule;
 }

@@ -15,7 +15,9 @@ export type BuildPhase =
 // satisfies this structurally.
 export interface ScheduleLineInput {
   trade?: string;
-  total?: number;
+  total?: number;       // client-facing line total (revenue weight)
+  qty?: number;         // for internal cost = qty × subCost
+  subCost?: number;     // what the sub charges Skyeline (internal cost basis)
   description?: string;
   // JACK-parity line status: 'inc' included, 'ex' excluded (show-only),
   // 'note' info-only, 'allow' allowance.
@@ -46,6 +48,11 @@ export interface ScheduledPhase {
   endDate: string;
   durationDays: number;
   trades: ScheduledTrade[];
+  // Money (optional). `revenue` = the draw due by this phase (client-safe).
+  // `cost`/`profit` are GC-only — strip before exposing to a client.
+  revenue?: number;
+  cost?: number;
+  profit?: number;
 }
 
 export interface GeneratedSchedule {
@@ -54,4 +61,9 @@ export interface GeneratedSchedule {
   totalDays: number;       // calendar days start→end
   phases: ScheduledPhase[];
   tradeCount: number;      // distinct trades scheduled
+  // Roll-up money (optional). revenue is client-safe; cost/profit GC-only.
+  revenue?: number;
+  cost?: number;
+  profit?: number;
+  marginPct?: number;
 }
