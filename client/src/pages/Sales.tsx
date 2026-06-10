@@ -8,6 +8,7 @@ import { db } from '@/lib/firebase';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { AddressAutocomplete } from '@/components/common/AddressAutocomplete';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -546,7 +547,7 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
           {/* Address — full row for street, then City / State / Zip on one row */}
           <div className="sm:col-span-2">
             <Label>Job Address</Label>
-            <Input value={form.jobAddress} onChange={e => set('jobAddress', e.target.value)} placeholder="—" className="placeholder:text-gray-300" />
+            <AddressAutocomplete value={form.jobAddress} onChange={v => set('jobAddress', v)} placeholder="—" className="placeholder:text-gray-300" />
           </div>
           <div className="sm:col-span-2 grid grid-cols-6 gap-3">
             <div className="col-span-3">
@@ -817,9 +818,9 @@ function CreateProjectDialog({ client, mode, previousStage, previousStageLabel, 
           </div>
           <div>
             <Label>Job Address</Label>
-            <Input
+            <AddressAutocomplete
               value={form.address}
-              onChange={e => set('address', e.target.value)}
+              onChange={v => set('address', v)}
               placeholder="123 Main St, Salt Lake City"
             />
           </div>
