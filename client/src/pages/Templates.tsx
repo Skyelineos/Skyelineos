@@ -454,18 +454,15 @@ function DetailView({
               onClick={async () => {
                 try {
                   const { seedStarterScheduleTemplates } = await import('@/lib/seedStarterScheduleTemplates');
-                  const { created, skipped } = await seedStarterScheduleTemplates(user?.email || '');
-                  if (created === 0) {
-                    toast({
-                      title: 'Already added',
-                      description: `All ${skipped} project-type templates already exist. Open any to edit.`,
-                    });
-                  } else {
-                    toast({
-                      title: 'Project-type schedules added',
-                      description: `${created} template${created === 1 ? '' : 's'} added (House Build, Basement, Pool, Remodel). Open any to edit in the Gantt.`,
-                    });
-                  }
+                  const { created, refreshed, skipped } = await seedStarterScheduleTemplates(user?.email || '');
+                  const parts: string[] = [];
+                  if (created) parts.push(`${created} added`);
+                  if (refreshed) parts.push(`${refreshed} refreshed`);
+                  if (skipped) parts.push(`${skipped} left as-is`);
+                  toast({
+                    title: created || refreshed ? 'Project-type schedules updated' : 'No changes',
+                    description: `${parts.join(' · ') || 'Nothing to do'} — open House Build to edit in the Gantt.`,
+                  });
                 } catch (e: any) {
                   toast({
                     title: 'Seed failed',
