@@ -427,6 +427,37 @@ function DetailView({
               <Plus className="w-4 h-4" /> Add Skyeline Master Schedule
             </Button>
           )}
+          {category === 'schedule' && (
+            <Button
+              variant="outline"
+              onClick={async () => {
+                try {
+                  const { seedStarterScheduleTemplates } = await import('@/lib/seedStarterScheduleTemplates');
+                  const { created, skipped } = await seedStarterScheduleTemplates(user?.email || '');
+                  if (created === 0) {
+                    toast({
+                      title: 'Already added',
+                      description: `All ${skipped} project-type templates already exist. Open any to edit.`,
+                    });
+                  } else {
+                    toast({
+                      title: 'Project-type schedules added',
+                      description: `${created} template${created === 1 ? '' : 's'} added (House Build, Basement, Pool, Remodel). Open any to edit in the Gantt.`,
+                    });
+                  }
+                } catch (e: any) {
+                  toast({
+                    title: 'Seed failed',
+                    description: e?.message || 'Could not create starter schedules.',
+                    variant: 'destructive',
+                  });
+                }
+              }}
+              className="gap-2"
+            >
+              <Plus className="w-4 h-4" /> Add Project-Type Schedules
+            </Button>
+          )}
           <Button
             onClick={openCreate}
             style={{ backgroundColor: '#C9A96E' }}
