@@ -170,6 +170,11 @@ export function ProjectSetupWizard({ draftId, onPublished, onCancel }: ProjectSe
     try {
       const id = await saveDraft({ ...draft, status: 'planning' }, { silent: true });
       if (!id) return;
+      // Seed the project Gantt from the chosen schedule template (if not already seeded).
+      if (draft.scheduleTemplateId) {
+        const { applyTemplateToProject } = await import('@/modules/gantt/applyTemplateToProject');
+        await applyTemplateToProject(id, draft.scheduleTemplateId, draft.startDate, { onlyIfEmpty: true }).catch(() => {});
+      }
       toast({ title: 'Project created', description: 'Now visible to client + designer + team.' });
       onPublished?.(id);
     } finally {
