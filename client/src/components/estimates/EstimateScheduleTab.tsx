@@ -11,6 +11,7 @@ import {
 import { db } from '@/lib/firebase';
 import { estimateToSchedule } from '@/lib/schedule/estimateToSchedule';
 import { templateToSchedule, type TemplateTask } from '@/lib/schedule/templateToSchedule';
+import { clientSafeSchedule } from '@/lib/schedule/scheduleFinancials';
 import type { ScheduleLineInput } from '@/lib/schedule/types';
 import { ScheduleTimeline } from '@/components/schedule/ScheduleTimeline';
 import { Button } from '@/components/ui/button';
@@ -28,6 +29,7 @@ const ESTIMATE_SOURCE = 'estimate';
 export function EstimateScheduleTab({ estimateId }: { estimateId: string }) {
   const { toast } = useToast();
   const [lineItems, setLineItems] = useState<ScheduleLineInput[]>([]);
+  const [totalRevenue, setTotalRevenue] = useState<number>(0);  // estimate client total
   const [targetStart, setTargetStart] = useState<string>('');
   const [projectId, setProjectId] = useState<string>('');
   const [publishing, setPublishing] = useState(false);
@@ -43,6 +45,7 @@ export function EstimateScheduleTab({ estimateId }: { estimateId: string }) {
     const unsub = onSnapshot(doc(db, 'estimates', estimateId), snap => {
       const d = snap.data() as any;
       setLineItems(Array.isArray(d?.lineItems) ? d.lineItems : []);
+      setTotalRevenue(typeof d?.totalAmount === 'number' ? d.totalAmount : 0);
       setProjectId(d?.projectId || '');
       setTargetStart(prev => prev || d?.targetStartDate || todayPlus(30));
       setSourceId(prev => (prev !== ESTIMATE_SOURCE ? prev : d?.scheduleSourceId || ESTIMATE_SOURCE));
@@ -82,12 +85,21 @@ export function EstimateScheduleTab({ estimateId }: { estimateId: string }) {
 
   const usingTemplate = sourceId !== ESTIMATE_SOURCE;
 
+  // Internal cost basis for the profit forecast (Σ qty × subCost across lines).
+  const totalCost = useMemo(
+    () => lineItems.reduce((s, l) => s + (l.qty ?? 0) * (l.subCost ?? 0), 0),
+    [lineItems],
+  );
+
   const schedule = useMemo(() => {
     if (!targetStart) return null;
     return usingTemplate
-      ? templateToSchedule(templateTasks, targetStart)
-      : estimateToSchedule({ lineItems }, { targetStart });
-  }, [usingTemplate, templateTasks, lineItems, targetStart]);
+      ? templateToSchedule(templateTasks, targetStart, {
+          totalRevenue: totalRevenue || undefined,
+          totalCost: totalCost || undefined,
+        })
+      : estimateToSchedule({ lineItems }, { targetStart, totalRevenue: totalRevenue || undefined });
+  }, [usingTemplate, templateTasks, lineItems, targetStart, totalRevenue, totalCost]);
 
   const ready = usingTemplate ? templateTasks.length > 0 : lineItems.some(
     l => (l.lineStatus ?? 'inc') !== 'ex' && (l.lineStatus ?? 'inc') !== 'note');
@@ -97,7 +109,8 @@ export function EstimateScheduleTab({ estimateId }: { estimateId: string }) {
     setPublishing(true);
     try {
       await updateDoc(doc(db, 'projects', projectId), {
-        estimatedSchedule: schedule,
+        // Client-safe: strip GC-only cost/profit; keep the revenue draw schedule.
+        estimatedSchedule: clientSafeSchedule(schedule),
         estimatedScheduleStartDate: targetStart,
         estimatedScheduleSource: usingTemplate
           ? (templates.find(t => t.id === sourceId)?.name || 'Template')
@@ -178,7 +191,9 @@ export function EstimateScheduleTab({ estimateId }: { estimateId: string }) {
         </div>
       ) : schedule ? (
         <div className="rounded-xl border border-gray-200 bg-white p-5">
-          <ScheduleTimeline schedule={schedule} />
+          {/* GC view — show the revenue/profit forecast. The client portal renders
+              the same component without showProfit (and reads a cost-stripped copy). */}
+          <ScheduleTimeline schedule={schedule} showProfit />
         </div>
       ) : null}
     </div>

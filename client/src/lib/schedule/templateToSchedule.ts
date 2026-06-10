@@ -8,6 +8,12 @@
 // target start.
 
 import type { GeneratedSchedule, ScheduledPhase, ScheduledTrade } from './types';
+import { allocate, rollupFinancials } from './scheduleFinancials';
+
+export interface TemplateMoney {
+  totalRevenue?: number;  // estimate client total — allocated across phases by duration
+  totalCost?: number;     // internal cost — allocated the same way (GC-only)
+}
 
 export interface TemplateTask {
   id: string;
@@ -41,6 +47,7 @@ function stripPhaseName(name: string): string {
 export function templateToSchedule(
   tasks: TemplateTask[],
   targetStart: string,
+  money?: TemplateMoney,
 ): GeneratedSchedule {
   const dated = tasks.filter(t => t.startDate && t.endDate);
   if (dated.length === 0) {
@@ -99,11 +106,28 @@ export function templateToSchedule(
   const allStart = phases.reduce((m, p) => (p.startDate < m ? p.startDate : m), phases[0].startDate);
   const allEnd = phases.reduce((m, p) => (p.endDate > m ? p.endDate : m), phases[0].endDate);
 
-  return {
+  const schedule: GeneratedSchedule = {
     startDate: allStart,
     endDate: allEnd,
     totalDays: daysBetween(allStart, allEnd),
     phases,
     tradeCount,
   };
+
+  // Money: templates carry no dollars, so allocate the estimate's totals across
+  // phases proportional to each phase's duration (a sensible cash-flow curve).
+  if (money && (money.totalRevenue || money.totalCost)) {
+    const weights = phases.map(p => Math.max(1, p.durationDays));
+    if (money.totalRevenue) {
+      const rev = allocate(weights, money.totalRevenue);
+      phases.forEach((p, i) => { p.revenue = rev[i]; });
+    }
+    if (money.totalCost) {
+      const cost = allocate(weights, money.totalCost);
+      phases.forEach((p, i) => { p.cost = cost[i]; });
+    }
+    rollupFinancials(schedule);
+  }
+
+  return schedule;
 }

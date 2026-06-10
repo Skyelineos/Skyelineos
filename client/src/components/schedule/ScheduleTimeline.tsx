@@ -33,15 +33,26 @@ function fmtMoney(n: number): string {
   return n >= 1000 ? `$${Math.round(n / 1000)}k` : `$${n}`;
 }
 
+function fmtUSD(n: number): string {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n);
+}
+
 export function ScheduleTimeline({
   schedule,
   className = '',
+  showProfit = false,
 }: {
   schedule: GeneratedSchedule;
   className?: string;
+  showProfit?: boolean;   // GC-only revenue/profit forecast (never pass true for clients)
 }) {
   const { startDate, endDate, totalDays, phases, tradeCount } = schedule;
   const months = (totalDays / 30.44).toFixed(1);
+  const hasMoney = typeof schedule.revenue === 'number' && schedule.revenue > 0;
+
+  // Cumulative draw due by the end of each phase (the client's payment timeline).
+  let running = 0;
+  const cumByPhase = phases.map(p => (running += (p.revenue ?? 0)));
 
   return (
     <div className={className}>
@@ -53,8 +64,19 @@ export function ScheduleTimeline({
             {fmtDate(startDate)} <span className="text-gray-400">→</span> {fmtDate(endDate)}
           </div>
         </div>
-        <div className="text-sm text-gray-500">
+        <div className="text-sm text-gray-500 text-right">
           ~{months} months · {phases.length} phases · {tradeCount} trades
+          {hasMoney && (
+            <div className="text-[#141414] font-semibold mt-0.5">
+              {fmtUSD(schedule.revenue!)} total
+              {showProfit && typeof schedule.profit === 'number' && (
+                <span className="text-emerald-700 font-medium">
+                  {' · '}{fmtUSD(schedule.profit)} profit
+                  {typeof schedule.marginPct === 'number' && ` (${schedule.marginPct.toFixed(0)}%)`}
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -75,7 +97,7 @@ export function ScheduleTimeline({
 
       {/* Phase detail rows */}
       <div className="space-y-3">
-        {phases.map(p => (
+        {phases.map((p, idx) => (
           <div key={p.phase} className="flex gap-3">
             <div
               className="w-1.5 rounded-full flex-shrink-0"
@@ -88,6 +110,17 @@ export function ScheduleTimeline({
                   {fmtDate(p.startDate)} → {fmtDate(p.endDate)} · {p.durationDays}d
                 </div>
               </div>
+              {hasMoney && (p.revenue ?? 0) > 0 && (
+                <div className="mt-0.5 flex flex-wrap items-baseline gap-x-2 text-xs">
+                  <span className="font-semibold text-[#8a6d3b]">{fmtUSD(p.revenue!)} draw</span>
+                  <span className="text-gray-400">
+                    {fmtUSD(cumByPhase[idx])} due by {fmtDate(p.endDate)}
+                  </span>
+                  {showProfit && typeof p.profit === 'number' && (
+                    <span className="text-emerald-700">{fmtUSD(p.profit)} profit</span>
+                  )}
+                </div>
+              )}
               <div className="mt-1 flex flex-wrap gap-1.5">
                 {p.trades.map((t, i) => (
                   <span
@@ -111,8 +144,9 @@ export function ScheduleTimeline({
       </div>
 
       <p className="mt-4 text-xs text-gray-400">
-        Estimated timeline generated from this estimate's line items. Phase durations are
-        defaults and may shift with selections, weather, and inspections.
+        {hasMoney
+          ? 'Estimated timeline and draw schedule. Amounts are projections from the estimate; final draws may shift with selections, change orders, weather, and inspections.'
+          : 'Estimated timeline. Phase durations may shift with selections, weather, and inspections.'}
       </p>
     </div>
   );
