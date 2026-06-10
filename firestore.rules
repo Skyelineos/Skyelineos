@@ -295,6 +295,28 @@ service cloud.firestore {
       allow delete: if isAdmin() || isGC();
     }
 
+    // Project messaging (Slack-like). Visibility is by channel membership:
+    // a signed-in user sees a channel + its messages only if their uid is in
+    // the channel's memberUids (GC/admin see everything). This keeps the
+    // client's channels centralized and subs limited to channels they're in.
+    match /projects/{projectId}/channels/{channelId} {
+      allow read:   if isGC() || (isSignedIn() && request.auth.uid in resource.data.memberUids);
+      allow create: if isGC() || (isSignedIn() && request.auth.uid in request.resource.data.memberUids);
+      allow update: if isGC() || (isSignedIn() && request.auth.uid in resource.data.memberUids);
+      allow delete: if isGC();
+
+      match /messages/{messageId} {
+        function channelMembers() {
+          return get(/databases/$(database)/documents/projects/$(projectId)/channels/$(channelId)).data.memberUids;
+        }
+        allow read:   if isGC() || (isSignedIn() && request.auth.uid in channelMembers());
+        allow create: if isGC() || (isSignedIn()
+                          && request.auth.uid == request.resource.data.authorUid
+                          && request.auth.uid in channelMembers());
+        allow update, delete: if isGC() || (isSignedIn() && resource.data.authorUid == request.auth.uid);
+      }
+    }
+
     // RFIs (Requests for Information) — cross-portal field questions/clarifications.
     // Subs/designers/GC raise them and read the log; GC + designers answer and
     // close. A creator may edit their own RFI. Internal to the build team — not
