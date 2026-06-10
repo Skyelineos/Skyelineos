@@ -1,15 +1,15 @@
 // AUTO-GENERATED starter schedule templates seeded into Firestore `scheduleTemplates`.
-// House Build is built from Skyeline's 173-step process sheet (phase headers + step
-// rows; decision/selection steps flagged via status 'pending_approval'). Basement,
-// Pool and Remodel are starting skeletons to flesh out in the Gantt template editor.
-// Durations are estimates — tune per project. The editor renders a flat task list
-// with dependency links, so phases are header rows rather than nested children.
+// House Build = Skyeline's real build schedule (from the office Gantt): 5 phases with
+// real tasks, dates and durations; selection/decision steps flagged via status
+// 'pending_approval'. Basement / Pool / Remodel are starter skeletons to flesh out.
+// Editor renders a flat task list + links, so phases are header rows; dates re-anchor
+// to the project target start when a template is applied.
 import type { Link } from '@/modules/gantt/types';
 
 export interface StarterScheduleTask {
   id: string; name: string; startDate: string; endDate: string; durationDays?: number;
   status?: 'on_track' | 'delayed' | 'pending_approval';
-  isPhase?: boolean; decision?: boolean; responsible?: string; vendors?: string;
+  isPhase?: boolean; decision?: boolean;
 }
 export interface StarterScheduleTemplate {
   key: string; name: string; description: string; tasks: StarterScheduleTask[]; links: Link[];
@@ -19,1582 +19,699 @@ export const STARTER_SCHEDULE_TEMPLATES: StarterScheduleTemplate[] = [
   {
     "key": "house_build",
     "name": "House Build",
-    "description": "Full custom home build from Skyeline's process \u2014 173 steps across 7 phases (~12 months). Decision/selection steps are flagged. Durations are estimates; tune per project size.",
+    "description": "Skyeline's real custom-home build schedule: 5 phases, 85 tasks, ~11 months. Selection/decision steps flagged. Re-anchored to the project target start when applied.",
     "tasks": [
       {
-        "id": "hb_phase_pre_construction",
-        "name": "\u25a0 PRE-CONSTRUCTION",
+        "id": "hb_1_1",
+        "name": "Pre-Construction",
         "startDate": "2025-01-06",
-        "endDate": "2025-02-19",
-        "durationDays": 45,
+        "endDate": "2025-04-01",
+        "durationDays": 86,
         "isPhase": true
       },
       {
-        "id": "hb_1",
-        "name": "Pre construction meeting with owner and contractor",
+        "id": "hb_1_1_1",
+        "name": "Architect/Designer",
         "startDate": "2025-01-06",
-        "endDate": "2025-01-08",
-        "durationDays": 3,
-        "responsible": "Tyler"
+        "endDate": "2025-02-12",
+        "durationDays": 38
       },
       {
-        "id": "hb_2",
-        "name": "Meet with architect",
-        "startDate": "2025-01-09",
-        "endDate": "2025-01-11",
-        "durationDays": 3,
-        "responsible": "Tyler"
-      },
-      {
-        "id": "hb_3",
-        "name": "Architect does preliminary layout",
-        "startDate": "2025-01-12",
-        "endDate": "2025-01-14",
-        "durationDays": 3,
-        "responsible": "Tyler"
-      },
-      {
-        "id": "hb_4",
-        "name": "Changes and adjustments to preliminary plans",
-        "startDate": "2025-01-15",
-        "endDate": "2025-01-17",
-        "durationDays": 3,
-        "responsible": "Tyler"
-      },
-      {
-        "id": "hb_5",
-        "name": "Secure lot",
-        "startDate": "2025-01-18",
-        "endDate": "2025-01-20",
-        "durationDays": 3,
-        "responsible": "Tyler"
-      },
-      {
-        "id": "hb_6",
-        "name": "Elevations added to plans",
-        "startDate": "2025-01-21",
-        "endDate": "2025-01-23",
-        "durationDays": 3,
-        "responsible": "Tyler"
-      },
-      {
-        "id": "hb_7",
-        "name": "Site surveys and soils reports if applicable",
-        "startDate": "2025-01-24",
-        "endDate": "2025-01-26",
-        "durationDays": 3,
-        "responsible": "Tyler"
-      },
-      {
-        "id": "hb_8",
-        "name": "Plans go to engineering",
-        "startDate": "2025-01-27",
-        "endDate": "2025-01-29",
-        "durationDays": 3,
-        "responsible": "Tyler"
-      },
-      {
-        "id": "hb_9",
-        "name": "Final changes to plans",
-        "startDate": "2025-01-30",
-        "endDate": "2025-02-01",
-        "durationDays": 3,
-        "responsible": "Tyler"
-      },
-      {
-        "id": "hb_10",
-        "name": "Plans finalized and stamped",
-        "startDate": "2025-02-02",
-        "endDate": "2025-02-04",
-        "durationDays": 3,
-        "responsible": "Tyler",
-        "status": "pending_approval",
-        "decision": true
-      },
-      {
-        "id": "hb_11",
-        "name": "Apply for permit",
-        "startDate": "2025-02-05",
-        "endDate": "2025-02-07",
-        "durationDays": 3,
-        "responsible": "Office"
-      },
-      {
-        "id": "hb_12",
-        "name": "Set up SWPPP and make sure rain gutters are protected from debri throughout project",
-        "startDate": "2025-02-08",
-        "endDate": "2025-02-09",
-        "durationDays": 2,
-        "responsible": "Office/Super"
-      },
-      {
-        "id": "hb_13",
-        "name": "Set up for toilet and dumping services",
-        "startDate": "2025-02-10",
-        "endDate": "2025-02-11",
-        "durationDays": 2,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_14",
-        "name": "Temp power set up",
-        "startDate": "2025-02-12",
+        "id": "hb_1_1_2",
+        "name": "Secure Lot (If not alread",
+        "startDate": "2025-02-13",
         "endDate": "2025-02-13",
-        "durationDays": 2,
-        "responsible": "Super"
+        "durationDays": 1
       },
       {
-        "id": "hb_15",
-        "name": "Prepare construction site",
-        "startDate": "2025-02-14",
-        "endDate": "2025-02-15",
-        "durationDays": 2,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_16",
-        "name": "Set layout/backsets",
-        "startDate": "2025-02-16",
-        "endDate": "2025-02-17",
-        "durationDays": 2,
-        "responsible": "Surveyor"
-      },
-      {
-        "id": "hb_17",
-        "name": "Mark out for excavation",
-        "startDate": "2025-02-18",
+        "id": "hb_1_1_3",
+        "name": "Finish Selections",
+        "startDate": "2025-02-13",
         "endDate": "2025-02-19",
-        "durationDays": 2,
-        "responsible": "Office",
-        "vendors": "Dudley Engineering"
+        "durationDays": 7,
+        "status": "pending_approval",
+        "decision": true
       },
       {
-        "id": "hb_phase_foundation",
-        "name": "\u25a0 FOUNDATION",
+        "id": "hb_1_1_4",
+        "name": "Structural Engineering",
         "startDate": "2025-02-20",
-        "endDate": "2025-03-31",
-        "durationDays": 40,
-        "isPhase": true
-      },
-      {
-        "id": "hb_18",
-        "name": "Excavation begins",
-        "startDate": "2025-02-20",
-        "endDate": "2025-02-21",
-        "durationDays": 2,
-        "responsible": "Super",
-        "vendors": "1.Cody Excavation"
-      },
-      {
-        "id": "hb_19",
-        "name": "Select Windows",
-        "startDate": "2025-02-22",
-        "endDate": "2025-02-23",
-        "durationDays": 2,
-        "responsible": "Owner/Tyler",
-        "vendors": "1. Jones Paint and Glass",
-        "status": "pending_approval",
-        "decision": true
-      },
-      {
-        "id": "hb_20",
-        "name": "Select roof shingles/style and get ordered",
-        "startDate": "2025-02-24",
-        "endDate": "2025-02-25",
-        "durationDays": 2,
-        "responsible": "Owner/Tyler",
-        "vendors": "1.LKL",
-        "status": "pending_approval",
-        "decision": true
-      },
-      {
-        "id": "hb_21",
-        "name": "Make selections for exterior doors, interior doors, and interior finish trim",
-        "startDate": "2025-02-26",
-        "endDate": "2025-02-27",
-        "durationDays": 2,
-        "responsible": "Owner/Tyler",
-        "vendors": "Rocky Mountain Windows and Doors",
-        "status": "pending_approval",
-        "decision": true
-      },
-      {
-        "id": "hb_22",
-        "name": "Make plumbing selections",
-        "startDate": "2025-02-28",
-        "endDate": "2025-03-01",
-        "durationDays": 2,
-        "responsible": "Owner/Tyler",
-        "vendors": "Peterson Plumbing",
-        "status": "pending_approval",
-        "decision": true
-      },
-      {
-        "id": "hb_23",
-        "name": "Select Fireplace",
-        "startDate": "2025-03-02",
-        "endDate": "2025-03-03",
-        "durationDays": 2,
-        "responsible": "Owner/Tyler",
-        "vendors": "1. Hearth and Home",
-        "status": "pending_approval",
-        "decision": true
-      },
-      {
-        "id": "hb_24",
-        "name": "Select Mantel and Hearth (if applicabale)",
-        "startDate": "2025-03-04",
-        "endDate": "2025-03-05",
-        "durationDays": 2,
-        "responsible": "Owner/Tyler",
-        "vendors": "Stone Mountain Casting & Design",
-        "status": "pending_approval",
-        "decision": true
-      },
-      {
-        "id": "hb_25",
-        "name": "Make electrical selections pertinent to rough in",
-        "startDate": "2025-03-06",
-        "endDate": "2025-03-07",
-        "durationDays": 2,
-        "responsible": "Owner/Tyler",
-        "vendors": "Hansen Lighting",
-        "status": "pending_approval",
-        "decision": true
-      },
-      {
-        "id": "hb_26",
-        "name": "Make Selections for Exterior materials for the house (rock, brick, stucco, hardi plank, hardi shaker...etc)",
-        "startDate": "2025-03-08",
-        "endDate": "2025-03-09",
-        "durationDays": 2,
-        "responsible": "Owner/Tyler",
-        "vendors": "1.LKL",
-        "status": "pending_approval",
-        "decision": true
-      },
-      {
-        "id": "hb_27",
-        "name": "Haul away soil if applicable",
-        "startDate": "2025-03-10",
         "endDate": "2025-03-11",
-        "durationDays": 2,
-        "responsible": "Super",
-        "vendors": "Scheduled by Excavator"
+        "durationDays": 20
       },
       {
-        "id": "hb_28",
-        "name": "Prepare footing forms",
+        "id": "hb_1_1_5",
+        "name": "Manual J",
         "startDate": "2025-03-12",
         "endDate": "2025-03-13",
-        "durationDays": 2,
-        "responsible": "Super",
-        "vendors": "1.Jeff Dumas"
+        "durationDays": 2
       },
       {
-        "id": "hb_29",
-        "name": "Footing form inspection",
-        "startDate": "2025-03-14",
-        "endDate": "2025-03-15",
-        "durationDays": 2,
-        "responsible": "Super"
+        "id": "hb_1_1_6",
+        "name": "Res Check",
+        "startDate": "2025-03-12",
+        "endDate": "2025-03-12",
+        "durationDays": 1
       },
       {
-        "id": "hb_30",
-        "name": "Pour footings",
-        "startDate": "2025-03-16",
-        "endDate": "2025-03-17",
-        "durationDays": 2,
-        "responsible": "Super",
-        "vendors": "1.Jeff Dumas"
+        "id": "hb_1_1_7",
+        "name": "Soils Report",
+        "startDate": "2025-03-12",
+        "endDate": "2025-03-12",
+        "durationDays": 1
       },
       {
-        "id": "hb_31",
-        "name": "Footings inspection",
-        "startDate": "2025-03-18",
-        "endDate": "2025-03-18",
-        "durationDays": 1,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_32",
-        "name": "Prepare foundation wall forms",
-        "startDate": "2025-03-19",
-        "endDate": "2025-03-19",
-        "durationDays": 1,
-        "responsible": "Super",
-        "vendors": "1.Jeff Dumas"
-      },
-      {
-        "id": "hb_33",
-        "name": "Foundation wall form inspection",
-        "startDate": "2025-03-20",
-        "endDate": "2025-03-20",
-        "durationDays": 1,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_34",
-        "name": "Pour the foundation",
-        "startDate": "2025-03-21",
-        "endDate": "2025-03-21",
-        "durationDays": 1,
-        "responsible": "Super",
-        "vendors": "1. Jeff Dumas"
-      },
-      {
-        "id": "hb_35",
-        "name": "Remove foundation forms",
-        "startDate": "2025-03-22",
-        "endDate": "2025-03-22",
-        "durationDays": 1,
-        "responsible": "Super",
-        "vendors": "1. Jeff Dumas"
-      },
-      {
-        "id": "hb_36",
-        "name": "Underground Plumbing",
-        "startDate": "2025-03-23",
-        "endDate": "2025-03-23",
-        "durationDays": 1,
-        "responsible": "Super",
-        "vendors": "1. Skyline Plumbing"
-      },
-      {
-        "id": "hb_37",
-        "name": "Knock off pins around exterior",
-        "startDate": "2025-03-24",
-        "endDate": "2025-03-24",
-        "durationDays": 1,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_38",
-        "name": "Foundation waterproof seal",
-        "startDate": "2025-03-25",
-        "endDate": "2025-03-25",
-        "durationDays": 1,
-        "responsible": "Super",
-        "vendors": "1. Pro Sandoval (Niagra Waterproofing)"
-      },
-      {
-        "id": "hb_39",
-        "name": "Foundation seal inspection",
-        "startDate": "2025-03-26",
-        "endDate": "2025-03-26",
-        "durationDays": 1,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_40",
-        "name": "Install window Wells",
-        "startDate": "2025-03-27",
-        "endDate": "2025-03-27",
-        "durationDays": 1,
-        "responsible": "Super",
-        "vendors": "Clyde Co"
-      },
-      {
-        "id": "hb_41",
-        "name": "Backfill site and initial grading",
-        "startDate": "2025-03-28",
-        "endDate": "2025-03-28",
-        "durationDays": 1,
-        "responsible": "Super",
-        "vendors": "1. Cody Excavation"
-      },
-      {
-        "id": "hb_42",
-        "name": "Apply for new service line for gas to Dominion Energy",
-        "startDate": "2025-03-29",
-        "endDate": "2025-03-29",
-        "durationDays": 1,
-        "responsible": "Office"
-      },
-      {
-        "id": "hb_43",
-        "name": "Install Camera at site and make sure cellular chip is active",
-        "startDate": "2025-03-30",
-        "endDate": "2025-03-30",
-        "durationDays": 1,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_44",
-        "name": "Make Garage Door Selections to Order in",
-        "startDate": "2025-03-31",
+        "id": "hb_1_1_8",
+        "name": "Permits and Approvals",
+        "startDate": "2025-03-12",
         "endDate": "2025-03-31",
-        "durationDays": 1,
-        "responsible": "Owner/Tyler",
-        "vendors": "White Cap",
-        "status": "pending_approval",
-        "decision": true
+        "durationDays": 20
       },
       {
-        "id": "hb_phase_framing",
-        "name": "\u25a0 FRAMING",
+        "id": "hb_1_1_9",
+        "name": "Temp Power and Honey",
         "startDate": "2025-04-01",
-        "endDate": "2025-04-30",
-        "durationDays": 30,
+        "endDate": "2025-04-01",
+        "durationDays": 1
+      },
+      {
+        "id": "hb_1_2",
+        "name": "Phase 1 \u2014 Excavation, Underground & Foundation",
+        "startDate": "2025-04-01",
+        "endDate": "2025-05-21",
+        "durationDays": 51,
         "isPhase": true
       },
       {
-        "id": "hb_45",
-        "name": "Framing begins",
+        "id": "hb_1_2_1",
+        "name": "Select Windows and Ext",
         "startDate": "2025-04-01",
-        "endDate": "2025-04-03",
-        "durationDays": 3,
-        "responsible": "Super",
-        "vendors": "1. Erasmo Crew"
-      },
-      {
-        "id": "hb_46",
-        "name": "Any preferences on hvac units/brands/special items",
-        "startDate": "2025-04-04",
-        "endDate": "2025-04-06",
-        "durationDays": 3,
-        "responsible": "Owner",
-        "vendors": "1st Choice HVAC",
+        "endDate": "2025-04-01",
+        "durationDays": 1,
         "status": "pending_approval",
         "decision": true
       },
       {
-        "id": "hb_47",
-        "name": "Layout exterior walls and snap lines for square walls",
-        "startDate": "2025-04-07",
+        "id": "hb_1_2_2",
+        "name": "Select Roofing Material a",
+        "startDate": "2025-04-01",
+        "endDate": "2025-04-01",
+        "durationDays": 1,
+        "status": "pending_approval",
+        "decision": true
+      },
+      {
+        "id": "hb_1_2_3",
+        "name": "Select Plumbing Fixtures",
+        "startDate": "2025-04-01",
+        "endDate": "2025-04-01",
+        "durationDays": 1,
+        "status": "pending_approval",
+        "decision": true
+      },
+      {
+        "id": "hb_1_2_4",
+        "name": "Select Fireplace and ma",
+        "startDate": "2025-04-01",
+        "endDate": "2025-04-01",
+        "durationDays": 1,
+        "status": "pending_approval",
+        "decision": true
+      },
+      {
+        "id": "hb_1_2_5",
+        "name": "Select Window Well Styl",
+        "startDate": "2025-04-01",
+        "endDate": "2025-04-01",
+        "durationDays": 1,
+        "status": "pending_approval",
+        "decision": true
+      },
+      {
+        "id": "hb_1_2_6",
+        "name": "Staking the Lot",
+        "startDate": "2025-04-01",
+        "endDate": "2025-04-02",
+        "durationDays": 2
+      },
+      {
+        "id": "hb_1_2_7",
+        "name": "Excavation",
+        "startDate": "2025-04-03",
         "endDate": "2025-04-09",
-        "durationDays": 3,
-        "responsible": "Super",
-        "vendors": "1. Utah Framing Company"
+        "durationDays": 7
       },
       {
-        "id": "hb_48",
-        "name": "Lay bottom plate",
+        "id": "hb_1_2_8",
+        "name": "Stake Again for Footings",
         "startDate": "2025-04-10",
-        "endDate": "2025-04-12",
-        "durationDays": 3,
-        "responsible": "Super",
-        "vendors": "1. Utah Framing Company"
+        "endDate": "2025-04-11",
+        "durationDays": 2
       },
       {
-        "id": "hb_49",
-        "name": "Rollout floor joists and subfloor",
-        "startDate": "2025-04-13",
-        "endDate": "2025-04-15",
-        "durationDays": 3,
-        "responsible": "Super",
-        "vendors": "1. Utah Framing Company"
+        "id": "hb_1_2_9",
+        "name": "Schedule Concrete Was",
+        "startDate": "2025-04-14",
+        "endDate": "2025-04-14",
+        "durationDays": 1
       },
       {
-        "id": "hb_50",
-        "name": "Basement load bearing walls constructed",
-        "startDate": "2025-04-16",
-        "endDate": "2025-04-18",
-        "durationDays": 3,
-        "responsible": "Super",
-        "vendors": "1. Utah Framing Company"
-      },
-      {
-        "id": "hb_51",
-        "name": "Exterior walls main floor constructed",
-        "startDate": "2025-04-19",
-        "endDate": "2025-04-20",
-        "durationDays": 2,
-        "responsible": "Super",
-        "vendors": "1. Utah Framing Company"
-      },
-      {
-        "id": "hb_52",
-        "name": "Interior walls constructed",
-        "startDate": "2025-04-21",
-        "endDate": "2025-04-22",
-        "durationDays": 2,
-        "responsible": "Super",
-        "vendors": "1. Utah Framing Company"
-      },
-      {
-        "id": "hb_53",
-        "name": "Set Trusses",
-        "startDate": "2025-04-23",
-        "endDate": "2025-04-24",
-        "durationDays": 2,
-        "responsible": "Super",
-        "vendors": "1. Utah Framing Company"
-      },
-      {
-        "id": "hb_54",
-        "name": "Sheet Roof",
-        "startDate": "2025-04-25",
-        "endDate": "2025-04-26",
-        "durationDays": 2,
-        "responsible": "Super",
-        "vendors": "1. Utah Framing Company"
-      },
-      {
-        "id": "hb_55",
-        "name": "Walkthrough with HVAC, electrical, and plumbing together to discuss layout and mechanical room layout and how to work around each other during rough in",
-        "startDate": "2025-04-27",
+        "id": "hb_1_2_10",
+        "name": "Footings and Foundation",
+        "startDate": "2025-04-15",
         "endDate": "2025-04-28",
-        "durationDays": 2,
-        "responsible": "Super/Tyler",
-        "vendors": "HVAC, Plumbing, Electrical/Client"
+        "durationDays": 14
       },
       {
-        "id": "hb_56",
-        "name": "Finalize Selection for Stair railing and balaster",
+        "id": "hb_1_2_11",
+        "name": "Install Window Wells",
         "startDate": "2025-04-29",
         "endDate": "2025-04-30",
-        "durationDays": 2,
-        "responsible": "Owner/Tyler",
-        "vendors": "1.Burton Lumber https://www.rwspecialties.com/stair-parts",
-        "status": "pending_approval",
-        "decision": true
+        "durationDays": 2
       },
       {
-        "id": "hb_phase_rough_in",
-        "name": "\u25a0 ROUGH-IN",
-        "startDate": "2025-05-01",
-        "endDate": "2025-06-24",
-        "durationDays": 55,
+        "id": "hb_1_2_12",
+        "name": "Underground Plumbing",
+        "startDate": "2025-04-29",
+        "endDate": "2025-05-05",
+        "durationDays": 7
+      },
+      {
+        "id": "hb_1_2_13",
+        "name": "Waterproofing/Downproo",
+        "startDate": "2025-05-06",
+        "endDate": "2025-05-09",
+        "durationDays": 4
+      },
+      {
+        "id": "hb_1_2_14",
+        "name": "Sewer Connection and B",
+        "startDate": "2025-05-12",
+        "endDate": "2025-05-15",
+        "durationDays": 4
+      },
+      {
+        "id": "hb_1_2_15",
+        "name": "Concrete Flat Work",
+        "startDate": "2025-05-16",
+        "endDate": "2025-05-21",
+        "durationDays": 6
+      },
+      {
+        "id": "hb_1_3",
+        "name": "Phase 2 \u2014 Framing to 4-Way",
+        "startDate": "2025-05-22",
+        "endDate": "2025-08-01",
+        "durationDays": 72,
         "isPhase": true
       },
       {
-        "id": "hb_57",
-        "name": "Dry In Roof",
-        "startDate": "2025-05-01",
-        "endDate": "2025-05-02",
-        "durationDays": 2,
-        "responsible": "Super",
-        "vendors": "1. My Roof"
-      },
-      {
-        "id": "hb_58",
-        "name": "Install Windows and Exterior Doors",
-        "startDate": "2025-05-03",
-        "endDate": "2025-05-04",
-        "durationDays": 2,
-        "responsible": "Super",
-        "vendors": "1. Rocky Mountain Windows and Doors"
-      },
-      {
-        "id": "hb_59",
-        "name": "HVAC, and plumbing rough in start",
-        "startDate": "2025-05-05",
-        "endDate": "2025-05-06",
-        "durationDays": 2,
-        "responsible": "Super",
-        "vendors": "Awarded Trade"
-      },
-      {
-        "id": "hb_60",
-        "name": "Electrical",
-        "startDate": "2025-05-07",
-        "endDate": "2025-05-08",
-        "durationDays": 2,
-        "responsible": "Super",
-        "vendors": "Skyridge Electrical"
-      },
-      {
-        "id": "hb_61",
-        "name": "AV/Low voltage install",
-        "startDate": "2025-05-09",
-        "endDate": "2025-05-10",
-        "durationDays": 2,
-        "responsible": "Super",
-        "vendors": "Skyridge Electrical"
-      },
-      {
-        "id": "hb_62",
-        "name": "Get subfloor uneven seams/ high points sanded",
-        "startDate": "2025-05-11",
-        "endDate": "2025-05-12",
-        "durationDays": 2,
-        "responsible": "Super",
-        "vendors": "Super"
-      },
-      {
-        "id": "hb_63",
-        "name": "Site walk exterior with owner, stone guys, siding/soffit/fascia to go over final selections on exterior material",
-        "startDate": "2025-05-13",
-        "endDate": "2025-05-14",
-        "durationDays": 2,
-        "responsible": "Owner/Tyler",
-        "vendors": "1.Emco 2.Other Siding Company",
-        "status": "pending_approval",
-        "decision": true
-      },
-      {
-        "id": "hb_64",
-        "name": "Make selections for flooring and get ordered",
-        "startDate": "2025-05-15",
-        "endDate": "2025-05-16",
-        "durationDays": 2,
-        "responsible": "Owner",
-        "vendors": "1.Mountain West Wholesale Flooring",
-        "status": "pending_approval",
-        "decision": true
-      },
-      {
-        "id": "hb_65",
-        "name": "Final changes to any major rough framing",
-        "startDate": "2025-05-17",
-        "endDate": "2025-05-18",
-        "durationDays": 2,
-        "responsible": "Super",
-        "vendors": "1.Utah Framing Company"
-      },
-      {
-        "id": "hb_66",
-        "name": "Roofers should be close to done or at least started",
-        "startDate": "2025-05-19",
-        "endDate": "2025-05-20",
-        "durationDays": 2,
-        "responsible": "Super",
-        "vendors": "1.My Roof"
-      },
-      {
-        "id": "hb_67",
-        "name": "Begin Selecting Appliances (youll see below we have to finalize the range and hood combo at this time, the rest can be finalized later)",
-        "startDate": "2025-05-21",
+        "id": "hb_1_3_1",
+        "name": "Install Security Camera",
+        "startDate": "2025-05-22",
         "endDate": "2025-05-22",
-        "durationDays": 2,
-        "responsible": "Owner/Tyler",
-        "vendors": "1. Cabinet Gallery",
+        "durationDays": 1
+      },
+      {
+        "id": "hb_1_3_2",
+        "name": "Install Temp Power",
+        "startDate": "2025-05-22",
+        "endDate": "2025-05-22",
+        "durationDays": 1
+      },
+      {
+        "id": "hb_1_3_3",
+        "name": "Set up Honey Bucket",
+        "startDate": "2025-05-22",
+        "endDate": "2025-05-22",
+        "durationDays": 1
+      },
+      {
+        "id": "hb_1_3_4",
+        "name": "Install Sign and SWPPP",
+        "startDate": "2025-05-22",
+        "endDate": "2025-05-22",
+        "durationDays": 1
+      },
+      {
+        "id": "hb_1_3_5",
+        "name": "Select Appliances",
+        "startDate": "2025-05-22",
+        "endDate": "2025-05-22",
+        "durationDays": 1,
         "status": "pending_approval",
         "decision": true
       },
       {
-        "id": "hb_68",
-        "name": "Need final selection for at least Vent hood appliance for vent sizing (6\u201d or 8\u201d)",
-        "startDate": "2025-05-23",
-        "endDate": "2025-05-24",
-        "durationDays": 2,
-        "responsible": "Owner/Super",
+        "id": "hb_1_3_6",
+        "name": "Framing",
+        "startDate": "2025-05-22",
+        "endDate": "2025-07-02",
+        "durationDays": 42
+      },
+      {
+        "id": "hb_1_3_7",
+        "name": "Dry In Roof (Begin Roofi",
+        "startDate": "2025-07-03",
+        "endDate": "2025-07-07",
+        "durationDays": 5
+      },
+      {
+        "id": "hb_1_3_8",
+        "name": "Windows and Exterior D",
+        "startDate": "2025-07-08",
+        "endDate": "2025-07-11",
+        "durationDays": 4
+      },
+      {
+        "id": "hb_1_3_9",
+        "name": "Roofing",
+        "startDate": "2025-07-08",
+        "endDate": "2025-07-21",
+        "durationDays": 14
+      },
+      {
+        "id": "hb_1_3_10",
+        "name": "HVAC/Plumbing",
+        "startDate": "2025-07-08",
+        "endDate": "2025-07-16",
+        "durationDays": 9
+      },
+      {
+        "id": "hb_1_3_11",
+        "name": "Electrical",
+        "startDate": "2025-07-17",
+        "endDate": "2025-07-25",
+        "durationDays": 9
+      },
+      {
+        "id": "hb_1_3_12",
+        "name": "Fireplace Install",
+        "startDate": "2025-07-28",
+        "endDate": "2025-07-29",
+        "durationDays": 2
+      },
+      {
+        "id": "hb_1_3_13",
+        "name": "AV/Internet (Low voltage",
+        "startDate": "2025-07-28",
+        "endDate": "2025-07-30",
+        "durationDays": 3
+      },
+      {
+        "id": "hb_1_3_14",
+        "name": "Home Owner Walkthroug",
+        "startDate": "2025-07-31",
+        "endDate": "2025-07-31",
+        "durationDays": 1,
         "status": "pending_approval",
         "decision": true
       },
       {
-        "id": "hb_69",
-        "name": "Complete rough plumbing, electrical and HVAC",
-        "startDate": "2025-05-25",
-        "endDate": "2025-05-26",
-        "durationDays": 2,
-        "responsible": "Super"
+        "id": "hb_1_3_15",
+        "name": "4 way Inspection and Sh",
+        "startDate": "2025-07-30",
+        "endDate": "2025-08-01",
+        "durationDays": 3
       },
       {
-        "id": "hb_70",
-        "name": "Install fireplace units",
-        "startDate": "2025-05-27",
-        "endDate": "2025-05-28",
-        "durationDays": 2,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_71",
-        "name": "Any last minute changes to minor framing, plumbing, electrical and HVAC",
-        "startDate": "2025-05-29",
-        "endDate": "2025-05-30",
-        "durationDays": 2,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_72",
-        "name": "Install Exterior Doors",
-        "startDate": "2025-05-31",
-        "endDate": "2025-06-01",
-        "durationDays": 2,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_73",
-        "name": "Rough In site cleanup",
-        "startDate": "2025-06-02",
-        "endDate": "2025-06-03",
-        "durationDays": 2,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_74",
-        "name": "Contractor walks through house prior to inspection",
-        "startDate": "2025-06-04",
-        "endDate": "2025-06-05",
-        "durationDays": 2,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_75",
-        "name": "4 Way Inspection & permanent power inspection",
-        "startDate": "2025-06-06",
-        "endDate": "2025-06-07",
-        "durationDays": 2,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_76",
-        "name": "Changes/corrections made from inspection if needed",
-        "startDate": "2025-06-08",
-        "endDate": "2025-06-09",
-        "durationDays": 2,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_77",
-        "name": "Final 4 way inspection",
-        "startDate": "2025-06-10",
-        "endDate": "2025-06-11",
-        "durationDays": 2,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_78",
-        "name": "Request for gas meter set-call dominion energy",
-        "startDate": "2025-06-12",
-        "endDate": "2025-06-13",
-        "durationDays": 2,
-        "responsible": "Office"
-      },
-      {
-        "id": "hb_79",
-        "name": "Check water meter well for debri or damage-make sure it has a functioning city meter cap",
-        "startDate": "2025-06-14",
-        "endDate": "2025-06-14",
-        "durationDays": 1,
-        "responsible": "Office"
-      },
-      {
-        "id": "hb_80",
-        "name": "Schedule for water meter set",
-        "startDate": "2025-06-15",
-        "endDate": "2025-06-15",
-        "durationDays": 1,
-        "responsible": "Office"
-      },
-      {
-        "id": "hb_81",
-        "name": "Permanent power set",
-        "startDate": "2025-06-16",
-        "endDate": "2025-06-16",
-        "durationDays": 1,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_82",
-        "name": "Remove temp power stick",
-        "startDate": "2025-06-17",
-        "endDate": "2025-06-17",
-        "durationDays": 1,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_83",
-        "name": "Any final changes to rough in",
-        "startDate": "2025-06-18",
-        "endDate": "2025-06-18",
-        "durationDays": 1,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_84",
-        "name": "Drywall does site measure and takeoff",
-        "startDate": "2025-06-19",
-        "endDate": "2025-06-19",
-        "durationDays": 1,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_85",
-        "name": "Add any backing marked by drywall guy",
-        "startDate": "2025-06-20",
-        "endDate": "2025-06-20",
-        "durationDays": 1,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_86",
-        "name": "Begin Cabinet Design with Cabinet Company",
-        "startDate": "2025-06-21",
-        "endDate": "2025-06-21",
-        "durationDays": 1,
-        "responsible": "Owner/Tyler",
-        "vendors": "1.Maple Landing Cabinetry",
-        "status": "pending_approval",
-        "decision": true
-      },
-      {
-        "id": "hb_87",
-        "name": "Make Tile Selections for bathrooms and tile flooring",
-        "startDate": "2025-06-22",
-        "endDate": "2025-06-22",
-        "durationDays": 1,
-        "responsible": "Owner/Tyler",
-        "vendors": "1.Floor and Decor",
-        "status": "pending_approval",
-        "decision": true
-      },
-      {
-        "id": "hb_88",
-        "name": "Make final selections for Finish trim and order package",
-        "startDate": "2025-06-23",
-        "endDate": "2025-06-23",
-        "durationDays": 1,
-        "responsible": "Super",
-        "status": "pending_approval",
-        "decision": true
-      },
-      {
-        "id": "hb_89",
-        "name": "Finalize appliance selections",
-        "startDate": "2025-06-24",
-        "endDate": "2025-06-24",
-        "durationDays": 1,
-        "responsible": "Owner/Tyler",
-        "status": "pending_approval",
-        "decision": true
-      },
-      {
-        "id": "hb_phase_pre_drywall",
-        "name": "\u25a0 PRE-DRYWALL",
-        "startDate": "2025-06-25",
-        "endDate": "2025-07-09",
-        "durationDays": 15,
+        "id": "hb_1_4",
+        "name": "Phase 3 \u2014 Insulation, Drywall & Exterior",
+        "startDate": "2025-07-08",
+        "endDate": "2025-09-24",
+        "durationDays": 79,
         "isPhase": true
       },
       {
-        "id": "hb_90",
-        "name": "Install insulation",
-        "startDate": "2025-06-25",
-        "endDate": "2025-06-26",
-        "durationDays": 2,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_91",
-        "name": "Insulation Inspection",
-        "startDate": "2025-06-27",
-        "endDate": "2025-06-28",
-        "durationDays": 2,
-        "responsible": "Syoer"
-      },
-      {
-        "id": "hb_92",
-        "name": "Stock site with drywall materials",
-        "startDate": "2025-06-29",
-        "endDate": "2025-06-30",
-        "durationDays": 2,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_93",
-        "name": "Fire up the furnaces for drywall guys if during cold weather",
-        "startDate": "2025-07-01",
-        "endDate": "2025-07-02",
-        "durationDays": 2,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_94",
-        "name": "Install drywall",
-        "startDate": "2025-07-03",
-        "endDate": "2025-07-04",
-        "durationDays": 2,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_95",
-        "name": "Drywall screw inspection",
-        "startDate": "2025-07-05",
-        "endDate": "2025-07-05",
-        "durationDays": 1,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_96",
-        "name": "Contractor walks job to see if there are potential issues with any drywall items (windows line up, long runs are straight not bowed out)",
-        "startDate": "2025-07-06",
-        "endDate": "2025-07-06",
-        "durationDays": 1,
-        "responsible": "Super/Tyler"
-      },
-      {
-        "id": "hb_97",
-        "name": "Drywall tape and mud and texture",
-        "startDate": "2025-07-07",
-        "endDate": "2025-07-07",
-        "durationDays": 1,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_98",
-        "name": "Walkthrough with home owner",
+        "id": "hb_1_4_1",
+        "name": "Measure for Interior doo",
         "startDate": "2025-07-08",
         "endDate": "2025-07-08",
         "durationDays": 1,
-        "responsible": "Tyler"
+        "status": "pending_approval",
+        "decision": true
       },
       {
-        "id": "hb_99",
-        "name": "Any fixes to drywall",
-        "startDate": "2025-07-09",
-        "endDate": "2025-07-09",
-        "durationDays": 1,
-        "responsible": "Super"
+        "id": "hb_1_4_2",
+        "name": "Order all Flooring, Tile a",
+        "startDate": "2025-08-04",
+        "endDate": "2025-07-27",
+        "durationDays": -7,
+        "status": "pending_approval",
+        "decision": true
       },
       {
-        "id": "hb_phase_finish",
-        "name": "\u25a0 FINISH",
-        "startDate": "2025-07-10",
-        "endDate": "2025-12-06",
-        "durationDays": 150,
-        "isPhase": true
+        "id": "hb_1_4_3",
+        "name": "Call for Water Meter to b",
+        "startDate": "2025-08-04",
+        "endDate": "2025-08-04",
+        "durationDays": 1
       },
       {
-        "id": "hb_100",
-        "name": "Begin tile work interior",
-        "startDate": "2025-07-10",
-        "endDate": "2025-07-13",
-        "durationDays": 4,
-        "responsible": "Super"
+        "id": "hb_1_4_4",
+        "name": "Call for Permanent Powe",
+        "startDate": "2025-08-04",
+        "endDate": "2025-08-04",
+        "durationDays": 1
       },
       {
-        "id": "hb_101",
-        "name": "House wrap",
-        "startDate": "2025-07-14",
-        "endDate": "2025-07-17",
-        "durationDays": 4,
-        "responsible": "Super"
+        "id": "hb_1_4_5",
+        "name": "Drywall Measurement an",
+        "startDate": "2025-08-04",
+        "endDate": "2025-08-04",
+        "durationDays": 1
       },
       {
-        "id": "hb_102",
-        "name": "Vapor barrier inspection",
-        "startDate": "2025-07-18",
-        "endDate": "2025-07-21",
-        "durationDays": 4,
-        "responsible": "Super"
+        "id": "hb_1_4_6",
+        "name": "Finalize Cabinet Layout",
+        "startDate": "2025-08-04",
+        "endDate": "2025-08-21",
+        "durationDays": 18,
+        "status": "pending_approval",
+        "decision": true
       },
       {
-        "id": "hb_103",
-        "name": "Stock site with exterior materials",
-        "startDate": "2025-07-22",
-        "endDate": "2025-07-25",
-        "durationDays": 4,
-        "responsible": "Super"
+        "id": "hb_1_4_7",
+        "name": "Select Tile and Finish Tr",
+        "startDate": "2025-08-04",
+        "endDate": "2025-08-12",
+        "durationDays": 9,
+        "status": "pending_approval",
+        "decision": true
       },
       {
-        "id": "hb_104",
-        "name": "Exterior should have started or be starting",
-        "startDate": "2025-07-26",
-        "endDate": "2025-07-29",
-        "durationDays": 4,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_105",
-        "name": "Lathe inspection",
-        "startDate": "2025-07-30",
-        "endDate": "2025-08-02",
-        "durationDays": 4,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_106",
-        "name": "Walk through with finish carpenter, home owner and builder",
-        "startDate": "2025-08-03",
+        "id": "hb_1_4_8",
+        "name": "Shower Pan install/inspe",
+        "startDate": "2025-08-04",
         "endDate": "2025-08-06",
-        "durationDays": 4,
-        "responsible": "Super"
+        "durationDays": 3
       },
       {
-        "id": "hb_107",
-        "name": "Finalize speciality interior trim design/selections",
-        "startDate": "2025-08-07",
-        "endDate": "2025-08-10",
-        "durationDays": 4,
-        "responsible": "Super",
-        "status": "pending_approval",
-        "decision": true
+        "id": "hb_1_4_9",
+        "name": "Insulation Begins",
+        "startDate": "2025-08-04",
+        "endDate": "2025-08-08",
+        "durationDays": 5
       },
       {
-        "id": "hb_108",
-        "name": "Stock house with interior finish materials",
+        "id": "hb_1_4_10",
+        "name": "Inspection for Insulation",
         "startDate": "2025-08-11",
-        "endDate": "2025-08-14",
-        "durationDays": 4,
-        "responsible": "Super"
+        "endDate": "2025-08-13",
+        "durationDays": 3
       },
       {
-        "id": "hb_109",
-        "name": "Deliver flooring materials for tile work",
-        "startDate": "2025-08-15",
+        "id": "hb_1_4_11",
+        "name": "Stock Drywall Materials",
+        "startDate": "2025-08-14",
         "endDate": "2025-08-18",
-        "durationDays": 4,
-        "responsible": "Super"
+        "durationDays": 5
       },
       {
-        "id": "hb_110",
-        "name": "Start interior finish work",
+        "id": "hb_1_4_12",
+        "name": "Install Drywall",
         "startDate": "2025-08-19",
-        "endDate": "2025-08-22",
-        "durationDays": 4,
-        "responsible": "Super"
+        "endDate": "2025-08-25",
+        "durationDays": 7
       },
       {
-        "id": "hb_111",
-        "name": "Exterior should be well on its way at this point",
-        "startDate": "2025-08-23",
+        "id": "hb_1_4_13",
+        "name": "Drywall inspection",
+        "startDate": "2025-08-26",
         "endDate": "2025-08-26",
-        "durationDays": 4,
-        "responsible": "Super"
+        "durationDays": 1
       },
       {
-        "id": "hb_112",
-        "name": "Make any final changes to cabinet layout",
+        "id": "hb_1_4_14",
+        "name": "Decision on Texture and",
+        "startDate": "2025-08-26",
+        "endDate": "2025-08-26",
+        "durationDays": 1
+      },
+      {
+        "id": "hb_1_4_15",
+        "name": "Tape,Mud,Texture",
         "startDate": "2025-08-27",
-        "endDate": "2025-08-29",
-        "durationDays": 3,
-        "responsible": "Super"
+        "endDate": "2025-09-03",
+        "durationDays": 8
       },
       {
-        "id": "hb_113",
-        "name": "Make final selections for Interior paint colors and/or wallpaper",
-        "startDate": "2025-08-30",
-        "endDate": "2025-09-01",
-        "durationDays": 3,
-        "responsible": "Super",
-        "status": "pending_approval",
-        "decision": true
-      },
-      {
-        "id": "hb_114",
-        "name": "Complete finish carpentry",
-        "startDate": "2025-09-02",
+        "id": "hb_1_4_16",
+        "name": "Home Owner Walkthroug",
+        "startDate": "2025-09-04",
         "endDate": "2025-09-04",
-        "durationDays": 3,
-        "responsible": "Super"
+        "durationDays": 1,
+        "status": "pending_approval",
+        "decision": true
       },
       {
-        "id": "hb_115",
-        "name": "Complete all tile work",
+        "id": "hb_1_4_17",
+        "name": "Install all hard surface flo",
         "startDate": "2025-09-05",
-        "endDate": "2025-09-07",
-        "durationDays": 3,
-        "responsible": "Super"
+        "endDate": "2025-09-24",
+        "durationDays": 20
       },
       {
-        "id": "hb_116",
-        "name": "Template/measure for any shower glass",
-        "startDate": "2025-09-08",
-        "endDate": "2025-09-10",
-        "durationDays": 3,
-        "responsible": "Super"
+        "id": "hb_1_4_18",
+        "name": "House Wrap for exterior",
+        "startDate": "2025-08-04",
+        "endDate": "2025-08-04",
+        "durationDays": 1
       },
       {
-        "id": "hb_117",
-        "name": "Get any extra materials returned",
-        "startDate": "2025-09-11",
-        "endDate": "2025-09-13",
-        "durationDays": 3,
-        "responsible": "Super"
+        "id": "hb_1_4_19",
+        "name": "Soffit Installation",
+        "startDate": "2025-08-05",
+        "endDate": "2025-08-08",
+        "durationDays": 4
       },
       {
-        "id": "hb_118",
-        "name": "Begin Paint prep",
-        "startDate": "2025-09-14",
-        "endDate": "2025-09-16",
-        "durationDays": 3,
-        "responsible": "Super"
+        "id": "hb_1_4_20",
+        "name": "Attic Insulation Installed",
+        "startDate": "2025-09-05",
+        "endDate": "2025-09-08",
+        "durationDays": 4
       },
       {
-        "id": "hb_119",
-        "name": "Painting interior",
-        "startDate": "2025-09-17",
-        "endDate": "2025-09-19",
-        "durationDays": 3,
-        "responsible": "Super"
+        "id": "hb_1_4_21",
+        "name": "Scratch coat for stucco a",
+        "startDate": "2025-08-11",
+        "endDate": "2025-08-15",
+        "durationDays": 5
       },
       {
-        "id": "hb_120",
-        "name": "Set forms driveways/walkways/patios/AC pads",
-        "startDate": "2025-09-20",
-        "endDate": "2025-09-22",
-        "durationDays": 3,
-        "responsible": "Super"
+        "id": "hb_1_4_22",
+        "name": "Inspection of scratch coa",
+        "startDate": "2025-08-18",
+        "endDate": "2025-08-18",
+        "durationDays": 1
       },
       {
-        "id": "hb_121",
-        "name": "Pour driveways/walkways/patios/AC pads",
-        "startDate": "2025-09-23",
-        "endDate": "2025-09-25",
-        "durationDays": 3,
-        "responsible": "Super"
+        "id": "hb_1_4_23",
+        "name": "Stone Work",
+        "startDate": "2025-08-18",
+        "endDate": "2025-09-12",
+        "durationDays": 26
       },
       {
-        "id": "hb_122",
-        "name": "Garage doors should be installed",
-        "startDate": "2025-09-26",
-        "endDate": "2025-09-28",
-        "durationDays": 3,
-        "responsible": "Super"
+        "id": "hb_1_4_24",
+        "name": "Apply Finish Stucco Coa",
+        "startDate": "2025-09-09",
+        "endDate": "2025-09-11",
+        "durationDays": 3
       },
       {
-        "id": "hb_123",
-        "name": "Make sure to place garage door openers and pad in a safe place",
-        "startDate": "2025-09-29",
-        "endDate": "2025-10-01",
-        "durationDays": 3,
-        "responsible": "Super"
+        "id": "hb_1_4_25",
+        "name": "Remove Scaffolding and",
+        "startDate": "2025-09-10",
+        "endDate": "2025-09-11",
+        "durationDays": 2
       },
       {
-        "id": "hb_124",
-        "name": "Depending on where soffit is at, when it\u2019s complete get attic insulation blown in",
-        "startDate": "2025-10-02",
-        "endDate": "2025-10-04",
-        "durationDays": 3,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_125",
-        "name": "Make final selection for countertops",
-        "startDate": "2025-10-05",
-        "endDate": "2025-10-07",
-        "durationDays": 3,
-        "responsible": "Super",
-        "status": "pending_approval",
-        "decision": true
-      },
-      {
-        "id": "hb_126",
-        "name": "Make final selections for hardware",
-        "startDate": "2025-10-08",
-        "endDate": "2025-10-10",
-        "durationDays": 3,
-        "responsible": "Super",
-        "status": "pending_approval",
-        "decision": true
-      },
-      {
-        "id": "hb_127",
-        "name": "Paint complete",
-        "startDate": "2025-10-11",
-        "endDate": "2025-10-13",
-        "durationDays": 3,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_128",
-        "name": "Electrical Finish can start",
-        "startDate": "2025-10-14",
-        "endDate": "2025-10-16",
-        "durationDays": 3,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_129",
-        "name": "Install hard-surface flooring",
-        "startDate": "2025-10-17",
-        "endDate": "2025-10-19",
-        "durationDays": 3,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_130",
-        "name": "Clean start up on any fireplaces",
-        "startDate": "2025-10-20",
-        "endDate": "2025-10-22",
-        "durationDays": 3,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_131",
-        "name": "Set ACs, water heaters, water softeners",
-        "startDate": "2025-10-23",
-        "endDate": "2025-10-25",
-        "durationDays": 3,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_132",
-        "name": "Cabinets complete at least base installation",
-        "startDate": "2025-10-26",
-        "endDate": "2025-10-28",
-        "durationDays": 3,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_133",
-        "name": "Countertop template",
-        "startDate": "2025-10-29",
-        "endDate": "2025-10-31",
-        "durationDays": 3,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_134",
-        "name": "Set backbase, install balusters, fix any Finish carpenters items",
-        "startDate": "2025-11-01",
-        "endDate": "2025-11-03",
-        "durationDays": 3,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_135",
-        "name": "Electrical Finish should be going",
-        "startDate": "2025-11-04",
-        "endDate": "2025-11-06",
-        "durationDays": 3,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_136",
-        "name": "Countertop Installation",
-        "startDate": "2025-11-07",
-        "endDate": "2025-11-09",
-        "durationDays": 3,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_137",
-        "name": "Plumbing finish trim begins",
-        "startDate": "2025-11-10",
-        "endDate": "2025-11-12",
-        "durationDays": 3,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_138",
-        "name": "Electrical wraps up and should have all power on and breakers in for AC units and appliances",
-        "startDate": "2025-11-13",
-        "endDate": "2025-11-15",
-        "durationDays": 3,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_139",
-        "name": "Appliance Installation",
-        "startDate": "2025-11-16",
-        "endDate": "2025-11-18",
-        "durationDays": 3,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_140",
-        "name": "Test all appliances and gas units interior and exterior",
-        "startDate": "2025-11-19",
-        "endDate": "2025-11-21",
-        "durationDays": 3,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_141",
-        "name": "Exterior grading and site cleanup",
-        "startDate": "2025-11-22",
-        "endDate": "2025-11-24",
-        "durationDays": 3,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_142",
-        "name": "Begin Finish HVAC trims",
-        "startDate": "2025-11-25",
-        "endDate": "2025-11-27",
-        "durationDays": 3,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_143",
-        "name": "Get subfloor vacuumed and prepped for carpet",
-        "startDate": "2025-11-28",
-        "endDate": "2025-11-30",
-        "durationDays": 3,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_144",
-        "name": "Carpet installation",
-        "startDate": "2025-12-01",
-        "endDate": "2025-12-03",
-        "durationDays": 3,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_145",
-        "name": "Install mirrors, shower doors, hardware, etc",
-        "startDate": "2025-12-04",
-        "endDate": "2025-12-06",
-        "durationDays": 3,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_phase_closeout",
-        "name": "\u25a0 CLOSEOUT",
-        "startDate": "2025-12-07",
-        "endDate": "2026-01-05",
-        "durationDays": 30,
+        "id": "hb_1_5",
+        "name": "Phase 4 \u2014 Finish Work",
+        "startDate": "2025-08-29",
+        "endDate": "2025-12-05",
+        "durationDays": 99,
         "isPhase": true
       },
       {
-        "id": "hb_146",
-        "name": "Get blower door test",
-        "startDate": "2025-12-07",
-        "endDate": "2025-12-08",
-        "durationDays": 2,
-        "responsible": "Super"
+        "id": "hb_1_5_1",
+        "name": "Excavator Prep for Drive",
+        "startDate": "2025-09-12",
+        "endDate": "2025-09-16",
+        "durationDays": 5
       },
       {
-        "id": "hb_147",
-        "name": "Post blower door test inside of electrical panel and check for insulation sticker on panel door or furnace",
-        "startDate": "2025-12-09",
-        "endDate": "2025-12-10",
-        "durationDays": 2,
-        "responsible": "Super"
+        "id": "hb_1_5_2",
+        "name": "Pour Driveways, Walkwa",
+        "startDate": "2025-09-17",
+        "endDate": "2025-09-23",
+        "durationDays": 7
       },
       {
-        "id": "hb_148",
-        "name": "Cabinet Company wrap up handles, knobs and touch ups",
-        "startDate": "2025-12-11",
-        "endDate": "2025-12-11",
+        "id": "hb_1_5_3",
+        "name": "Select Counter Tops and",
+        "startDate": "2025-08-29",
+        "endDate": "2025-08-29",
         "durationDays": 1,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_149",
-        "name": "Get exterior windows cleaned",
-        "startDate": "2025-12-12",
-        "endDate": "2025-12-12",
-        "durationDays": 1,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_150",
-        "name": "Make any final returns",
-        "startDate": "2025-12-13",
-        "endDate": "2025-12-13",
-        "durationDays": 1,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_151",
-        "name": "Place extra spare material in cold storage or as directed by owner",
-        "startDate": "2025-12-14",
-        "endDate": "2025-12-14",
-        "durationDays": 1,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_152",
-        "name": "Clean up, power wash all exterior surfaces and garage floors",
-        "startDate": "2025-12-15",
-        "endDate": "2025-12-15",
-        "durationDays": 1,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_153",
-        "name": "If applicable do epoxy for garage floors",
-        "startDate": "2025-12-16",
-        "endDate": "2025-12-16",
-        "durationDays": 1,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_154",
-        "name": "Have toilet and dumpster removed",
-        "startDate": "2025-12-17",
-        "endDate": "2025-12-17",
-        "durationDays": 1,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_155",
-        "name": "All gutters extended 10\u2019 from house",
-        "startDate": "2025-12-18",
-        "endDate": "2025-12-18",
-        "durationDays": 1,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_156",
-        "name": "Street gutters and site cleared of debri",
-        "startDate": "2025-12-19",
-        "endDate": "2025-12-19",
-        "durationDays": 1,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_157",
-        "name": "Attic access door in garage secured with latches",
-        "startDate": "2025-12-20",
-        "endDate": "2025-12-20",
-        "durationDays": 1,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_158",
-        "name": "Make sure address house numbers posted clearly",
-        "startDate": "2025-12-21",
-        "endDate": "2025-12-21",
-        "durationDays": 1,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_159",
-        "name": "Interior cleaning",
-        "startDate": "2025-12-22",
-        "endDate": "2025-12-22",
-        "durationDays": 1,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_160",
-        "name": "Final Inspection",
-        "startDate": "2025-12-23",
-        "endDate": "2025-12-23",
-        "durationDays": 1,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_161",
-        "name": "Final inspection corrections made",
-        "startDate": "2025-12-24",
-        "endDate": "2025-12-24",
-        "durationDays": 1,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_162",
-        "name": "Re Inspect if applicable",
-        "startDate": "2025-12-25",
-        "endDate": "2025-12-25",
-        "durationDays": 1,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_163",
-        "name": "Certificate of Occupancy released from city",
-        "startDate": "2025-12-26",
-        "endDate": "2025-12-26",
-        "durationDays": 1,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_164",
-        "name": "Final site cleanup",
-        "startDate": "2025-12-27",
-        "endDate": "2025-12-27",
-        "durationDays": 1,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_165",
-        "name": "Touchups to the interior cleaning if needed",
-        "startDate": "2025-12-28",
-        "endDate": "2025-12-28",
-        "durationDays": 1,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_166",
-        "name": "Final walkthrough with the owner",
-        "startDate": "2025-12-29",
-        "endDate": "2025-12-29",
-        "durationDays": 1,
-        "responsible": "Tyler/Super/Owner"
-      },
-      {
-        "id": "hb_167",
-        "name": "Final punch list made",
-        "startDate": "2025-12-30",
-        "endDate": "2025-12-30",
-        "durationDays": 1,
-        "responsible": "Super"
-      },
-      {
-        "id": "hb_168",
-        "name": "Adjustments to final Invoices",
-        "startDate": "2025-12-31",
-        "endDate": "2025-12-31",
-        "durationDays": 1,
-        "responsible": "Tyler/Office"
-      },
-      {
-        "id": "hb_169",
-        "name": "Final draw is collected and/or agreement is determined and signed for move in",
-        "startDate": "2026-01-01",
-        "endDate": "2026-01-01",
-        "durationDays": 1,
-        "responsible": "Office"
-      },
-      {
-        "id": "hb_170",
-        "name": "Owner closes on house",
-        "startDate": "2026-01-02",
-        "endDate": "2026-01-02",
-        "durationDays": 1,
-        "responsible": "Owner",
         "status": "pending_approval",
         "decision": true
       },
       {
-        "id": "hb_171",
-        "name": "Move in",
-        "startDate": "2026-01-03",
-        "endDate": "2026-01-03",
+        "id": "hb_1_5_4",
+        "name": "Install Finish Carpentry (",
+        "startDate": "2025-09-25",
+        "endDate": "2025-10-08",
+        "durationDays": 14
+      },
+      {
+        "id": "hb_1_5_5",
+        "name": "Tile install for all showers",
+        "startDate": "2025-09-25",
+        "endDate": "2025-10-08",
+        "durationDays": 14
+      },
+      {
+        "id": "hb_1_5_6",
+        "name": "Measure for shower glas",
+        "startDate": "2025-10-09",
+        "endDate": "2025-10-09",
         "durationDays": 1,
-        "responsible": "Owner",
         "status": "pending_approval",
         "decision": true
       },
       {
-        "id": "hb_172",
-        "name": "Complete punch list as agreed",
-        "startDate": "2026-01-04",
-        "endDate": "2026-01-04",
-        "durationDays": 1,
-        "responsible": "Super"
+        "id": "hb_1_5_7",
+        "name": "Paint",
+        "startDate": "2025-10-09",
+        "endDate": "2025-10-22",
+        "durationDays": 14
       },
       {
-        "id": "hb_173",
-        "name": "1 year warranty",
-        "startDate": "2026-01-05",
-        "endDate": "2026-01-05",
+        "id": "hb_1_5_8",
+        "name": "Install Garage Doors",
+        "startDate": "2025-10-14",
+        "endDate": "2025-10-15",
+        "durationDays": 2
+      },
+      {
+        "id": "hb_1_5_9",
+        "name": "Install Cabinets",
+        "startDate": "2025-10-23",
+        "endDate": "2025-10-29",
+        "durationDays": 7
+      },
+      {
+        "id": "hb_1_5_10",
+        "name": "Countertop Install",
+        "startDate": "2025-10-30",
+        "endDate": "2025-11-03",
+        "durationDays": 5
+      },
+      {
+        "id": "hb_1_5_11",
+        "name": "Finish Plumbing and HVA",
+        "startDate": "2025-11-04",
+        "endDate": "2025-11-10",
+        "durationDays": 7
+      },
+      {
+        "id": "hb_1_5_12",
+        "name": "Finish Electrical",
+        "startDate": "2025-11-11",
+        "endDate": "2025-11-17",
+        "durationDays": 7
+      },
+      {
+        "id": "hb_1_5_13",
+        "name": "Appliance Install",
+        "startDate": "2025-11-18",
+        "endDate": "2025-11-18",
+        "durationDays": 1
+      },
+      {
+        "id": "hb_1_5_14",
+        "name": "Carpet Install",
+        "startDate": "2025-11-18",
+        "endDate": "2025-11-20",
+        "durationDays": 3
+      },
+      {
+        "id": "hb_1_5_15",
+        "name": "Install Mirrors and Show",
+        "startDate": "2025-11-18",
+        "endDate": "2025-11-20",
+        "durationDays": 3
+      },
+      {
+        "id": "hb_1_5_16",
+        "name": "Blower Doors Test and C",
+        "startDate": "2025-11-21",
+        "endDate": "2025-11-25",
+        "durationDays": 5
+      },
+      {
+        "id": "hb_1_5_17",
+        "name": "Epoxy for Garage Floors",
+        "startDate": "2025-11-26",
+        "endDate": "2025-11-28",
+        "durationDays": 3
+      },
+      {
+        "id": "hb_1_5_18",
+        "name": "Interior Cleaning",
+        "startDate": "2025-12-01",
+        "endDate": "2025-12-02",
+        "durationDays": 2
+      },
+      {
+        "id": "hb_1_5_19",
+        "name": "Walkthrough with client",
+        "startDate": "2025-12-03",
+        "endDate": "2025-12-03",
         "durationDays": 1,
-        "responsible": "Tyler"
+        "status": "pending_approval",
+        "decision": true
+      },
+      {
+        "id": "hb_1_5_20",
+        "name": "City Final Inspection",
+        "startDate": "2025-12-03",
+        "endDate": "2025-12-03",
+        "durationDays": 1
+      },
+      {
+        "id": "hb_1_5_21",
+        "name": "Final Punch List Made a",
+        "startDate": "2025-12-04",
+        "endDate": "2025-12-05",
+        "durationDays": 2
       }
     ],
     "links": [
       {
-        "id": "l_hb_phase_pre_construction_hb_phase_foundation",
-        "sourceId": "hb_phase_pre_construction",
-        "targetId": "hb_phase_foundation",
+        "id": "l_hb_1_1_hb_1_2",
+        "sourceId": "hb_1_1",
+        "targetId": "hb_1_2",
         "type": "FS"
       },
       {
-        "id": "l_hb_phase_foundation_hb_phase_framing",
-        "sourceId": "hb_phase_foundation",
-        "targetId": "hb_phase_framing",
+        "id": "l_hb_1_2_hb_1_3",
+        "sourceId": "hb_1_2",
+        "targetId": "hb_1_3",
         "type": "FS"
       },
       {
-        "id": "l_hb_phase_framing_hb_phase_rough_in",
-        "sourceId": "hb_phase_framing",
-        "targetId": "hb_phase_rough_in",
+        "id": "l_hb_1_3_hb_1_4",
+        "sourceId": "hb_1_3",
+        "targetId": "hb_1_4",
         "type": "FS"
       },
       {
-        "id": "l_hb_phase_rough_in_hb_phase_pre_drywall",
-        "sourceId": "hb_phase_rough_in",
-        "targetId": "hb_phase_pre_drywall",
-        "type": "FS"
-      },
-      {
-        "id": "l_hb_phase_pre_drywall_hb_phase_finish",
-        "sourceId": "hb_phase_pre_drywall",
-        "targetId": "hb_phase_finish",
-        "type": "FS"
-      },
-      {
-        "id": "l_hb_phase_finish_hb_phase_closeout",
-        "sourceId": "hb_phase_finish",
-        "targetId": "hb_phase_closeout",
+        "id": "l_hb_1_4_hb_1_5",
+        "sourceId": "hb_1_4",
+        "targetId": "hb_1_5",
         "type": "FS"
       }
     ]
@@ -1602,7 +719,7 @@ export const STARTER_SCHEDULE_TEMPLATES: StarterScheduleTemplate[] = [
   {
     "key": "basement_finish",
     "name": "Basement Finishing",
-    "description": "Finishing an unfinished basement. Edit/expand in the Gantt editor.",
+    "description": "Finishing an unfinished basement. Edit in the Gantt editor.",
     "tasks": [
       {
         "id": "basement_finish_design_permit",
@@ -1656,8 +773,8 @@ export const STARTER_SCHEDULE_TEMPLATES: StarterScheduleTemplate[] = [
         "durationDays": 4
       },
       {
-        "id": "basement_finish_select_finishes_floor_paint_trim",
-        "name": "Select Finishes (floor/paint/trim)",
+        "id": "basement_finish_select_finishes",
+        "name": "Select Finishes",
         "startDate": "2025-02-19",
         "endDate": "2025-02-19",
         "durationDays": 1,
@@ -1749,14 +866,14 @@ export const STARTER_SCHEDULE_TEMPLATES: StarterScheduleTemplate[] = [
         "type": "FS"
       },
       {
-        "id": "l_basement_finish_insulation_basement_finish_select_finishes_floor_paint_trim",
+        "id": "l_basement_finish_insulation_basement_finish_select_finishes",
         "sourceId": "basement_finish_insulation",
-        "targetId": "basement_finish_select_finishes_floor_paint_trim",
+        "targetId": "basement_finish_select_finishes",
         "type": "FS"
       },
       {
-        "id": "l_basement_finish_select_finishes_floor_paint_trim_basement_finish_drywall",
-        "sourceId": "basement_finish_select_finishes_floor_paint_trim",
+        "id": "l_basement_finish_select_finishes_basement_finish_drywall",
+        "sourceId": "basement_finish_select_finishes",
         "targetId": "basement_finish_drywall",
         "type": "FS"
       },
@@ -1795,7 +912,7 @@ export const STARTER_SCHEDULE_TEMPLATES: StarterScheduleTemplate[] = [
   {
     "key": "pool_build",
     "name": "Pool Build",
-    "description": "In-ground pool construction. Edit/expand in the Gantt editor.",
+    "description": "In-ground pool construction. Edit in the Gantt editor.",
     "tasks": [
       {
         "id": "pool_build_design_permit",
@@ -1807,7 +924,7 @@ export const STARTER_SCHEDULE_TEMPLATES: StarterScheduleTemplate[] = [
         "decision": true
       },
       {
-        "id": "pool_build_select_finishes_tile_coping_plaster",
+        "id": "pool_build_select_finishes_tile_cop",
         "name": "Select Finishes (tile/coping/plaster)",
         "startDate": "2025-01-20",
         "endDate": "2025-01-20",
@@ -1830,7 +947,7 @@ export const STARTER_SCHEDULE_TEMPLATES: StarterScheduleTemplate[] = [
         "durationDays": 4
       },
       {
-        "id": "pool_build_rough_plumbing_electrical",
+        "id": "pool_build_rough_plumbing_electrica",
         "name": "Rough Plumbing & Electrical",
         "startDate": "2025-01-30",
         "endDate": "2025-02-04",
@@ -1867,8 +984,8 @@ export const STARTER_SCHEDULE_TEMPLATES: StarterScheduleTemplate[] = [
         "decision": true
       },
       {
-        "id": "pool_build_plaster_interior_finish",
-        "name": "Plaster / Interior Finish",
+        "id": "pool_build_plaster_interior",
+        "name": "Plaster / Interior",
         "startDate": "2025-02-26",
         "endDate": "2025-03-01",
         "durationDays": 4
@@ -1890,7 +1007,7 @@ export const STARTER_SCHEDULE_TEMPLATES: StarterScheduleTemplate[] = [
         "decision": true
       },
       {
-        "id": "pool_build_final_inspection_handover",
+        "id": "pool_build_final_inspection_handove",
         "name": "Final Inspection & Handover",
         "startDate": "2025-03-11",
         "endDate": "2025-03-13",
@@ -1899,14 +1016,14 @@ export const STARTER_SCHEDULE_TEMPLATES: StarterScheduleTemplate[] = [
     ],
     "links": [
       {
-        "id": "l_pool_build_design_permit_pool_build_select_finishes_tile_coping_plaster",
+        "id": "l_pool_build_design_permit_pool_build_select_finishes_tile_cop",
         "sourceId": "pool_build_design_permit",
-        "targetId": "pool_build_select_finishes_tile_coping_plaster",
+        "targetId": "pool_build_select_finishes_tile_cop",
         "type": "FS"
       },
       {
-        "id": "l_pool_build_select_finishes_tile_coping_plaster_pool_build_layout_excavation",
-        "sourceId": "pool_build_select_finishes_tile_coping_plaster",
+        "id": "l_pool_build_select_finishes_tile_cop_pool_build_layout_excavation",
+        "sourceId": "pool_build_select_finishes_tile_cop",
         "targetId": "pool_build_layout_excavation",
         "type": "FS"
       },
@@ -1917,14 +1034,14 @@ export const STARTER_SCHEDULE_TEMPLATES: StarterScheduleTemplate[] = [
         "type": "FS"
       },
       {
-        "id": "l_pool_build_steel_bond_beam_pool_build_rough_plumbing_electrical",
+        "id": "l_pool_build_steel_bond_beam_pool_build_rough_plumbing_electrica",
         "sourceId": "pool_build_steel_bond_beam",
-        "targetId": "pool_build_rough_plumbing_electrical",
+        "targetId": "pool_build_rough_plumbing_electrica",
         "type": "FS"
       },
       {
-        "id": "l_pool_build_rough_plumbing_electrical_pool_build_inspections",
-        "sourceId": "pool_build_rough_plumbing_electrical",
+        "id": "l_pool_build_rough_plumbing_electrica_pool_build_inspections",
+        "sourceId": "pool_build_rough_plumbing_electrica",
         "targetId": "pool_build_inspections",
         "type": "FS"
       },
@@ -1947,14 +1064,14 @@ export const STARTER_SCHEDULE_TEMPLATES: StarterScheduleTemplate[] = [
         "type": "FS"
       },
       {
-        "id": "l_pool_build_decking_pool_build_plaster_interior_finish",
+        "id": "l_pool_build_decking_pool_build_plaster_interior",
         "sourceId": "pool_build_decking",
-        "targetId": "pool_build_plaster_interior_finish",
+        "targetId": "pool_build_plaster_interior",
         "type": "FS"
       },
       {
-        "id": "l_pool_build_plaster_interior_finish_pool_build_equipment_set_startup",
-        "sourceId": "pool_build_plaster_interior_finish",
+        "id": "l_pool_build_plaster_interior_pool_build_equipment_set_startup",
+        "sourceId": "pool_build_plaster_interior",
         "targetId": "pool_build_equipment_set_startup",
         "type": "FS"
       },
@@ -1965,9 +1082,9 @@ export const STARTER_SCHEDULE_TEMPLATES: StarterScheduleTemplate[] = [
         "type": "FS"
       },
       {
-        "id": "l_pool_build_fence_safety_pool_build_final_inspection_handover",
+        "id": "l_pool_build_fence_safety_pool_build_final_inspection_handove",
         "sourceId": "pool_build_fence_safety",
-        "targetId": "pool_build_final_inspection_handover",
+        "targetId": "pool_build_final_inspection_handove",
         "type": "FS"
       }
     ]
@@ -1975,7 +1092,7 @@ export const STARTER_SCHEDULE_TEMPLATES: StarterScheduleTemplate[] = [
   {
     "key": "house_remodel",
     "name": "House Remodel",
-    "description": "Interior remodel / renovation. Edit/expand in the Gantt editor.",
+    "description": "Interior remodel / renovation. Edit in the Gantt editor.",
     "tasks": [
       {
         "id": "house_remodel_design_selections",
@@ -1994,52 +1111,54 @@ export const STARTER_SCHEDULE_TEMPLATES: StarterScheduleTemplate[] = [
         "durationDays": 7
       },
       {
-        "id": "house_remodel_demo",
-        "name": "Demo",
+        "id": "house_remodel_demo_reframe",
+        "name": "Demo & Reframe",
         "startDate": "2025-01-27",
         "endDate": "2025-02-02",
         "durationDays": 7
       },
       {
-        "id": "house_remodel_framing_changes",
-        "name": "Framing Changes",
+        "id": "house_remodel_install_new_windows_door",
+        "name": "Install New Windows & Doors",
         "startDate": "2025-02-03",
-        "endDate": "2025-02-09",
-        "durationDays": 7
+        "endDate": "2025-02-06",
+        "durationDays": 4,
+        "status": "pending_approval",
+        "decision": true
       },
       {
-        "id": "house_remodel_rough_in_plumbing_elec_hvac",
+        "id": "house_remodel_rough_in_plumbing_elec_h",
         "name": "Rough-In: Plumbing/Elec/HVAC",
-        "startDate": "2025-02-10",
-        "endDate": "2025-02-19",
+        "startDate": "2025-02-07",
+        "endDate": "2025-02-16",
         "durationDays": 10
       },
       {
         "id": "house_remodel_inspections",
         "name": "Inspections",
-        "startDate": "2025-02-20",
-        "endDate": "2025-02-22",
+        "startDate": "2025-02-17",
+        "endDate": "2025-02-19",
         "durationDays": 3
       },
       {
         "id": "house_remodel_insulation",
         "name": "Insulation",
-        "startDate": "2025-02-23",
-        "endDate": "2025-02-25",
+        "startDate": "2025-02-20",
+        "endDate": "2025-02-22",
         "durationDays": 3
       },
       {
         "id": "house_remodel_drywall",
         "name": "Drywall",
-        "startDate": "2025-02-26",
-        "endDate": "2025-03-07",
+        "startDate": "2025-02-23",
+        "endDate": "2025-03-04",
         "durationDays": 10
       },
       {
         "id": "house_remodel_select_finishes",
         "name": "Select Finishes",
-        "startDate": "2025-03-08",
-        "endDate": "2025-03-08",
+        "startDate": "2025-03-05",
+        "endDate": "2025-03-05",
         "durationDays": 1,
         "status": "pending_approval",
         "decision": true
@@ -2047,8 +1166,8 @@ export const STARTER_SCHEDULE_TEMPLATES: StarterScheduleTemplate[] = [
       {
         "id": "house_remodel_cabinets",
         "name": "Cabinets",
-        "startDate": "2025-03-09",
-        "endDate": "2025-03-18",
+        "startDate": "2025-03-06",
+        "endDate": "2025-03-15",
         "durationDays": 10,
         "status": "pending_approval",
         "decision": true
@@ -2056,8 +1175,8 @@ export const STARTER_SCHEDULE_TEMPLATES: StarterScheduleTemplate[] = [
       {
         "id": "house_remodel_countertops",
         "name": "Countertops",
-        "startDate": "2025-03-19",
-        "endDate": "2025-03-22",
+        "startDate": "2025-03-16",
+        "endDate": "2025-03-19",
         "durationDays": 4,
         "status": "pending_approval",
         "decision": true
@@ -2065,22 +1184,22 @@ export const STARTER_SCHEDULE_TEMPLATES: StarterScheduleTemplate[] = [
       {
         "id": "house_remodel_trim_doors",
         "name": "Trim & Doors",
-        "startDate": "2025-03-23",
-        "endDate": "2025-04-01",
+        "startDate": "2025-03-20",
+        "endDate": "2025-03-29",
         "durationDays": 10
       },
       {
         "id": "house_remodel_paint",
         "name": "Paint",
-        "startDate": "2025-04-02",
-        "endDate": "2025-04-08",
+        "startDate": "2025-03-30",
+        "endDate": "2025-04-05",
         "durationDays": 7
       },
       {
         "id": "house_remodel_flooring",
         "name": "Flooring",
-        "startDate": "2025-04-09",
-        "endDate": "2025-04-16",
+        "startDate": "2025-04-06",
+        "endDate": "2025-04-13",
         "durationDays": 8,
         "status": "pending_approval",
         "decision": true
@@ -2088,8 +1207,8 @@ export const STARTER_SCHEDULE_TEMPLATES: StarterScheduleTemplate[] = [
       {
         "id": "house_remodel_fixtures_appliances",
         "name": "Fixtures & Appliances",
-        "startDate": "2025-04-17",
-        "endDate": "2025-04-21",
+        "startDate": "2025-04-14",
+        "endDate": "2025-04-18",
         "durationDays": 5,
         "status": "pending_approval",
         "decision": true
@@ -2097,8 +1216,8 @@ export const STARTER_SCHEDULE_TEMPLATES: StarterScheduleTemplate[] = [
       {
         "id": "house_remodel_final_clean_punch",
         "name": "Final Clean & Punch",
-        "startDate": "2025-04-22",
-        "endDate": "2025-04-26",
+        "startDate": "2025-04-19",
+        "endDate": "2025-04-23",
         "durationDays": 5
       }
     ],
@@ -2110,26 +1229,26 @@ export const STARTER_SCHEDULE_TEMPLATES: StarterScheduleTemplate[] = [
         "type": "FS"
       },
       {
-        "id": "l_house_remodel_permit_house_remodel_demo",
+        "id": "l_house_remodel_permit_house_remodel_demo_reframe",
         "sourceId": "house_remodel_permit",
-        "targetId": "house_remodel_demo",
+        "targetId": "house_remodel_demo_reframe",
         "type": "FS"
       },
       {
-        "id": "l_house_remodel_demo_house_remodel_framing_changes",
-        "sourceId": "house_remodel_demo",
-        "targetId": "house_remodel_framing_changes",
+        "id": "l_house_remodel_demo_reframe_house_remodel_install_new_windows_door",
+        "sourceId": "house_remodel_demo_reframe",
+        "targetId": "house_remodel_install_new_windows_door",
         "type": "FS"
       },
       {
-        "id": "l_house_remodel_framing_changes_house_remodel_rough_in_plumbing_elec_hvac",
-        "sourceId": "house_remodel_framing_changes",
-        "targetId": "house_remodel_rough_in_plumbing_elec_hvac",
+        "id": "l_house_remodel_install_new_windows_door_house_remodel_rough_in_plumbing_elec_h",
+        "sourceId": "house_remodel_install_new_windows_door",
+        "targetId": "house_remodel_rough_in_plumbing_elec_h",
         "type": "FS"
       },
       {
-        "id": "l_house_remodel_rough_in_plumbing_elec_hvac_house_remodel_inspections",
-        "sourceId": "house_remodel_rough_in_plumbing_elec_hvac",
+        "id": "l_house_remodel_rough_in_plumbing_elec_h_house_remodel_inspections",
+        "sourceId": "house_remodel_rough_in_plumbing_elec_h",
         "targetId": "house_remodel_inspections",
         "type": "FS"
       },
