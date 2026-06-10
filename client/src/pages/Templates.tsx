@@ -245,6 +245,27 @@ function DetailView({
       }
       return;
     }
+    if (category === 'schedule') {
+      // Schedule templates live in `scheduleTemplates` and open straight into the
+      // Gantt editor (the shared dialog wrote to the wrong collection before).
+      try {
+        const ref = await addDoc(collection(db, 'scheduleTemplates'), {
+          name: 'New Schedule',
+          description: '',
+          tasks: [],
+          links: [],
+          taskCount: 0,
+          isStarter: false,
+          createdBy: user?.id,
+          createdByName: user?.name,
+          createdAt: serverTimestamp(),
+        });
+        setEditingTemplate({ id: ref.id, name: 'New Schedule', category: 'schedule' });
+      } catch {
+        toast({ title: 'Error creating template', variant: 'destructive' });
+      }
+      return;
+    }
     setEditTarget(null);
     setForm({ name: '', description: '', content: '' });
     setShowDialog(true);

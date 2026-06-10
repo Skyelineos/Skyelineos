@@ -2,9 +2,11 @@
 // preview and (next) client-side as their estimated build timeline. Purely
 // presentational — pass it a GeneratedSchedule.
 
-import type { GeneratedSchedule, BuildPhase } from '@/lib/schedule/types';
+import type { GeneratedSchedule } from '@/lib/schedule/types';
 
-const PHASE_COLORS: Record<BuildPhase, string> = {
+// Known build-phase colors, with a deterministic fallback so arbitrary template
+// phase names (e.g. "Gunite", "Decking") still get a stable brand-ish shade.
+const KNOWN_PHASE_COLORS: Record<string, string> = {
   'Pre-Construction': '#8B7355',
   'Foundation': '#A6824C',
   'Framing': '#C9A96E',
@@ -13,6 +15,13 @@ const PHASE_COLORS: Record<BuildPhase, string> = {
   'Finish': '#C9A96E',
   'Closeout': '#6E5A3A',
 };
+const FALLBACK_PALETTE = ['#8B7355', '#A6824C', '#C9A96E', '#B8924A', '#9C7E4F', '#6E5A3A', '#7A6440'];
+function phaseColor(phase: string): string {
+  if (KNOWN_PHASE_COLORS[phase]) return KNOWN_PHASE_COLORS[phase];
+  let h = 0;
+  for (let i = 0; i < phase.length; i++) h = (h * 31 + phase.charCodeAt(i)) >>> 0;
+  return FALLBACK_PALETTE[h % FALLBACK_PALETTE.length];
+}
 
 function fmtDate(iso: string): string {
   const [y, m, d] = iso.split('-').map(Number);
@@ -57,7 +66,7 @@ export function ScheduleTimeline({
             title={`${p.phase}: ${fmtDate(p.startDate)} → ${fmtDate(p.endDate)} (${p.durationDays}d)`}
             style={{
               width: `${(p.durationDays / Math.max(1, totalDays)) * 100}%`,
-              backgroundColor: PHASE_COLORS[p.phase],
+              backgroundColor: phaseColor(p.phase),
             }}
             className="h-full"
           />
@@ -70,7 +79,7 @@ export function ScheduleTimeline({
           <div key={p.phase} className="flex gap-3">
             <div
               className="w-1.5 rounded-full flex-shrink-0"
-              style={{ backgroundColor: PHASE_COLORS[p.phase] }}
+              style={{ backgroundColor: phaseColor(p.phase) }}
             />
             <div className="flex-1 min-w-0">
               <div className="flex flex-wrap items-baseline justify-between gap-x-3">
@@ -83,8 +92,14 @@ export function ScheduleTimeline({
                 {p.trades.map((t, i) => (
                   <span
                     key={`${t.trade}-${i}`}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-700"
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs ${
+                      t.decision
+                        ? 'bg-[#C9A96E]/15 text-[#8a6d3b] ring-1 ring-[#C9A96E]/40'
+                        : 'bg-gray-100 text-gray-700'
+                    }`}
+                    title={t.decision ? 'Decision / selection needed' : undefined}
                   >
+                    {t.decision && <span className="text-[#C9A96E]">◆</span>}
                     {t.trade}
                     {t.amount > 0 && <span className="text-gray-400">{fmtMoney(t.amount)}</span>}
                   </span>
