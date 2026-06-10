@@ -11,7 +11,7 @@ import {
   ChevronLeft, Save, Plus, Trash2, AlertTriangle, Upload, FileText,
 } from 'lucide-react';
 import { collection, getDocs, onSnapshot, query, where, orderBy } from 'firebase/firestore';
-import { db, storage } from '@/lib/firebase';
+import { db, storage, auth } from '@/lib/firebase';
 import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { updateContract } from '@/lib/contracts/firestore';
 import {
@@ -163,6 +163,44 @@ export function ContractEditor({ contract, newContractType, onBack, onCancel, on
 
   const isNew = !state.id;
   const update = (patch: Partial<Contract>) => setState(s => ({ ...s, ...patch }));
+
+  // Signature → commencement. Fires the server-side hook that activates the
+  // project, seeds tasks from the published estimate schedule, notifies awarded
+  // subs, and surfaces outstanding selections. Idempotent server-side.
+  const [commencing, setCommencing] = useState(false);
+  const handleCommence = async () => {
+    if (!contract?.id) {
+      toast({ title: 'Save the contract first', variant: 'destructive' });
+      return;
+    }
+    setCommencing(true);
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch(`/api/contracts/${contract.id}/commencement`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          defaultAssigneeId: (user as any)?.id?.toString(),
+          defaultAssigneeName: (user as any)?.name,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Commencement failed');
+      if (data.alreadyCommenced) {
+        toast({ title: 'Already commenced', description: 'This project was already started — no changes made.' });
+      } else {
+        toast({
+          title: 'Project commenced 🎉',
+          description: `${data.tasksCreated} tasks seeded · ${data.subsNotified} sub(s) notified · ${data.selectionsOutstanding} selection(s) pending.`,
+        });
+        update({ status: 'active' });
+      }
+    } catch (e: any) {
+      toast({ title: 'Could not commence', description: e?.message || 'Unknown error', variant: 'destructive' });
+    } finally {
+      setCommencing(false);
+    }
+  };
 
   const linkedProject = state.projectId ? projects.find(p => p.id === state.projectId) : null;
 
@@ -339,6 +377,17 @@ export function ContractEditor({ contract, newContractType, onBack, onCancel, on
                   ))}
                 </SelectContent>
               </Select>
+              {state.type === 'client_build' && contract?.id && state.projectId &&
+                (state.status === 'signed' || state.status === 'active') && (
+                <Button
+                  onClick={handleCommence}
+                  disabled={commencing}
+                  size="sm"
+                  className="mt-2 w-full bg-[#C9A96E] hover:bg-[#b8924a] text-white"
+                >
+                  {commencing ? 'Commencing…' : 'Commence project — seed tasks & notify subs'}
+                </Button>
+              )}
             </div>
             <div>
               <Label>Budget mode</Label>

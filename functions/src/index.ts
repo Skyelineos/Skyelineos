@@ -2038,6 +2038,10 @@ registerDeleteBidRequestRoute(app, admin.firestore());
 import { registerAwardBidRoute } from './bids/awardBidRoute';
 registerAwardBidRoute(app, admin.firestore());
 
+// Route: POST /api/contracts/:id/commencement
+import { registerCommenceRoute } from './contracts/commenceRoute';
+registerCommenceRoute(app, admin.firestore());
+
 // Catch-all 404 — must come AFTER all route registrations (QBO routes above included)
 app.use('*', (req: any, res: any) => {
   console.log(`❌ 404 - API endpoint not found: ${req.method} ${req.originalUrl}`);
