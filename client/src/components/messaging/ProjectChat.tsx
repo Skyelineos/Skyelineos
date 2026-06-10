@@ -8,9 +8,10 @@ import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import {
   listenChannels, listenMessages, sendMessage, ensureDefaultChannels,
-  type Channel, type ChatMessage,
+  loadProjectMembers, notifyMentions,
+  type Channel, type ChatMessage, type Member,
 } from '@/lib/messaging/firestore';
-import { Hash, Send, Loader2 } from 'lucide-react';
+import { Hash, Send, Loader2, AtSign } from 'lucide-react';
 
 function fmtTime(ts: any): string {
   const d = ts?.toDate ? ts.toDate() : (ts ? new Date(ts) : null);
@@ -31,7 +32,31 @@ export function ProjectChat({ projectId }: { projectId: string }) {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [mention, setMention] = useState<{ query: string; pos: number } | null>(null);
+  const mentionMapRef = useRef<Record<string, string>>({});
   const endRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => { if (projectId) loadProjectMembers(projectId).then(setMembers).catch(() => {}); }, [projectId]);
+
+  const mentionMatches = mention
+    ? members.filter(m => m.name.toLowerCase().includes(mention.query.toLowerCase())).slice(0, 6)
+    : [];
+
+  const onInput = (val: string, caret: number) => {
+    setInput(val);
+    const before = val.slice(0, caret);
+    const m = before.match(/@([\w]*)$/);
+    setMention(m ? { query: m[1], pos: caret - m[0].length } : null);
+  };
+
+  const pickMention = (m: Member) => {
+    const before = input.slice(0, mention?.pos ?? input.length);
+    const after = input.slice(mention?.pos ?? input.length).replace(/^@[\w]*/, '');
+    setInput(`${before}@${m.name} ${after}`);
+    mentionMapRef.current[m.name] = m.uid;
+    setMention(null);
+  };
 
   // Seed default channels once (GC/admin only — they're the project owner) then listen.
   useEffect(() => {
@@ -42,11 +67,13 @@ export function ProjectChat({ projectId }: { projectId: string }) {
         if (isStaff) {
           const snap = await getDoc(doc(db, 'projects', projectId));
           const p = (snap.data() as any) || {};
-          const team = [
-            ...(Array.isArray(p.assignedUserIds) ? p.assignedUserIds : []),
-            uid,
-          ];
-          const clients = [p.clientId].filter(Boolean);
+          // Classify members so subs are NOT auto-added to default channels
+          // (they only appear when @tagged); GC/designer = team, owner = client.
+          const mem = await loadProjectMembers(projectId);
+          const isSub = (r?: string) => /sub/i.test(r || '');
+          const isClientRole = (r?: string) => /client|owner|home/i.test(r || '');
+          const team = [uid, ...mem.filter(m => !isSub(m.role) && !isClientRole(m.role)).map(m => m.uid)];
+          const clients = [p.clientId, ...mem.filter(m => isClientRole(m.role)).map(m => m.uid)].filter(Boolean);
           await ensureDefaultChannels(projectId, team, clients, uid).catch(() => {});
         }
       } catch { /* ignore */ }
@@ -73,12 +100,24 @@ export function ProjectChat({ projectId }: { projectId: string }) {
 
   const send = async () => {
     if (!input.trim() || !activeId || sending) return;
+    const text = input;
+    const mentions = Object.entries(mentionMapRef.current)
+      .filter(([name]) => text.includes(`@${name}`))
+      .map(([, mUid]) => mUid);
     setSending(true);
     try {
       await sendMessage(projectId, activeId, {
-        text: input, authorUid: uid, authorName: myName, authorRole: myRole,
+        text, authorUid: uid, authorName: myName, authorRole: myRole,
+        ...(mentions.length ? { mentions } : {}),
       });
+      if (mentions.length && active) {
+        await notifyMentions({
+          projectId, channelId: activeId, channelName: active.name,
+          mentionUids: mentions, fromUid: uid, fromName: myName, text,
+        }).catch(() => {});
+      }
       setInput('');
+      mentionMapRef.current = {};
     } finally { setSending(false); }
   };
 
@@ -130,23 +169,47 @@ export function ProjectChat({ projectId }: { projectId: string }) {
         </div>
 
         {/* Composer */}
-        <div className="border-t border-gray-200 p-3 flex items-end gap-2">
-          <textarea
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
-            placeholder={active ? `Message #${active.name}` : 'Select a channel'}
-            rows={1}
-            disabled={!activeId}
-            className="flex-1 resize-none rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#C9A96E] max-h-32"
-          />
-          <button
-            onClick={send}
-            disabled={!input.trim() || sending || !activeId}
-            className="h-9 w-9 flex items-center justify-center rounded-md bg-[#C9A96E] text-white hover:bg-[#b8924a] disabled:opacity-40 flex-shrink-0"
-          >
-            {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-          </button>
+        <div className="border-t border-gray-200 p-3">
+          <div className="relative flex items-end gap-2">
+            {mention && mentionMatches.length > 0 && (
+              <div className="absolute bottom-full left-0 mb-1 w-64 bg-white border border-gray-200 rounded-md shadow-lg max-h-56 overflow-auto z-50">
+                {mentionMatches.map(m => (
+                  <button
+                    key={m.uid}
+                    type="button"
+                    onMouseDown={e => { e.preventDefault(); pickMention(m); }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:bg-gray-50"
+                  >
+                    <AtSign className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
+                    <span className="font-medium text-gray-700 truncate">{m.name}</span>
+                    {m.trade && <span className="text-[11px] text-gray-400 truncate">· {m.trade}</span>}
+                    {m.role && <span className="ml-auto text-[10px] uppercase tracking-wide text-gray-300 flex-shrink-0">{m.role}</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+            <textarea
+              value={input}
+              onChange={e => onInput(e.target.value, e.target.selectionStart ?? e.target.value.length)}
+              onKeyDown={e => {
+                if (mention && mentionMatches.length > 0 && (e.key === 'Enter' || e.key === 'Tab')) { e.preventDefault(); pickMention(mentionMatches[0]); return; }
+                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+                if (e.key === 'Escape') setMention(null);
+              }}
+              placeholder={active ? `Message #${active.name}  ·  @ to tag` : 'Select a channel'}
+              rows={1}
+              disabled={!activeId}
+              className="flex-1 resize-none rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#C9A96E] max-h-32"
+            />
+            <button
+              onClick={send}
+              disabled={!input.trim() || sending || !activeId}
+              className="h-9 w-9 flex items-center justify-center rounded-md bg-[#C9A96E] text-white hover:bg-[#b8924a] disabled:opacity-40 flex-shrink-0"
+            >
+              {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            </button>
+          </div>
+          <p className="text-[10px] text-gray-400 mt-1">Tag someone with <strong>@</strong> — they're added to this channel and notified. Subs are only pinged when tagged.</p>
         </div>
       </div>
     </div>
