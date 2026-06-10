@@ -22,16 +22,17 @@ export const PHASE_ORDER: BuildPhase[] = [
 // happen on a custom build, so they appear even if no estimate line maps to them.
 export const ALWAYS_INCLUDE: BuildPhase[] = ['Pre-Construction', 'Closeout'];
 
-// Starter durations in CALENDAR days. These are deliberately conservative
-// placeholders — tune to Skyeline's real numbers.
+// Starter durations in CALENDAR days, tuned so a full custom build totals
+// ~12 months (365 days). Finish is the dominant phase. Tune to Skyeline's
+// real numbers.
 export const PHASE_DEFAULT_DAYS: Record<BuildPhase, number> = {
-  'Pre-Construction': 30,
-  'Foundation': 21,
-  'Framing': 30,
-  'Rough-In': 30,
-  'Pre-Drywall': 14,
-  'Finish': 60,
-  'Closeout': 14,
+  'Pre-Construction': 45,
+  'Foundation': 30,
+  'Framing': 45,
+  'Rough-In': 45,
+  'Pre-Drywall': 20,
+  'Finish': 150,
+  'Closeout': 30,
 };
 
 // Friendly label shown when an always-include phase has no estimate line items.
