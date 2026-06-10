@@ -20,6 +20,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useConfirm } from '@/hooks/use-confirm';
 import { GmailBidImporter } from '@/components/estimates/GmailBidImporter';
 import { EstimateCostingsTab } from '@/components/estimates/EstimateCostingsTab';
+import { EstimateScheduleTab } from '@/components/estimates/EstimateScheduleTab';
 import { LineDescriptionButton } from '@/components/estimates/LineDescriptionButton';
 import { SubPickerButton } from '@/components/estimates/SubPickerButton';
 import {
@@ -117,7 +118,7 @@ interface Estimate {
   updatedAt?: any;
 }
 
-type EstimateTab = 'details' | 'costings' | 'bid_packages' | 'takeoffs';
+type EstimateTab = 'details' | 'costings' | 'schedule' | 'bid_packages' | 'takeoffs';
 
 interface CRMClient {
   id: string;
@@ -1052,9 +1053,9 @@ function EstimateModal({
           {/* Tab bar — only shown when editing an existing estimate */}
           {editing && (
             <div className="flex gap-0 border-b border-gray-200 -mb-4 mt-2 overflow-x-auto">
-              {(['details', 'costings', 'bid_packages', 'takeoffs'] as EstimateTab[]).map(tab => {
+              {(['details', 'costings', 'schedule', 'bid_packages', 'takeoffs'] as EstimateTab[]).map(tab => {
                 const LABELS: Record<EstimateTab, string> = {
-                  details: 'Details', costings: 'Costings',
+                  details: 'Details', costings: 'Costings', schedule: 'Schedule',
                   bid_packages: 'Bid Packages', takeoffs: 'Takeoffs',
                 };
                 return (
@@ -1091,6 +1092,13 @@ function EstimateModal({
                 await updateDoc(doc(db, 'estimates', editing.id), { tax: v });
               }}
             />
+          </div>
+        )}
+
+        {/* ── Schedule tab (estimate-derived timeline) ── */}
+        {editing && activeTab === 'schedule' && (
+          <div className="overflow-y-auto flex-1">
+            <EstimateScheduleTab estimateId={editing.id} />
           </div>
         )}
 
