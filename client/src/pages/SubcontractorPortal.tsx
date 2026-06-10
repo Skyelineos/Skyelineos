@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import PhotosTab from '@/components/photos/PhotosTab';
 import { RFIPanel } from '@/components/rfi/RFIPanel';
-import { MessagingModule } from '@/components/messaging/MessagingModule';
+import { ProjectChat } from '@/components/messaging/ProjectChat';
 import { SubTodayFeed } from '@/components/today/SubTodayFeed';
 import { SubBidRequestsTab } from '@/components/bidding/SubBidRequestsTab';
 import { MyContractsView } from '@/components/contracts/MyContractsView';
@@ -158,6 +158,7 @@ export default function SubcontractorPortal() {
   const [loading, setLoading] = useState(true);
   // Which assigned project the RFIs tab is scoped to (subs can be on several).
   const [rfiProjectId, setRfiProjectId] = useState<string>('');
+  const [msgProjectId, setMsgProjectId] = useState<string>('');
 
   useEffect(() => {
     if (!effectiveUid) { setLoading(false); return; }
@@ -610,20 +611,35 @@ export default function SubcontractorPortal() {
     </div>
   );
 
-  const renderMessages = () => (
-    <div className="h-[calc(100vh-200px)]">
-      <MessagingModule
-        projectId={0}
-        currentUser={{
-          id: effectiveUid,
-          name: userName,
-          email: userEmail,
-          role: 'sub' as const,
-          avatar: '',
-        }}
-      />
-    </div>
-  );
+  const renderMessages = () => {
+    const activeId = msgProjectId || projects[0]?.id || '';
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <h2 className="text-xl font-bold text-gray-900">Messages</h2>
+          {projects.length > 0 && (
+            <select
+              value={activeId}
+              onChange={e => setMsgProjectId(e.target.value)}
+              className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+            >
+              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          )}
+        </div>
+        {!activeId ? (
+          <Card>
+            <CardContent className="py-12 text-center">
+              <p className="text-gray-700 font-medium">No projects assigned yet</p>
+              <p className="text-sm text-gray-500 mt-1">You'll see a channel here when the team tags you on a job.</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <ProjectChat projectId={activeId} />
+        )}
+      </div>
+    );
+  };
 
   // RFIs — field questions the sub raises and the team answers. Scoped to one
   // assigned project at a time (a sub may be on several jobs at once).

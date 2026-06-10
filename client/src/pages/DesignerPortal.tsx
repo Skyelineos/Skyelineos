@@ -22,8 +22,10 @@ import {
   DoorOpen,
   Ruler,
   HelpCircle,
+  MessageSquare,
 } from 'lucide-react';
 import { RFIPanel } from '@/components/rfi/RFIPanel';
+import { ProjectChat } from '@/components/messaging/ProjectChat';
 import SelectionsManager from '@/components/designer/SelectionsManager';
 import SelectionsCatalog from '@/components/designer/SelectionsCatalog';
 import { ProjectDesignDashboard } from '@/components/designer/ProjectDesignDashboard';
@@ -101,7 +103,7 @@ export default function DesignerPortal() {
   const [rawProjects, setRawProjects] = useState<FirestoreProject[]>([]);
   const [projectsLoading, setProjectsLoading] = useState(true);
   const [selectedProject, setSelectedProject] = useState<FirestoreProject | null>(null);
-  const [projectTab, setProjectTab] = useState<'dashboard' | 'rooms' | 'selections' | 'catalog' | 'plans' | 'rfis'>('dashboard');
+  const [projectTab, setProjectTab] = useState<'dashboard' | 'rooms' | 'selections' | 'catalog' | 'plans' | 'rfis' | 'messages'>('dashboard');
   const [filterRoomId, setFilterRoomId] = useState<string | undefined>(undefined);
 
   const userRole = user?.role || 'designer';
@@ -302,6 +304,7 @@ export default function DesignerPortal() {
                   { value: 'catalog', icon: BookOpen, label: 'Catalog' },
                   { value: 'plans', icon: Ruler, label: 'Plans' },
                   { value: 'rfis', icon: HelpCircle, label: 'RFIs' },
+                  { value: 'messages', icon: MessageSquare, label: 'Messages' },
                 ].map(tab => (
                   <button
                     key={tab.value}
@@ -371,6 +374,10 @@ export default function DesignerPortal() {
                     projectId={selectedProject.id}
                     projectName={selectedProject.name}
                   />
+                </TabsContent>
+
+                <TabsContent value="messages" className="m-0">
+                  <ProjectChat projectId={selectedProject.id} />
                 </TabsContent>
               </div>
             </Tabs>
