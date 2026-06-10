@@ -18,9 +18,10 @@ import { useToast } from '@/hooks/use-toast';
 import {
   Calendar, DollarSign, Upload, CheckCircle, AlertTriangle, Clock,
   Briefcase, Shield, FileCheck, Building, MessageSquare, Camera,
-  FileText, ChevronRight,
+  FileText, ChevronRight, HelpCircle,
 } from 'lucide-react';
 import PhotosTab from '@/components/photos/PhotosTab';
+import { RFIPanel } from '@/components/rfi/RFIPanel';
 import { MessagingModule } from '@/components/messaging/MessagingModule';
 import { SubTodayFeed } from '@/components/today/SubTodayFeed';
 import { SubBidRequestsTab } from '@/components/bidding/SubBidRequestsTab';
@@ -155,6 +156,8 @@ export default function SubcontractorPortal() {
   const [purchaseOrders, setPurchaseOrders] = useState<FSPO[]>([]);
   const [compliance, setCompliance] = useState<ComplianceData>({});
   const [loading, setLoading] = useState(true);
+  // Which assigned project the RFIs tab is scoped to (subs can be on several).
+  const [rfiProjectId, setRfiProjectId] = useState<string>('');
 
   useEffect(() => {
     if (!effectiveUid) { setLoading(false); return; }
@@ -622,6 +625,44 @@ export default function SubcontractorPortal() {
     </div>
   );
 
+  // RFIs — field questions the sub raises and the team answers. Scoped to one
+  // assigned project at a time (a sub may be on several jobs at once).
+  const renderRFIs = () => {
+    const activeId = rfiProjectId || projects[0]?.id || '';
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <h2 className="text-xl font-bold text-gray-900">RFIs &amp; Field Questions</h2>
+          {projects.length > 0 && (
+            <select
+              value={activeId}
+              onChange={e => setRfiProjectId(e.target.value)}
+              className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+            >
+              {projects.map(p => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          )}
+        </div>
+        {!activeId ? (
+          <Card>
+            <CardContent className="py-12 text-center">
+              <HelpCircle className="w-10 h-10 mx-auto mb-3 text-gray-300" />
+              <p className="text-gray-700 font-medium">No projects assigned yet</p>
+              <p className="text-sm text-gray-500 mt-1">Once you're assigned to a job, you can raise RFIs here.</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <RFIPanel
+            projectId={activeId}
+            projectName={projects.find(p => p.id === activeId)?.name}
+          />
+        )}
+      </div>
+    );
+  };
+
   const renderTabContent = () => {
     if (loading) {
       return (
@@ -642,6 +683,7 @@ export default function SubcontractorPortal() {
       case 'invoices': return renderInvoices();
       case 'purchase-orders': return renderPurchaseOrders();
       case 'progress-photos': return <PhotosTab />;
+      case 'rfis': return renderRFIs();
       case 'messages': return renderMessages();
       default: return renderDashboard();
     }

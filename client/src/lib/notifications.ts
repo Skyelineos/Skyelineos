@@ -46,6 +46,8 @@ export type NotificationKind =
   | 'change_order_approved'
   | 'estimate_accepted'
   | 'invoice_overdue'
+  | 'rfi_created'
+  | 'rfi_answered'
   | 'message'
   | 'system';
 
@@ -57,7 +59,7 @@ export interface NotificationPayload {
   link?: string;        // in-app route to open on click
   projectId?: string;
   // Optional context — useful for grouping/dedup
-  refType?: 'task' | 'walkthrough' | 'changeOrder' | 'estimate' | 'invoice' | 'message';
+  refType?: 'task' | 'walkthrough' | 'changeOrder' | 'estimate' | 'invoice' | 'rfi' | 'message';
   refId?: string;
   // Sender context
   fromUserId?: string;
