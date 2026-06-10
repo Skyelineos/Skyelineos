@@ -80,6 +80,7 @@ const Automations = lazy(() => import("@/pages/Automations"));
 const ImportCenter = lazy(() => import("@/pages/ImportCenter"));
 const ProjectTasks = lazy(() => import("@/pages/ProjectTasks"));
 const ProjectChangeOrders = lazy(() => import("@/pages/ProjectChangeOrders"));
+const ProjectRFIs = lazy(() => import("@/pages/ProjectRFIs"));
 const ProjectSiteLog = lazy(() => import("@/pages/ProjectSiteLog"));
 const ProjectBills = lazy(() => import("@/pages/ProjectBills"));
 const ProjectWalkthroughs = lazy(() => import("@/pages/ProjectWalkthroughs"));
@@ -364,6 +365,16 @@ function Router() {
           <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
             <Suspense fallback={<MinimalSpinner title="Loading Change Orders" />}>
               <ProjectChangeOrders />
+            </Suspense>
+          </RoleGuard>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/projects/:id/rfis">
+        <ProtectedRoute>
+          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager', 'designer']} showNotAuthorized>
+            <Suspense fallback={<MinimalSpinner title="Loading RFIs" />}>
+              <ProjectRFIs />
             </Suspense>
           </RoleGuard>
         </ProtectedRoute>

@@ -21,7 +21,9 @@ import {
   LayoutDashboard,
   DoorOpen,
   Ruler,
+  HelpCircle,
 } from 'lucide-react';
+import { RFIPanel } from '@/components/rfi/RFIPanel';
 import SelectionsManager from '@/components/designer/SelectionsManager';
 import SelectionsCatalog from '@/components/designer/SelectionsCatalog';
 import { ProjectDesignDashboard } from '@/components/designer/ProjectDesignDashboard';
@@ -99,7 +101,7 @@ export default function DesignerPortal() {
   const [rawProjects, setRawProjects] = useState<FirestoreProject[]>([]);
   const [projectsLoading, setProjectsLoading] = useState(true);
   const [selectedProject, setSelectedProject] = useState<FirestoreProject | null>(null);
-  const [projectTab, setProjectTab] = useState<'dashboard' | 'rooms' | 'selections' | 'catalog' | 'plans'>('dashboard');
+  const [projectTab, setProjectTab] = useState<'dashboard' | 'rooms' | 'selections' | 'catalog' | 'plans' | 'rfis'>('dashboard');
   const [filterRoomId, setFilterRoomId] = useState<string | undefined>(undefined);
 
   const userRole = user?.role || 'designer';
@@ -299,6 +301,7 @@ export default function DesignerPortal() {
                   { value: 'selections', icon: Palette, label: 'Selections' },
                   { value: 'catalog', icon: BookOpen, label: 'Catalog' },
                   { value: 'plans', icon: Ruler, label: 'Plans' },
+                  { value: 'rfis', icon: HelpCircle, label: 'RFIs' },
                 ].map(tab => (
                   <button
                     key={tab.value}
@@ -361,6 +364,13 @@ export default function DesignerPortal() {
                       projectName={selectedProject.name}
                     />
                   </div>
+                </TabsContent>
+
+                <TabsContent value="rfis" className="m-0">
+                  <RFIPanel
+                    projectId={selectedProject.id}
+                    projectName={selectedProject.name}
+                  />
                 </TabsContent>
               </div>
             </Tabs>

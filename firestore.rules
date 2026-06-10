@@ -295,6 +295,19 @@ service cloud.firestore {
       allow delete: if isAdmin() || isGC();
     }
 
+    // RFIs (Requests for Information) — cross-portal field questions/clarifications.
+    // Subs/designers/GC raise them and read the log; GC + designers answer and
+    // close. A creator may edit their own RFI. Internal to the build team — not
+    // exposed to clients. Role-based (not per-project-membership), matching the
+    // convention used by safetyForms/selections elsewhere in this file.
+    match /projects/{projectId}/rfis/{rfiId} {
+      allow read: if isGC() || isDesigner() || isSub();
+      allow create: if isGC() || isDesigner() || isSub();
+      allow update: if isGC() || isDesigner()
+        || (isSub() && resource.data.createdByUid == request.auth.uid);
+      allow delete: if isAdmin() || isGC();
+    }
+
     // Draws (payment milestones) — clients can read their project's draws; GC manages.
     match /projects/{projectId}/draws/{drawId} {
       allow read: if isGC() || isDesigner()

@@ -26,6 +26,7 @@ import {
   ClipboardCheck,
   Receipt,
   Ruler,
+  HelpCircle,
 } from 'lucide-react';
 
 interface ProjectSidebarProps {
@@ -45,6 +46,7 @@ const sidebarItems = [
   { id: 'budget',        label: 'Budget',        icon: DollarSign },
   { id: 'bills',         label: 'Bills',         icon: Receipt },
   { id: 'change-orders', label: 'Change Orders', icon: GitPullRequest },
+  { id: 'rfis',          label: 'RFIs',          icon: HelpCircle },
   { id: 'site-log',      label: 'Site Log',      icon: ClipboardCheck },
   { id: 'walkthroughs',  label: 'Walkthroughs',  icon: Users },
   { id: 'move-in-binder', label: 'Move-in Binder', icon: ClipboardCheck },
