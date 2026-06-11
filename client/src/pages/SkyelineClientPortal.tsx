@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
-import { collection, query, where, onSnapshot, orderBy, or, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, orderBy, or } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { BuildLocation } from '@/components/common/BuildLocation';
-import { locationFromProject, logLocationEvent, type BuildLocation as BLType } from '@/lib/buildLocation';
 import { useAuth } from '@/hooks/use-auth';
 import { AdminPortalControls } from '@/components/admin/AdminPortalControls';
 import { useAdminView } from '@/contexts/AdminViewContext';
@@ -46,7 +44,6 @@ interface FirestoreProject {
   actualCompletion?: string;
   estimatedSchedule?: GeneratedSchedule;       // published estimated timeline
   estimatedSchedulePublishedAt?: any;
-  buildLocation?: BLType | null;
 }
 
 const TABS = [
@@ -133,36 +130,6 @@ export default function SkyelineClientPortal() {
   const selectedProject = projects.find(p => p.id === selectedProjectId);
   const handleNavigate = (tab: string) => navigate(`/client-portal/${tab}`);
 
-  const confirmLocation = async () => {
-    if (!selectedProjectId) return;
-    try {
-      await updateDoc(doc(db, 'projects', selectedProjectId), {
-        'buildLocation.status': 'confirmed',
-        'buildLocation.locationConfirmedByClient': true,
-        'buildLocation.locationConfirmedAt': new Date().toISOString(),
-        'buildLocation.locationConfirmedByUserId': effectiveUid,
-      });
-      await logLocationEvent(selectedProjectId, { type: 'client_confirmed', byUserId: effectiveUid });
-      toast({ title: 'Location confirmed', description: 'Thanks — the team has your verified build location.' });
-    } catch (e: any) {
-      toast({ title: 'Could not confirm', description: e?.message, variant: 'destructive' });
-    }
-  };
-
-  const requestCorrection = async (notes: string) => {
-    if (!selectedProjectId) return;
-    try {
-      await updateDoc(doc(db, 'projects', selectedProjectId), {
-        'buildLocation.status': 'correction_requested',
-        'buildLocation.correctionNotes': notes || '',
-      });
-      await logLocationEvent(selectedProjectId, { type: 'client_requested_correction', byUserId: effectiveUid, details: notes });
-      toast({ title: 'Correction sent', description: "We let the team know — they'll update the location." });
-    } catch (e: any) {
-      toast({ title: 'Could not send correction', description: e?.message, variant: 'destructive' });
-    }
-  };
-
   const renderContent = () => {
     if (!selectedProjectId && !projectsLoading) {
       return (
@@ -180,18 +147,6 @@ export default function SkyelineClientPortal() {
         return (
           <div className="space-y-6">
             <ClientTodayFeed />
-            {selectedProject?.buildLocation && (
-              <div className="rounded-xl border border-gray-200 bg-white p-5">
-                <h3 className="font-semibold text-gray-900 mb-1">Your build location</h3>
-                <p className="text-sm text-gray-500 mb-3">Please confirm this is the correct build location.</p>
-                <BuildLocation
-                  mode="confirm"
-                  value={locationFromProject(selectedProject)}
-                  onConfirm={confirmLocation}
-                  onRequestCorrection={requestCorrection}
-                />
-              </div>
-            )}
             <ClientDashboard
               projectId={selectedProjectId}
               project={selectedProject}

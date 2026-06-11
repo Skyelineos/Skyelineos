@@ -1,6 +1,6 @@
 import { Input } from '@/components/ui/input';
+import { AddressAutocomplete } from '@/components/common/AddressAutocomplete';
 import { Label } from '@/components/ui/label';
-import { BuildLocation } from '@/components/common/BuildLocation';
 import type { ProjectSetupDraft } from '@/types/projectSetup';
 
 /**
@@ -51,17 +51,19 @@ export function Step1Identity({ draft, onChange }: Props) {
         </div>
 
         <div className="md:col-span-2">
-          <Label>
-            Jobsite location <span className="text-red-500 font-bold">*</span>
+          <Label htmlFor="proj-address">
+            Jobsite address <span className="text-red-500 font-bold">*</span>
           </Label>
-          <p className="text-[11px] text-gray-500 mt-0.5 mb-2">
-            Enter the address and drop the pin — works even if the lot has no address yet. The homeowner confirms it from their portal.
-          </p>
-          <BuildLocation
-            mode="edit"
-            value={draft.buildLocation || { addressLine1: draft.address || '', status: 'unconfirmed' }}
-            onChange={(loc) => patch({ buildLocation: loc, address: loc.addressLine1 || draft.address })}
+          <AddressAutocomplete
+            id="proj-address"
+            value={draft.address}
+            onChange={v => patch({ address: v })}
+            placeholder="e.g. 482 N 1500 W, Mapleton UT"
+            className="mt-1.5"
           />
+          <p className="text-[11px] text-gray-500 mt-1">
+            Subs need this to bid intelligently — and clients use it to ground every status update.
+          </p>
         </div>
 
         <div>
