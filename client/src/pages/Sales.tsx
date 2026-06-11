@@ -47,6 +47,8 @@ interface Client {
   zip?: string | null;
   spouse?: {
     name: string;
+    firstName?: string | null;
+    lastName?: string | null;
     email?: string | null;
     phone?: string | null;
   } | null;
@@ -312,7 +314,7 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
     // state regardless so toggling off-then-on doesn't wipe entered text;
     // the save handler only emits a spouse object when hasSpouse is true.
     hasSpouse: false,
-    spouseName: '', spouseEmail: '', spousePhone: '',
+    spouseFirstName: '', spouseLastName: '', spouseEmail: '', spousePhone: '',
     stage: stages[0]?.key || 'new_lead',
     projectType: 'custom_home' as ProjectType,
     source: 'referral' as LeadSource,
@@ -354,8 +356,9 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
           city: editing.city || '',
           state: editing.state || '',
           zip: editing.zip || '',
-          hasSpouse: !!(editing.spouse && editing.spouse.name),
-          spouseName: editing.spouse?.name || '',
+          hasSpouse: !!(editing.spouse && (editing.spouse.name || editing.spouse.firstName)),
+          spouseFirstName: editing.spouse?.firstName || (editing.spouse?.name || '').trim().split(/\s+/)[0] || '',
+          spouseLastName: editing.spouse?.lastName || (editing.spouse?.name || '').trim().split(/\s+/).slice(1).join(' ') || '',
           spouseEmail: editing.spouse?.email || '',
           spousePhone: editing.spouse?.phone || '',
           stage: editing.stage || stages[0]?.key || 'new_lead',
@@ -383,7 +386,8 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
           state:       prefill.state       ?? blank.state,
           zip:         prefill.zip         ?? blank.zip,
           hasSpouse:   !!prefill.spouseName,
-          spouseName:  prefill.spouseName  ?? blank.spouseName,
+          spouseFirstName: (prefill.spouseName || '').trim().split(/\s+/)[0] || blank.spouseFirstName,
+          spouseLastName:  (prefill.spouseName || '').trim().split(/\s+/).slice(1).join(' ') || blank.spouseLastName,
           spouseEmail: prefill.spouseEmail ?? blank.spouseEmail,
           spousePhone: prefill.spousePhone ?? blank.spousePhone,
           budget:      prefill.budget      ?? blank.budget,
@@ -446,10 +450,15 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
       // Emit a spouse object only when the toggle is on AND there's a name.
       // Toggling off (or leaving the name blank) writes spouse: null so the
       // edit dialog reads cleanly on the next open.
+      const spouseFirst = form.spouseFirstName.trim();
+      const spouseLast = form.spouseLastName.trim();
+      const spouseFullName = `${spouseFirst} ${spouseLast}`.trim();
       const spousePayload =
-        form.hasSpouse && form.spouseName.trim()
+        form.hasSpouse && spouseFullName
           ? {
-              name: form.spouseName.trim(),
+              name: spouseFullName,
+              firstName: spouseFirst || null,
+              lastName: spouseLast || null,
               email: form.spouseEmail.trim() || null,
               phone: form.spousePhone.trim() || null,
             }
@@ -586,7 +595,8 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
                     size="sm"
                     onClick={() => {
                       set('hasSpouse', false);
-                      set('spouseName', '');
+                      set('spouseFirstName', '');
+                      set('spouseLastName', '');
                       set('spouseEmail', '');
                       set('spousePhone', '');
                     }}
@@ -596,9 +606,13 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
                   </Button>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="sm:col-span-2">
-                    <Label>Spouse Name</Label>
-                    <Input value={form.spouseName} onChange={e => set('spouseName', e.target.value)} placeholder="—" className="placeholder:text-gray-300" />
+                  <div>
+                    <Label>Spouse First Name</Label>
+                    <Input value={form.spouseFirstName} onChange={e => set('spouseFirstName', e.target.value)} placeholder="—" className="placeholder:text-gray-300" />
+                  </div>
+                  <div>
+                    <Label>Spouse Last Name</Label>
+                    <Input value={form.spouseLastName} onChange={e => set('spouseLastName', e.target.value)} placeholder="—" className="placeholder:text-gray-300" />
                   </div>
                   <div>
                     <Label>Spouse Email</Label>
