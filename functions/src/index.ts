@@ -1360,20 +1360,21 @@ app.post('/api/contacts/list-mine', authMiddleware, async (req: any, res: any) =
 // List every sub-type contact with no linkedUserId yet (claim candidates).
 app.post('/api/contacts/list-unclaimed-subs', authMiddleware, async (_req: any, res: any) => {
   try {
-    const out = new Map<string, any>();
-    const queries = [
-      db.collection('contacts').where('type', '==', 'sub'),
-      db.collection('contacts').where('role', '==', 'sub'),
-      db.collection('contacts').where('role', '==', 'subcontractor'),
-    ];
-    for (const q of queries) {
-      const snap = await q.limit(200).get();
-      snap.docs.forEach((d: any) => {
-        const data = d.data();
-        if (!data.linkedUserId) out.set(d.id, { id: d.id, ...data });
-      });
-    }
-    res.json({ contacts: Array.from(out.values()) });
+    // Match any sub-like contact case-insensitively across both role and type
+    // (the old exact where('role','==','subcontractor') queries missed
+    // 'Subcontractor', 'vendor', and type-only records). Single-tenant, so a
+    // full scan + in-memory filter is cheap and far more reliable.
+    const SUB_ROLES = new Set(['sub', 'subcontractor', 'vendor']);
+    const snap = await db.collection('contacts').limit(2000).get();
+    const out: any[] = [];
+    snap.docs.forEach((d: any) => {
+      const data = d.data();
+      if (data.linkedUserId) return; // already claimed/linked
+      const role = String(data.role || '').toLowerCase().trim();
+      const type = String(data.type || '').toLowerCase().trim();
+      if (SUB_ROLES.has(role) || SUB_ROLES.has(type)) out.push({ id: d.id, ...data });
+    });
+    res.json({ contacts: out });
   } catch (e: any) {
     console.error('[contacts/list-unclaimed-subs]', e);
     res.status(500).json({ error: e.message || String(e) });
