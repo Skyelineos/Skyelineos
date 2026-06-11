@@ -344,7 +344,11 @@ export default function UserManagement() {
   const filtered = users.filter(u => {
     const matchSearch = !search || [u.name, u.email, u.company]
       .filter(Boolean).some(v => v!.toLowerCase().includes(search.toLowerCase()));
-    const matchRole = roleFilter === 'all' || u.role === roleFilter;
+    const matchRole =
+      roleFilter === 'all' ||
+      (roleFilter === 'staff'
+        ? u.role === 'admin' || u.role === 'gc'
+        : u.role === roleFilter);
     return matchSearch && matchRole;
   });
 
@@ -413,6 +417,7 @@ export default function UserManagement() {
             <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All roles</SelectItem>
+              <SelectItem value="staff">Staff (Admin + Team)</SelectItem>
               {ROLES.map(r => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
             </SelectContent>
           </Select>
@@ -421,16 +426,27 @@ export default function UserManagement() {
         {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
-            { label: 'Staff',         count: users.filter(u => u.role === 'admin' || u.role === 'gc').length, color: '#C9A96E' },
-            { label: 'Home Owners',   count: users.filter(u => u.role === 'client').length,   color: '#3b82f6' },
-            { label: 'Subs',          count: users.filter(u => u.role === 'sub').length,       color: '#f59e0b' },
-            { label: 'Designers',     count: users.filter(u => u.role === 'designer').length,  color: '#8b5cf6' },
-          ].map(stat => (
-            <div key={stat.label} className="bg-white border border-gray-200 rounded-xl px-4 py-3">
-              <p className="text-2xl font-bold" style={{ color: stat.color }}>{stat.count}</p>
-              <p className="text-xs text-gray-500 mt-0.5">{stat.label}</p>
-            </div>
-          ))}
+            { label: 'Staff',         filter: 'staff',    count: users.filter(u => u.role === 'admin' || u.role === 'gc').length, color: '#C9A96E' },
+            { label: 'Home Owners',   filter: 'client',   count: users.filter(u => u.role === 'client').length,   color: '#3b82f6' },
+            { label: 'Subs',          filter: 'sub',      count: users.filter(u => u.role === 'sub').length,       color: '#f59e0b' },
+            { label: 'Designers',     filter: 'designer', count: users.filter(u => u.role === 'designer').length,  color: '#8b5cf6' },
+          ].map(stat => {
+            const active = roleFilter === stat.filter;
+            return (
+              <button
+                key={stat.label}
+                type="button"
+                onClick={() => setRoleFilter(active ? 'all' : stat.filter)}
+                aria-pressed={active}
+                title={active ? `Clear ${stat.label} filter` : `Show only ${stat.label}`}
+                className={`bg-white rounded-xl px-4 py-3 text-left transition-all hover:shadow-sm focus:outline-none ${active ? 'border-2' : 'border border-gray-200'}`}
+                style={active ? { borderColor: stat.color, boxShadow: `0 0 0 1px ${stat.color}` } : undefined}
+              >
+                <p className="text-2xl font-bold" style={{ color: stat.color }}>{stat.count}</p>
+                <p className="text-xs text-gray-500 mt-0.5">{stat.label}</p>
+              </button>
+            );
+          })}
         </div>
 
         {/* User list */}

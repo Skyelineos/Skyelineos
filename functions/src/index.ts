@@ -2043,6 +2043,12 @@ registerAwardBidRoute(app, admin.firestore());
 import { registerCommenceRoute } from './contracts/commenceRoute';
 registerCommenceRoute(app, admin.firestore());
 
+// Public lead intake for the Crestview Solace QR / model-home Google Form.
+// Gated by the LEAD_INTAKE_SECRET shared secret (not Firebase auth).
+// Route: POST /api/leads/intake
+import { registerLeadIntakeRoute } from './leads/intakeRoute';
+registerLeadIntakeRoute(app, admin.firestore());
+
 // Catch-all 404 — must come AFTER all route registrations (QBO routes above included)
 app.use('*', (req: any, res: any) => {
   console.log(`❌ 404 - API endpoint not found: ${req.method} ${req.originalUrl}`);
@@ -2079,6 +2085,8 @@ exports.api = onRequest(
       'TWILIO_AUTH_TOKEN',
       'TWILIO_FROM_NUMBER',
       'APP_BASE_URL',
+      // Crestview Solace lead-intake form (/api/leads/intake) shared secret.
+      'LEAD_INTAKE_SECRET',
     ],
     memory: '512MiB',
     timeoutSeconds: 540, // Reels can take 30-90s to process

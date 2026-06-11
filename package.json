@@ -13,7 +13,7 @@
     "check": "tsc",
     "test:smoke": "node scripts/smoke-lumber.mjs",
     "test:smoke:local": "node scripts/smoke-lumber.mjs --url http://localhost:5173",
-    "prepare": "husky"
+    "prepare": "husky || true"
   },
   "dependencies": {
     "@axe-core/react": "^4.10.2",

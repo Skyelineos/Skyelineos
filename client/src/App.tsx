@@ -60,6 +60,7 @@ const UserManagement = lazy(() => import("@/pages/UserManagement"));
 const ProjectDesign = lazy(() => import("@/pages/ProjectDesign"));
 const ProjectTakeoff = lazy(() => import("@/pages/ProjectTakeoff"));
 const Subscriptions = lazy(() => import("@/pages/Subscriptions"));
+const ApiStorage = lazy(() => import("@/pages/ApiStorage"));
 const Bills = lazy(() => import("@/pages/Bills"));
 const ContentStudio = lazy(() => import("@/pages/ContentStudio"));
 const SiteLog = lazy(() => import("@/pages/SiteLog"));
@@ -255,6 +256,16 @@ function Router() {
           <RoleGuard allowedRoles={['admin']} showNotAuthorized>
             <Suspense fallback={<MinimalSpinner title="Loading Subscriptions" />}>
               <Subscriptions />
+            </Suspense>
+          </RoleGuard>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/api-storage">
+        <ProtectedRoute>
+          <RoleGuard allowedRoles={['admin']} showNotAuthorized>
+            <Suspense fallback={<MinimalSpinner title="Loading API Storage" />}>
+              <ApiStorage />
             </Suspense>
           </RoleGuard>
         </ProtectedRoute>
@@ -785,11 +796,66 @@ function Router() {
 
 function AppContent() {
   const { user, loading } = useAuth();
-  
+
+  // Top-level boot gate: the whole app waits here until Firebase auth resolves.
+  // This gate sits ABOVE the Router, so ProtectedRoute's own 8s stuck-escape is
+  // never reached while we're here. Mirror that pattern so a hung auth/profile
+  // load can't pin users on the bare "Loading......" spinner forever. After 10s
+  // of continuous loading, offer reload / hard-reset instead of an infinite spin.
+  const [stuck, setStuck] = useState(false);
+  useEffect(() => {
+    if (!loading) { setStuck(false); return; }
+    const t = setTimeout(() => setStuck(true), 10000);
+    return () => clearTimeout(t);
+  }, [loading]);
+
   if (loading) {
-    return <MinimalSpinner title="Loading..." />;
+    if (!stuck) {
+      return <MinimalSpinner title="Loading..." />;
+    }
+    return (
+      <div className="flex items-center justify-center min-h-screen p-6">
+        <div className="flex flex-col items-center space-y-4 max-w-sm text-center">
+          <div className="w-6 h-6 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin" />
+          <p className="text-sm text-gray-600">Still loading…</p>
+          <p className="text-xs text-amber-700">
+            This is taking longer than expected — authentication or a cached
+            session may be stuck. Try reloading, or reset site data and sign in
+            again.
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className="px-3 py-1.5 rounded border border-gray-300 bg-white text-gray-800 text-sm hover:bg-gray-50"
+              onClick={() => window.location.reload()}
+            >
+              Reload
+            </button>
+            <button
+              type="button"
+              className="px-3 py-1.5 rounded border border-amber-400 bg-amber-50 text-amber-900 text-sm hover:bg-amber-100"
+              onClick={async () => {
+                try {
+                  localStorage.clear();
+                  sessionStorage.clear();
+                  const dbs = (indexedDB as any).databases
+                    ? await (indexedDB as any).databases()
+                    : [];
+                  for (const d of dbs) {
+                    if (d?.name) indexedDB.deleteDatabase(d.name);
+                  }
+                } catch {}
+                window.location.href = '/sign-in';
+              }}
+            >
+              Reset &amp; sign in
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
-  
+
   return (
     <>
       <NavigationHandler />

@@ -124,7 +124,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const loadUserProfile = useCallback(async (firebaseUser: FirebaseUser) => {
     try {
       setAuthLoading(true);
-      const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+      // Bound the profile read. A hung Firestore Listen/Write channel (blocked
+      // by an ad-blocker, corporate proxy, or flaky network) can leave getDoc
+      // pending forever — neither resolving nor rejecting — which would pin the
+      // whole app on the boot spinner since setLoading(false) runs only after
+      // this await completes. If the read doesn't land in time we reject and let
+      // the catch below resolve loading with a basic fallback instead of hanging.
+      const userDoc = await Promise.race([
+        getDoc(doc(db, 'users', firebaseUser.uid)),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('profile-load-timeout')), 8000),
+        ),
+      ]);
 
       if (userDoc.exists()) {
         const data = userDoc.data();
