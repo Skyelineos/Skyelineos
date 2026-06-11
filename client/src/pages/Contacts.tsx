@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
 import { Users, Search, Download, Upload, Plus, TrendingUp, Building, UserCheck, Wrench, Edit, Trash2, Mail, Phone, MoreVertical, User, Star } from 'lucide-react';
+import { StarRating } from '@/components/common/StarRating';
 import PreferredCategoriesEditor from '@/components/contacts/PreferredCategoriesEditor';
 import { MultiTradeSelector } from '@/components/contacts/MultiTradeSelector';
 import { EditContactModal } from '@/components/contacts/EditContactModal';
@@ -173,6 +174,16 @@ export default function Contacts() {
   const handleContactClick = (contact: Contact) => {
     setSelectedContact(contact);
     setShowContactDetail(true);
+  };
+
+  // Manual 1–5 sub quality rating. Used to sort subs highest-first when picking
+  // them for bid packages.
+  const updateRating = async (id: string, rating: number) => {
+    try {
+      await updateDoc(doc(db, 'contacts', id), { rating });
+    } catch (e: any) {
+      toast({ title: 'Could not update rating', description: e?.message, variant: 'destructive' });
+    }
   };
 
   const handleEditContact = (contact: Contact) => {
@@ -753,6 +764,19 @@ export default function Contacts() {
                           </div>
                         </div>
                         <div className="flex items-center space-x-1">
+                          {(() => {
+                            const role = String(contact.role || '').toLowerCase();
+                            if (role !== 'subcontractor' && role !== 'sub' && role !== 'vendor') return null;
+                            return (
+                              <div onClick={(e) => e.stopPropagation()} className="mr-2" title="Sub rating">
+                                <StarRating
+                                  value={(contact as any).rating || 0}
+                                  size={16}
+                                  onChange={(v) => updateRating(contact.id, v)}
+                                />
+                              </div>
+                            );
+                          })()}
                           <Button
                             variant="ghost"
                             size="sm"
