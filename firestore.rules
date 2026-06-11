@@ -83,6 +83,14 @@ service cloud.firestore {
         || (isDesigner() && request.auth.uid in resource.data.assignedUserIds)
         || (isSub() && request.auth.uid in resource.data.assignedUserIds);
       allow create, update: if isGC();
+      // The homeowner may confirm their lot location — only flip the confirmation
+      // flags on lotLocation; they can't move the pin or touch any other field.
+      allow update: if isClient()
+        && resource.data.clientId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lotLocation'])
+        && request.resource.data.lotLocation.lat == resource.data.lotLocation.lat
+        && request.resource.data.lotLocation.lng == resource.data.lotLocation.lng
+        && request.resource.data.lotLocation.confirmedByHomeowner == true;
       allow delete: if isAdmin();
     }
 

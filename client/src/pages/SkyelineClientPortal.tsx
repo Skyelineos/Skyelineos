@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
-import { collection, query, where, onSnapshot, orderBy, or } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, orderBy, or, doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { LotLocationMap } from '@/components/common/LotLocationMap';
 import { useAuth } from '@/hooks/use-auth';
 import { AdminPortalControls } from '@/components/admin/AdminPortalControls';
 import { useAdminView } from '@/contexts/AdminViewContext';
@@ -44,6 +45,7 @@ interface FirestoreProject {
   actualCompletion?: string;
   estimatedSchedule?: GeneratedSchedule;       // published estimated timeline
   estimatedSchedulePublishedAt?: any;
+  lotLocation?: { lat: number; lng: number; confirmedByHomeowner?: boolean; confirmedAt?: string } | null;
 }
 
 const TABS = [
@@ -128,6 +130,18 @@ export default function SkyelineClientPortal() {
   }, [effectiveUid]);
 
   const selectedProject = projects.find(p => p.id === selectedProjectId);
+
+  const confirmLot = async (projectId: string) => {
+    if (!projectId) return;
+    try {
+      await updateDoc(doc(db, 'projects', projectId), {
+        'lotLocation.confirmedByHomeowner': true,
+        'lotLocation.confirmedAt': new Date().toISOString(),
+      });
+    } catch (e) {
+      console.warn('[client-portal] lot confirm failed', e);
+    }
+  };
   const handleNavigate = (tab: string) => navigate(`/client-portal/${tab}`);
 
   const renderContent = () => {
@@ -147,6 +161,31 @@ export default function SkyelineClientPortal() {
         return (
           <div className="space-y-6">
             <ClientTodayFeed />
+            {selectedProject?.lotLocation && (
+              <div className="rounded-xl border border-gray-200 bg-white p-5">
+                <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
+                  <div>
+                    <h3 className="font-semibold text-gray-900">Your lot location</h3>
+                    <p className="text-sm text-gray-500">
+                      {selectedProject.lotLocation.confirmedByHomeowner
+                        ? 'Thanks — you confirmed this is your lot.'
+                        : 'Please confirm this is the right spot so the team builds in the right place.'}
+                    </p>
+                  </div>
+                  {selectedProject.lotLocation.confirmedByHomeowner ? (
+                    <span className="inline-flex items-center gap-1 text-sm font-medium text-green-700 bg-green-50 px-3 py-1.5 rounded-md">✓ Confirmed</span>
+                  ) : (
+                    <button
+                      onClick={() => confirmLot(selectedProjectId)}
+                      className="bg-[#C9A96E] text-[#141414] font-semibold px-4 py-2 rounded-md hover:opacity-90"
+                    >
+                      Yes, this is my lot
+                    </button>
+                  )}
+                </div>
+                <LotLocationMap value={selectedProject.lotLocation} height={260} />
+              </div>
+            )}
             <ClientDashboard
               projectId={selectedProjectId}
               project={selectedProject}

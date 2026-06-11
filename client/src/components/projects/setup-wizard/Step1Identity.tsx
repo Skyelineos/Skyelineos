@@ -1,5 +1,6 @@
 import { Input } from '@/components/ui/input';
 import { AddressAutocomplete } from '@/components/common/AddressAutocomplete';
+import { LotLocationMap } from '@/components/common/LotLocationMap';
 import { Label } from '@/components/ui/label';
 import type { ProjectSetupDraft } from '@/types/projectSetup';
 
@@ -64,6 +65,25 @@ export function Step1Identity({ draft, onChange }: Props) {
           <p className="text-[11px] text-gray-500 mt-1">
             Subs need this to bid intelligently — and clients use it to ground every status update.
           </p>
+        </div>
+
+        <div className="md:col-span-2">
+          <Label>Lot location</Label>
+          <p className="text-[11px] text-gray-500 mb-1.5">
+            No address yet? Drop a pin on the lot — click or drag the marker. It saves with the project so subs and the
+            whole team can find it, and the homeowner confirms it from their portal.
+          </p>
+          <LotLocationMap
+            value={draft.lotLocation}
+            onChange={(loc) => patch({ lotLocation: { ...(draft.lotLocation || {}), lat: loc.lat, lng: loc.lng } })}
+            height={260}
+          />
+          {draft.lotLocation && (
+            <p className="text-[11px] text-gray-500 mt-1">
+              Pinned at {draft.lotLocation.lat.toFixed(5)}, {draft.lotLocation.lng.toFixed(5)}
+              {draft.lotLocation.confirmedByHomeowner ? ' · confirmed by homeowner ✓' : ' · awaiting homeowner confirmation'}
+            </p>
+          )}
         </div>
 
         <div>

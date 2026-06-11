@@ -84,6 +84,14 @@ export interface ProjectSetupDraft {
   name: string;
   projectCode?: string;
   address: string;
+  // Map pin for the lot — works even when there's no street address yet. Saved on
+  // the project and shown to subs/everyone; the homeowner confirms it in-portal.
+  lotLocation?: {
+    lat: number;
+    lng: number;
+    confirmedByHomeowner?: boolean;
+    confirmedAt?: string;
+  } | null;
   squareFootage: number;
   targetCompletion: string;     // YYYY-MM-DD
 
