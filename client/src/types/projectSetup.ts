@@ -15,7 +15,6 @@
  */
 
 import type { Timestamp } from 'firebase/firestore';
-import type { BuildLocation } from '@/lib/buildLocation';
 
 /** Suggested finish tier labels — purely cosmetic, the user can rename or
  *  replace these per project. No $/sqft anchor on purpose; the user's
@@ -85,9 +84,6 @@ export interface ProjectSetupDraft {
   name: string;
   projectCode?: string;
   address: string;
-  // Canonical build/jobsite location (address + map pin + confirmation state).
-  // addressLine1 is mirrored to `address` above for back-compat.
-  buildLocation?: BuildLocation | null;
   squareFootage: number;
   targetCompletion: string;     // YYYY-MM-DD
 

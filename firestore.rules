@@ -83,28 +83,7 @@ service cloud.firestore {
         || (isDesigner() && request.auth.uid in resource.data.assignedUserIds)
         || (isSub() && request.auth.uid in resource.data.assignedUserIds);
       allow create, update: if isGC();
-      // The homeowner may confirm or request a correction on their build
-      // location — only the buildLocation key, and only the status/notes/
-      // confirmation fields. They cannot move the pin or change the address.
-      allow update: if isClient()
-        && resource.data.clientId == request.auth.uid
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['buildLocation'])
-        && request.resource.data.buildLocation.latitude == resource.data.buildLocation.latitude
-        && request.resource.data.buildLocation.longitude == resource.data.buildLocation.longitude
-        && request.resource.data.buildLocation.addressLine1 == resource.data.buildLocation.addressLine1
-        && request.resource.data.buildLocation.status in ['confirmed', 'correction_requested'];
       allow delete: if isAdmin();
-
-      // Build-location audit trail. Any project participant can append events;
-      // GC + the project's client/designer/subs can read the history.
-      match /locationEvents/{eventId} {
-        allow read: if isGC()
-          || (isSignedIn() && (
-                get(/databases/$(database)/documents/projects/$(projectId)).data.clientId == request.auth.uid
-                || request.auth.uid in get(/databases/$(database)/documents/projects/$(projectId)).data.assignedUserIds));
-        allow create: if isSignedIn();
-        allow update, delete: if isGC();
-      }
     }
 
     // Contacts (subs, employees, vendors)
