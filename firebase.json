@@ -24,7 +24,7 @@
   "functions": {
     "source": "functions",
     "predeploy": [
-      "npm run build"
+      "npm --prefix functions run build"
     ],
     "runtime": "nodejs20"
   },
