@@ -60,6 +60,7 @@ const UserManagement = lazy(() => import("@/pages/UserManagement"));
 const ProjectDesign = lazy(() => import("@/pages/ProjectDesign"));
 const ProjectTakeoff = lazy(() => import("@/pages/ProjectTakeoff"));
 const Subscriptions = lazy(() => import("@/pages/Subscriptions"));
+const ApiStorage = lazy(() => import("@/pages/ApiStorage"));
 const Bills = lazy(() => import("@/pages/Bills"));
 const ContentStudio = lazy(() => import("@/pages/ContentStudio"));
 const SiteLog = lazy(() => import("@/pages/SiteLog"));
@@ -255,6 +256,16 @@ function Router() {
           <RoleGuard allowedRoles={['admin']} showNotAuthorized>
             <Suspense fallback={<MinimalSpinner title="Loading Subscriptions" />}>
               <Subscriptions />
+            </Suspense>
+          </RoleGuard>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/api-storage">
+        <ProtectedRoute>
+          <RoleGuard allowedRoles={['admin']} showNotAuthorized>
+            <Suspense fallback={<MinimalSpinner title="Loading API Storage" />}>
+              <ApiStorage />
             </Suspense>
           </RoleGuard>
         </ProtectedRoute>
