@@ -52,6 +52,14 @@ function deriveUserRole(contactRole: string | undefined): string {
   }
 }
 
+// Only these contact roles get a proactive portal invite when newly added (or
+// when invited for bids — bid invitees are added as `subcontractor` contacts).
+// Vendors, suppliers, and internal team/employees are NOT auto-invited.
+const INVITE_ROLES = new Set(['subcontractor', 'sub', 'client', 'homeowner', 'designer']);
+function shouldInvite(contactRole: string | undefined): boolean {
+  return INVITE_ROLES.has((contactRole || '').toLowerCase());
+}
+
 function inviteEmailHtml(name: string, link: string, base: string): string {
   return `
   <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #222;">
@@ -127,6 +135,9 @@ export const ensureContactAuthAccount = onDocumentWritten(
       // contact (a deliberate add). For updates / backfill of the historical
       // rolodex we don't bulk-invite — let them self-sign-up.
       if (!isCreate) return;
+      // Only subs, clients, and designers get auto-invited — not vendors,
+      // suppliers, or internal team.
+      if (!shouldInvite(after.role)) return;
       try {
         uid = await createAccountAndInvite(email, after.name || '');
       } catch (err) {
