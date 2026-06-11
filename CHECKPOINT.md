@@ -1,9 +1,61 @@
 # Skyelineos — Session Checkpoint
-**Last updated:** 2026-05-22 (refresh against git history through commit `28f9cd0`)
+**Last updated:** 2026-06-11 (session: incident recovery + BuildLocation re-land + hosting cache + Phase A cleanup)
 **Live URL:** https://skyelineos.web.app
 **Firebase project:** skyelineos (**BLAZE** plan — upgraded 2026-05-06)
-**Deploy command:** `npm run deploy` (or `:hosting` / `:rules` / `:functions` variants — see `package.json`)
+**Deploy command:** `npm run deploy` (or `:hosting` / `:rules` / `:functions` variants — see `package.json`). Note: this repo also deploys via **CI on push to `main`** (GitHub Actions "Deploy to Firebase").
 **Authoritative docs:** `CLAUDE.md`, `PROJECT_OVERVIEW.md`, `SESSION_NOTES.md` (in that order). This file is a session-checkpoint snapshot; the other three are the durable references.
+
+---
+
+## Session 2026-06-11 — what shipped (all merged to `main`)
+
+1. **Incident: app stuck on "Loading……" → recovered.** The BuildLocation/MapLibre
+   push (#55) imported `maplibre-gl` at module top level, which pulled the 800 kB
+   library into the **startup bundle** and hung the whole app before the auth gate.
+   Reverted via **#56**. Root-caused with the browser console + an incognito test
+   (incognito worked → it was a stale cached shell in the normal browser).
+2. **BuildLocation re-landed safely (#57).** Same feature (canonical jobsite location:
+   address + draggable pin + parcel/lot/subdivision + confirm/correction status +
+   location-event log; set in setup wizard, confirmed by homeowner in client portal),
+   but **MapLibre is now `import type` + dynamic `import()`** inside the map-init
+   effect → its own lazy chunk, **zero refs in the entry bundle** (verified in build).
+   Do **not** reintroduce a top-level value import of `maplibre-gl`.
+3. **Hosting cache headers (#58).** `firebase.json` now sets `no-cache` on the HTML
+   shell + everything unhashed, and `immutable` on `/assets/**`. Prevents the
+   "stale shell after deploy" failure mode that masked the revert during the incident.
+4. **Phase A cleanup (#59).** Deleted **12 verified-dead scaffold files** (App-minimal,
+   BuildTrackerPro page + root BuildTrackerPro-Complete-Fixed, several Gantt/Timeline
+   demos, LoginPage/ProjectMessages/ProjectFinancialsPage/FinancialManagement). tsc
+   660 → 588. The **live** Gantt at `modules/gantt/ui/BuildTrackerPro.tsx` is untouched.
+
+### Verified-false alarms (don't re-chase these)
+- Bid-dispatch secrets **are** bound to the `api` function (`index.ts:2076–2081`).
+- RoleGuard/ProtectedRoute `isLoading` is mapped correctly (`hooks/use-auth.ts:58`).
+- Both `/api/projects/:id/estimates/approved` **and** `/api/estimates/approved/:projectId`
+  exist (`index.ts:391, 411`).
+
+### Real, still-open
+- **`tsc` is 588 errors across live files** and the deploy build (`vite build`) never
+  type-checks — so `tsc` is a dead gate. Greening it (or gating *new* errors) is its
+  own track.
+- **`pending_team` dead role** — contacts of role `team`/`employee` get `pending_team`,
+  which no portal recognizes (normalizes to `client`). Fix inside the role refactor.
+
+## Next up (roadmap, in priority order)
+
+1. **Estimates: email→bid ingestion + workspace ergonomics + mandatory trades.**
+   Tyler's next major ask (2026-06-11). Full spec: **`docs/estimates-email-bids-design.md`**.
+   - WS3: every estimate line item must have a **trade**; alert + "request bids" prompt if missing.
+   - WS2: collapsible + hover-expand sidebar, **wider modals**, estimate focus/split view (email side-by-side).
+   - WS1: **"Check Email for Bids"** button — AI reads 2–3 emails, recommends line items
+     (with trade), attaches the source PDF. Reuses Ingestion Lab Gmail OAuth + Claude
+     extraction. **Blocked on Google OAuth operator setup** (Secret Manager + APIs + consent).
+   - Suggested order: WS3 → WS2 → WS1.
+2. **Role-taxonomy refactor** (`ROLE_AUDIT.md`) — keystone; fixes `pending_team`,
+   dedupes `UserRole` types, de-risks Firestore rules. Migrate data before rules.
+3. **Selections v2** — port `origin/feat/selections-v2-dashboard-reminders` (`6b09bd6`)
+   onto the lifecycle model (see "Unmerged work" below).
+4. **tsc type-health track** — make type-check a real gate again.
 
 ---
 
