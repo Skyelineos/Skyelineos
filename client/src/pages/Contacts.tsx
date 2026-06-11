@@ -395,6 +395,10 @@ export default function Contacts() {
     return matchesSearch;
   });
 
+  // Internal Skyeline staff roles — grouped under the "Team Members" tile/filter.
+  const TEAM_ROLES = ['team', 'employee', 'gc', 'admin', 'project_manager', 'projectmanager', 'staff'];
+  const isTeamRole = (role?: string) => TEAM_ROLES.includes((role || '').toLowerCase());
+
   const filteredContacts = contacts.filter((contact) => {
     const matchesSearch = searchTerm === '' ||
       contact.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -405,7 +409,11 @@ export default function Contacts() {
       (Array.isArray((contact as any).trades) && (contact as any).trades.some((t: string) =>
         typeof t === 'string' && t.toLowerCase().includes(searchTerm.toLowerCase())
       ));
-    const matchesRole = roleFilter === 'all' || contact.role?.toLowerCase() === roleFilter.toLowerCase();
+    const matchesRole = roleFilter === 'all'
+      ? true
+      : roleFilter === 'team'
+        ? isTeamRole(contact.role)
+        : contact.role?.toLowerCase() === roleFilter.toLowerCase();
     const matchesCompany = companyFilter === 'all' || contact.company === companyFilter;
     return matchesSearch && matchesRole && matchesCompany;
   }).sort((a, b) => {
@@ -423,6 +431,7 @@ export default function Contacts() {
     clients: contacts.filter((c) => c.role.toLowerCase() === 'client').length,
     subcontractors: contacts.filter((c) => c.role.toLowerCase() === 'subcontractor').length,
     suppliers: contacts.filter((c) => c.role.toLowerCase() === 'supplier').length,
+    team: contacts.filter((c) => isTeamRole(c.role)).length,
     active: contacts.filter((c) => c.isActive).length
   };
 
@@ -556,7 +565,7 @@ export default function Contacts() {
             </div>
 
             {/* Summary Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
               <Card
                 onClick={() => setRoleFilter('all')}
                 className={`cursor-pointer transition-shadow hover:shadow-md ${roleFilter === 'all' ? 'ring-2 ring-[#C9A96E]' : ''}`}
@@ -609,6 +618,20 @@ export default function Contacts() {
                     <div>
                       <p className="text-sm text-gray-600">Suppliers</p>
                       <p className="text-xl font-semibold">{summaryStats.suppliers}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card
+                onClick={() => setRoleFilter('team')}
+                className={`cursor-pointer transition-shadow hover:shadow-md ${roleFilter === 'team' ? 'ring-2 ring-[#C9A96E]' : ''}`}
+              >
+                <CardContent className="p-4">
+                  <div className="flex items-center space-x-2">
+                    <User className="h-4 w-4 text-slate-600" />
+                    <div>
+                      <p className="text-sm text-gray-600">Team Members</p>
+                      <p className="text-xl font-semibold">{summaryStats.team}</p>
                     </div>
                   </div>
                 </CardContent>
