@@ -62,6 +62,7 @@ const ProjectTakeoff = lazy(() => import("@/pages/ProjectTakeoff"));
 const Subscriptions = lazy(() => import("@/pages/Subscriptions"));
 const ApiStorage = lazy(() => import("@/pages/ApiStorage"));
 const LearnMore = lazy(() => import("@/pages/LearnMore"));
+const Giveaway = lazy(() => import("@/pages/Giveaway"));
 const Bills = lazy(() => import("@/pages/Bills"));
 const ContentStudio = lazy(() => import("@/pages/ContentStudio"));
 const SiteLog = lazy(() => import("@/pages/SiteLog"));
@@ -122,6 +123,14 @@ function Router() {
       <Route path="/learn-more">
         <Suspense fallback={<MinimalSpinner title="Loading" />}>
           <LearnMore />
+        </Suspense>
+      </Route>
+
+      {/* Public giveaway page — no auth. Shows the design uploaded via
+          Content Studio → Giveaway Page; the giveaway QR points here. */}
+      <Route path="/giveaway">
+        <Suspense fallback={<MinimalSpinner title="Loading" />}>
+          <Giveaway />
         </Suspense>
       </Route>
 
