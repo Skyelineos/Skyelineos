@@ -125,7 +125,6 @@
     "cors": "^2.8.5",
     "cypress": "^14.5.4",
     "date-fns": "^3.6.0",
-    "dhtmlx-gantt": "^9.0.14",
     "docx": "^9.5.1",
     "dompurify": "^3.2.6",
     "dotenv": "^17.2.1",
