@@ -9,6 +9,7 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { AddressAutocomplete } from '@/components/common/AddressAutocomplete';
+import { MapPinPicker } from '@/components/common/MapPinPicker';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -20,7 +21,7 @@ import { VcardImportZone } from '@/components/sales/VcardImportZone';
 import {
   Plus, Search, MoreVertical, Filter, X, ChevronUp, ChevronDown,
   ExternalLink, FolderOpen, List, LayoutGrid, Settings2, Trash2,
-  ArrowRight, Edit2, User,
+  ArrowRight, Edit2, User, MapPin,
 } from 'lucide-react';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -49,6 +50,10 @@ interface Client {
   city?: string | null;
   state?: string | null;
   zip?: string | null;
+  // Job-site map pin (set via the lead form's map picker). Carried into the
+  // project's buildLocation when the lead converts.
+  latitude?: number | null;
+  longitude?: number | null;
   spouse?: {
     name: string;
     firstName?: string | null;
@@ -319,10 +324,12 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
   const [tagInput, setTagInput] = useState('');
+  const [showPin, setShowPin] = useState(false);
 
   const blank = {
     firstName: '', lastName: '',
     email: '', phone: '', company: '', jobAddress: '', city: '', state: '', zip: '',
+    latitude: null as number | null, longitude: null as number | null,
     // hasSpouse toggles the spouse fields. We keep the three spouse fields in
     // state regardless so toggling off-then-on doesn't wipe entered text;
     // the save handler only emits a spouse object when hasSpouse is true.
@@ -370,6 +377,8 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
           city: editing.city || '',
           state: editing.state || '',
           zip: editing.zip || '',
+          latitude: typeof editing.latitude === 'number' ? editing.latitude : null,
+          longitude: typeof editing.longitude === 'number' ? editing.longitude : null,
           hasSpouse: !!(editing.spouse && (editing.spouse.name || editing.spouse.firstName)),
           spouseFirstName: editing.spouse?.firstName || (editing.spouse?.name || '').trim().split(/\s+/)[0] || '',
           spouseLastName: editing.spouse?.lastName || (editing.spouse?.name || '').trim().split(/\s+/).slice(1).join(' ') || '',
@@ -412,6 +421,8 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
         setForm(blank);
       }
       setTagInput('');
+      // Auto-open the map when the lead already has a pin so it's visible on edit.
+      setShowPin(!!editing && typeof editing.latitude === 'number');
     }
   }, [open, editing, prefill]);
 
@@ -489,6 +500,8 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
         city: form.city || null,
         state: form.state || null,
         zip: form.zip || null,
+        latitude: typeof form.latitude === 'number' ? form.latitude : null,
+        longitude: typeof form.longitude === 'number' ? form.longitude : null,
         spouse: spousePayload,
         stage: form.stage,
         projectType: form.projectType,
@@ -609,6 +622,33 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
               <Label>Zip</Label>
               <Input value={form.zip} onChange={e => set('zip', e.target.value)} placeholder="—" className="placeholder:text-gray-300" />
             </div>
+          </div>
+
+          {/* Job-site map pin. Collapsed until opened (so the map only mounts on
+              demand), auto-open when a pin already exists. Drop/drag the pin to
+              set the exact lot; carried into the project's buildLocation on
+              conversion. */}
+          <div className="sm:col-span-2">
+            {!showPin && form.latitude == null ? (
+              <Button variant="outline" size="sm" onClick={() => setShowPin(true)} className="gap-2">
+                <MapPin className="w-4 h-4" /> Pin job-site on map
+              </Button>
+            ) : (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label>Job-Site Location {form.latitude != null && <span className="text-green-600 text-xs font-normal">· pin set</span>}</Label>
+                  <Button variant="ghost" size="sm" onClick={() => setShowPin(false)} className="h-7 text-xs text-gray-500">
+                    <ChevronUp className="w-3.5 h-3.5 mr-1" /> Hide map
+                  </Button>
+                </div>
+                <MapPinPicker
+                  latitude={form.latitude}
+                  longitude={form.longitude}
+                  address={[form.jobAddress, form.city, form.state, form.zip].filter(Boolean).join(', ')}
+                  onChange={({ latitude, longitude }) => { set('latitude', latitude); set('longitude', longitude); }}
+                />
+              </div>
+            )}
           </div>
 
           {/* Spouse — hidden by default; "+ Add Spouse" reveals three fields.
@@ -787,11 +827,27 @@ function CreateProjectDialog({ client, mode, previousStage, previousStageLabel, 
     if (!form.projectName.trim()) return;
     setSaving(true);
     try {
+      // Carry the lead's job-site pin into the project's buildLocation so the
+      // jobsite map + directions work immediately on the project overview.
+      const hasPin = typeof client.latitude === 'number' && typeof client.longitude === 'number';
+      const buildLocation = hasPin
+        ? {
+            addressLine1: client.jobAddress || form.address || '',
+            city: client.city || '',
+            state: client.state || '',
+            zipCode: client.zip || '',
+            latitude: client.latitude,
+            longitude: client.longitude,
+            status: 'unconfirmed' as const,
+          }
+        : null;
+
       // 1. Create project
       const projectRef = await addDoc(collection(db, 'projects'), {
         name: form.projectName.trim(),
         clientName: client.name,
         address: form.address || null,
+        ...(buildLocation ? { buildLocation } : {}),
         status: 'active',
         projectType: client.projectType || 'custom_home',
         contractAmount: client.budget || null,

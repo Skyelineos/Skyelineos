@@ -29,6 +29,7 @@ interface LeadIntakePayload {
   phone?: string;
   preferredContact?: string;
   city?: string;
+  county?: string;
   interests?: string[];
   selections?: string[];
   crestviewQuestions?: string;
@@ -164,6 +165,7 @@ async function createLead(
     source,
     sourceDetail,
     city: p.city || null,
+    county: p.county || null,
     state: 'UT',
     budget,
     priority: priorityFromScore(leadScore, budget),

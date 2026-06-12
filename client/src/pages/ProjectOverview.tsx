@@ -33,6 +33,7 @@ import { ProjectStageTracker, deriveStageFromProject } from '@/components/projec
 import { SoftBudgetBadge } from '@/components/projects/SoftBudgetBadge';
 import { ContractProfitCard } from '@/components/projects/ContractProfitCard';
 import { SelectionsProgressCard } from '@/components/projects/SelectionsProgressCard';
+import { ProjectJobsiteCard } from '@/components/projects/ProjectJobsiteCard';
 
 
 
@@ -547,6 +548,9 @@ export default function ProjectOverview() {
             );
           })()}
         </div>
+
+        {/* Jobsite location — map + one-tap directions to the build. */}
+        {projectId && <ProjectJobsiteCard project={project} projectId={projectId} />}
 
         {/* Milestones */}
         <Card className="bg-gray-50">

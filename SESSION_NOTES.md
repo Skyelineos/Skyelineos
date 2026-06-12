@@ -63,6 +63,41 @@ notification dispatcher). No new secrets required.
   taxonomy, two in `Sales.tsx` at the legacy `getDocs`/`Set` spots) — none
   introduced by this work; production build (esbuild) ships fine.
 
+## Session 13 — Jobsite mapping + QR-form counties
+
+Wired the existing `BuildLocation` map/pin system into the two places it was
+missing, added a lightweight reusable pin picker, and tightened the QR lead form.
+
+- **Reusable pin picker** — `client/src/components/common/MapPinPicker.tsx`. A
+  lean map (no address-field clutter) you click/drag to set lat/lng. Dynamic
+  `import('maplibre-gl')` like `BuildLocation` so it stays out of the startup
+  bundle. Best-effort OSM Nominatim "Find address on map" + manual drop. Use it
+  anywhere an address is captured.
+- **Lead form** (`Sales.tsx`) — the lead dialog now has a collapsible "Pin
+  job-site on map" section storing `latitude`/`longitude` on the `clients` doc.
+  When a lead converts to a project (`CreateProjectFromLead`), the pin carries
+  into the project's `buildLocation` so directions work immediately.
+- **GC project widget** — `client/src/components/projects/ProjectJobsiteCard.tsx`,
+  added to `ProjectOverview.tsx` below the details grid. View mode shows the map
+  + an "Open Directions" button; "Set/Edit pin" flips to edit mode (keyed
+  remount so the map rebinds handlers) and saves via `saveBuildLocation`. Lets
+  the GC pin legacy projects that only had a text address.
+- **Directions = default app** — `buildLocation.ts` `directionsUrl` now detects
+  iOS (incl. iPadOS-as-Mac) and returns an Apple Maps link there, Google Maps
+  elsewhere — so it opens the user's actual default maps app.
+- **QR lead form counties** (`LearnMore.tsx`) — the "City/Area" dropdown is now
+  "County You Plan to Build In" → Utah County · Wasatch County · Salt Lake
+  County · Other (reveals a "please specify" text box). Stored as both `city`
+  (back-compat) and a new `county` field on the lead; `intakeRoute.ts` persists
+  `county`.
+
+Reference: `docs/mind-map.md` logs Tyler's four-portal product mind map.
+
+Still plain-text address (not yet pin-enabled): `NewProjectForm`,
+`CreateProjectModal`, `WorkingEditProjectForm`. They write the flat `address`
+field; the project overview pin picker covers them after creation. Migrate to
+`MapPinPicker`/`BuildLocation` when convenient.
+
 ## Session 12 — Ingestion Lab
 
 Built the admin-only AI ingestion pipeline at `/admin/ingestion-lab`. Full reference: `docs/ingestion-lab-schema.md`. Code under `functions/src/ingestionLab/` (backend) and `client/src/components/ingestionLab/` + `client/src/pages/IngestionLab.tsx` (UI).
