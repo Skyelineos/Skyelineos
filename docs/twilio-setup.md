@@ -65,18 +65,34 @@ in the Twilio console for the outbound record / any error code.
 ### 5. Upgrade out of trial
 Dashboard → **Upgrade your account** → add a payment method. This removes the
 verified-number restriction and the trial prefix. (Keep your number.)
+✅ *Done — account Active, $50 funds.*
 
 ### 6. Register A2P 10DLC  ← the real gate
-Messaging → **Regulatory Compliance → A2P 10DLC**. US carriers filter/block
+Trust Hub → **Registrations → A2P 10DLC**. US carriers filter/block
 application-to-person texts from unregistered local numbers, *even after you
-upgrade*. For a small builder, the **Sole Proprietor** brand is the fast, cheap
-path (lower throughput, plenty for sub alerts).
-- Register a **Brand**, then a **Campaign** (use case: *Mixed / Notifications* —
-  describe it as "transactional jobsite + bid notifications to subcontractors and
-  the operator").
+upgrade*. Two parts — **Brand**, then **Campaign**:
+
+**a) Brand** (A2P Brands tab → Create A2P Brand). Skyeline registered as
+**Low volume standard** (Private corporation) — good fit for sub-alert volume;
+trust score shows `N/A` for this tier, which is normal. ✅ *Done — Approved,
+brand SID `BNc0d314…`.*
+
+**b) Campaign** (A2P Campaigns tab → Create) — **this is what actually unblocks
+sending; the brand alone won't deliver.** Under the Skyeline Homes brand:
+- Use case: **Mixed** / Low Volume Mixed
+- Sample messages (mirror what the code sends):
+  - `New lead: Jane Smith. Source: Website. Provo · 801-555-1234 https://skyelineos.web.app/sales`
+  - `New bid request — Maple Ridge. Trades: Framing, Roofing. https://skyelineos.web.app/...`
+  - `Bid awarded: Framing. Your bid for Maple Ridge was awarded. Skyeline will follow up.`
+  - `Skyeline Homes alerts. Reply STOP to unsubscribe, START to resubscribe.` (HELP reply)
+- Opt-in description: *"Subcontractors and clients give their number and consent
+  when added to Skyeline's system by staff; consent is recorded per contact.
+  Recipients reply STOP to opt out."* (matches the consent checkbox + STOP webhook)
 - Associate `+13852334688` with the campaign's Messaging Service.
-- Approval is typically **1–3 business days**. Until it clears, sub texts may be
-  filtered.
+
+After the campaign is submitted, the brand's **"T-Mobile daily limit" stays
+*Pending* until the campaign is approved** (~minutes to a few days for low-volume
+standard). When it flips to a real number, sub texts deliver reliably.
 
 ### 7. Wire the inbound STOP/HELP webhook
 This is what makes the opt-out ledger record STOP/START. Console → Phone Numbers
