@@ -1,39 +1,30 @@
-// Skyelineos Gantt - Main Dual-Engine Component
+// Skyelineos Gantt — clean, single-view construction schedule.
+// One timeline, a minimal toolbar, and advanced options tucked behind a menu.
 import React, { useState } from 'react';
 import { useGantt } from '../state';
-import { DhtmlxBuilder } from './DhtmlxBuilder';
-import { FrappeViewer } from './FrappeViewer';
+import { SkyelineGantt } from './SkyelineGantt';
 import { AddTaskModal } from './AddTaskModal';
-import { DependencyEditorModal } from './DependencyEditorModal';
-import { DraggableResizer, useResizableLayout } from './DraggableResizer';
 import { SaveTemplateModal, LoadTemplateModal } from './TemplateModal';
 import { autoSchedule } from '../engine/autoSchedule';
 import { saveSchedule } from '../useSchedulePersistence';
 import { useToast } from '@/hooks/use-toast';
 import type { WbsTask, Link } from '../types';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 import {
-  Calendar,
-  Eye,
-  Settings,
-  Play,
-  Users,
-  AlertCircle,
-  CheckCircle2,
-  Clock,
-  Zap,
-  Plus,
-  Save,
-  FolderOpen,
-  BookTemplate
-} from 'lucide-react';
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuCheckboxItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu';
+import { Plus, Save, Sparkles, MoreHorizontal, CheckCircle2, AlertCircle } from 'lucide-react';
+
+const ZOOMS = ['Day', 'Week', 'Month'] as const;
 
 export const BuildTrackerPro: React.FC = () => {
   const {
-    viewMode,
-    setViewMode,
     projectName,
     projectId,
     tasks,
@@ -50,107 +41,67 @@ export const BuildTrackerPro: React.FC = () => {
     toggleBaseline,
     showWeekends,
     toggleWeekends,
-    holidays
+    holidays,
   } = useGantt();
 
-  const [showMetrics, setShowMetrics] = useState(false);
   const [isScheduling, setIsScheduling] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showAddTaskModal, setShowAddTaskModal] = useState(false);
-  const [showDependencyEditor, setShowDependencyEditor] = useState(false);
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
   const [showLoadTemplate, setShowLoadTemplate] = useState(false);
-  const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
-  const [editingLink, setEditingLink] = useState<Link | null>(null);
-  const [editingSourceTask, setEditingSourceTask] = useState<WbsTask | null>(null);
-  const [editingTargetTask, setEditingTargetTask] = useState<WbsTask | null>(null);
   const { toast } = useToast();
-  
-  // Resizable layout management
-  const { tableWidth, handleResize } = useResizableLayout(400, 'skyelineos-gantt-table-width');
 
-  const criticalTaskCount = metrics ? metrics.criticalIds.size : 0;
-  const totalTaskCount = tasks.length;
-  const completedTasks = tasks.filter(t => (t.progress ?? 0) === 100).length;
+  const criticalCount = metrics ? metrics.criticalIds.size : 0;
 
-  // Extract links from WBS tasks with predecessors
-  const extractLinksFromTasks = (tasks: WbsTask[]): Link[] => {
-    const allLinks: Link[] = [];
-    
-    const extractFromNode = (node: WbsTask) => {
-      if (node.predecessors) {
-        node.predecessors.forEach(pred => {
-          allLinks.push({
-            id: `${pred.sourceId}-${pred.targetId}`,
-            sourceId: pred.sourceId,
-            targetId: pred.targetId,
-            type: pred.type,
-            lagDays: pred.lagDays
-          });
-        });
-      }
-      if (node.children) {
-        node.children.forEach(child => extractFromNode(child));
-      }
+  const leafStats = (() => {
+    let total = 0;
+    let done = 0;
+    const walk = (nodes: WbsTask[]) =>
+      nodes.forEach((n) => {
+        const leaf = !n.children || n.children.length === 0;
+        if (leaf) {
+          total++;
+          if ((n.progress ?? 0) >= 100) done++;
+        }
+        n.children && walk(n.children);
+      });
+    walk(tasks);
+    return { total, done };
+  })();
+
+  const extractLinksFromTasks = (list: WbsTask[]): Link[] => {
+    const all: Link[] = [];
+    const walk = (node: WbsTask) => {
+      node.predecessors?.forEach((p) =>
+        all.push({ id: `${p.sourceId}-${p.targetId}`, sourceId: p.sourceId, targetId: p.targetId, type: p.type, lagDays: p.lagDays })
+      );
+      node.children?.forEach(walk);
     };
-    
-    tasks.forEach(task => extractFromNode(task));
-    return allLinks;
+    list.forEach(walk);
+    return all;
   };
 
-  // Auto Schedule Handler
   const handleAutoSchedule = async () => {
     if (tasks.length === 0) {
-      toast({
-        title: "No Tasks",
-        description: "Add some tasks before running auto-schedule.",
-        variant: "destructive"
-      });
+      toast({ title: 'No tasks', description: 'Add some tasks before auto-scheduling.', variant: 'destructive' });
       return;
     }
-
     setIsScheduling(true);
     try {
-      const extractedLinks = extractLinksFromTasks(tasks);
-      const result = autoSchedule(tasks, extractedLinks, {
-        respectLocked: true,
-        holidays: holidays,
-        projectStart: undefined // Use earliest task start
-      });
-
-      // Update state with scheduled tasks and metrics
+      const result = autoSchedule(tasks, extractLinksFromTasks(tasks), { respectLocked: true, holidays });
       setTasks(result.tasks);
       setMetrics(result.metrics);
-
-      // Show success message
       toast({
-        title: "Auto Schedule Complete",
-        description: `Scheduled ${tasks.length} tasks. ${result.metrics.warnings.length > 0 ? 'Check warnings.' : 'No issues found.'}`
+        title: 'Schedule recalculated',
+        description: result.metrics.warnings.length ? `Done — ${result.metrics.warnings.length} warning(s).` : 'All dependencies resolved.',
       });
-
-      // Show warnings if any
-      if (result.metrics.warnings.length > 0) {
-        setTimeout(() => {
-          toast({
-            title: "Schedule Warnings",
-            description: result.metrics.warnings.join('; '),
-            variant: "destructive"
-          });
-        }, 1000);
-      }
-
-    } catch (error) {
-      toast({
-        title: "Schedule Error",
-        description: `Failed to auto-schedule: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        variant: "destructive"
-      });
+    } catch (e) {
+      toast({ title: 'Schedule error', description: e instanceof Error ? e.message : 'Unknown error', variant: 'destructive' });
     } finally {
       setIsScheduling(false);
     }
   };
 
-  // Save schedule to Firestore
   const handleSave = async () => {
     if (!projectId) {
       toast({ title: 'Cannot save', description: 'No project linked to this schedule.', variant: 'destructive' });
@@ -167,299 +118,110 @@ export const BuildTrackerPro: React.FC = () => {
     }
   };
 
-  // Apply a loaded template — reset dates relative to today
   const handleApplyTemplate = (template: { tasks: WbsTask[]; links: Link[] }) => {
     setTasks(template.tasks);
     setLinks(template.links);
-    toast({ title: 'Template applied', description: 'Tasks loaded. Run Auto Schedule to set dates.' });
-  };
-
-  // Handle dependency double-click
-  const handleLinkDoubleClick = (link: Link, sourceTask: WbsTask, targetTask: WbsTask) => {
-    setEditingLink(link);
-    setEditingSourceTask(sourceTask);
-    setEditingTargetTask(targetTask);
-    setShowDependencyEditor(true);
+    toast({ title: 'Template applied', description: 'Tasks loaded. Recalculate to set dates.' });
   };
 
   return (
-    <div className="skyelineos-gantt">
-      {/* Header */}
-      <div className="border-b bg-white px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <h1 className="text-2xl font-bold text-gray-900">{projectName}</h1>
-            <Badge variant={viewMode === 'builder' ? 'default' : 'secondary'}>
-              {viewMode === 'builder' ? 'Builder Mode' : 'Client View'}
-            </Badge>
-          </div>
-          
-          <div className="flex items-center space-x-2">
-            {/* Mode Toggle */}
-            <Button
-              variant={viewMode === 'builder' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setViewMode('builder')}
-            >
-              <Settings className="h-4 w-4 mr-1" />
-              Builder
-            </Button>
-            <Button
-              variant={viewMode === 'viewer' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setViewMode('viewer')}
-            >
-              <Eye className="h-4 w-4 mr-1" />
-              Client View
-            </Button>
-            
-            <Separator orientation="vertical" className="h-6" />
-            
-            {/* Quick Stats */}
-            <div className="flex items-center space-x-4 text-sm">
-              <div className="flex items-center">
-                <CheckCircle2 className="h-4 w-4 text-green-500 mr-1" />
-                {completedTasks}/{totalTaskCount} Complete
-              </div>
-              {criticalTaskCount > 0 && (
-                <div className="flex items-center">
-                  <AlertCircle className="h-4 w-4 text-red-500 mr-1" />
-                  {criticalTaskCount} Critical
-                </div>
-              )}
-            </div>
-          </div>
+    <div className="flex h-full flex-col bg-white">
+      {/* ===== Toolbar ===== */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-3">
+        <div className="flex items-center gap-3">
+          <h1 className="text-lg font-semibold text-gray-900">{projectName}</h1>
+          <span className="hidden items-center gap-1 text-sm text-gray-500 sm:flex">
+            <CheckCircle2 className="h-4 w-4 text-green-500" />
+            {leafStats.done}/{leafStats.total} done
+          </span>
+          {showCritical && criticalCount > 0 && (
+            <span className="hidden items-center gap-1 text-sm text-red-500 sm:flex">
+              <AlertCircle className="h-4 w-4" />
+              {criticalCount} critical
+            </span>
+          )}
         </div>
 
-        {/* Toolbar */}
-        <div className="flex items-center justify-between mt-4">
-          <div className="flex items-center space-x-2">
-            {/* Zoom Controls */}
-            <div className="flex items-center space-x-1">
-              <Button 
-                variant={zoom === 'Day' ? 'default' : 'outline'} 
-                size="sm"
-                onClick={() => setZoom('Day')}
+        <div className="flex items-center gap-2">
+          {/* zoom segmented control */}
+          <div className="flex items-center rounded-lg border bg-gray-50 p-0.5">
+            {ZOOMS.map((z) => (
+              <button
+                key={z}
+                onClick={() => setZoom(z)}
+                className={`rounded-md px-3 py-1 text-sm font-medium transition ${
+                  zoom === z ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'
+                }`}
               >
-                Day
-              </Button>
-              <Button 
-                variant={zoom === 'Week' ? 'default' : 'outline'} 
-                size="sm"
-                onClick={() => setZoom('Week')}
-              >
-                Week
-              </Button>
-              <Button 
-                variant={zoom === 'Month' ? 'default' : 'outline'} 
-                size="sm"
-                onClick={() => setZoom('Month')}
-              >
-                Month
-              </Button>
-            </div>
-            
-            <Separator orientation="vertical" className="h-6" />
-            
-            {/* Action Buttons */}
-            <Button
-              variant="default"
-              size="sm"
-              onClick={handleAutoSchedule}
-              disabled={isScheduling}
-            >
-              <Zap className="h-4 w-4 mr-1" />
-              {isScheduling ? 'Scheduling...' : 'Auto Schedule'}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={isScheduling}
-              onClick={() => setShowAddTaskModal(true)}
-            >
-              <Plus className="h-4 w-4 mr-1" />
-              Add Task
-            </Button>
-            
-            <Separator orientation="vertical" className="h-6" />
-            
-            {/* Display Options */}
-            <Button
-              variant={showCritical ? 'default' : 'outline'}
-              size="sm"
-              onClick={toggleCritical}
-            >
-              <AlertCircle className="h-4 w-4 mr-1" />
-              Critical Path
-            </Button>
-            <Button
-              variant={showBaseline ? 'default' : 'outline'}
-              size="sm"
-              onClick={toggleBaseline}
-            >
-              <Clock className="h-4 w-4 mr-1" />
-              Baseline
-            </Button>
-            <Button
-              variant={showWeekends ? 'default' : 'outline'}
-              size="sm"
-              onClick={toggleWeekends}
-            >
-              <Calendar className="h-4 w-4 mr-1" />
-              Weekends
-            </Button>
+                {z}
+              </button>
+            ))}
           </div>
-          
-          <div className="flex items-center space-x-2">
-            {/* Template Buttons */}
-            <Button variant="outline" size="sm" onClick={() => setShowLoadTemplate(true)}>
-              <FolderOpen className="h-4 w-4 mr-1" />
-              Load Template
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setShowSaveTemplate(true)} disabled={tasks.length === 0}>
-              <BookTemplate className="h-4 w-4 mr-1" />
-              Save as Template
-            </Button>
 
-            <Separator orientation="vertical" className="h-6" />
+          <Button variant="outline" size="sm" onClick={() => setShowAddTaskModal(true)}>
+            <Plus className="mr-1 h-4 w-4" />
+            Add Task
+          </Button>
 
-            {/* Save Schedule */}
-            <Button
-              size="sm"
-              onClick={handleSave}
-              disabled={isSaving || tasks.length === 0}
-              style={{ backgroundColor: '#C9A96E', color: '#141414' }}
-            >
-              <Save className="h-4 w-4 mr-1" />
-              {isSaving ? 'Saving...' : 'Save Schedule'}
-            </Button>
+          {/* Advanced options menu — keeps the main bar uncluttered */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="px-2">
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem onClick={handleAutoSchedule} disabled={isScheduling}>
+                <Sparkles className="mr-2 h-4 w-4" />
+                {isScheduling ? 'Recalculating…' : 'Recalculate dates'}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel className="text-xs text-gray-400">Display</DropdownMenuLabel>
+              <DropdownMenuCheckboxItem checked={showCritical} onCheckedChange={toggleCritical}>
+                Critical path
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem checked={showBaseline} onCheckedChange={toggleBaseline}>
+                Baseline variance
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem checked={showWeekends} onCheckedChange={toggleWeekends}>
+                Shade weekends
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel className="text-xs text-gray-400">Templates</DropdownMenuLabel>
+              <DropdownMenuItem onClick={() => setShowLoadTemplate(true)}>Load template…</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setShowSaveTemplate(true)} disabled={tasks.length === 0}>
+                Save as template…
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
-            <Separator orientation="vertical" className="h-6" />
-
-            {/* Metrics Toggle */}
-            <Button
-              variant={showMetrics ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setShowMetrics(!showMetrics)}
-            >
-              <Play className="h-4 w-4 mr-1" />
-              Metrics
-            </Button>
-          </div>
+          <Button
+            size="sm"
+            onClick={handleSave}
+            disabled={isSaving || tasks.length === 0}
+            style={{ backgroundColor: '#C9A96E', color: '#141414' }}
+          >
+            <Save className="mr-1 h-4 w-4" />
+            {isSaving ? 'Saving…' : 'Save'}
+          </Button>
         </div>
       </div>
 
-      {/* Metrics Panel */}
-      {showMetrics && metrics && (
-        <div className="border-b bg-gray-50 px-6 py-3">
-          <div className="grid grid-cols-4 gap-4 text-sm">
-            <div>
-              <div className="font-medium text-gray-900">Critical Tasks</div>
-              <div className="text-red-600">{criticalTaskCount}</div>
-            </div>
-            <div>
-              <div className="font-medium text-gray-900">Total Float</div>
-              <div className="text-blue-600">
-                {Object.values(metrics.slackDays).reduce((a, b) => a + b, 0)} days
-              </div>
-            </div>
-            <div>
-              <div className="font-medium text-gray-900">Warnings</div>
-              <div className="text-amber-600">{metrics.warnings.length}</div>
-            </div>
-            <div>
-              <div className="font-medium text-gray-900">Completion</div>
-              <div className="text-green-600">
-                {Math.round((completedTasks / totalTaskCount) * 100)}%
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Main Gantt Area with Resizable Layout */}
-      <div className="flex-1 bg-white">
-        {/* Debug: Current view mode: {viewMode} */}
-        {viewMode === 'builder' ? (
-          <div className="h-full flex flex-col">
-            <div className="p-4 bg-blue-50 text-blue-800 text-sm">
-              🔧 DHTMLX Builder Mode - Professional Gantt Chart with Resizable Table
-            </div>
-            <div className="flex-1 flex">
-              <DhtmlxBuilder 
-                onLinkDoubleClick={handleLinkDoubleClick}
-                tableWidth={tableWidth}
-                onTableWidthChange={handleResize}
-              />
-              <DraggableResizer
-                defaultWidth={tableWidth}
-                minWidth={250}
-                maxWidth={600}
-                onResize={handleResize}
-                storageKey="skyelineos-gantt-table-width"
-                className="z-10"
-              />
-            </div>
-          </div>
-        ) : (
-          <div className="h-full">
-            <div className="p-4 bg-green-50 text-green-800 text-sm mb-2">
-              👁️ Frappe Client View - Clean Presentation Mode
-            </div>
-            <FrappeViewer />
-          </div>
-        )}
+      {/* ===== Chart ===== */}
+      <div className="min-h-0 flex-1">
+        <SkyelineGantt onAddTask={() => setShowAddTaskModal(true)} />
       </div>
 
-      {/* Status Bar */}
-      <div className="border-t bg-gray-50 px-6 py-2 text-sm text-gray-600">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <span>Engine: {viewMode === 'builder' ? 'DHTMLX Gantt' : 'Frappe Gantt'}</span>
-            <span>Tasks: {totalTaskCount}</span>
-            <span>View: {zoom}</span>
-          </div>
-          <div className="flex items-center space-x-2">
-            <Users className="h-4 w-4" />
-            <span>Professional Construction Management</span>
-          </div>
-        </div>
-      </div>
-      
-      {/* Add Task Modal */}
-      <AddTaskModal
-        open={showAddTaskModal}
-        onClose={() => setShowAddTaskModal(false)}
-        selectedTaskIds={selectedTaskIds}
-      />
-      
-      {/* Dependency Editor Modal */}
-      <DependencyEditorModal
-        open={showDependencyEditor}
-        onClose={() => {
-          setShowDependencyEditor(false);
-          setEditingLink(null);
-          setEditingSourceTask(null);
-          setEditingTargetTask(null);
-        }}
-        link={editingLink}
-        sourceTask={editingSourceTask}
-        targetTask={editingTargetTask}
-      />
-
-      {/* Template Modals */}
+      {/* ===== Modals ===== */}
+      <AddTaskModal open={showAddTaskModal} onClose={() => setShowAddTaskModal(false)} />
       <SaveTemplateModal
         open={showSaveTemplate}
         onClose={() => setShowSaveTemplate(false)}
         tasks={tasks}
         links={links}
-        onSaved={(name) => toast({ title: 'Template saved', description: `"${name}" is ready to use on future projects.` })}
+        onSaved={(name) => toast({ title: 'Template saved', description: `"${name}" is ready for future projects.` })}
       />
-      <LoadTemplateModal
-        open={showLoadTemplate}
-        onClose={() => setShowLoadTemplate(false)}
-        onLoad={handleApplyTemplate}
-      />
+      <LoadTemplateModal open={showLoadTemplate} onClose={() => setShowLoadTemplate(false)} onLoad={handleApplyTemplate} />
     </div>
   );
 };
