@@ -7,7 +7,9 @@ import { useState } from 'react';
 const GOLD = '#C9A96E';
 const BLACK = '#141414';
 
-const CITIES = ['St. George', 'Washington', 'Hurricane', 'Ivins', 'Santa Clara', 'Cedar City', 'Enterprise', 'Other'];
+// Counties Skyeline actively builds in. Shown on the QR lead form so leads
+// self-select where their build is. "Other" reveals a free-text box.
+const COUNTIES = ['Utah County', 'Wasatch County', 'Salt Lake County', 'Other'];
 const INTERESTS = [
   'Building a Custom Home', 'Learning More About Crestview Solace', 'Product & Finish Information',
   'Design Services', 'Remodel or Addition', 'Investment or Spec Home Opportunities', 'Future Skyeline Homes Projects',
@@ -22,13 +24,17 @@ const HELP = [
 ];
 
 interface FormState {
-  fullName: string; phone: string; email: string; preferredContact: string; city: string;
+  fullName: string; phone: string; email: string; preferredContact: string;
+  // `county` holds the dropdown selection; `countyOther` the free text when
+  // "Other" is picked. The two collapse into the submitted `city` field.
+  county: string; countyOther: string;
   interests: string[]; timeline: string; budgetRange: string; ownsLot: string;
   projectVision: string; helpWith: string[]; consent: boolean; website: string;
 }
 
 const EMPTY: FormState = {
-  fullName: '', phone: '', email: '', preferredContact: '', city: '',
+  fullName: '', phone: '', email: '', preferredContact: '',
+  county: '', countyOther: '',
   interests: [], timeline: '', budgetRange: '', ownsLot: '',
   projectVision: '', helpWith: [], consent: false, website: '',
 };
@@ -38,6 +44,19 @@ export default function LearnMore() {
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState('');
+
+  // The same branded form backs many lead-gen avenues. Each entry point (a QR
+  // sign at the model home, an ad landing-page link, a website button) carries
+  // its own `?source=` + `?campaign=` so every lead is labeled with where it
+  // came from. Defaults to the Crestview model-home open house when unset.
+  //   /learn-more                               → event · Crestview Solace · Build #27
+  //   /learn-more?source=ad_campaign&campaign=Meta%20Spring%20Reno
+  //   /learn-more?source=website
+  const params = typeof window !== 'undefined'
+    ? new URLSearchParams(window.location.search)
+    : new URLSearchParams();
+  const source = params.get('source') || 'event';
+  const campaign = params.get('campaign') || 'Crestview Solace · Build #27';
 
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) => setF(prev => ({ ...prev, [k]: v }));
   const toggle = (k: 'interests' | 'helpWith', v: string) =>
@@ -52,10 +71,13 @@ export default function LearnMore() {
 
     setSubmitting(true);
     try {
+      const county = f.county === 'Other' ? f.countyOther.trim() : f.county;
       const res = await fetch('/api/leads/public-intake', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(f),
+        // `city` carries the county for back-compat with the clients schema;
+        // `county` is also sent so the lead doc records it explicitly.
+        body: JSON.stringify({ ...f, city: county, county, source, sourceDetail: campaign }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Something went wrong. Please try again.');
@@ -117,11 +139,19 @@ export default function LearnMore() {
           <Field label="Preferred Method of Contact">
             <Radios options={['Phone Call', 'Text Message', 'Email']} value={f.preferredContact} onChange={v => set('preferredContact', v)} />
           </Field>
-          <Field label="City or Area You Plan to Build In">
-            <select className={inputCls} value={f.city} onChange={e => set('city', e.target.value)}>
+          <Field label="County You Plan to Build In">
+            <select className={inputCls} value={f.county} onChange={e => set('county', e.target.value)}>
               <option value="">Select…</option>
-              {CITIES.map(c => <option key={c} value={c}>{c}</option>)}
+              {COUNTIES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
+            {f.county === 'Other' && (
+              <input
+                className={`${inputCls} mt-2`}
+                placeholder="Please specify your county or area"
+                value={f.countyOther}
+                onChange={e => set('countyOther', e.target.value)}
+              />
+            )}
           </Field>
         </Card>
 

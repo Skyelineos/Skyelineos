@@ -30,6 +30,10 @@ interface NotificationDoc {
   body?: string;
   link?: string;
   fromUserName?: string;
+  /** When true, send the SMS regardless of the recipient's opt-in prefs.
+   *  Used for high-signal alerts (e.g. a new lead) the operator always wants
+   *  texted. Still requires the recipient to have a phone number. */
+  forceSms?: boolean;
   emailSent?: boolean;
   smsSent?: boolean;
   errors?: string[];
@@ -165,8 +169,10 @@ async function sendAll(
     }
   }
 
-  // SMS via Twilio
-  if (recipient.phone && shouldSendSms(recipient, notif.kind)) {
+  // SMS via Twilio. `forceSms` overrides the opt-in check for alerts the
+  // operator always wants texted (new leads), but a phone number is still
+  // required.
+  if (recipient.phone && (notif.forceSms === true || shouldSendSms(recipient, notif.kind))) {
     try {
       const sid = TWILIO_ACCOUNT_SID.value();
       const token = TWILIO_AUTH_TOKEN.value();

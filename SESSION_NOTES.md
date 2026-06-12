@@ -12,6 +12,92 @@ Things a future Claude session should know before diving in. Specific file paths
 
 The errors look like a brace/paren mismatch around line 815, with the parser cascading the rest of the file as a single broken expression. The file imports cleanly (it's only used in a few timeline experiments) and `vite build` succeeds because esbuild is more permissive than `tsc`. **Production builds and ships fine** — but `npm run check` will always exit non-zero until these are fixed. Don't gate CI on `tsc` without addressing this first.
 
+## Session 13 — Lead intake: alerts + source tracking
+
+Hardened the lead-intake path end to end and added new-lead alerting + lead-gen
+source documentation across every avenue.
+
+### What shipped
+- **New-lead alert (Cloud Function).** `functions/src/leads/newLeadAlert.ts` —
+  `onDocumentCreated('clients/{clientId}')`. Because **every** avenue (manual
+  Sales entry, public web form, Crestview QR/Google Form, future event QR + ad
+  landing pages) writes to `clients`, this one trigger guarantees an alert no
+  matter how the lead arrived. Writes a `notifications/{id}` doc per admin
+  (`role == 'admin'`) with `kind: 'lead_created'` + `forceSms: true`; the
+  existing `dispatchNotification` then fans out to in-app + web push + SMS.
+  Bulk imports (`importedAt` / `imported-vcf` tag) are skipped so a big vCard
+  import doesn't fire one text per contact. Exported from `index.ts`.
+- **`forceSms` on notifications.** `dispatch.ts` now sends the SMS regardless of
+  the recipient's opt-in pref when `notif.forceSms === true` (a phone number is
+  still required). SMS is otherwise opt-in-only and stays that way.
+- **Dashboard alert.** `GCTodayFeed.tsx` gained a **"New leads (last 7 days)"**
+  section above Hot Leads — every new lead, any priority, any avenue, each row
+  labeled with its source. Reads `clients` ordered by `createdAt` (single-field,
+  no composite index).
+- **Lead-gen source documentation.** Source taxonomy extended to
+  `website · event · ad_campaign · referral · instagram · parade_of_homes ·
+  email · phone · other`. Each lead now stores `source` + a free-text
+  `sourceDetail` (the specific event/campaign/referrer). Three places kept in
+  sync: `LEAD_SOURCES` (`Sales.tsx`), `ALLOWED_SOURCES` (`intakeRoute.ts`),
+  `SOURCE_LABELS` (`newLeadAlert.ts` + `GCTodayFeed.tsx`).
+  - **Manual form** (`Sales.tsx`): source picker + a contextual "Source detail"
+    input (Campaign Name / Referred By / Event Name) for event/ad/referral/parade.
+  - **Public form** (`LearnMore.tsx`): reads `?source=` + `?campaign=` query
+    params so the **same** branded form backs many documented entry points
+    (model-home QR → event, ad link → ad_campaign, etc.). Defaults to
+    `event` / "Crestview Solace · Build #27".
+  - **Intake routes** (`intakeRoute.ts`): both `/api/leads/intake` and
+    `/api/leads/public-intake` whitelist `source`, store `sourceDetail`, and tag
+    the lead with the detail string for filtering. No longer hardcodes
+    `source: 'website'` or the Crestview tags.
+
+### Operator prerequisite for the SMS
+The text only sends if the **admin user doc has a `phone`** (E.164, e.g.
+`+18015551234`). Set it on `users/{tyler-uid}.phone`. No SMS opt-in needed —
+`lead_created` forces it. Twilio secrets are already configured (shared with the
+notification dispatcher). No new secrets required.
+
+### Verification
+- `functions` `tsc --noEmit` → clean. Client `vite build` → green.
+- Pre-existing `tsc` errors remain (ModernTimelineBuilder, App.tsx `'gc'` role
+  taxonomy, two in `Sales.tsx` at the legacy `getDocs`/`Set` spots) — none
+  introduced by this work; production build (esbuild) ships fine.
+
+## Session 13 — Jobsite mapping + QR-form counties
+
+Wired the existing `BuildLocation` map/pin system into the two places it was
+missing, added a lightweight reusable pin picker, and tightened the QR lead form.
+
+- **Reusable pin picker** — `client/src/components/common/MapPinPicker.tsx`. A
+  lean map (no address-field clutter) you click/drag to set lat/lng. Dynamic
+  `import('maplibre-gl')` like `BuildLocation` so it stays out of the startup
+  bundle. Best-effort OSM Nominatim "Find address on map" + manual drop. Use it
+  anywhere an address is captured.
+- **Lead form** (`Sales.tsx`) — the lead dialog now has a collapsible "Pin
+  job-site on map" section storing `latitude`/`longitude` on the `clients` doc.
+  When a lead converts to a project (`CreateProjectFromLead`), the pin carries
+  into the project's `buildLocation` so directions work immediately.
+- **GC project widget** — `client/src/components/projects/ProjectJobsiteCard.tsx`,
+  added to `ProjectOverview.tsx` below the details grid. View mode shows the map
+  + an "Open Directions" button; "Set/Edit pin" flips to edit mode (keyed
+  remount so the map rebinds handlers) and saves via `saveBuildLocation`. Lets
+  the GC pin legacy projects that only had a text address.
+- **Directions = default app** — `buildLocation.ts` `directionsUrl` now detects
+  iOS (incl. iPadOS-as-Mac) and returns an Apple Maps link there, Google Maps
+  elsewhere — so it opens the user's actual default maps app.
+- **QR lead form counties** (`LearnMore.tsx`) — the "City/Area" dropdown is now
+  "County You Plan to Build In" → Utah County · Wasatch County · Salt Lake
+  County · Other (reveals a "please specify" text box). Stored as both `city`
+  (back-compat) and a new `county` field on the lead; `intakeRoute.ts` persists
+  `county`.
+
+Reference: `docs/mind-map.md` logs Tyler's four-portal product mind map.
+
+Still plain-text address (not yet pin-enabled): `NewProjectForm`,
+`CreateProjectModal`, `WorkingEditProjectForm`. They write the flat `address`
+field; the project overview pin picker covers them after creation. Migrate to
+`MapPinPicker`/`BuildLocation` when convenient.
+
 ## Session 12 — Ingestion Lab
 
 Built the admin-only AI ingestion pipeline at `/admin/ingestion-lab`. Full reference: `docs/ingestion-lab-schema.md`. Code under `functions/src/ingestionLab/` (backend) and `client/src/components/ingestionLab/` + `client/src/pages/IngestionLab.tsx` (UI).

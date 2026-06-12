@@ -29,6 +29,7 @@ interface LeadIntakePayload {
   phone?: string;
   preferredContact?: string;
   city?: string;
+  county?: string;
   interests?: string[];
   selections?: string[];
   crestviewQuestions?: string;
@@ -39,7 +40,14 @@ interface LeadIntakePayload {
   helpWith?: string[];
   consent?: boolean;
   leadScore?: number;
+  // Lead-gen avenue this submission came from. Lets one shared form back many
+  // entry points — a model-home QR (event), an ad landing page (ad_campaign),
+  // the plain website form, etc. — and document each. Whitelisted server-side.
   source?: string;
+  // Free-text label for the specific event / campaign (e.g. "Parade of Homes
+  // 2026", "Meta Spring Reno campaign"). Stored so ROI can be traced per source.
+  sourceDetail?: string;
+  campaign?: string; // alias for sourceDetail
   tags?: string[];
   // Honeypot — a hidden field real users never fill. Bots that auto-fill every
   // input will populate it, letting us silently drop the submission.
@@ -87,9 +95,23 @@ function scoreFromPayload(p: LeadIntakePayload): number {
   return Math.min(100, s);
 }
 
+// Avenues a public submission is allowed to claim. Anything else falls back to
+// 'website'. Mirrors the LEAD_SOURCES list in client/src/pages/Sales.tsx.
+const ALLOWED_SOURCES = new Set([
+  'website', 'event', 'ad_campaign', 'referral', 'instagram', 'parade_of_homes', 'email', 'phone', 'other',
+]);
+
+function resolveSource(p: LeadIntakePayload): { source: string; sourceDetail: string | null } {
+  const raw = (p.source || '').toString().trim().toLowerCase().replace(/[\s-]+/g, '_');
+  const source = ALLOWED_SOURCES.has(raw) ? raw : 'website';
+  const detail = (p.sourceDetail || p.campaign || '').toString().trim().slice(0, 120) || null;
+  return { source, sourceDetail: detail };
+}
+
 function buildNotes(p: LeadIntakePayload): string {
   const lines: string[] = [];
-  lines.push('— Lead from Crestview Solace (Build #27) lead form —');
+  const detail = (p.sourceDetail || p.campaign || '').toString().trim();
+  lines.push(detail ? `— Lead from ${detail} —` : '— Lead from Skyeline lead form —');
   if (p.preferredContact) lines.push(`Preferred contact: ${p.preferredContact}`);
   if (p.timeline) lines.push(`Build timeline: ${p.timeline}`);
   if (p.budgetRange) lines.push(`Budget range: ${p.budgetRange}`);
@@ -124,8 +146,11 @@ async function createLead(
   const lastName = p.lastName || fullName.split(' ').slice(1).join(' ') || null;
   const budget = budgetBandToNumber(p.budgetRange);
   const leadScore = typeof p.leadScore === 'number' ? p.leadScore : scoreFromPayload(p);
+  const { source, sourceDetail } = resolveSource(p);
 
-  const baseTags = ['Crestview Solace', 'Build #27', 'Lead Form'];
+  // Tag with the specific source detail (event/campaign name) when present, so
+  // the lead is filterable by avenue in Sales/CRM.
+  const baseTags = ['Lead Form', ...(sourceDetail ? [sourceDetail] : [])];
   const tags = Array.from(new Set([...baseTags, ...(p.tags || [])])).slice(0, 25);
 
   const now = admin.firestore.FieldValue.serverTimestamp();
@@ -137,8 +162,10 @@ async function createLead(
     phone: p.phone || null,
     company: null,
     stage: 'new_lead',
-    source: 'website',
+    source,
+    sourceDetail,
     city: p.city || null,
+    county: p.county || null,
     state: 'UT',
     budget,
     priority: priorityFromScore(leadScore, budget),

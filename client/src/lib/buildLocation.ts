@@ -119,13 +119,26 @@ export function hasPin(loc?: BuildLocation | null): boolean {
 
 // ── Directions ───────────────────────────────────────────────────────────────
 
-/** Opens the OS default maps app at the pin (preferred) or the address. */
+/**
+ * Opens the OS default maps app at the pin (preferred) or the address.
+ * iOS devices get an Apple Maps link (which opens the Maps app), everything
+ * else gets a Google Maps link (opens the Google Maps app if installed, else
+ * the web). Both honor "directions to" so the user lands on a navigable route.
+ */
 export function directionsUrl(loc?: BuildLocation | null): string {
-  if (hasPin(loc)) {
-    return `https://www.google.com/maps/dir/?api=1&destination=${loc!.latitude},${loc!.longitude}`;
-  }
-  const a = formatAddress(loc);
-  return a ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(a)}` : '#';
+  const isIOS = typeof navigator !== 'undefined'
+    && (/iphone|ipad|ipod/i.test(navigator.userAgent || '')
+      // iPadOS 13+ reports as Mac; disambiguate via touch points.
+      || (/macintosh/i.test(navigator.userAgent || '') && (navigator as any).maxTouchPoints > 1));
+
+  const dest = hasPin(loc)
+    ? `${loc!.latitude},${loc!.longitude}`
+    : (formatAddress(loc) ? encodeURIComponent(formatAddress(loc)) : '');
+  if (!dest) return '#';
+
+  return isIOS
+    ? `https://maps.apple.com/?daddr=${dest}&dirflg=d`
+    : `https://www.google.com/maps/dir/?api=1&destination=${dest}`;
 }
 
 // ── Persistence ──────────────────────────────────────────────────────────────
