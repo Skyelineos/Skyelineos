@@ -842,10 +842,21 @@ function CreateProjectDialog({ client, mode, previousStage, previousStageLabel, 
           }
         : null;
 
+      // Link the homeowner so their client portal can find this project. The
+      // portal resolves a client by their CONTACT-doc id (contacts.linkedUserId
+      // = auth.uid) and email — so we key the project by the lead's contactId
+      // and email here. Without this, lead→project conversions are invisible to
+      // the client. clientIds[] is the canonical shape; clientId mirrors it for
+      // legacy readers.
+      const contactId = (client as any).contactId || null;
+
       // 1. Create project
       const projectRef = await addDoc(collection(db, 'projects'), {
         name: form.projectName.trim(),
         clientName: client.name,
+        clientId: contactId,
+        clientIds: contactId ? [contactId] : [],
+        clientEmail: client.email || null,
         address: form.address || null,
         ...(buildLocation ? { buildLocation } : {}),
         status: 'active',
