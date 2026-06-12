@@ -176,6 +176,10 @@ export function registerAwardBidRoute(
             projectId: data.projectId,
             refType: 'bid',
             refId: data.bidId,
+            // Award is a high-signal, transactional event — text the sub even
+            // if they haven't toggled SMS on. The dispatcher still honors STOP
+            // (sms_opt_outs ledger) and requires a valid phone.
+            forceSms: true,
             read: false,
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
           });

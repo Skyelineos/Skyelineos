@@ -20,6 +20,7 @@ import * as admin from 'firebase-admin';
 import sgMail from '@sendgrid/mail';
 import twilio from 'twilio';
 import crypto from 'crypto';
+import { toE164, isSmsOptedOut } from '../notifications/sms';
 
 // ───────────────────────────────────────────────────────────────────────────
 // Types
@@ -503,15 +504,22 @@ export function registerBidRequestRoute(app: Express, db: admin.firestore.Firest
           }
         }
         if (v.phone && twilioClient) {
-          try {
-            await twilioClient.messages.create({
-              from: twilioFrom!,
-              to: v.phone,
-              body: buildSms(builderArgs),
-            });
-            r.sms = { sent: true };
-          } catch (e: any) {
-            r.sms = { sent: false, error: e?.message || String(e) };
+          const toNumber = toE164(v.phone);
+          if (!toNumber) {
+            r.sms = { sent: false, error: `Invalid phone "${v.phone}" (not E.164)` };
+          } else if (await isSmsOptedOut(db, toNumber)) {
+            r.sms = { sent: false, error: 'Recipient opted out (STOP)' };
+          } else {
+            try {
+              await twilioClient.messages.create({
+                from: twilioFrom!,
+                to: toNumber,
+                body: buildSms(builderArgs),
+              });
+              r.sms = { sent: true };
+            } catch (e: any) {
+              r.sms = { sent: false, error: e?.message || String(e) };
+            }
           }
         }
         results.push(r);

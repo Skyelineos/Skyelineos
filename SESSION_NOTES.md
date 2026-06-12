@@ -12,6 +12,68 @@ Things a future Claude session should know before diving in. Specific file paths
 
 The errors look like a brace/paren mismatch around line 815, with the parser cascading the rest of the file as a single broken expression. The file imports cleanly (it's only used in a few timeline experiments) and `vite build` succeeds because esbuild is more permissive than `tsc`. **Production builds and ships fine** — but `npm run check` will always exit non-zero until these are fixed. Don't gate CI on `tsc` without addressing this first.
 
+## Session 14 — SMS text alerts (operator + subs)
+
+Made the SMS pipeline actually fire end-to-end and brought it into carrier
+compliance. The dispatcher already supported Twilio; the gaps were phone
+formatting, a dead opt-in toggle, no STOP handling, and subs never being texted.
+
+### What shipped (code)
+- **Shared SMS util** — `functions/src/notifications/sms.ts`. `toE164()` coerces
+  free-form phones (`(801) 555-1234`, `801-555-1234`, `8015551234`, `1-801…`) to
+  the `+18015551234` Twilio requires; defaults to +1. Returns null on ambiguous
+  input so callers skip + log instead of letting Twilio throw. Plus an opt-out
+  ledger helper (`isSmsOptedOut`) and keyword classifier (`classifySmsKeyword` /
+  `applySmsKeyword`).
+- **Every outbound SMS path now normalizes + checks opt-out**: the notification
+  dispatcher (`dispatch.ts`), per-trade bid sends (`sendBidRequestRoute.ts`), and
+  the consolidated bid-package dispatch (`bidPackageDispatchRoute.ts`). Before
+  this, un-normalized phones silently failed at Twilio.
+- **STOP/START/HELP webhook** — `functions/src/notifications/smsInboundRoute.ts`,
+  `POST /api/sms/inbound`. Writes a phone-keyed ledger at `sms_opt_outs/{e164}`.
+  Every sender skips opted-out numbers, *including* `forceSms` alerts. Twilio's
+  carrier-level STOP is a backstop; this mirrors it so we don't waste sends and
+  so START re-enables. Added `express.urlencoded` (Twilio posts form-encoded).
+- **Opt-in toggle is now real** — `UserPreferencesContext.tsx` syncs the
+  Email/SMS toggles to `users/{uid}.notificationPrefs.{email,sms}` (the fields
+  the dispatcher reads) and seeds them from Firestore on login. Previously the
+  toggle wrote localStorage only — the dispatcher never saw it. Turning SMS on
+  also stamps `smsConsentAt` / `smsConsentSource: 'self_settings'`.
+- **Subs get texted on award** — `awardBidRoute.ts` notification now carries
+  `forceSms: true` (transactional, high-signal). Bid invitations already texted
+  subs via the bid routes; those now normalize + honor STOP too.
+- **Firestore rule** — explicit Cloud-Function-only rule for `sms_opt_outs`
+  (sensitive raw phone numbers; was already covered by default-deny).
+
+### Operator prerequisites (REQUIRED before subs get reliable texts)
+1. **Set your phone, E.164** — `users/{your-uid}.phone = +1801…`. Lead alerts
+   (`forceSms`) start texting you immediately once this is set. Twilio secrets
+   are already configured; no new secrets.
+2. **A2P 10DLC registration (Twilio)** — register a Brand + Campaign in the
+   Twilio console. **Without this, carriers filter/block messages to subs** at
+   any volume. Texting yourself often slips through; a fleet of subs will not.
+   Allow ~1–3 business days for approval. This is the single biggest gate.
+3. **Wire the inbound webhook** — in Twilio, set the messaging number's
+   "A MESSAGE COMES IN" webhook to
+   `https://skyelineos.web.app/api/sms/inbound` (HTTP POST). Without it STOP is
+   still honored by Twilio at the carrier level, but our ledger won't record it.
+4. **Sub consent at onboarding** — texting subs requires prior express consent.
+   The runtime STOP/opt-out mechanism is built; capturing the *opt-in* (a
+   checkbox + `smsConsentAt` stamp when a sub's phone is collected) is the
+   remaining UX task. Until then, rely on the existing business relationship +
+   transactional nature of award/invite texts, and keep STOP working.
+5. **Deploy** — `npm run deploy:functions` (dispatcher + webhook + bid routes),
+   `npm run deploy:rules` (sms_opt_outs), `npm run deploy:hosting` (toggle).
+
+### Deliberately NOT built this session
+- Consent-capture checkbox on contact/sub forms (see #4 above) — runtime opt-out
+  is done; opt-in capture UI is the follow-up.
+- Per-kind SMS toggles in the UI (the dispatcher already supports
+  `notificationPrefs.kinds.{kind}.sms`; the dialog only surfaces the two global
+  switches).
+- A sub-facing notification-prefs screen — subs have no SMS toggle yet; award/
+  invite texts are `forceSms`/transactional, STOP-respecting.
+
 ## Session 13 — Lead intake: alerts + source tracking
 
 Hardened the lead-intake path end to end and added new-lead alerting + lead-gen

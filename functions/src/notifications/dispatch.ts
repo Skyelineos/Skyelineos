@@ -12,6 +12,7 @@ import { defineSecret } from 'firebase-functions/params';
 import * as admin from 'firebase-admin';
 import sgMail from '@sendgrid/mail';
 import twilio from 'twilio';
+import { toE164, isSmsOptedOut } from './sms';
 
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore();
@@ -177,14 +178,22 @@ async function sendAll(
       const sid = TWILIO_ACCOUNT_SID.value();
       const token = TWILIO_AUTH_TOKEN.value();
       const fromNumber = TWILIO_FROM_NUMBER.value();
-      if (sid && token && fromNumber) {
+      const toNumber = toE164(recipient.phone);
+      if (!toNumber) {
+        const msg = `SMS skipped: phone "${recipient.phone}" is not a valid E.164 number`;
+        console.warn('[dispatch]', msg);
+        errors.push(msg);
+      } else if (await isSmsOptedOut(db, toNumber)) {
+        // Recipient texted STOP — honor it even for forceSms alerts.
+        console.log('[dispatch] SMS skipped: recipient opted out', toNumber);
+      } else if (sid && token && fromNumber) {
         const client = twilio(sid, token);
         const link = notif.link
           ? ` ${APP_BASE_URL.value() || 'https://skyelineos.web.app'}${notif.link}`
           : '';
         const message = `${notif.title}${notif.body ? `: ${notif.body}` : ''}${link}`.slice(0, 160);
         await client.messages.create({
-          to: recipient.phone,
+          to: toNumber,
           from: fromNumber,
           body: message,
         });

@@ -25,6 +25,7 @@ import * as admin from 'firebase-admin';
 import sgMail from '@sendgrid/mail';
 import twilio from 'twilio';
 import { randomBytes } from 'crypto';
+import { toE164, isSmsOptedOut } from '../notifications/sms';
 
 interface DispatchPayload {
   projectId: string;
@@ -328,21 +329,28 @@ export function registerBidPackageDispatchRoute(
         }
 
         if (bundle.phone && twilioClient) {
-          try {
-            await twilioClient.messages.create({
-              from: twilioFrom!,
-              to: bundle.phone,
-              body: buildPackageSms({
-                vendorName: bundle.vendorName,
-                projectName,
-                trades: bundle.trades,
-                link,
-              }),
-            });
-            result.sms = { sent: true };
-            sentSms += 1;
-          } catch (e: any) {
-            result.sms = { sent: false, error: e?.message || String(e) };
+          const toNumber = toE164(bundle.phone);
+          if (!toNumber) {
+            result.sms = { sent: false, error: `Invalid phone "${bundle.phone}" (not E.164)` };
+          } else if (await isSmsOptedOut(db, toNumber)) {
+            result.sms = { sent: false, error: 'Recipient opted out (STOP)' };
+          } else {
+            try {
+              await twilioClient.messages.create({
+                from: twilioFrom!,
+                to: toNumber,
+                body: buildPackageSms({
+                  vendorName: bundle.vendorName,
+                  projectName,
+                  trades: bundle.trades,
+                  link,
+                }),
+              });
+              result.sms = { sent: true };
+              sentSms += 1;
+            } catch (e: any) {
+              result.sms = { sent: false, error: e?.message || String(e) };
+            }
           }
         }
         perVendorResults.push(result);

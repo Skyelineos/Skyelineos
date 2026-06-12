@@ -691,6 +691,14 @@ service cloud.firestore {
              ]);
     }
 
+    // SMS opt-out ledger — phone-keyed STOP/START state. Sensitive (raw phone
+    // numbers); written exclusively by the api Cloud Function (Twilio inbound
+    // webhook) and read by the notification dispatcher, both via Admin SDK
+    // which bypasses these rules. No client access.
+    match /sms_opt_outs/{phone} {
+      allow read, write: if false; // Cloud Function only
+    }
+
     // Deny everything else
     match /{document=**} {
       allow read, write: if false;
