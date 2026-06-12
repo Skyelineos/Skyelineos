@@ -108,19 +108,23 @@ Settings → General → **Spending Limit** → start at **$25/month**. US SMS i
 All paths **honor STOP** (the `sms_opt_outs` ledger) even when "forced," and
 skip any number that can't be normalized to E.164.
 
-**Opt-in toggle:** Settings → User Preferences → Notifications → "SMS
-notifications" now writes `users/{uid}.notificationPrefs.sms` (and stamps a
+**Opt-in toggle (you/team):** Settings → User Preferences → Notifications →
+"SMS notifications" now writes `users/{uid}.notificationPrefs.sms` (and stamps a
 consent record). Previously it was cosmetic.
+
+**Consent capture (subs/contacts):** Contacts → edit a contact → once they have
+a phone, an **"agreed to receive SMS text alerts"** checkbox appears. Check it
+when you collect a sub's number — it records the opt-in (`smsConsentAt` +
+source) and enables `notificationPrefs.sms`. This is the proof-of-consent to
+check before texting subs at scale.
 
 ---
 
 ## Still open (not blocking, but know it)
 
-- **Sub opt-in capture.** Texting subs legally needs prior express consent. The
-  *opt-out* (STOP) path is built and live; capturing the *opt-in* (a consent
-  checkbox + `smsConsentAt` stamp when a sub's phone is collected) is a small
-  follow-up UX task. Until then you're relying on the existing business
-  relationship + the transactional nature of bid/award texts.
+- **Sub self-onboarding consent.** The GC-side opt-in checkbox is live
+  (EditContactModal). A sub opting *themselves* in during their own portal
+  signup is the remaining surface — add it if you want subs to self-consent.
 - **Per-event sub toggles.** Subs have no SMS preferences screen yet; award +
   invite are forced/transactional. Add a sub notification-prefs screen if you
   want them to self-manage.

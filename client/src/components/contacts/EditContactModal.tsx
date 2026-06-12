@@ -14,6 +14,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -40,6 +41,8 @@ interface ContactLike {
   spouseEmail?: string;
   spousePhone?: string;
   linkedUserId?: string;
+  smsConsent?: boolean;
+  notificationPrefs?: { sms?: boolean; email?: boolean; push?: boolean };
 }
 
 interface Props {
@@ -67,6 +70,10 @@ export function EditContactModal({ contact, open, onClose }: Props) {
   const [spousePhone, setSpousePhone] = useState('');
   const [allContacts, setAllContacts] = useState<Array<{ id: string; name?: string; email?: string }>>([]);
   const [saving, setSaving] = useState(false);
+  // SMS consent — the auditable opt-in proof carriers/TCPA expect before we
+  // text a contact. Checking it also flips notificationPrefs.sms on so the
+  // dispatcher sends (forced bid/award texts ignore this, but the record stands).
+  const [smsConsent, setSmsConsent] = useState(false);
 
   // Sync form state from the contact every time the dialog opens.
   useEffect(() => {
@@ -94,6 +101,9 @@ export function EditContactModal({ contact, open, onClose }: Props) {
     setSpouseName(String(c.spouseName || ''));
     setSpouseEmail(String(c.spouseEmail || ''));
     setSpousePhone(String(c.spousePhone || ''));
+    // Seed consent from the explicit flag, falling back to an existing SMS pref
+    // for contacts that were opted in before this field existed.
+    setSmsConsent(!!c.smsConsent || c.notificationPrefs?.sms === true);
   }, [open, contact]);
 
   // Live contact list — used for the "Link existing contact as spouse" picker.
@@ -143,6 +153,23 @@ export function EditContactModal({ contact, open, onClose }: Props) {
         spousePhone: spousePhone.trim(),
         updatedAt: serverTimestamp(),
       };
+
+      // SMS consent — only meaningful when there's a number to text. Use dot-path
+      // keys so we set notificationPrefs.sms without clobbering sibling prefs
+      // (email/push). Stamp the consent timestamp + source on the rising edge so
+      // there's an auditable record of when/how they opted in.
+      if (phone.trim()) {
+        const hadConsent = !!contact.smsConsent || contact.notificationPrefs?.sms === true;
+        updates.smsConsent = smsConsent;
+        updates['notificationPrefs.sms'] = smsConsent;
+        if (smsConsent && !hadConsent) {
+          updates.smsConsentAt = serverTimestamp();
+          updates.smsConsentSource = 'gc_contact_form';
+        } else if (!smsConsent && hadConsent) {
+          updates.smsConsentRevokedAt = serverTimestamp();
+        }
+      }
+
       await updateDoc(doc(db, 'contacts', contact.id), updates);
 
       // Mirror the spouse link both ways when an existing contact was linked.
@@ -236,6 +263,26 @@ export function EditContactModal({ contact, open, onClose }: Props) {
               </Select>
             </div>
           </div>
+
+          {/* SMS consent — only surfaced once there's a number to text. This is
+              the opt-in record we need before texting subs/contacts at scale.
+              Checking it flips notificationPrefs.sms on and stamps when/how
+              they consented; STOP replies still override it at send time. */}
+          {phone.trim() && (
+            <label className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50/40 p-3 cursor-pointer">
+              <Checkbox
+                checked={smsConsent}
+                onCheckedChange={(c) => setSmsConsent(!!c)}
+                className="mt-0.5"
+              />
+              <span className="text-sm">
+                <span className="font-medium">This contact agreed to receive SMS text alerts</span>
+                <span className="block text-[11px] text-gray-500 mt-0.5">
+                  Required before we text them. They can reply STOP anytime to opt out.
+                </span>
+              </span>
+            </label>
+          )}
 
           {showCompany && (
             <div>

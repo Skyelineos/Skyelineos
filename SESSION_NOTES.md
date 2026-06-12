@@ -42,6 +42,12 @@ formatting, a dead opt-in toggle, no STOP handling, and subs never being texted.
 - **Subs get texted on award** — `awardBidRoute.ts` notification now carries
   `forceSms: true` (transactional, high-signal). Bid invitations already texted
   subs via the bid routes; those now normalize + honor STOP too.
+- **Consent capture (opt-in record)** — `EditContactModal.tsx` shows an "agreed
+  to receive SMS text alerts" checkbox once a contact has a phone. Checking it
+  flips `notificationPrefs.sms` on (dot-path write, doesn't clobber email/push)
+  and stamps `smsConsentAt` / `smsConsentSource: 'gc_contact_form'` on the rising
+  edge; unchecking stamps `smsConsentRevokedAt`. This is the auditable opt-in
+  proof for texting subs/contacts. STOP still overrides at send time.
 - **Firestore rule** — explicit Cloud-Function-only rule for `sms_opt_outs`
   (sensitive raw phone numbers; was already covered by default-deny).
 
@@ -57,17 +63,17 @@ formatting, a dead opt-in toggle, no STOP handling, and subs never being texted.
    "A MESSAGE COMES IN" webhook to
    `https://skyelineos.web.app/api/sms/inbound` (HTTP POST). Without it STOP is
    still honored by Twilio at the carrier level, but our ledger won't record it.
-4. **Sub consent at onboarding** — texting subs requires prior express consent.
-   The runtime STOP/opt-out mechanism is built; capturing the *opt-in* (a
-   checkbox + `smsConsentAt` stamp when a sub's phone is collected) is the
-   remaining UX task. Until then, rely on the existing business relationship +
-   transactional nature of award/invite texts, and keep STOP working.
+4. **Capture sub consent** — texting subs requires prior express consent. The
+   opt-in checkbox is now in the contact editor (`EditContactModal`); check it
+   when you collect a sub's phone so there's an auditable record. STOP/opt-out
+   is honored automatically regardless.
 5. **Deploy** — `npm run deploy:functions` (dispatcher + webhook + bid routes),
    `npm run deploy:rules` (sms_opt_outs), `npm run deploy:hosting` (toggle).
 
 ### Deliberately NOT built this session
-- Consent-capture checkbox on contact/sub forms (see #4 above) — runtime opt-out
-  is done; opt-in capture UI is the follow-up.
+- Consent capture on the sub *portal* self-onboarding (`SubcontractorPortalAccess`)
+  — the GC-side capture (EditContactModal checkbox) is built; a sub self-opting-in
+  during their own signup is the remaining surface.
 - Per-kind SMS toggles in the UI (the dispatcher already supports
   `notificationPrefs.kinds.{kind}.sms`; the dialog only surfaces the two global
   switches).
