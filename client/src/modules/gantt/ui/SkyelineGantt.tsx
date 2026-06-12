@@ -164,6 +164,7 @@ export const SkyelineGantt: React.FC<SkyelineGanttProps> = ({ onAddTask, onEditT
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
   const [dragOffsetDays, setDragOffsetDays] = useState(0);
+  const movedRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const pxPerDay = PX_PER_DAY[zoom];
@@ -230,6 +231,7 @@ export const SkyelineGantt: React.FC<SkyelineGanttProps> = ({ onAddTask, onEditT
   ) => {
     if (row.isParent) return; // summaries are derived, not draggable
     e.stopPropagation();
+    movedRef.current = false;
     (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
     setDrag({
       id: row.task.id,
@@ -243,6 +245,7 @@ export const SkyelineGantt: React.FC<SkyelineGanttProps> = ({ onAddTask, onEditT
 
   const onPointerMove = (e: React.PointerEvent) => {
     if (!drag) return;
+    if (Math.abs(e.clientX - drag.startX) > 3) movedRef.current = true;
     setDragOffsetDays(Math.round((e.clientX - drag.startX) / pxPerDay));
   };
 
@@ -558,6 +561,10 @@ export const SkyelineGantt: React.FC<SkyelineGanttProps> = ({ onAddTask, onEditT
                     }}
                     title={`${row.task.name} — ${format(start, 'MMM d, yyyy')}`}
                     onPointerDown={(e) => onBarPointerDown(e, row, 'move')}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!movedRef.current) onEditTask?.(row.task);
+                    }}
                   />
                 );
               }
@@ -618,6 +625,7 @@ export const SkyelineGantt: React.FC<SkyelineGanttProps> = ({ onAddTask, onEditT
                   onClick={(e) => {
                     e.stopPropagation();
                     setSelectedId(row.task.id);
+                    if (!movedRef.current) onEditTask?.(row.task);
                   }}
                 >
                   {/* progress fill */}

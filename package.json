@@ -18,8 +18,6 @@
   "dependencies": {
     "@axe-core/react": "^4.10.2",
     "@cypress/vite-dev-server": "^6.0.3",
-    "@daypilot/daypilot-lite-javascript": "^4.3.0",
-    "@daypilot/daypilot-lite-react": "^4.3.0",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
@@ -151,7 +149,6 @@
     "firebase-functions": "^6.4.0",
     "firebase-tools": "^14.12.1",
     "framer-motion": "^11.13.1",
-    "frappe-gantt": "^1.0.3",
     "google-auth-library": "^10.2.1",
     "helmet": "^8.1.0",
     "hotkeys-js": "^3.13.15",

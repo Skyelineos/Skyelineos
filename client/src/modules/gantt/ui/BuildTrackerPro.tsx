@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useGantt } from '../state';
 import { SkyelineGantt } from './SkyelineGantt';
 import { AddTaskModal } from './AddTaskModal';
+import { EditTaskModal } from './EditTaskModal';
 import { SaveTemplateModal, LoadTemplateModal } from './TemplateModal';
 import { autoSchedule } from '../engine/autoSchedule';
 import { saveSchedule } from '../useSchedulePersistence';
@@ -49,6 +50,7 @@ export const BuildTrackerPro: React.FC = () => {
   const [showAddTaskModal, setShowAddTaskModal] = useState(false);
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
   const [showLoadTemplate, setShowLoadTemplate] = useState(false);
+  const [editingTask, setEditingTask] = useState<WbsTask | null>(null);
   const { toast } = useToast();
 
   const criticalCount = metrics ? metrics.criticalIds.size : 0;
@@ -209,11 +211,12 @@ export const BuildTrackerPro: React.FC = () => {
 
       {/* ===== Chart ===== */}
       <div className="min-h-0 flex-1">
-        <SkyelineGantt onAddTask={() => setShowAddTaskModal(true)} />
+        <SkyelineGantt onAddTask={() => setShowAddTaskModal(true)} onEditTask={setEditingTask} />
       </div>
 
       {/* ===== Modals ===== */}
       <AddTaskModal open={showAddTaskModal} onClose={() => setShowAddTaskModal(false)} />
+      <EditTaskModal task={editingTask} onClose={() => setEditingTask(null)} />
       <SaveTemplateModal
         open={showSaveTemplate}
         onClose={() => setShowSaveTemplate(false)}
