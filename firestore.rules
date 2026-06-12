@@ -120,6 +120,13 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // Public site content (e.g. the giveaway page image). World-readable so the
+    // public /giveaway page renders with no auth; only GC/admin can change it.
+    match /public_content/{docId} {
+      allow read: if true;
+      allow write: if isGC();
+    }
+
     // Pending trade requests (submitted during sub registration)
     match /pendingTrades/{tradeId} {
       allow read: if isAdmin();
