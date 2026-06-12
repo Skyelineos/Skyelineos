@@ -61,6 +61,7 @@ const ProjectDesign = lazy(() => import("@/pages/ProjectDesign"));
 const ProjectTakeoff = lazy(() => import("@/pages/ProjectTakeoff"));
 const Subscriptions = lazy(() => import("@/pages/Subscriptions"));
 const ApiStorage = lazy(() => import("@/pages/ApiStorage"));
+const LearnMore = lazy(() => import("@/pages/LearnMore"));
 const Bills = lazy(() => import("@/pages/Bills"));
 const ContentStudio = lazy(() => import("@/pages/ContentStudio"));
 const SiteLog = lazy(() => import("@/pages/SiteLog"));
@@ -113,6 +114,14 @@ function Router() {
       <Route path="/bid/respond/:token">
         <Suspense fallback={<MinimalSpinner title="Loading bid request" />}>
           <BidRespond />
+        </Suspense>
+      </Route>
+
+      {/* Public lead-capture form — no auth. Behind the model-home QR sign.
+          Submissions hit /api/leads/public-intake → land in Sales/CRM. */}
+      <Route path="/learn-more">
+        <Suspense fallback={<MinimalSpinner title="Loading" />}>
+          <LearnMore />
         </Suspense>
       </Route>
 
