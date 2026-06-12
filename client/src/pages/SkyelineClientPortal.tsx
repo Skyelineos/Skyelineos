@@ -145,7 +145,16 @@ export default function SkyelineClientPortal() {
       selectedProject.estimatedCompletion
     )
   );
-  const clientFirstName = ((selectedProject?.clientName || user?.name || '').trim().split(/\s+/)[0]) || '';
+  // The portal is "the client's" — so the welcome should greet the client, not
+  // whoever is logged in. When an admin is impersonating, that's `viewedUser`;
+  // for a real client it's their own `user`. The project's clientName is the
+  // most authoritative when present.
+  const clientFullName =
+    (isAdminView && viewedUser?.name) ||
+    selectedProject?.clientName ||
+    user?.name ||
+    '';
+  const clientFirstName = clientFullName.trim().split(/\s+/)[0] || '';
 
   const confirmLocation = async () => {
     if (!selectedProjectId) return;
@@ -401,7 +410,7 @@ export default function SkyelineClientPortal() {
                   <button
                     key={tab.key}
                     onClick={() => handleNavigate(tab.key)}
-                    className={`flex items-center gap-1.5 px-4 py-3 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
+                    className={`flex flex-shrink-0 items-center gap-1.5 px-4 py-3 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
                       active
                         ? 'border-[#C9A96E] text-[#8a6a3a]'
                         : 'border-transparent text-gray-500 hover:text-gray-700'
