@@ -197,6 +197,18 @@ export const SkyelineGantt: React.FC<SkyelineGanttProps> = ({ onAddTask, onEditT
   const todayX = xOf(new Date());
   const todayInRange = todayX >= 0 && todayX <= timelineW;
 
+  // Effective status palette for a row. Explicit status wins; otherwise a
+  // leaf task that's past its end date and not yet complete is auto-flagged
+  // as behind schedule (red), so slipping work stands out at a glance.
+  const today0 = new Date();
+  today0.setHours(0, 0, 0, 0);
+  const paletteFor = (row: Row): { bar: string; fill: string } => {
+    if (showCritical && metrics?.criticalIds.has(row.task.id)) return STATUS.critical;
+    if (row.task.status) return STATUS[row.task.status];
+    if (!row.isParent && (row.task.progress ?? 0) < 100 && row.end < today0) return STATUS.delayed;
+    return STATUS.default;
+  };
+
   // Scroll so "today" is roughly a third of the way in — once, after the
   // (async-loaded) tasks first populate.
   const didCenter = useRef(false);
@@ -403,14 +415,7 @@ export const SkyelineGantt: React.FC<SkyelineGanttProps> = ({ onAddTask, onEditT
             style={{ width: LEFT_W }}
           >
             {rows.map((row, i) => {
-              const status = row.task.status;
-              const dotColor = row.isMilestone
-                ? BRAND_GOLD
-                : showCritical && metrics?.criticalIds.has(row.task.id)
-                ? STATUS.critical.bar
-                : status
-                ? STATUS[status].bar
-                : STATUS.default.bar;
+              const dotColor = row.isMilestone ? BRAND_GOLD : paletteFor(row).bar;
               return (
                 <div
                   key={row.task.id}
@@ -586,12 +591,7 @@ export const SkyelineGantt: React.FC<SkyelineGanttProps> = ({ onAddTask, onEditT
               }
 
               // leaf task bar
-              const palette =
-                showCritical && metrics?.criticalIds.has(row.task.id)
-                  ? STATUS.critical
-                  : row.task.status
-                  ? STATUS[row.task.status]
-                  : STATUS.default;
+              const palette = paletteFor(row);
               const dragging = drag?.id === row.task.id;
 
               // baseline variance label
