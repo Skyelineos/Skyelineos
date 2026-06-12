@@ -12,6 +12,44 @@ Things a future Claude session should know before diving in. Specific file paths
 
 The errors look like a brace/paren mismatch around line 815, with the parser cascading the rest of the file as a single broken expression. The file imports cleanly (it's only used in a few timeline experiments) and `vite build` succeeds because esbuild is more permissive than `tsc`. **Production builds and ships fine** — but `npm run check` will always exit non-zero until these are fixed. Don't gate CI on `tsc` without addressing this first.
 
+## Session 13 — Client portal: real-client project access
+
+The client portal couldn't load a real homeowner's project — two layered bugs:
+1. **Identity:** it queried `projects` by `user.firebaseUid`, but projects key
+   the client by their **contact-doc id** (`contacts.linkedUserId = auth.uid`),
+   not the uid. (Admin impersonation "worked" only because the admin passes
+   `isGC()` and can read everything.)
+2. **Rules:** `firestore.rules` gated clients with `clientId == request.auth.uid`
+   everywhere — same uid-vs-contactId mismatch — so reads were denied even if the
+   query matched.
+
+Fixes:
+- `SkyelineClientPortal.tsx` now uses `resolveClientIdentity()` (same helper
+  `ClientTodayFeed` uses) to resolve the uid+email→contact-id union, and queries
+  `clientIds array-contains-any` + `clientId in` that union (dropped the
+  `assignedUserIds` query — that's team uids, not the client). `primaryClientId`
+  (the resolved contact id, or impersonated id) is what's passed to child tabs.
+- `firestore.rules`: new helpers `clientOwns(data)` / `clientOwnsProject(pid)`
+  match a client by uid **or** `users/{uid}.linkedContactId` against
+  `clientId`/`clientIds`. Applied to the projects read, the buildLocation
+  client-confirm update, and every project-subcollection client read
+  (selections, schedules, rooms, draws, budgetItems, moveInBinder,
+  locationEvents, walkthroughs, rfis…). Rules compile clean (validated via the
+  Firestore emulator).
+- `Sales.tsx` lead→project conversion now writes `clientId`/`clientIds` (the
+  lead's `contactId`) + `clientEmail`. Previously it wrote **no** client link at
+  all, so converted projects were invisible to the homeowner.
+
+Known follow-ups (not regressions — these were already broken for clients):
+- **Estimates** rule (`firestore.rules` ~line 200) still keys
+  `estimates/{id}.clientId == uid`, but the Sales path writes the estimate's
+  `clientId` as the **sales `clients`-doc id** (neither uid nor contactId). The
+  client Financials tab may not read estimates until that's reconciled.
+- The portal still reads the logged-in user via the legacy `@/hooks/use-auth`
+  (drops `firebaseUid`; `user.id` is `0`). We now resolve identity via
+  `auth.currentUser` instead, so it's moot here — but other client components
+  using that hook for identity may have the same latent bug.
+
 ## Session 13 — Lead intake: alerts + source tracking
 
 Hardened the lead-intake path end to end and added new-lead alerting + lead-gen

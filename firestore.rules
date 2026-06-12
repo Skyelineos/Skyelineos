@@ -70,6 +70,34 @@ service cloud.firestore {
       return isSignedIn() && (getUserRole() == 'sub' || isStaff());
     }
 
+    // ── Client ↔ project ownership ───────────────────────────────────────────
+    // Projects key the homeowner by their CONTACT-doc id (contacts.linkedUserId
+    // = auth.uid), NOT their Firebase uid — so the old `clientId == auth.uid`
+    // check denied every real client. A client "owns" a record when its
+    // clientId / clientIds matches their uid (legacy) OR the contact id linked
+    // to their user profile (users/{uid}.linkedContactId). get()/exists() calls
+    // on the same path are cached per evaluation, so this stays well under the
+    // access-call limit.
+    function clientLinkedContactId() {
+      return isClient()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && 'linkedContactId' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.linkedContactId
+        : null;
+    }
+    function clientOwns(data) {
+      return isClient() && (
+        data.clientId == request.auth.uid
+        || (clientLinkedContactId() != null && (
+              data.clientId == clientLinkedContactId()
+              || ('clientIds' in data && data.clientIds is list && clientLinkedContactId() in data.clientIds)
+            ))
+      );
+    }
+    function clientOwnsProject(pid) {
+      return clientOwns(get(/databases/$(database)/documents/projects/$(pid)).data);
+    }
+
     // Users — each user reads/writes their own profile; admins can write any profile
     match /users/{userId} {
       allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
@@ -79,15 +107,14 @@ service cloud.firestore {
     // Projects — GC can do everything; clients see only their project; designers/subs see assigned
     match /projects/{projectId} {
       allow read: if isGC()
-        || (isClient() && resource.data.clientId == request.auth.uid)
+        || (clientOwns(resource.data))
         || (isDesigner() && request.auth.uid in resource.data.assignedUserIds)
         || (isSub() && request.auth.uid in resource.data.assignedUserIds);
       allow create, update: if isGC();
       // The homeowner may confirm or request a correction on their build
       // location — only the buildLocation key, and only the status/notes/
       // confirmation fields. They cannot move the pin or change the address.
-      allow update: if isClient()
-        && resource.data.clientId == request.auth.uid
+      allow update: if clientOwns(resource.data)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['buildLocation'])
         && request.resource.data.buildLocation.latitude == resource.data.buildLocation.latitude
         && request.resource.data.buildLocation.longitude == resource.data.buildLocation.longitude
@@ -100,7 +127,7 @@ service cloud.firestore {
       match /locationEvents/{eventId} {
         allow read: if isGC()
           || (isSignedIn() && (
-                get(/databases/$(database)/documents/projects/$(projectId)).data.clientId == request.auth.uid
+                clientOwnsProject(projectId)
                 || request.auth.uid in get(/databases/$(database)/documents/projects/$(projectId)).data.assignedUserIds));
         allow create: if isSignedIn();
         allow update, delete: if isGC();
@@ -164,7 +191,7 @@ service cloud.firestore {
     // Estimates — linked to clients and jobs
     match /estimates/{estimateId} {
       allow read: if isGC()
-        || (isClient() && resource.data.clientId == request.auth.uid);
+        || (clientOwns(resource.data));
       allow write: if isGCOnly();
       allow delete: if isAdmin();
 
@@ -179,7 +206,7 @@ service cloud.firestore {
     // Invoices
     match /invoices/{invoiceId} {
       allow read: if isGC()
-        || (isClient() && resource.data.clientId == request.auth.uid);
+        || (clientOwns(resource.data));
       allow write: if isGCOnly();
       allow delete: if isAdmin();
     }
@@ -244,7 +271,7 @@ service cloud.firestore {
     // Change orders
     match /changeOrders/{orderId} {
       allow read: if isGC()
-        || (isClient() && resource.data.clientId == request.auth.uid);
+        || (clientOwns(resource.data));
       allow create: if isGCOnly() || isClient(); // clients create COs when approving overages
       allow update, delete: if isGCOnly();
     }
@@ -267,7 +294,7 @@ service cloud.firestore {
     match /projects/{projectId}/rooms/{roomId} {
       allow read: if isGC()
         || isDesigner()
-        || (isClient() && get(/databases/$(database)/documents/projects/$(projectId)).data.clientId == request.auth.uid);
+        || (isClient() && clientOwnsProject(projectId));
       allow create, update: if isGC() || isDesigner();
       allow delete: if isAdmin() || isGC();
     }
@@ -303,10 +330,10 @@ service cloud.firestore {
     match /projects/{projectId}/selections/{selectionId} {
       allow read: if isGC()
         || isDesigner()
-        || (isClient() && get(/databases/$(database)/documents/projects/$(projectId)).data.clientId == request.auth.uid);
+        || (isClient() && clientOwnsProject(projectId));
       // Client can approve their own project's selections when not locked
       allow update: if isClient()
-        && get(/databases/$(database)/documents/projects/$(projectId)).data.clientId == request.auth.uid
+        && clientOwnsProject(projectId)
         && resource.data.get('locked', false) == false
         && request.resource.data.clientApprovalStatus == 'Approved';
       // GC can always write (lock/unlock, order status, finalize)
@@ -318,7 +345,7 @@ service cloud.firestore {
 
     match /projects/{projectId}/schedules/{scheduleId} {
       allow read: if isGC() || isDesigner()
-        || (isClient() && get(/databases/$(database)/documents/projects/$(projectId)).data.clientId == request.auth.uid);
+        || (isClient() && clientOwnsProject(projectId));
       allow write: if isGC();
       allow delete: if isAdmin() || isGC();
     }
@@ -361,7 +388,7 @@ service cloud.firestore {
     // Draws (payment milestones) — clients can read their project's draws; GC manages.
     match /projects/{projectId}/draws/{drawId} {
       allow read: if isGC() || isDesigner()
-        || (isClient() && get(/databases/$(database)/documents/projects/$(projectId)).data.clientId == request.auth.uid);
+        || (isClient() && clientOwnsProject(projectId));
       allow create, update: if isGC();
       allow delete: if isAdmin() || isGC();
     }
@@ -369,7 +396,7 @@ service cloud.firestore {
     // Budget vs Actual items per project
     match /projects/{projectId}/budgetItems/{itemId} {
       allow read: if isGC()
-        || (isClient() && get(/databases/$(database)/documents/projects/$(projectId)).data.clientId == request.auth.uid);
+        || (isClient() && clientOwnsProject(projectId));
       allow create, update: if isGC();
       allow delete: if isAdmin() || isGC();
     }
@@ -580,7 +607,7 @@ service cloud.firestore {
     match /designSelections/{selectionId} {
       allow read: if isGC()
         || isDesigner()
-        || (isClient() && resource.data.clientId == request.auth.uid);
+        || (clientOwns(resource.data));
       allow write: if isGC() || isDesigner();
       allow delete: if isAdmin();
     }
@@ -641,7 +668,7 @@ service cloud.firestore {
     // Move-in binder docs — owned by the project.
     match /projects/{projectId}/moveInBinder/{itemId} {
       allow read: if isGC()
-        || (isClient() && get(/databases/$(database)/documents/projects/$(projectId)).data.clientId == request.auth.uid);
+        || (isClient() && clientOwnsProject(projectId));
       allow create, update: if isGC();
       allow delete: if isAdmin() || isGC();
     }
