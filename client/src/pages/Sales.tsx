@@ -1632,6 +1632,20 @@ export default function Sales() {
               </button>
             </div>
 
+            {/* Public lead-capture form (behind the model-home QR sign).
+                Opens the live form people fill from their phones; submissions
+                land right here in the pipeline. */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.open('/learn-more', '_blank')}
+              className="gap-1.5"
+              title="Open the public lead-capture form (the page behind your QR sign)"
+            >
+              <ExternalLink className="w-4 h-4" />
+              <span className="hidden sm:inline">Lead Form</span>
+            </Button>
+
             {/* Edit Stages */}
             <Button variant="outline" size="sm" onClick={() => setEditStagesOpen(true)} className="gap-1.5">
               <Settings2 className="w-4 h-4" />
