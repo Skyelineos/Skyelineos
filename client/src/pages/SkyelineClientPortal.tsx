@@ -15,6 +15,7 @@ import DocumentsTab from '@/components/documents/DocumentsTab';
 import PhotosTab from '@/components/photos/PhotosTab';
 import { ProjectChat } from '@/components/messaging/ProjectChat';
 import ClientDashboard from '@/components/client-portal/ClientDashboard';
+import { ClientWelcomePreview } from '@/components/client-portal/ClientWelcomePreview';
 import SelectionsBoard from '@/components/client-portal/SelectionsBoard';
 import ClientSelectionsTimeline from '@/components/client/ClientSelectionsTimeline';
 import ChangeOrdersTab from '@/components/client-portal/ChangeOrdersTab';
@@ -133,6 +134,19 @@ export default function SkyelineClientPortal() {
   const selectedProject = projects.find(p => p.id === selectedProjectId);
   const handleNavigate = (tab: string) => navigate(`/client-portal/${tab}`);
 
+  // A project is "set up" once there's something real for the client to track:
+  // a published schedule, started progress, or scheduled dates. Until then the
+  // dashboard would be a wall of zeros, so we show the welcome/preview instead.
+  const projectIsSetUp = !!(
+    selectedProject && (
+      selectedProject.estimatedSchedule ||
+      (typeof selectedProject.progress === 'number' && selectedProject.progress > 0) ||
+      selectedProject.startDate ||
+      selectedProject.estimatedCompletion
+    )
+  );
+  const clientFirstName = ((selectedProject?.clientName || user?.name || '').trim().split(/\s+/)[0]) || '';
+
   const confirmLocation = async () => {
     if (!selectedProjectId) return;
     try {
@@ -166,32 +180,52 @@ export default function SkyelineClientPortal() {
   const renderContent = () => {
     if (!selectedProjectId && !projectsLoading) {
       return (
-        <div className="flex items-center justify-center h-64 p-8 text-center">
-          <div>
-            <p className="text-gray-500 font-medium">No projects found</p>
-            <p className="text-sm text-gray-400 mt-1">You haven't been assigned to any projects yet</p>
-          </div>
-        </div>
+        <ClientWelcomePreview
+          clientFirstName={clientFirstName}
+          hasProject={false}
+          onNavigate={handleNavigate}
+        />
       );
     }
 
     switch (currentTab) {
-      case 'dashboard':
+      case 'dashboard': {
+        // Build-location confirm card — relevant in every state, so it renders
+        // for both the welcome preview and the full dashboard.
+        const buildLocationCard = selectedProject?.buildLocation ? (
+          <div className="rounded-xl border border-gray-200 bg-white p-5 mx-4 sm:mx-6">
+            <h3 className="font-semibold text-gray-900 mb-1">Your build location</h3>
+            <p className="text-sm text-gray-500 mb-3">Please confirm this is the correct build location.</p>
+            <BuildLocation
+              mode="confirm"
+              value={locationFromProject(selectedProject)}
+              onConfirm={confirmLocation}
+              onRequestCorrection={requestCorrection}
+            />
+          </div>
+        ) : null;
+
+        // Project not set up yet → warm welcome + feature preview instead of a
+        // dashboard full of zeros.
+        if (!projectIsSetUp) {
+          return (
+            <div className="space-y-6 pb-6">
+              <ClientWelcomePreview
+                clientFirstName={clientFirstName}
+                projectName={selectedProject?.name}
+                projectAddress={selectedProject?.address}
+                hasProject={true}
+                onNavigate={handleNavigate}
+              />
+              {buildLocationCard}
+            </div>
+          );
+        }
+
         return (
           <div className="space-y-6">
             <ClientTodayFeed />
-            {selectedProject?.buildLocation && (
-              <div className="rounded-xl border border-gray-200 bg-white p-5">
-                <h3 className="font-semibold text-gray-900 mb-1">Your build location</h3>
-                <p className="text-sm text-gray-500 mb-3">Please confirm this is the correct build location.</p>
-                <BuildLocation
-                  mode="confirm"
-                  value={locationFromProject(selectedProject)}
-                  onConfirm={confirmLocation}
-                  onRequestCorrection={requestCorrection}
-                />
-              </div>
-            )}
+            {buildLocationCard}
             <ClientDashboard
               projectId={selectedProjectId}
               project={selectedProject}
@@ -199,6 +233,7 @@ export default function SkyelineClientPortal() {
             />
           </div>
         );
+      }
 
       case 'schedule':
         return (
