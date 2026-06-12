@@ -2125,6 +2125,11 @@ export { oneShotContactAuthBackfill } from './auth/contactAuthBackfill';
 //    reminders at 3 / 6 / 11 / 12 months from that date.
 export { createWarrantyReminders } from './projects/warrantyReminders';
 
+// ── One-shot: remap legacy project phases to the new client milestones.
+//    Runs on a 5-min schedule, writes a marker after a clean run, exits early
+//    thereafter. Idempotent.
+export { oneShotPhaseMigration } from './projects/phaseMigration';
+
 
 // (qboOAuth standalone removed — routes folded into the api Express app
 //  to avoid the org-IAM block on new public Cloud Functions.)
