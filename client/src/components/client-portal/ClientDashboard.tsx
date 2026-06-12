@@ -38,8 +38,9 @@ export default function ClientDashboard({ projectId, project, onNavigate }: Clie
   const { data: changeOrders = [] } = useQuery({
     queryKey: ['changeOrders', projectId],
     queryFn: async () => {
+      // Top-level `changeOrders` keyed by projectId (canonical location).
       const snap = await getDocs(
-        query(collection(db, 'projects', projectId, 'changeOrders'), orderBy('createdAt', 'desc'))
+        query(collection(db, 'changeOrders'), where('projectId', '==', projectId))
       );
       return snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
     },

@@ -190,8 +190,11 @@ service cloud.firestore {
 
     // Estimates — linked to clients and jobs
     match /estimates/{estimateId} {
+      // Estimates key clientId as the sales clients-doc id (a third id shape),
+      // so match by the project the estimate belongs to instead.
       allow read: if isGC()
-        || (clientOwns(resource.data));
+        || clientOwns(resource.data)
+        || (isClient() && 'projectId' in resource.data && clientOwnsProject(resource.data.projectId));
       allow write: if isGCOnly();
       allow delete: if isAdmin();
 
@@ -271,7 +274,8 @@ service cloud.firestore {
     // Change orders
     match /changeOrders/{orderId} {
       allow read: if isGC()
-        || (clientOwns(resource.data));
+        || clientOwns(resource.data)
+        || (isClient() && 'projectId' in resource.data && clientOwnsProject(resource.data.projectId));
       allow create: if isGCOnly() || isClient(); // clients create COs when approving overages
       allow update, delete: if isGCOnly();
     }
