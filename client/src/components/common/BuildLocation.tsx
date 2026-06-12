@@ -17,6 +17,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Navigation, Satellite, Map as MapIcon } from 'lucide-react';
+import { AddressSearchInput, type GeoResult } from '@/components/common/AddressSearchInput';
 import {
   type BuildLocation as BL, STATUS_META, locationStatus, formatAddress,
   directionsUrl, hasPin,
@@ -66,6 +67,28 @@ export function BuildLocation({ value, mode, onChange, onConfirm, onRequestCorre
   const editable = mode === 'edit';
   const status = locationStatus(value);
   const patch = (p: Partial<BL>) => onChangeRef.current?.({ ...value, ...p });
+
+  // Move the map + pin to a geocoded spot. `commit` fills the address fields
+  // too (explicit pick); a preview just repositions the pin as the user types.
+  const goToGeo = (r: GeoResult, commit: boolean) => {
+    const next: Partial<BL> = { latitude: r.lat, longitude: r.lng };
+    if (commit && r.address) {
+      if (r.address.line1) next.addressLine1 = r.address.line1;
+      if (r.address.city) next.city = r.address.city;
+      if (r.address.state) next.state = r.address.state;
+      if (r.address.zip) next.zipCode = r.address.zip;
+      if (r.address.county) next.county = r.address.county;
+    } else {
+      // Preview: fill blank sub-fields so the form stays in sync, but never
+      // overwrite what the GC has already typed.
+      if (r.address?.city && !value.city) next.city = r.address.city;
+      if (r.address?.state && !value.state) next.state = r.address.state;
+      if (r.address?.zip && !value.zipCode) next.zipCode = r.address.zip;
+      if (r.address?.county && !value.county) next.county = r.address.county;
+    }
+    patch(next);
+    mapRef.current?.flyTo({ center: [r.lng, r.lat], zoom: 17, duration: 800 });
+  };
 
   // Init map once. MapLibre + its CSS are loaded via dynamic import() so they
   // are code-split into a lazy chunk that only downloads when this component
@@ -154,7 +177,17 @@ export function BuildLocation({ value, mode, onChange, onConfirm, onRequestCorre
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="sm:col-span-2">
             <Label>Address line 1</Label>
-            <Input value={value.addressLine1 || ''} onChange={e => patch({ addressLine1: e.target.value })} placeholder="482 N 1500 W" className="mt-1" />
+            <AddressSearchInput
+              value={value.addressLine1 || ''}
+              onChange={(t) => patch({ addressLine1: t })}
+              onSelect={(r) => goToGeo(r, true)}
+              onPreview={(r) => goToGeo(r, false)}
+              placeholder="Start typing an address — the pin follows"
+              className="mt-1"
+            />
+            <p className="mt-1 text-[11px] text-gray-500">
+              Suggestions come from your saved addresses and live map search; pick one to drop the pin.
+            </p>
           </div>
           <div className="sm:col-span-2">
             <Label>Address line 2</Label>
