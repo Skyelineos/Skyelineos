@@ -534,6 +534,16 @@ service cloud.firestore {
       allow write: if isGC();
     }
 
+    // Client portal engagement log — append-only. Any signed-in portal user
+    // records their own events (the event's uid must equal their own); only
+    // staff read them (internal engagement view on the project overview).
+    // No edits/deletes except admin cleanup.
+    match /clientActivity/{eventId} {
+      allow read: if isGC();
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
     // Walkthroughs — site media (photos/videos) captured on-site by GC, assigned to subs.
     // GC sees all; subs see only items assigned to them; designers can view (often related to selections).
     match /projects/{projectId}/walkthroughs/{walkthroughId} {
