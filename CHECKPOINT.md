@@ -1,9 +1,32 @@
 # Skyelineos — Session Checkpoint
-**Last updated:** 2026-06-11 (session: incident recovery + BuildLocation re-land + hosting cache + Phase A cleanup)
+**Last updated:** 2026-06-12 (lead intake + model-home sign + deploy/infra fixes; builds on the 2026-06-11 session below)
 **Live URL:** https://skyelineos.web.app
 **Firebase project:** skyelineos (**BLAZE** plan — upgraded 2026-05-06)
 **Deploy command:** `npm run deploy` (or `:hosting` / `:rules` / `:functions` variants — see `package.json`). Note: this repo also deploys via **CI on push to `main`** (GitHub Actions "Deploy to Firebase").
 **Authoritative docs:** `CLAUDE.md`, `PROJECT_OVERVIEW.md`, `SESSION_NOTES.md` (in that order). This file is a session-checkpoint snapshot; the other three are the durable references.
+
+---
+
+## Session 2026-06-12 — what shipped (all merged to `main`)
+
+Lead-capture pipeline + model-home sign + deploy/infra fixes. Merged via PRs #61–63 (and this handoff, #64). Deploy is by push/merge to `main` → the "Deploy to Firebase" Action.
+
+1. **Dashboard boot-hang fix** (#61). `AppContent` had no escape from the top-level "Loading……" auth gate; added a 10s stuck-escape + bounded `loadUserProfile`'s Firestore `getDoc` with an 8s timeout. `client/src/App.tsx`, `client/src/auth/AuthContext.tsx`.
+2. **Lead intake pipeline** (#61, #62). `functions/src/leads/intakeRoute.ts`: `POST /api/leads/intake` (secret-gated via `LEAD_INTAKE_SECRET`) + `POST /api/leads/public-intake` (public, honeypot + validation). Shared `createLead()` → `clients` (stage `new_lead`, source `website`, budget band → number, priority from score). Idempotent via `lead_intake_dedupe`. Public form at `client/src/pages/LearnMore.tsx` (`/learn-more`); Sales toolbar "Lead Form" button. `scripts/build-crestview-lead-form.gs` = optional Google-Form generator (not run).
+3. **API Storage page** (#61). Admin-only `/api-storage` (Management sidebar) — integration catalog + Secret Manager key names, no values. `client/src/pages/ApiStorage.tsx`.
+4. **Clickable Users stat tiles** (#61). Staff/Home Owners/Subs/Designers tiles filter Users by role (Staff = `admin`+`gc`). `client/src/pages/UserManagement.tsx`.
+5. **Giveaway page** (#63). Content Studio → "Giveaway Page" uploads a Canva export to `public/giveaway/...`, recorded at `public_content/giveaway`; public `/giveaway` page renders it. `firestore.rules`: `public_content` world-read, GC-write. `components/content-studio/GiveawayPageManager.tsx`, `pages/Giveaway.tsx`.
+6. **Infra/deploy fixes** (#61). `firebase.json` predeploy `npm run build` → `npm --prefix functions run build` (was building the client, not compiling functions); root `prepare` `husky` → `husky || true`; Functions runtime **Node 20 → 22**.
+
+**Secret Manager:** `LEAD_INTAKE_SECRET` set (real). `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` = **`placeholder`** (set to unblock the `api` deploy; Ingestion Lab OAuth non-functional until real values added).
+
+**Model-home sign (deliverable, NOT in repo):** 3-QR sign for a **100" TV** (4K 3840×2160, 16:9, built with `sharp`): center logo; left "Explore the Finish Selections of this Home" → Christensen selections Sheet; middle "Enter Our Giveaway!" → `/giveaway`; right "Learn More About Building with Skyeline Homes" → `/learn-more`. Build scripts were ephemeral in `/tmp`.
+
+**Open / next:**
+- Left sign QR points at the **internal** Christensen selections Sheet (prices/vendors/private notes) — consider a cleaned buyer-facing destination.
+- Verify the public lead form end-to-end (submit `/learn-more` → lands in Sales); sandbox couldn't reach `skyelineos.web.app` to test (egress).
+- Replace placeholder `GOOGLE_CLIENT_*` secrets before using Ingestion Lab.
+- Delete test leads from Sales ("Test Lead", "Public Form Test").
 
 ---
 
