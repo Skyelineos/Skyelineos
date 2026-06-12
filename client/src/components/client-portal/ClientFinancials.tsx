@@ -4,6 +4,7 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { CLIENT_PHASES as PHASES } from '@/lib/clientPhases';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
@@ -56,11 +57,6 @@ interface ProjectFinancials {
   actualCompletion?: string;
   name?: string;
 }
-
-const PHASES = [
-  'Pre-Construction', 'Site Prep', 'Foundation', 'Framing',
-  'Rough MEP', 'Insulation', 'Drywall', 'Finish Work', 'Punch List', 'Complete',
-];
 
 const DRAW_STATUS: Record<Draw['status'], { label: string; color: string; bg: string; icon: any }> = {
   scheduled: { label: 'Scheduled',         color: '#6b7280', bg: '#f3f4f6',       icon: Clock },

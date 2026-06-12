@@ -10,10 +10,7 @@ import {
   Calendar, DollarSign, Home, Wrench, Palette
 } from 'lucide-react';
 
-const PHASES = [
-  'Pre-Construction', 'Site Prep', 'Foundation', 'Framing',
-  'Rough MEP', 'Insulation', 'Drywall', 'Finish Work', 'Punch List', 'Complete'
-];
+import { CLIENT_PHASES as PHASES } from '@/lib/clientPhases';
 
 interface ClientDashboardProps {
   projectId: string;

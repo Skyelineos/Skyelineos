@@ -214,6 +214,21 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // Client inspiration board — pre-project photos + notes a homeowner shares
+    // for their designer to review (before a project exists). Owner reads their
+    // own (by uid or linked contact id); GC + designers read all. The homeowner
+    // creates their own items; owner or GC can remove.
+    match /inspiration/{itemId} {
+      allow read: if isGC() || isDesigner()
+        || (isClient() && (
+              resource.data.clientUid == request.auth.uid
+              || (clientLinkedContactId() != null && resource.data.clientContactId == clientLinkedContactId())
+            ));
+      allow create: if isSignedIn() && request.resource.data.clientUid == request.auth.uid;
+      allow update, delete: if isGC()
+        || (isSignedIn() && resource.data.clientUid == request.auth.uid);
+    }
+
     // Bids — GC full access; subs can read+write their own portal-submitted bids;
     // public token bids still allowed for legacy flow
     match /bids/{bidId} {

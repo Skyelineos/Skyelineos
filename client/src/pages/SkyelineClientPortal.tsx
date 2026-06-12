@@ -17,6 +17,8 @@ import PhotosTab from '@/components/photos/PhotosTab';
 import { ProjectChat } from '@/components/messaging/ProjectChat';
 import ClientDashboard from '@/components/client-portal/ClientDashboard';
 import { ClientWelcomePreview } from '@/components/client-portal/ClientWelcomePreview';
+import { ClientTabPreview } from '@/components/client-portal/ClientTabPreview';
+import { InspirationBoard } from '@/components/client-portal/InspirationBoard';
 import SelectionsBoard from '@/components/client-portal/SelectionsBoard';
 import ClientSelectionsTimeline from '@/components/client/ClientSelectionsTimeline';
 import ChangeOrdersTab from '@/components/client-portal/ChangeOrdersTab';
@@ -212,14 +214,33 @@ export default function SkyelineClientPortal() {
   };
 
   const renderContent = () => {
-    if (!selectedProjectId && !projectsLoading) {
-      return (
-        <ClientWelcomePreview
-          clientFirstName={clientFirstName}
-          hasProject={false}
-          onNavigate={handleNavigate}
-        />
-      );
+    // No project yet (lead / pre-plans). Each tab gets tailored content so the
+    // nav actually goes somewhere: a welcome on Dashboard, a working inspiration
+    // board on Selections + Photos, and a "what to expect" preview elsewhere.
+    if (!selectedProjectId) {
+      const goInspiration = () => handleNavigate('selections');
+      switch (currentTab) {
+        case 'selections':
+        case 'design':
+        case 'photos':
+          return <InspirationBoard clientContactId={primaryClientId} clientName={clientFullName} />;
+        case 'schedule':
+        case 'financials':
+        case 'change-orders':
+        case 'site-log':
+        case 'documents':
+        case 'messages':
+          return <ClientTabPreview tab={currentTab as any} onStartInspiration={goInspiration} />;
+        case 'dashboard':
+        default:
+          return (
+            <ClientWelcomePreview
+              clientFirstName={clientFirstName}
+              hasProject={false}
+              onNavigate={handleNavigate}
+            />
+          );
+      }
     }
 
     switch (currentTab) {
