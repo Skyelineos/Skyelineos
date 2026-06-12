@@ -26,7 +26,9 @@ import {
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 type ProjectType = 'custom_home' | 'remodel' | 'addition' | 'spec' | 'commercial' | 'other';
-type LeadSource  = 'referral' | 'parade_of_homes' | 'website' | 'instagram' | 'email' | 'phone' | 'other';
+type LeadSource  =
+  | 'website' | 'event' | 'ad_campaign' | 'referral'
+  | 'instagram' | 'parade_of_homes' | 'email' | 'phone' | 'other';
 
 interface StageConfig { key: string; label: string; color: string; }
 
@@ -41,6 +43,8 @@ interface Client {
   stage: string;
   projectType?: ProjectType;
   source?: LeadSource;
+  // Specific event/campaign name behind `source` (e.g. "Parade of Homes 2026").
+  sourceDetail?: string | null;
   jobAddress?: string | null;
   city?: string | null;
   state?: string | null;
@@ -91,15 +95,24 @@ const PROJECT_TYPES: { value: ProjectType; label: string }[] = [
   { value: 'other',       label: 'Other'       },
 ];
 
+// Lead-gen avenues. Keep in sync with SOURCE_LABELS in
+// functions/src/leads/newLeadAlert.ts and ALLOWED_SOURCES in
+// functions/src/leads/intakeRoute.ts. `event` and `ad_campaign` pair with the
+// "Source detail" field below so each specific open house / campaign is labeled.
 const LEAD_SOURCES: { value: LeadSource; label: string }[] = [
-  { value: 'referral',        label: 'Referral'        },
-  { value: 'parade_of_homes', label: 'Parade of Homes' },
-  { value: 'website',         label: 'Website'         },
-  { value: 'instagram',       label: 'Instagram'       },
-  { value: 'email',           label: 'Email'           },
-  { value: 'phone',           label: 'Phone'           },
-  { value: 'other',           label: 'Other'           },
+  { value: 'website',         label: 'Website'           },
+  { value: 'event',           label: 'Event / Open House' },
+  { value: 'ad_campaign',     label: 'Ad Campaign'       },
+  { value: 'referral',        label: 'Referral'          },
+  { value: 'instagram',       label: 'Instagram / Social' },
+  { value: 'parade_of_homes', label: 'Parade of Homes'   },
+  { value: 'email',           label: 'Email'             },
+  { value: 'phone',           label: 'Phone / Walk-in'   },
+  { value: 'other',           label: 'Other'             },
 ];
+
+// Sources where naming the specific event/campaign matters for ROI tracking.
+const SOURCES_WITH_DETAIL = new Set<LeadSource>(['event', 'ad_campaign', 'parade_of_homes', 'referral']);
 
 const COLOR_OPTIONS = [
   '#64748b','#3b82f6','#f59e0b','#8b5cf6','#10b981',
@@ -318,6 +331,7 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
     stage: stages[0]?.key || 'new_lead',
     projectType: 'custom_home' as ProjectType,
     source: 'referral' as LeadSource,
+    sourceDetail: '',
     budget: '', squareFootage: '', notes: '',
     priority: 'medium' as 'low' | 'medium' | 'high',
     assignedTo: user?.firebaseUid || '',
@@ -364,6 +378,7 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
           stage: editing.stage || stages[0]?.key || 'new_lead',
           projectType: editing.projectType || 'custom_home',
           source: editing.source || 'referral',
+          sourceDetail: editing.sourceDetail || '',
           budget: editing.budget?.toString() || '',
           squareFootage: editing.squareFootage?.toString() || '',
           notes: editing.notes || '',
@@ -478,6 +493,7 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
         stage: form.stage,
         projectType: form.projectType,
         source: form.source,
+        sourceDetail: form.sourceDetail.trim() || null,
         budget: form.budget ? parseFloat(form.budget) : null,
         squareFootage: form.squareFootage ? parseFloat(form.squareFootage) : null,
         notes: form.notes || null,
@@ -552,6 +568,28 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
               </SelectContent>
             </Select>
           </div>
+
+          {/* Source detail — which specific event / campaign / referrer. Shown
+              for sources where the specific name matters for ROI tracking. */}
+          {SOURCES_WITH_DETAIL.has(form.source) && (
+            <div>
+              <Label>
+                {form.source === 'ad_campaign' ? 'Campaign Name'
+                  : form.source === 'referral' ? 'Referred By'
+                  : 'Event Name'}
+              </Label>
+              <Input
+                value={form.sourceDetail}
+                onChange={e => set('sourceDetail', e.target.value)}
+                placeholder={
+                  form.source === 'ad_campaign' ? 'e.g. Meta Spring Reno'
+                    : form.source === 'referral' ? 'e.g. Jane Smith'
+                    : 'e.g. Parade of Homes 2026'
+                }
+                className="placeholder:text-gray-300"
+              />
+            </div>
+          )}
 
           {/* Address — full row for street, then City / State / Zip on one row */}
           <div className="sm:col-span-2">

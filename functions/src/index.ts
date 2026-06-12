@@ -2098,6 +2098,10 @@ exports.api = onRequest(
 // ── Phase 3: Notification dispatch (email + SMS) ─────────────────────────────
 export { dispatchNotification } from './notifications/dispatch';
 
+// ── New-lead alert: on every clients/{id} create (any avenue), notify admins
+//    in-app + push + forced SMS. dispatchNotification does the actual sending.
+export { newLeadAlert } from './leads/newLeadAlert';
+
 // (The /api/bid-requests/send, /api/bid-requests/by-token/:token,
 //  /api/sub/post-signup-link, and /api/sub/link-queue/:id/resolve routes
 //  are registered above, just before the catch-all 404. Don't add them again

@@ -39,6 +39,19 @@ export default function LearnMore() {
   const [done, setDone] = useState(false);
   const [error, setError] = useState('');
 
+  // The same branded form backs many lead-gen avenues. Each entry point (a QR
+  // sign at the model home, an ad landing-page link, a website button) carries
+  // its own `?source=` + `?campaign=` so every lead is labeled with where it
+  // came from. Defaults to the Crestview model-home open house when unset.
+  //   /learn-more                               → event · Crestview Solace · Build #27
+  //   /learn-more?source=ad_campaign&campaign=Meta%20Spring%20Reno
+  //   /learn-more?source=website
+  const params = typeof window !== 'undefined'
+    ? new URLSearchParams(window.location.search)
+    : new URLSearchParams();
+  const source = params.get('source') || 'event';
+  const campaign = params.get('campaign') || 'Crestview Solace · Build #27';
+
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) => setF(prev => ({ ...prev, [k]: v }));
   const toggle = (k: 'interests' | 'helpWith', v: string) =>
     setF(prev => ({ ...prev, [k]: prev[k].includes(v) ? prev[k].filter(x => x !== v) : [...prev[k], v] }));
@@ -55,7 +68,7 @@ export default function LearnMore() {
       const res = await fetch('/api/leads/public-intake', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(f),
+        body: JSON.stringify({ ...f, source, sourceDetail: campaign }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Something went wrong. Please try again.');
