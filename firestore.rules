@@ -58,6 +58,25 @@ service cloud.firestore {
       return isGC();
     }
 
+    // ── Project Manager scoping ──────────────────────────────────────────────
+    // A PM is limited to the jobs they're assigned to (projects.assignedUserIds).
+    // pmInList() checks a project doc already in hand (e.g. resource.data on the
+    // projects collection). Admin/GC bypass scoping via isGCOnly().
+    //
+    // NOTE (intentional, documented): right now this scoping is applied only to
+    // the projects/{projectId} document itself — the "gateway" the app loads
+    // before showing any project. Project SUBcollections (rooms, selections,
+    // rfis, draws, takeoffs, walkthroughs, …) are NOT yet PM-scoped because
+    // their rules admit staff through isDesigner()/isSub(), which fall back to
+    // isStaff()→isGC()→includes PM. Closing those requires reworking the shared
+    // role predicates + per-collection client query changes, validated with the
+    // Firestore rules emulator. See docs/pm-project-isolation-plan.md.
+    function pmInList(projectData) {
+      return isProjectManager()
+        && 'assignedUserIds' in projectData
+        && request.auth.uid in projectData.assignedUserIds;
+    }
+
     function isClient() {
       return isSignedIn() && getUserRole() == 'client';
     }
@@ -104,13 +123,20 @@ service cloud.firestore {
       allow write: if isAdmin() || request.auth.uid == userId;
     }
 
-    // Projects — GC can do everything; clients see only their project; designers/subs see assigned
+    // Projects — admin/GC do everything; a PM is scoped to assigned jobs;
+    // clients see only their project; designers/subs see assigned.
     match /projects/{projectId} {
-      allow read: if isGC()
+      // A PM only reads a project they're in (assignedUserIds); the designer/sub
+      // clauses already require assignment, so there's no unscoped PM backdoor here.
+      allow read: if isGCOnly()
+        || pmInList(resource.data)
         || (clientOwns(resource.data))
         || (isDesigner() && request.auth.uid in resource.data.assignedUserIds)
         || (isSub() && request.auth.uid in resource.data.assignedUserIds);
-      allow create, update: if isGC();
+      // Only admin/GC create new projects (D-001: PMs can't create/delete).
+      allow create: if isGCOnly();
+      // A PM may edit only a project they're assigned to; admin/GC any.
+      allow update: if isGCOnly() || pmInList(resource.data);
       // The homeowner may confirm or request a correction on their build
       // location — only the buildLocation key, and only the status/notes/
       // confirmation fields. They cannot move the pin or change the address.
