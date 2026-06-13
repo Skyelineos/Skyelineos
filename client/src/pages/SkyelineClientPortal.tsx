@@ -265,7 +265,7 @@ export default function SkyelineClientPortal() {
               />
               {/* Soft sales pitch — interactive one-pagers that answer the
                   questions prospective clients have before a project exists. */}
-              <SalesPitchSection />
+              <SalesPitchSection onNavigate={handleNavigate} />
             </div>
           );
       }
@@ -303,7 +303,7 @@ export default function SkyelineClientPortal() {
               {buildLocationCard}
               {/* Pre-construction clients still benefit from the soft pitch /
                   one-pagers while their project is being set up. */}
-              <SalesPitchSection />
+              <SalesPitchSection onNavigate={handleNavigate} />
             </div>
           );
         }

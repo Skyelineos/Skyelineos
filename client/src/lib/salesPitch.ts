@@ -47,6 +47,7 @@ export interface SalesPitchSection {
   videoUrl?: string;   // empty/undefined → "video coming soon" placeholder
   documents: SalesPitchDoc[];
   published: boolean;  // false → hidden from clients, still visible to staff
+  featured?: boolean;  // true → rendered as the big hero card at the top
   updatedAt?: any;
   updatedBy?: string;
 }
@@ -64,6 +65,7 @@ export function blankSection(order: number): SalesPitchSection {
     videoUrl: '',
     documents: [],
     published: true,
+    featured: false,
   };
 }
 
@@ -167,6 +169,7 @@ export const DEFAULT_SECTIONS: SalesPitchSection[] = [
     videoUrl: '',
     documents: [],
     published: true,
+    featured: true,
   },
   {
     id: 'why-skyeline',

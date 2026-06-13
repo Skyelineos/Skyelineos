@@ -220,7 +220,14 @@ export function SalesPitchEditDialog({ open, section, uid, onClose }: Props) {
             </div>
           </div>
 
-          {/* Published toggle */}
+          {/* Featured + Published toggles */}
+          <div className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2.5">
+            <div>
+              <p className="text-sm font-medium text-gray-900">Feature as hero</p>
+              <p className="text-[11px] text-gray-400">On = the big banner at the top of the pitch. Only one section should be featured.</p>
+            </div>
+            <Switch checked={!!draft.featured} onCheckedChange={(v) => set({ featured: v })} />
+          </div>
           <div className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2.5">
             <div>
               <p className="text-sm font-medium text-gray-900">Published</p>
