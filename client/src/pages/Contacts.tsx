@@ -296,17 +296,19 @@ export default function Contacts() {
         });
         toast({ title: 'Contact added', description: `${fullName} added to contacts.` });
         if (formSnapshot.sendInvite && formSnapshot.email) {
-          // Fire-and-forget invite — opens the user's mail client.
-          const { createPortalInvite, openInviteMail } = await import('@/lib/portalInvite');
+          // Send a real portal-invite email (SendGrid) using the default
+          // template for a new contact. No mail client involved.
+          const { sendPortalInviteEmail } = await import('@/lib/portalInvite');
           try {
-            const token = await createPortalInvite({
+            const { templateName } = await sendPortalInviteEmail({
               contactId: newRef.id,
               email: formSnapshot.email,
               role: validRole,
               firstName: formSnapshot.firstName,
               invitedBy: user?.email || '',
+              preferStage: 'lead',
             });
-            openInviteMail({ email: formSnapshot.email, firstName: formSnapshot.firstName, token });
+            toast({ title: 'Portal invite sent', description: `Emailed “${templateName}” to ${formSnapshot.email}.` });
           } catch (e: any) {
             toast({ title: 'Invite not sent', description: e?.message || '', variant: 'destructive' });
           }
