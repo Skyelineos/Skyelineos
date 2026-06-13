@@ -2056,6 +2056,11 @@ registerLeadIntakeRoute(app, admin.firestore());
 import { registerSmsInboundRoute } from './notifications/smsInboundRoute';
 registerSmsInboundRoute(app, admin.firestore());
 
+// Portal-invite email — sends a stage-specific template (emailTemplates/{id})
+// to a client's documented address via SendGrid. Route: POST /api/send-portal-invite
+import { registerSendPortalInviteRoute } from './email/sendPortalInviteRoute';
+registerSendPortalInviteRoute(app, admin.firestore());
+
 // Catch-all 404 — must come AFTER all route registrations (QBO routes above included)
 app.use('*', (req: any, res: any) => {
   console.log(`❌ 404 - API endpoint not found: ${req.method} ${req.originalUrl}`);

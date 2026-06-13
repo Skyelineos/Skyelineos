@@ -553,6 +553,16 @@ service cloud.firestore {
       allow write: if isGC();
     }
 
+    // Portal-invite email templates — staff-managed library of selectable
+    // templates (built-in seeds + GC uploads). Read/write is GC-only; the
+    // backend send route reads them with admin privileges.
+    match /emailTemplates/{templateId} {
+      allow read, write: if isGC();
+    }
+    match /emailTemplates_meta/{docId} {
+      allow read, write: if isGC();
+    }
+
     // Client portal engagement log — append-only. Any signed-in portal user
     // records their own events (the event's uid must equal their own); only
     // staff read them (internal engagement view on the project overview).
