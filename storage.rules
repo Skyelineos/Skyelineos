@@ -46,5 +46,14 @@ service firebase.storage {
       allow read: if true;
       allow write: if request.auth != null;
     }
+
+    // Sales-pitch documents/videos shown in the client portal one-pagers.
+    // Readable by anyone (downloaded straight from the portal); the UI only
+    // exposes the upload/delete affordances to staff. Firestore rules gate who
+    // can reference these on a section doc.
+    match /salesPitch/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
   }
 }

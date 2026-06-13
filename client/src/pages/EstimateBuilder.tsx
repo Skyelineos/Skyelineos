@@ -875,6 +875,7 @@ function EstimateModal({
   prefillProject?: { id: string; name: string } | null;
 }) {
   const defaultItems = () => FALLBACK_TRADES.slice(0, 5).map(t => newLineItem(t));
+  const { toast } = useToast();
 
   const [activeTab, setActiveTab]   = useState<EstimateTab>('details');
   const [title, setTitle]           = useState('');
@@ -1008,27 +1009,42 @@ function EstimateModal({
   })();
 
   const handleSave = async () => {
-    if (!title.trim()) return;
+    if (!title.trim()) {
+      toast({ title: 'Add a title', description: 'Give the estimate a title before saving.', variant: 'destructive' });
+      return;
+    }
     setSaving(true);
     const clientName = clients.find(c => c.id === clientId)?.name;
-    await onSave({
-      title: title.trim(),
-      clientId: clientId || undefined,
-      clientName,
-      jobAddress: jobAddress.trim() || undefined,
-      status,
-      lineItems: items,
-      subtotal: totals.subtotal,
-      overhead,
-      profit,
-      markup: markupPct,
-      tax: taxPct,
-      totalAmount: totals.total,
-      notes: notes.trim() || undefined,
-      validUntil: validUntil || undefined,
-    });
-    setSaving(false);
-    onClose();
+    try {
+      await onSave({
+        title: title.trim(),
+        clientId: clientId || undefined,
+        clientName,
+        jobAddress: jobAddress.trim() || undefined,
+        status,
+        lineItems: items,
+        subtotal: totals.subtotal,
+        overhead,
+        profit,
+        markup: markupPct,
+        tax: taxPct,
+        totalAmount: totals.total,
+        notes: notes.trim() || undefined,
+        validUntil: validUntil || undefined,
+      });
+      onClose();
+    } catch (e: any) {
+      // Never leave the button stuck on "Saving…" — surface the failure so the
+      // user knows their edits weren't persisted (and can retry).
+      console.error('Estimate save failed:', e);
+      toast({
+        title: 'Could not save estimate',
+        description: e?.message || 'Something went wrong saving your changes. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
