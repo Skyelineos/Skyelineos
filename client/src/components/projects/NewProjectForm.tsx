@@ -34,6 +34,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { useAuth } from '@/hooks/use-auth';
 import { NewClientModal } from '@/components/contacts/NewClientModal';
+import { useAuth } from '@/auth/AuthContext';
 import type { Contact } from '@shared/messaging-types';
 
 const projectSchema = z.object({
@@ -166,11 +167,31 @@ export function NewProjectForm({ isOpen, onClose, onProjectCreated }: NewProject
     contact.type === 'Client'
   );
 
-  // Filter to only show project manager contacts (both 'pm' and 'project_manager' roles)
-  const projectManagerContacts = allContacts.filter((contact: any) =>
-    (contact.role && (contact.role === 'project_manager' || contact.role === 'pm')) ||
-    (contact.type && (contact.type === 'project_manager' || contact.type === 'pm'))
-  );
+  // Project-manager options = the Skyeline team. Real team members live in the
+  // `users` collection (admin-listable; fails silently for non-admins); PM-
+  // tagged contacts and the signed-in GC ("you") are folded in so there's
+  // always at least yourself to assign.
+  const { user: me } = useAuth();
+  const [teamUsers, setTeamUsers] = useState<any[]>([]);
+  useEffect(() => {
+    getDocs(collection(db, 'users'))
+      .then(snap => setTeamUsers(snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }))))
+      .catch(() => setTeamUsers([]));
+  }, []);
+  const PM_ROLES = new Set(['project_manager', 'pm', 'gc', 'admin']);
+  const projectManagerContacts = (() => {
+    const byId = new Map<string, any>();
+    const add = (c: any) => { if (c && c.id != null) byId.set(String(c.id), { ...c, id: String(c.id) }); };
+    teamUsers.filter((u: any) => PM_ROLES.has(String(u.role || '').toLowerCase())).forEach(add);
+    allContacts.filter((c: any) =>
+      PM_ROLES.has(String(c.role || '').toLowerCase()) || PM_ROLES.has(String(c.type || '').toLowerCase()),
+    ).forEach(add);
+    if ((me as any)?.firebaseUid) {
+      const meId = String((me as any).firebaseUid);
+      byId.set(meId, { id: meId, name: `${me?.name || 'Me'} (you)`, role: me?.role });
+    }
+    return Array.from(byId.values());
+  })();
 
   // Designer contacts — only surface real designers (not subs / clients / etc.)
   const designerContacts = allContacts.filter((contact: any) =>
