@@ -12,6 +12,51 @@ Things a future Claude session should know before diving in. Specific file paths
 
 The errors look like a brace/paren mismatch around line 815, with the parser cascading the rest of the file as a single broken expression. The file imports cleanly (it's only used in a few timeline experiments) and `vite build` succeeds because esbuild is more permissive than `tsc`. **Production builds and ships fine** — but `npm run check` will always exit non-zero until these are fixed. Don't gate CI on `tsc` without addressing this first.
 
+## Shipping workflow (every session)
+
+**Push everything through GitHub; go live through Firebase.** Two distinct steps:
+commit + push code to the GitHub repo (the canonical history — work on a branch / PR),
+then run `npm run deploy*` to deploy to the `skyelineos` Firebase project so the change
+actually reaches users. A GitHub push alone does **not** update the live site. See the
+"How work ships" section in `CLAUDE.md`.
+
+## Session 15 — Portal access without admin approval + sub bid-link fix
+
+Subs (and clients/designers) were getting walled behind the "Access Pending Approval"
+screen, and subs arriving via a bid magic-link couldn't reach the bid in their portal.
+
+### Root cause
+`client/src/auth/AuthContext.tsx` stamped **every** first-time sign-in with no `users`
+doc as `role: 'pending_gc'`. The email/password registration form (`SignIn.tsx`) already
+assigns `client` / `sub` / `designer` correctly, but any cold sign-in that skipped it —
+most importantly a sub who clicks the bid magic-link and signs in with Google — hit the
+`pending_gc` default and was blocked by `ProtectedRoute` (line ~87) before ever reaching
+the portal where their bid would surface. The sub portal is also role-gated to `sub`/`admin`
+(`App.tsx` ~600), so even a non-blocked cold sub stamped `client` couldn't see bids.
+
+### What changed
+- **`AuthContext.tsx`** — on first sign-in with no profile, resolve the portal role from a
+  matching **contact card** by email (new `derivePortalRole()`, mirrors
+  `functions/src/auth/ensureContactAuth.ts` `deriveUserRole()`): subcontractor/vendor → `sub`,
+  client/homeowner → `client`, designer → `designer`, team/employee → `pending_gc`
+  (internal staff still gated), unknown → `client`. Profile is written `active: true`,
+  `status: 'active'`, and the matched contact gets `linkedUserId` stamped so bid queries
+  resolve it by contact ID next load. **Clients, subs, and designers now get their portal
+  with no admin-approval step.** Only internal team/employee sign-ups remain gated.
+- **`SubBidRequestsTab.tsx`** — `array-contains-any` / `in` queries cap at 10 values; added
+  `prioritize()` so uid + contact IDs (no `@`) sort ahead of email variants before the
+  `.slice(0, 10)`, ensuring the primary invite keys never get truncated away.
+
+### Notes for future sessions
+- `RequestBidsModal.tsx` and `StartBidModal.tsx` are **orphaned** (not imported/rendered
+  anywhere). The live GC send path is `SendBidPackageModal` → `/api/bid-requests/send`
+  (`functions/src/bids/sendBidRequestRoute.ts`), which writes `invitedSubIds` =
+  contactId + linkedUserId + lowercased email. Don't invest in the orphaned modals; delete
+  them in a future cleanup if desired.
+- The `firestore.rules` bidRequests read rule only matches on `request.auth.uid` or
+  `request.auth.token.email.lower()` in `invitedSubIds` (not contactId), so the backend
+  *must* keep including the lowercased email — it does.
+
 ## Session 14 — SMS text alerts (operator + subs)
 
 Made the SMS pipeline actually fire end-to-end and brought it into carrier
