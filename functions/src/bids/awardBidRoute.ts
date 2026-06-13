@@ -19,6 +19,7 @@
 
 import type { Express } from 'express';
 import * as admin from 'firebase-admin';
+import { fireTrigger } from '../notifications/fireTrigger';
 
 interface AwardPayload {
   bidId: string;
@@ -164,24 +165,24 @@ export function registerAwardBidRoute(
       }
       await batch.commit();
 
-      // Best-effort: notify the winning sub
+      // Best-effort: notify the winning sub through the configurable engine.
+      // Channels/templates for 'bid_awarded' (audience: sub) are admin-editable
+      // in Settings → Notifications; defaults force SMS on this transactional
+      // event (STOP/opt-out still honored).
       if (check.resolvedUid) {
         try {
-          await db.collection('notifications').add({
-            userId: check.resolvedUid,
-            kind: 'system',
-            title: `Bid awarded: ${bid.trade || 'your trade'}`,
-            body: `Your bid for ${bid.projectName || 'this project'} was awarded. Skyeline will follow up with next steps.`,
-            link: '/subcontractor-portal/bids',
+          await fireTrigger({
+            db,
+            triggerKey: 'bid_awarded',
+            recipientUserId: check.resolvedUid,
+            audience: 'sub',
             projectId: data.projectId,
-            refType: 'bid',
-            refId: data.bidId,
-            // Award is a high-signal, transactional event — text the sub even
-            // if they haven't toggled SMS on. The dispatcher still honors STOP
-            // (sms_opt_outs ledger) and requires a valid phone.
-            forceSms: true,
-            read: false,
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            variables: {
+              projectName: bid.projectName || 'this project',
+              trade: bid.trade || 'your trade',
+              link: '/subcontractor-portal/bids',
+              bidId: data.bidId,
+            },
           });
         } catch (notifyErr) {
           console.warn('[awardBid] notification write failed (non-blocking):', notifyErr);
