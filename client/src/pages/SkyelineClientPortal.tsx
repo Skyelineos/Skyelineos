@@ -3,6 +3,7 @@ import { useLocation } from 'wouter';
 import { collection, query, where, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 import { db, auth } from '@/lib/firebase';
 import { resolveClientIdentity } from '@/lib/clientIdentity';
+import { logClientActivity, type ClientActivityType } from '@/lib/clientActivity';
 import { BuildLocation } from '@/components/common/BuildLocation';
 import { locationFromProject, logLocationEvent, type BuildLocation as BLType } from '@/lib/buildLocation';
 import { useAuth } from '@/hooks/use-auth';
@@ -119,6 +120,27 @@ export default function SkyelineClientPortal() {
       navigate('/client-portal/dashboard', { replace: true });
     }
   }, [location, navigate]);
+
+  // Log which sections the client opens (once per tab per session) so the GC's
+  // Portal Activity panel reflects real engagement. Skip admin impersonation.
+  useEffect(() => {
+    const uid = auth.currentUser?.uid;
+    if (!uid || isAdminView || !selectedProjectId) return;
+    const tab = TABS.find((t) => t.key === currentTab);
+    const type: ClientActivityType =
+      currentTab === 'selections' ? 'view_selections'
+      : currentTab === 'financials' ? 'view_invoice'
+      : 'view_tab';
+    logClientActivity({
+      uid,
+      type,
+      role: user?.role,
+      contactId: primaryClientId || undefined,
+      projectId: selectedProjectId,
+      label: tab?.label || currentTab,
+      once: `tab:${selectedProjectId}:${currentTab}`,
+    });
+  }, [currentTab, selectedProjectId, isAdminView, primaryClientId, user?.role]);
 
   // Load this client's projects. Projects store the client link in three
   // shapes across creation paths: canonical `clientIds[]`, legacy `clientId`,

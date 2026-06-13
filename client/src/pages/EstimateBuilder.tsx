@@ -10,6 +10,7 @@ import { estimateToContractInput } from '@/lib/contracts/fromEstimate';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { InviteToPortalButton } from '@/components/portal/InviteToPortalButton';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
@@ -1957,6 +1958,24 @@ export function EstimateBuilderContent({ projectId, projectName, embedded = fals
                         <DropdownMenuItem onClick={() => handleDuplicate(est)}>
                           <Copy className="h-4 w-4 mr-2" />Duplicate
                         </DropdownMenuItem>
+                        {(() => {
+                          const lc = est.clientId ? clients.find(c => c.id === est.clientId) : null;
+                          return lc?.email ? (
+                            <>
+                              <DropdownMenuSeparator />
+                              <div className="px-1 py-0.5">
+                                <InviteToPortalButton
+                                  email={lc.email}
+                                  firstName={lc.name?.split(' ')[0]}
+                                  contactId={est.clientId}
+                                  variant="ghost"
+                                  size="sm"
+                                  className="w-full justify-start gap-2 font-normal h-8"
+                                />
+                              </div>
+                            </>
+                          ) : null;
+                        })()}
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={() => handleDelete(est)} className="text-red-600">
                           <Trash2 className="h-4 w-4 mr-2" />Delete

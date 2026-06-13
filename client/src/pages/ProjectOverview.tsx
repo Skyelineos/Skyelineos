@@ -28,6 +28,9 @@ import {
 import { ChatThread } from '@/components/ui/ChatThread';
 import { WalkthroughCapture } from '@/components/walkthrough/WalkthroughCapture';
 import { WalkthroughList } from '@/components/walkthrough/WalkthroughList';
+import { Activity } from 'lucide-react';
+import { PortalActivityPanel } from '@/components/portal/PortalActivityPanel';
+import { InviteToPortalButton } from '@/components/portal/InviteToPortalButton';
 import { ProjectFinancialsCard } from '@/components/projects/ProjectFinancialsCard';
 import { ProjectStageTracker, deriveStageFromProject } from '@/components/projects/ProjectStageTracker';
 import { SoftBudgetBadge } from '@/components/projects/SoftBudgetBadge';
@@ -42,6 +45,7 @@ export default function ProjectOverview() {
   const projectId = params?.id;
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [advancing, setAdvancing] = useState(false);
+  const [activityOpen, setActivityOpen] = useState(false);
   const { toast } = useToast();
 
   const { project: transformedProject, rawProject: project, isLoading, error } = useOptimizedProject(projectId);
@@ -477,15 +481,26 @@ export default function ProjectOverview() {
               <Card className="bg-gray-50">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0">
                   <CardTitle>Client Information</CardTitle>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setEditDialogOpen(true)}
-                    className="gap-1.5"
-                  >
-                    <Edit className="w-3.5 h-3.5" />
-                    Edit
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setActivityOpen(true)}
+                      className="gap-1.5"
+                    >
+                      <Activity className="w-3.5 h-3.5" />
+                      Portal Activity
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setEditDialogOpen(true)}
+                      className="gap-1.5"
+                    >
+                      <Edit className="w-3.5 h-3.5" />
+                      Edit
+                    </Button>
+                  </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div>
@@ -543,6 +558,16 @@ export default function ProjectOverview() {
                       <p className="text-sm text-gray-400 italic">Not set</p>
                     )}
                   </div>
+                  {email && (
+                    <div className="pt-1">
+                      <InviteToPortalButton
+                        email={email}
+                        firstName={(transformedProject.client || '').split(' ')[0]}
+                        contactId={Array.isArray(raw?.clientIds) && raw.clientIds[0] ? String(raw.clientIds[0]) : ''}
+                        className="w-full justify-center"
+                      />
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             );
@@ -619,6 +644,17 @@ export default function ProjectOverview() {
             onOpenChange={setEditDialogOpen}
           />
         )}
+
+        {/* Client portal activity (internal) */}
+        <PortalActivityPanel
+          open={activityOpen}
+          onClose={() => setActivityOpen(false)}
+          projectId={projectId!}
+          contactId={Array.isArray((project as any)?.clientIds) && (project as any).clientIds[0]
+            ? String((project as any).clientIds[0]) : undefined}
+          clientName={transformedProject?.client}
+          clientEmail={transformedProject?.clientEmail || linkedClient?.email}
+        />
         </div>
 
         {/* Floating capture button (mobile-friendly, persists across scroll) */}
