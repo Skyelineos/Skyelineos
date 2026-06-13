@@ -34,6 +34,7 @@ import { GlobalDesignDashboard } from '@/components/designer/GlobalDesignDashboa
 import TakeoffStudio from '@/components/takeoff/TakeoffStudio';
 import { DesignerTodayFeed } from '@/components/today/DesignerTodayFeed';
 import { MyContractsView } from '@/components/contracts/MyContractsView';
+import { JobsiteLocationCard } from '@/components/common/JobsiteLocationCard';
 
 interface FirestoreProject {
   id: string;
@@ -322,7 +323,8 @@ export default function DesignerPortal() {
               </TabsList>
 
               <div className="mt-6">
-                <TabsContent value="dashboard" className="m-0">
+                <TabsContent value="dashboard" className="m-0 space-y-5">
+                  <JobsiteLocationCard project={selectedProject} />
                   <ProjectDesignDashboard
                     projectId={selectedProject.id}
                     projectName={selectedProject.name}

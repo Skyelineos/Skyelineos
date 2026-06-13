@@ -7,6 +7,7 @@ import { registerGmailIngester } from './ingestionLab/gmailIngester';
 import { registerDriveIngester } from './ingestionLab/driveIngester';
 import { registerUploadEndpoint } from './ingestionLab/uploadEndpoint';
 import { registerBrainPass } from './ingestionLab/brainPass';
+import { registerPlacesRoutes } from './places/placesRoutes';
 
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -24,6 +25,10 @@ registerGmailIngester(app, db);      // POST /api/ingestionLab/ingest/gmail
 registerDriveIngester(app, db);      // POST /api/ingestionLab/ingest/drive
 registerUploadEndpoint(app, db);     // POST /api/ingestionLab/upload
 registerBrainPass(app, db);          // POST /api/ingestionLab/brain/process
+
+// Google Places proxy — address autocomplete for the jobsite "Set pin" flow.
+// Key stays server-side (Secret Manager); see places/placesRoutes.ts.
+registerPlacesRoutes(app);           // GET /api/places/{autocomplete,details}
 
 // Real Firestore API endpoints
 app.get('/api/projects', async (req: any, res: any) => {
@@ -2077,6 +2082,8 @@ exports.api = onRequest(
       // Ingestion Lab OAuth — Gmail + Drive use one Google OAuth client.
       'GOOGLE_CLIENT_ID',
       'GOOGLE_CLIENT_SECRET',
+      // Google Places (New) autocomplete proxy for jobsite address entry.
+      'GOOGLE_MAPS_API_KEY',
       // Bid request route (/api/bid-requests/send) reads these via process.env.
       // Same secret names as the standalone dispatchNotification function uses.
       'SENDGRID_API_KEY',
