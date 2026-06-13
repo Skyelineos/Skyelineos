@@ -2056,6 +2056,11 @@ registerLeadIntakeRoute(app, admin.firestore());
 import { registerSmsInboundRoute } from './notifications/smsInboundRoute';
 registerSmsInboundRoute(app, admin.firestore());
 
+// Portal-invite email — sends a stage-specific template (emailTemplates/{id})
+// to a client's documented address via SendGrid. Route: POST /api/send-portal-invite
+import { registerSendPortalInviteRoute } from './email/sendPortalInviteRoute';
+registerSendPortalInviteRoute(app, admin.firestore());
+
 // Configurable notification engine — catalog + seed defaults + live test send.
 // Routes: GET /api/notifications/catalog, POST /api/notifications/rules/init,
 // POST /api/notifications/test
