@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { MultiTradeSelector } from './MultiTradeSelector';
+import { InviteToPortalButton } from '@/components/portal/InviteToPortalButton';
 
 interface ContactLike {
   id: string;
@@ -390,32 +391,15 @@ export function EditContactModal({ contact, open, onClose }: Props) {
 
         <DialogFooter className="border-t pt-4 mt-2 flex-col sm:flex-row gap-2">
           {!contact?.linkedUserId && contact?.email && (
-            <Button
-              type="button"
+            <InviteToPortalButton
+              email={email.trim()}
+              firstName={firstName.trim()}
+              contactId={contact.id}
+              role={role}
               variant="outline"
-              className="sm:mr-auto gap-1.5"
-              onClick={async () => {
-                if (!contact?.id || !email.trim()) {
-                  toast({ title: 'Save email first', variant: 'destructive' });
-                  return;
-                }
-                try {
-                  const { createPortalInvite, openInviteMail } = await import('@/lib/portalInvite');
-                  const token = await createPortalInvite({
-                    contactId: contact.id,
-                    email: email.trim(),
-                    role,
-                    firstName: firstName.trim(),
-                  });
-                  openInviteMail({ email: email.trim(), firstName: firstName.trim(), token });
-                  toast({ title: 'Invite ready', description: 'Email draft opened — send it from your mail app.' });
-                } catch (e: any) {
-                  toast({ title: 'Could not create invite', description: e?.message || '', variant: 'destructive' });
-                }
-              }}
-            >
-              Send Portal Invite
-            </Button>
+              className="sm:mr-auto"
+              label="Send portal invite"
+            />
           )}
           {contact?.linkedUserId && (
             <span className="text-xs text-green-700 sm:mr-auto inline-flex items-center gap-1">

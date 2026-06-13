@@ -26,7 +26,7 @@ import { RefreshCw, Info, Copy, Check } from 'lucide-react';
 // Role configuration
 const ROLES = [
   { value: 'admin', label: 'Administrator', description: 'Full system access' },
-  { value: 'project_manager', label: 'Project Manager', description: 'Manage projects and users' },
+  { value: 'projectManager', label: 'Project Manager', description: 'Runs projects end-to-end; no billing/settings access' },
   { value: 'accountant', label: 'Accountant', description: 'Financial management access' },
   { value: 'client', label: 'Client', description: 'View project progress' },
   { value: 'subcontractor', label: 'Subcontractor', description: 'Bid on projects and manage tasks' },
