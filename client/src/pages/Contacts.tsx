@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { contactsWithEmail, confirmDuplicateEmail } from '@/lib/contacts/duplicateEmail';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -227,6 +228,15 @@ export default function Contacts() {
         variant: 'destructive',
       });
       return;
+    }
+
+    // Soft duplicate-email warning — contacts that share an email can't each
+    // get their own portal login (Firebase Auth is one account per email).
+    if (newContactFormData.email.trim()) {
+      const dupes = await contactsWithEmail(newContactFormData.email);
+      if (dupes.length > 0 && !confirmDuplicateEmail(newContactFormData.email.trim(), dupes)) {
+        return;
+      }
     }
 
     // Optimistic UX: close the modal immediately so the user isn't stuck

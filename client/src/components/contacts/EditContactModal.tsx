@@ -25,6 +25,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { MultiTradeSelector } from './MultiTradeSelector';
 import { InviteToPortalButton } from '@/components/portal/InviteToPortalButton';
+import { contactsWithEmail, confirmDuplicateEmail } from '@/lib/contacts/duplicateEmail';
 
 interface ContactLike {
   id: string;
@@ -133,6 +134,17 @@ export function EditContactModal({ contact, open, onClose }: Props) {
         variant: 'destructive',
       });
       return;
+    }
+
+    // Soft duplicate-email warning — only when the email actually changed, so
+    // unrelated edits to an existing contact don't nag. Contacts that share an
+    // email can't each get their own portal login.
+    const emailLower = email.trim().toLowerCase();
+    if (emailLower && emailLower !== String(contact.email || '').trim().toLowerCase()) {
+      const dupes = await contactsWithEmail(email.trim(), contact.id);
+      if (dupes.length > 0 && !confirmDuplicateEmail(email.trim(), dupes)) {
+        return;
+      }
     }
 
     setSaving(true);
