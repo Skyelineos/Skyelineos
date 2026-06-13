@@ -28,6 +28,7 @@ import { SubBidRequestsTab } from '@/components/bidding/SubBidRequestsTab';
 import { MyContractsView } from '@/components/contracts/MyContractsView';
 import { EnablePushButton } from '@/components/notifications/EnablePushButton';
 import { RecipientMismatchBanner } from '@/components/bidding/RecipientMismatchBanner';
+import { JobsiteLocationCard } from '@/components/common/JobsiteLocationCard';
 import { StatCard } from '@/components/dashboard/StatCard';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -311,22 +312,20 @@ export default function SubcontractorPortal() {
             {activeProjects.length === 0 ? (
               <p className="text-sm text-gray-400 py-4 text-center">No projects assigned yet</p>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {activeProjects.map(p => (
-                  <div key={p.id} className="flex items-center justify-between py-2 border-b last:border-0">
-                    <div>
-                      <p className="text-sm font-medium text-gray-800">{p.name}</p>
-                      {p.address && <p className="text-xs text-gray-400">{p.address}</p>}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {p.currentPhase && <span className="text-xs text-gray-400">{p.currentPhase}</span>}
-                      {p.status && (
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
-                          {p.status}
-                        </span>
-                      )}
-                    </div>
-                  </div>
+                  <JobsiteLocationCard
+                    key={p.id}
+                    project={p}
+                    badge={
+                      <>
+                        {p.currentPhase && <span className="text-xs text-gray-500">{p.currentPhase}</span>}
+                        {p.status && (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">{p.status}</span>
+                        )}
+                      </>
+                    }
+                  />
                 ))}
               </div>
             )}

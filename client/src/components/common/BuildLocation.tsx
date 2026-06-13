@@ -57,8 +57,13 @@ export function BuildLocation({ value, mode, onChange, onConfirm, onRequestCorre
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markerRef = useRef<maplibregl.Marker | null>(null);
+  const maplibreRef = useRef<typeof maplibregl | null>(null);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  // Latest value, so map click/drag handlers (bound once at mount) merge onto
+  // the CURRENT form state instead of a stale snapshot from mount time.
+  const valueRef = useRef(value);
+  valueRef.current = value;
 
   const [satellite, setSatellite] = useState(true);
   const [showCorrection, setShowCorrection] = useState(false);
@@ -66,7 +71,32 @@ export function BuildLocation({ value, mode, onChange, onConfirm, onRequestCorre
 
   const editable = mode === 'edit';
   const status = locationStatus(value);
-  const patch = (p: Partial<BL>) => onChangeRef.current?.({ ...value, ...p });
+  const patch = (p: Partial<BL>) => onChangeRef.current?.({ ...valueRef.current, ...p });
+
+  // Create the marker on first use, or move it if it already exists. We never
+  // show a marker until there's a real pin (or the user clicks) — otherwise an
+  // empty location would render a stray pin on the default center, which looks
+  // like data the user never entered.
+  const placePin = (lng: number, lat: number, fromUser: boolean) => {
+    const maplib = maplibreRef.current;
+    const map = mapRef.current;
+    if (!maplib || !map) return;
+    if (markerRef.current) {
+      markerRef.current.setLngLat([lng, lat]);
+    } else {
+      const marker = new maplib.Marker({ color: '#C9A96E', draggable: editable })
+        .setLngLat([lng, lat])
+        .addTo(map);
+      if (editable) {
+        marker.on('dragend', () => {
+          const p = marker.getLngLat();
+          patch({ latitude: p.lat, longitude: p.lng });
+        });
+      }
+      markerRef.current = marker;
+    }
+    if (fromUser) patch({ latitude: lat, longitude: lng });
+  };
 
   // Move the map + pin to a geocoded spot. `commit` fills the address fields
   // too (explicit pick); a preview just repositions the pin as the user types.
@@ -104,35 +134,28 @@ export function BuildLocation({ value, mode, onChange, onConfirm, onRequestCorre
       // Bail if the component unmounted (or another effect already built a map)
       // while the chunk was downloading.
       if (cancelled || !containerRef.current || mapRef.current) return;
+      maplibreRef.current = maplibregl;
 
-      const center: [number, number] = hasPin(value)
-        ? [value.longitude as number, value.latitude as number]
+      const v = valueRef.current;
+      const center: [number, number] = hasPin(v)
+        ? [v.longitude as number, v.latitude as number]
         : DEFAULT_CENTER;
       const map = new maplibregl.Map({
         container: containerRef.current,
         style: SATELLITE_STYLE,
         center,
-        zoom: hasPin(value) ? 17 : 12,
+        zoom: hasPin(v) ? 17 : 12,
         attributionControl: { compact: true },
       });
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
       mapRef.current = map;
       mapInstance = map;
 
-      const marker = new maplibregl.Marker({ color: '#C9A96E', draggable: editable })
-        .setLngLat(center)
-        .addTo(map);
-      markerRef.current = marker;
+      // Only show a marker when there's an actual pin — no stray default pin.
+      if (hasPin(v)) placePin(v.longitude as number, v.latitude as number, false);
 
       if (editable) {
-        marker.on('dragend', () => {
-          const p = marker.getLngLat();
-          onChangeRef.current?.({ ...value, latitude: p.lat, longitude: p.lng });
-        });
-        map.on('click', (e) => {
-          marker.setLngLat(e.lngLat);
-          onChangeRef.current?.({ ...value, latitude: e.lngLat.lat, longitude: e.lngLat.lng });
-        });
+        map.on('click', (e) => placePin(e.lngLat.lng, e.lngLat.lat, true));
       }
       setTimeout(() => map.resize(), 150);
     })();
@@ -151,12 +174,18 @@ export function BuildLocation({ value, mode, onChange, onConfirm, onRequestCorre
     mapRef.current?.setStyle(satellite ? SATELLITE_STYLE : (STREET_STYLE as any));
   }, [satellite]);
 
-  // Reflect external pin changes (e.g. value loaded async).
+  // Reflect external pin changes — value loaded async, or a Places result
+  // picked (which sets coords without touching the map directly).
   useEffect(() => {
-    if (hasPin(value) && markerRef.current && mapRef.current) {
-      markerRef.current.setLngLat([value.longitude as number, value.latitude as number]);
+    if (!mapRef.current) return;
+    if (hasPin(value)) {
+      placePin(value.longitude as number, value.latitude as number, false);
       mapRef.current.setCenter([value.longitude as number, value.latitude as number]);
+    } else if (markerRef.current) {
+      markerRef.current.remove();
+      markerRef.current = null;
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value.latitude, value.longitude]);
 
   return (
