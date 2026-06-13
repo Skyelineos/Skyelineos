@@ -90,6 +90,11 @@ export function NewProjectForm({ isOpen, onClose, onProjectCreated }: NewProject
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedClientIds, setSelectedClientIds] = useState<string[]>([]);
   const [isNewClientModalOpen, setIsNewClientModalOpen] = useState(false);
+  // Clients created via "Add New Client" while this form is open. NewClientModal
+  // writes the contact directly to Firestore, but the list below is fed by the
+  // /api/contacts read — which can lag a direct write. We optimistically merge
+  // these in so a freshly created client shows + is selectable immediately.
+  const [extraContacts, setExtraContacts] = useState<any[]>([]);
   const [templates, setTemplates] = useState<{ id: string; name: string }[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
   // Schedule template (Gantt) — separate from Job Template above. Loads a
@@ -157,22 +162,30 @@ export function NewProjectForm({ isOpen, onClose, onProjectCreated }: NewProject
     refetchOnMount: true, // Refetch when component mounts
   });
 
+  // Canonical list (from /api/contacts) merged with any clients created in this
+  // session, de-duped by id. Everything downstream (options + submit lookup)
+  // reads from here so a just-created client is fully usable right away.
+  const mergedContacts = React.useMemo(() => {
+    const seen = new Set(allContacts.map((c: any) => String(c.id)));
+    return [...allContacts, ...extraContacts.filter((c: any) => !seen.has(String(c.id)))];
+  }, [allContacts, extraContacts]);
+
   // Filter to only show client contacts (check both 'role' and 'type' fields for compatibility)
-  const clientContacts = allContacts.filter((contact: any) => 
-    contact.role === 'client' || 
+  const clientContacts = mergedContacts.filter((contact: any) =>
+    contact.role === 'client' ||
     contact.type === 'client' ||
     contact.role === 'Client' ||
     contact.type === 'Client'
   );
 
   // Filter to only show project manager contacts (both 'pm' and 'project_manager' roles)
-  const projectManagerContacts = allContacts.filter((contact: any) =>
+  const projectManagerContacts = mergedContacts.filter((contact: any) =>
     (contact.role && (contact.role === 'project_manager' || contact.role === 'pm')) ||
     (contact.type && (contact.type === 'project_manager' || contact.type === 'pm'))
   );
 
   // Designer contacts — only surface real designers (not subs / clients / etc.)
-  const designerContacts = allContacts.filter((contact: any) =>
+  const designerContacts = mergedContacts.filter((contact: any) =>
     String(contact.role || '').toLowerCase() === 'designer' ||
     String(contact.type || '').toLowerCase() === 'designer'
   );
@@ -246,7 +259,7 @@ export function NewProjectForm({ isOpen, onClose, onProjectCreated }: NewProject
         if (spouseId) augmentedIds.add(spouseId);
       });
       // Materialize the final client list including any auto-added spouses.
-      const finalClients = allContacts.filter((c: any) => augmentedIds.has(c.id.toString()));
+      const finalClients = mergedContacts.filter((c: any) => augmentedIds.has(c.id.toString()));
       data.selectedClientIds = Array.from(augmentedIds);
 
       // Use primary client (first selected) for main fields, store all client IDs
@@ -373,6 +386,8 @@ export function NewProjectForm({ isOpen, onClose, onProjectCreated }: NewProject
 
       reset();
       setSelectedTemplateId('');
+      setSelectedClientIds([]);
+      setExtraContacts([]);
       onClose();
       onProjectCreated?.(newProjectId);
     } catch (error) {
@@ -391,41 +406,33 @@ export function NewProjectForm({ isOpen, onClose, onProjectCreated }: NewProject
     if (!isSubmitting) {
       reset();
       setSelectedClientIds([]);
+      setExtraContacts([]);
       onClose();
     }
   };
 
-  const handleClientCreated = async (newClient: any) => {
-    console.log('🎯 Client created callback:', newClient);
-    
-    // Close the modal first
+  const handleClientCreated = (newClient: any) => {
     setIsNewClientModalOpen(false);
-    
-    try {
-      // Refresh the contacts query to include the new client
-      await queryClient.invalidateQueries({ queryKey: ['/api/contacts'] });
-      await refetchContacts(); // Force immediate refetch and wait for completion
-      
-      // Add a small delay to ensure UI updates
-      setTimeout(() => {
-        // Add the new client to selected clients
-        const newClientIds = [...selectedClientIds, newClient.id.toString()];
-        setSelectedClientIds(newClientIds);
-        
-        toast({
-          title: 'Client Added',
-          description: `${newClient.name} has been added and selected for this project.`,
-        });
-      }, 200);
-      
-    } catch (error) {
-      console.error('Error refreshing client data:', error);
-      toast({
-        title: 'Warning',
-        description: `${newClient.name} was created but may not appear immediately. Try refreshing if needed.`,
-        variant: 'destructive',
-      });
-    }
+
+    // Optimistically merge the new client into the list so it shows + is
+    // selectable immediately, without waiting on the /api/contacts read to
+    // catch up to NewClientModal's direct Firestore write.
+    setExtraContacts(prev =>
+      prev.some(c => String(c.id) === String(newClient.id)) ? prev : [...prev, newClient]
+    );
+    setSelectedClientIds(prev =>
+      prev.includes(newClient.id.toString()) ? prev : [...prev, newClient.id.toString()]
+    );
+
+    toast({
+      title: 'Client Added',
+      description: `${newClient.name} has been added and selected for this project.`,
+    });
+
+    // Sync canonical data in the background; the optimistic entry covers the gap
+    // and is de-duped against the refetched list by id.
+    queryClient.invalidateQueries({ queryKey: ['/api/contacts'] });
+    refetchContacts().catch(() => {});
   };
 
   return (
