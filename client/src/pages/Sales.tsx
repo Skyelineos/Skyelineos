@@ -9,7 +9,7 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { InviteToPortalButton } from '@/components/portal/InviteToPortalButton';
-import { AddressAutocomplete } from '@/components/common/AddressAutocomplete';
+import { AddressSearchInput } from '@/components/common/AddressSearchInput';
 import { MapPinPicker } from '@/components/common/MapPinPicker';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -608,7 +608,20 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
           {/* Address — full row for street, then City / State / Zip on one row */}
           <div className="sm:col-span-2">
             <Label>Job Address</Label>
-            <AddressAutocomplete value={form.jobAddress} onChange={v => set('jobAddress', v)} placeholder="—" className="placeholder:text-gray-300" />
+            <AddressSearchInput
+              value={form.jobAddress}
+              onChange={v => set('jobAddress', v)}
+              onSelect={(r) => {
+                set('jobAddress', r.address?.line1 || r.label);
+                if (r.address?.city) set('city', r.address.city);
+                if (r.address?.state) set('state', r.address.state);
+                if (r.address?.zip) set('zip', r.address.zip);
+                if (typeof r.lat === 'number') set('latitude', r.lat);
+                if (typeof r.lng === 'number') set('longitude', r.lng);
+              }}
+              placeholder="—"
+              className="placeholder:text-gray-300"
+            />
           </div>
           <div className="sm:col-span-2 grid grid-cols-6 gap-3">
             <div className="col-span-3">
@@ -938,9 +951,10 @@ function CreateProjectDialog({ client, mode, previousStage, previousStageLabel, 
           </div>
           <div>
             <Label>Job Address</Label>
-            <AddressAutocomplete
+            <AddressSearchInput
               value={form.address}
               onChange={v => set('address', v)}
+              onSelect={(r) => set('address', r.label || r.address?.line1 || '')}
               placeholder="123 Main St, Salt Lake City"
             />
           </div>
