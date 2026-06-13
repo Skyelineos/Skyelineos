@@ -550,7 +550,27 @@ service cloud.firestore {
     // capability); write is GC-only.
     match /portalInvites/{inviteId} {
       allow read: if true;
-      allow write: if isGC();
+      allow create, delete: if isGC();
+      // GC can edit freely. Otherwise, the just-registered invitee may flip
+      // ONLY their own invite (matched by email) to 'used' — nothing else —
+      // so the one-time token is consumed at signup.
+      allow update: if isGC() || (
+        isSignedIn()
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['status', 'claimedAt', 'claimedByUid'])
+        && request.resource.data.status == 'used'
+        && resource.data.email == request.auth.token.email
+      );
+    }
+
+    // Portal-invite email templates — staff-managed library of selectable
+    // templates (built-in seeds + GC uploads). Read/write is GC-only; the
+    // backend send route reads them with admin privileges.
+    match /emailTemplates/{templateId} {
+      allow read, write: if isGC();
+    }
+    match /emailTemplates_meta/{docId} {
+      allow read, write: if isGC();
     }
 
     // Client portal engagement log — append-only. Any signed-in portal user
@@ -745,6 +765,21 @@ service cloud.firestore {
                'correction',
                'clarificationAnswer'
              ]);
+    }
+
+    // Notification automation job queue — delayed/multi-step notification steps
+    // enqueued by fireTrigger and executed by the scheduled sweeper. Written and
+    // read exclusively by Cloud Functions (Admin SDK bypasses these rules).
+    match /notificationJobs/{jobId} {
+      allow read, write: if false; // Cloud Function only
+    }
+
+    // SMS opt-out ledger — phone-keyed STOP/START state. Sensitive (raw phone
+    // numbers); written exclusively by the api Cloud Function (Twilio inbound
+    // webhook) and read by the notification dispatcher, both via Admin SDK
+    // which bypasses these rules. No client access.
+    match /sms_opt_outs/{phone} {
+      allow read, write: if false; // Cloud Function only
     }
 
     // Deny everything else

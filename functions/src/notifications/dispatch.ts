@@ -12,6 +12,7 @@ import { defineSecret } from 'firebase-functions/params';
 import * as admin from 'firebase-admin';
 import sgMail from '@sendgrid/mail';
 import twilio from 'twilio';
+import { toE164, isSmsOptedOut } from './sms';
 
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore();
@@ -34,6 +35,17 @@ interface NotificationDoc {
    *  Used for high-signal alerts (e.g. a new lead) the operator always wants
    *  texted. Still requires the recipient to have a phone number. */
   forceSms?: boolean;
+  /** Org-level channel eligibility set by the configurable trigger engine
+   *  (fireTrigger). When a channel is explicitly false here it is suppressed
+   *  even if the recipient's prefs would allow it; the recipient's prefs +
+   *  SMS opt-out can still suppress a channel that is true here. Absent =
+   *  legacy behavior (all channels considered per user prefs). */
+  channels?: { inApp?: boolean; email?: boolean; sms?: boolean; push?: boolean };
+  /** Rendered per-channel content from the admin's templates. Used verbatim
+   *  when present; falls back to title/body otherwise. */
+  emailSubject?: string;
+  emailBody?: string;
+  smsBody?: string;
   emailSent?: boolean;
   smsSent?: boolean;
   errors?: string[];
@@ -143,8 +155,9 @@ async function sendAll(
   let smsSent = false;
   let pushSent = false;
 
-  // Email via SendGrid
-  if (recipient.email && shouldSendEmail(recipient, notif.kind)) {
+  // Email via SendGrid. Org channel directive can suppress; otherwise per-user pref.
+  const emailAllowedByOrg = notif.channels?.email !== false;
+  if (recipient.email && emailAllowedByOrg && shouldSendEmail(recipient, notif.kind)) {
     try {
       const apiKey = SENDGRID_API_KEY.value();
       const fromEmail = SENDGRID_FROM_EMAIL.value();
@@ -153,12 +166,14 @@ async function sendAll(
         const link = notif.link
           ? `${APP_BASE_URL.value() || 'https://skyelineos.web.app'}${notif.link}`
           : undefined;
+        const subject = notif.emailSubject || notif.title;
+        const bodyText = notif.emailBody || notif.body || '';
         await sgMail.send({
           to: recipient.email,
           from: { email: fromEmail, name: 'Skyeline Homes' },
-          subject: notif.title,
-          text: `${notif.body || ''}${link ? `\n\nOpen: ${link}` : ''}\n\n— Skyeline Homes`,
-          html: buildEmailHtml(notif, link),
+          subject,
+          text: `${bodyText}${link ? `\n\nOpen: ${link}` : ''}\n\n— Skyeline Homes`,
+          html: buildEmailHtml({ ...notif, title: subject, body: bodyText }, link),
         });
         emailSent = true;
       }
@@ -172,19 +187,32 @@ async function sendAll(
   // SMS via Twilio. `forceSms` overrides the opt-in check for alerts the
   // operator always wants texted (new leads), but a phone number is still
   // required.
-  if (recipient.phone && (notif.forceSms === true || shouldSendSms(recipient, notif.kind))) {
+  const smsAllowedByOrg = notif.channels?.sms !== false;
+  if (recipient.phone && smsAllowedByOrg && (notif.forceSms === true || shouldSendSms(recipient, notif.kind))) {
     try {
       const sid = TWILIO_ACCOUNT_SID.value();
       const token = TWILIO_AUTH_TOKEN.value();
       const fromNumber = TWILIO_FROM_NUMBER.value();
-      if (sid && token && fromNumber) {
+      const toNumber = toE164(recipient.phone);
+      if (!toNumber) {
+        const msg = `SMS skipped: phone "${recipient.phone}" is not a valid E.164 number`;
+        console.warn('[dispatch]', msg);
+        errors.push(msg);
+      } else if (await isSmsOptedOut(db, toNumber)) {
+        // Recipient texted STOP — honor it even for forceSms alerts.
+        console.log('[dispatch] SMS skipped: recipient opted out', toNumber);
+      } else if (sid && token && fromNumber) {
         const client = twilio(sid, token);
         const link = notif.link
           ? ` ${APP_BASE_URL.value() || 'https://skyelineos.web.app'}${notif.link}`
           : '';
-        const message = `${notif.title}${notif.body ? `: ${notif.body}` : ''}${link}`.slice(0, 160);
+        // Prefer the admin's rendered SMS template; the link is already baked
+        // into the template when desired, so only append the deep link if the
+        // template didn't supply its own copy.
+        const base = notif.smsBody || `${notif.title}${notif.body ? `: ${notif.body}` : ''}`;
+        const message = `${base}${notif.smsBody ? '' : link}`.slice(0, 320);
         await client.messages.create({
-          to: recipient.phone,
+          to: toNumber,
           from: fromNumber,
           body: message,
         });
@@ -201,7 +229,8 @@ async function sendAll(
   const tokens = Array.isArray(recipient.fcmTokens)
     ? recipient.fcmTokens.filter(t => typeof t === 'string' && t.length > 0)
     : [];
-  if (tokens.length > 0 && shouldSendPush(recipient, notif.kind)) {
+  const pushAllowedByOrg = notif.channels?.push !== false;
+  if (tokens.length > 0 && pushAllowedByOrg && shouldSendPush(recipient, notif.kind)) {
     try {
       const link = notif.link
         ? `${APP_BASE_URL.value() || 'https://skyelineos.web.app'}${notif.link}`

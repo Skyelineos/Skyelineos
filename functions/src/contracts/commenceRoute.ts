@@ -17,6 +17,7 @@
 
 import type { Express } from 'express';
 import * as admin from 'firebase-admin';
+import { fireTrigger } from '../notifications/fireTrigger';
 
 const STAFF_ROLES = new Set(['gc', 'admin', 'projectManager']);
 
@@ -170,17 +171,20 @@ export function registerCommenceRoute(
           const uid = await resolveSubUid(db, bid);
           if (!uid || notifiedUids.has(uid)) continue;
           notifiedUids.add(uid);
-          await db.collection('notifications').add({
-            userId: uid,
-            kind: 'system',
-            title: `You're on the team: ${bid.trade || 'your trade'} for ${projectName || 'a Skyeline project'}`,
-            body: `Your bid was accepted and ${projectName || 'the project'} is starting. Please prepare for work — Skyeline will follow up with schedule details.`,
-            link: '/subcontractor-portal/bids',
+          // Configurable 'project_commenced' trigger (audience: sub) — channels
+          // + templates editable in Settings → Notifications.
+          await fireTrigger({
+            db,
+            triggerKey: 'project_commenced',
+            recipientUserId: uid,
+            audience: 'sub',
             projectId,
-            refType: 'bid',
-            refId: String(br.awardedBidId),
-            read: false,
-            createdAt: now,
+            variables: {
+              projectName: projectName || 'a Skyeline project',
+              trade: bid.trade || 'your trade',
+              link: '/subcontractor-portal/bids',
+              bidId: String(br.awardedBidId),
+            },
           });
           subsNotified++;
         }

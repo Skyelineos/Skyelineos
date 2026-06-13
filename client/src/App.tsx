@@ -63,6 +63,8 @@ const Subscriptions = lazy(() => import("@/pages/Subscriptions"));
 const ApiStorage = lazy(() => import("@/pages/ApiStorage"));
 const LearnMore = lazy(() => import("@/pages/LearnMore"));
 const Giveaway = lazy(() => import("@/pages/Giveaway"));
+const SmsPrivacy = lazy(() => import("@/pages/SmsPrivacy"));
+const SmsTerms = lazy(() => import("@/pages/SmsTerms"));
 const Bills = lazy(() => import("@/pages/Bills"));
 const ContentStudio = lazy(() => import("@/pages/ContentStudio"));
 const SiteLog = lazy(() => import("@/pages/SiteLog"));
@@ -123,6 +125,21 @@ function Router() {
       <Route path="/learn-more">
         <Suspense fallback={<MinimalSpinner title="Loading" />}>
           <LearnMore />
+        </Suspense>
+      </Route>
+
+      {/* Public SMS Privacy Policy + Terms — no auth. Linked from the Twilio
+          A2P 10DLC campaign registration; carriers fetch these URLs to verify
+          the required SMS disclosures. */}
+      <Route path="/sms-privacy">
+        <Suspense fallback={<MinimalSpinner title="Loading" />}>
+          <SmsPrivacy />
+        </Suspense>
+      </Route>
+
+      <Route path="/sms-terms">
+        <Suspense fallback={<MinimalSpinner title="Loading" />}>
+          <SmsTerms />
         </Suspense>
       </Route>
 
