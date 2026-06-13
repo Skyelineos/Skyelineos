@@ -238,10 +238,25 @@ service cloud.firestore {
       // which allowed unauthenticated writes to the bids collection.)
       allow create: if isSignedIn()
         && request.resource.data.status != 'awarded';
-      allow update: if isGC()
+      // Only admin/GC may set a bid to 'awarded'. A projectManager passes
+      // isGC(), so without this carve-out they could self-award via a direct
+      // Firestore write and bypass the approval queue. PMs may still update
+      // bids (notes, etc.) as long as they don't flip status to 'awarded';
+      // their awards go through /api/bids/award → pendingSubAssignments.
+      allow update: if isGCOnly()
+        || (isProjectManager() && request.resource.data.status != 'awarded')
         || (isSub() && resource.data.subContactId == request.auth.uid
             && request.resource.data.status != 'awarded'); // sub can revise but not self-award
       allow delete: if isGC();
+    }
+
+    // Pending sub assignments — a Project Manager's bid-award request awaiting
+    // admin approval. Cloud Functions (admin SDK) create + resolve these via
+    // /api/bids/award and /api/pending-sub-assignments/*; staff read the queue.
+    // No direct client writes.
+    match /pendingSubAssignments/{id} {
+      allow read: if isGC();
+      allow write: if false;
     }
 
     // Schedule tasks
