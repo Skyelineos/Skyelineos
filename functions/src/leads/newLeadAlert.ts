@@ -18,6 +18,7 @@
 
 import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import * as admin from 'firebase-admin';
+import { fireTriggerForMany } from '../notifications/fireTrigger';
 
 if (!admin.apps.length) admin.initializeApp();
 
@@ -65,31 +66,22 @@ export const newLeadAlert = onDocumentCreated('clients/{clientId}', async (event
 
   const name = (lead.name || `${lead.firstName || ''} ${lead.lastName || ''}`).trim() || 'New lead';
   const where = sourceLabel(lead.source, lead.sourceDetail);
-  const contactBits = [lead.phone, lead.email].filter(Boolean).join(' · ');
 
-  const bodyParts = [`Source: ${where}`];
-  if (lead.city) bodyParts.push(lead.city);
-  if (contactBits) bodyParts.push(contactBits);
-  const body = bodyParts.join(' · ');
-
-  const batch = db.batch();
-  const col = db.collection('notifications');
-  for (const adminDoc of adminsSnap.docs) {
-    const ref = col.doc();
-    batch.set(ref, {
-      userId: adminDoc.id,
-      kind: 'lead_created',
-      title: `New lead: ${name}`,
-      body,
-      link: '/sales',
-      // Force the SMS even though SMS is opt-in by default — the operator wants
-      // a text on every lead. Honored by dispatchNotification.
-      forceSms: true,
-      leadId: event.params.clientId,
-      read: false,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-  }
-  await batch.commit();
-  console.log(`[newLeadAlert] lead ${event.params.clientId} (${where}) → ${adminsSnap.size} admin(s) notified`);
+  // Route through the configurable engine: the admin can edit channels/templates
+  // for the 'lead_created' trigger (audience: team) in Settings → Notifications.
+  // Defaults mirror the prior behavior (in-app + email + forced SMS + push).
+  const variables = {
+    leadName: name,
+    source: where,
+    city: lead.city || '',
+    phone: lead.phone || '',
+    email: lead.email || '',
+    link: '/sales',
+    leadId: event.params.clientId,
+  };
+  await fireTriggerForMany(
+    { db, triggerKey: 'lead_created', audience: 'team', variables, projectId: undefined },
+    adminsSnap.docs.map(d => d.id),
+  );
+  console.log(`[newLeadAlert] lead ${event.params.clientId} (${where}) → ${adminsSnap.size} admin(s) via fireTrigger`);
 });

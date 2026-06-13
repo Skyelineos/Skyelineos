@@ -2056,6 +2056,12 @@ registerLeadIntakeRoute(app, admin.firestore());
 import { registerSmsInboundRoute } from './notifications/smsInboundRoute';
 registerSmsInboundRoute(app, admin.firestore());
 
+// Configurable notification engine — catalog + seed defaults + live test send.
+// Routes: GET /api/notifications/catalog, POST /api/notifications/rules/init,
+// POST /api/notifications/test
+import { registerNotificationRulesRoutes } from './notifications/rulesRoutes';
+registerNotificationRulesRoutes(app, admin.firestore());
+
 // Catch-all 404 — must come AFTER all route registrations (QBO routes above included)
 app.use('*', (req: any, res: any) => {
   console.log(`❌ 404 - API endpoint not found: ${req.method} ${req.originalUrl}`);
@@ -2104,6 +2110,10 @@ exports.api = onRequest(
 
 // ── Phase 3: Notification dispatch (email + SMS) ─────────────────────────────
 export { dispatchNotification } from './notifications/dispatch';
+
+// ── Delayed-step executor for the configurable notification engine. Runs every
+//    5 min; fires due notificationJobs (multi-step / delayed automation steps).
+export { notificationJobSweep } from './notifications/notificationJobs';
 
 // ── New-lead alert: on every clients/{id} create (any avenue), notify admins
 //    in-app + push + forced SMS. dispatchNotification does the actual sending.
