@@ -7,6 +7,8 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { PROJECT_TYPES } from '@/modules/gantt/projectTypes';
 import { useToast } from '@/hooks/use-toast';
 import {
   ChevronLeft, Plus, Trash2, Save, List, GanttChartSquare,
@@ -47,6 +49,7 @@ export function ScheduleTemplateEditor({ templateId, onBack }: Props) {
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [projectType, setProjectType] = useState('Other');
   const [tasks, setTasks] = useState<WbsTask[]>([]);
   const [links, setLinks] = useState<Link[]>([]);
   const [view, setView] = useState<'list' | 'gantt'>('list');
@@ -66,6 +69,7 @@ export function ScheduleTemplateEditor({ templateId, onBack }: Props) {
         const data = snap.data() as any;
         setName(data.name || '');
         setDescription(data.description || '');
+        setProjectType(data.projectType || 'Other');
         setTasks(Array.isArray(data.tasks) ? data.tasks : []);
         setLinks(Array.isArray(data.links) ? data.links : []);
       } finally {
@@ -105,8 +109,10 @@ export function ScheduleTemplateEditor({ templateId, onBack }: Props) {
       await updateDoc(doc(db, 'scheduleTemplates', templateId), {
         name: name.trim() || 'Untitled schedule',
         description: description.trim(),
+        projectType,
         tasks,
         links,
+        taskCount: tasks.length,
         updatedAt: serverTimestamp(),
       });
       toast({ title: 'Template saved', description: `${tasks.length} tasks · ${links.length} dependencies.` });
@@ -187,9 +193,20 @@ export function ScheduleTemplateEditor({ templateId, onBack }: Props) {
 
       <Card>
         <CardContent className="p-5 space-y-4">
-          <div className="space-y-1.5">
-            <Label>Name</Label>
-            <Input value={name} onChange={e => setName(e.target.value)} />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label>Name</Label>
+              <Input value={name} onChange={e => setName(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Project type</Label>
+              <Select value={projectType} onValueChange={setProjectType}>
+                <SelectTrigger><SelectValue placeholder="Project type" /></SelectTrigger>
+                <SelectContent>
+                  {PROJECT_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <div className="space-y-1.5">
             <Label>Description</Label>
