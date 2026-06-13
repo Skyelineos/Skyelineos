@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import * as React from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -10,6 +10,7 @@ import { applyJobTemplate } from '@/lib/applyJobTemplate';
 import { buildProjectCode } from '@/lib/projectUtils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { AddressSearchInput, type GeoResult } from '@/components/common/AddressSearchInput';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import {
@@ -90,11 +91,6 @@ export function NewProjectForm({ isOpen, onClose, onProjectCreated }: NewProject
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedClientIds, setSelectedClientIds] = useState<string[]>([]);
   const [isNewClientModalOpen, setIsNewClientModalOpen] = useState(false);
-  // Clients created via "Add New Client" while this form is open. NewClientModal
-  // writes the contact directly to Firestore, but the list below is fed by the
-  // /api/contacts read — which can lag a direct write. We optimistically merge
-  // these in so a freshly created client shows + is selectable immediately.
-  const [extraContacts, setExtraContacts] = useState<any[]>([]);
   const [templates, setTemplates] = useState<{ id: string; name: string }[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
   // Schedule template (Gantt) — separate from Job Template above. Loads a
@@ -162,30 +158,22 @@ export function NewProjectForm({ isOpen, onClose, onProjectCreated }: NewProject
     refetchOnMount: true, // Refetch when component mounts
   });
 
-  // Canonical list (from /api/contacts) merged with any clients created in this
-  // session, de-duped by id. Everything downstream (options + submit lookup)
-  // reads from here so a just-created client is fully usable right away.
-  const mergedContacts = React.useMemo(() => {
-    const seen = new Set(allContacts.map((c: any) => String(c.id)));
-    return [...allContacts, ...extraContacts.filter((c: any) => !seen.has(String(c.id)))];
-  }, [allContacts, extraContacts]);
-
   // Filter to only show client contacts (check both 'role' and 'type' fields for compatibility)
-  const clientContacts = mergedContacts.filter((contact: any) =>
-    contact.role === 'client' ||
+  const clientContacts = allContacts.filter((contact: any) => 
+    contact.role === 'client' || 
     contact.type === 'client' ||
     contact.role === 'Client' ||
     contact.type === 'Client'
   );
 
   // Filter to only show project manager contacts (both 'pm' and 'project_manager' roles)
-  const projectManagerContacts = mergedContacts.filter((contact: any) =>
+  const projectManagerContacts = allContacts.filter((contact: any) =>
     (contact.role && (contact.role === 'project_manager' || contact.role === 'pm')) ||
     (contact.type && (contact.type === 'project_manager' || contact.type === 'pm'))
   );
 
   // Designer contacts — only surface real designers (not subs / clients / etc.)
-  const designerContacts = mergedContacts.filter((contact: any) =>
+  const designerContacts = allContacts.filter((contact: any) =>
     String(contact.role || '').toLowerCase() === 'designer' ||
     String(contact.type || '').toLowerCase() === 'designer'
   );
@@ -214,6 +202,10 @@ export function NewProjectForm({ isOpen, onClose, onProjectCreated }: NewProject
   React.useEffect(() => {
     setValue('selectedClientIds', selectedClientIds);
   }, [selectedClientIds, setValue]);
+
+  // Coordinates + parsed parts captured when the user picks an address
+  // suggestion — lets a new project start with a real map pin (buildLocation).
+  const pickedAddress = useRef<GeoResult | null>(null);
 
   const selectedProjectType = watch('projectType');
   const designerChoice = watch('designerChoice');
@@ -259,7 +251,7 @@ export function NewProjectForm({ isOpen, onClose, onProjectCreated }: NewProject
         if (spouseId) augmentedIds.add(spouseId);
       });
       // Materialize the final client list including any auto-added spouses.
-      const finalClients = mergedContacts.filter((c: any) => augmentedIds.has(c.id.toString()));
+      const finalClients = allContacts.filter((c: any) => augmentedIds.has(c.id.toString()));
       data.selectedClientIds = Array.from(augmentedIds);
 
       // Use primary client (first selected) for main fields, store all client IDs
@@ -271,12 +263,29 @@ export function NewProjectForm({ isOpen, onClose, onProjectCreated }: NewProject
       // Stable display code: LastName + MMDDYYYY. Computed from the primary
       // (first selected) client's name and today's date so it stays human-readable.
       const projectCode = buildProjectCode(primaryClient?.name, new Date());
+      // If the address was picked from a suggestion, seed buildLocation with the
+      // exact pin + parsed parts so the jobsite map/Directions work immediately.
+      const picked = pickedAddress.current;
+      const a = picked?.address;
+      const buildLocation = picked && typeof picked.lat === 'number' && typeof picked.lng === 'number'
+        ? {
+            addressLine1: a?.line1 || data.projectAddress,
+            city: a?.city || '',
+            state: a?.state || '',
+            zipCode: a?.zip || '',
+            county: a?.county || '',
+            latitude: picked.lat,
+            longitude: picked.lng,
+            status: 'unconfirmed' as const,
+          }
+        : null;
       const projectData = {
         name: data.projectName,
         projectCode,
         clientName: finalClients.map((c: any) => c.name).join(' & '), // "Steve Gardanier & Laura Gardanier"
         clientIds: data.selectedClientIds, // Store all client IDs
         address: data.projectAddress,
+        ...(buildLocation ? { buildLocation, city: buildLocation.city, state: buildLocation.state, zip: buildLocation.zipCode } : {}),
         description: data.notes || '',
         clientEmail: primaryClient.email,
         clientPhone: primaryClient.phone || '',
@@ -386,8 +395,6 @@ export function NewProjectForm({ isOpen, onClose, onProjectCreated }: NewProject
 
       reset();
       setSelectedTemplateId('');
-      setSelectedClientIds([]);
-      setExtraContacts([]);
       onClose();
       onProjectCreated?.(newProjectId);
     } catch (error) {
@@ -406,33 +413,35 @@ export function NewProjectForm({ isOpen, onClose, onProjectCreated }: NewProject
     if (!isSubmitting) {
       reset();
       setSelectedClientIds([]);
-      setExtraContacts([]);
       onClose();
     }
   };
 
-  const handleClientCreated = (newClient: any) => {
+  const handleClientCreated = async (newClient: any) => {
     setIsNewClientModalOpen(false);
+    if (!newClient?.id) return;
+    const id = String(newClient.id);
 
-    // Optimistically merge the new client into the list so it shows + is
-    // selectable immediately, without waiting on the /api/contacts read to
-    // catch up to NewClientModal's direct Firestore write.
-    setExtraContacts(prev =>
-      prev.some(c => String(c.id) === String(newClient.id)) ? prev : [...prev, newClient]
-    );
-    setSelectedClientIds(prev =>
-      prev.includes(newClient.id.toString()) ? prev : [...prev, newClient.id.toString()]
-    );
+    // Insert the new client straight into the cached contact list so it shows
+    // in the picker IMMEDIATELY — no waiting on (and not dependent on) the
+    // /api/contacts round-trip. The mutation already returns the full record
+    // (id + role:'client' + name/email), which is all the picker needs.
+    queryClient.setQueryData(['/api/contacts'], (old: any) => {
+      const list = Array.isArray(old) ? old : [];
+      if (list.some((c: any) => String(c.id) === id)) return list;
+      return [...list, { ...newClient, associatedProjects: [], tags: [] }];
+    });
 
+    // Select it for this project.
+    setSelectedClientIds(prev => (prev.includes(id) ? prev : [...prev, id]));
     toast({
       title: 'Client Added',
       description: `${newClient.name} has been added and selected for this project.`,
     });
 
-    // Sync canonical data in the background; the optimistic entry covers the gap
-    // and is de-duped against the refetched list by id.
+    // Reconcile with the server in the background (best-effort).
     queryClient.invalidateQueries({ queryKey: ['/api/contacts'] });
-    refetchContacts().catch(() => {});
+    refetchContacts().catch(() => { /* optimistic entry already shows it */ });
   };
 
   return (
@@ -490,10 +499,15 @@ export function NewProjectForm({ isOpen, onClose, onProjectCreated }: NewProject
             
             <div>
               <Label htmlFor="projectAddress">Project Address *</Label>
-              <Input
+              <AddressSearchInput
                 id="projectAddress"
-                {...register('projectAddress')}
-                placeholder="456 Construction St, City, State 12345"
+                value={watch('projectAddress') || ''}
+                onChange={(t) => { setValue('projectAddress', t, { shouldValidate: true }); pickedAddress.current = null; }}
+                onSelect={(r) => {
+                  setValue('projectAddress', r.label || r.address?.line1 || '', { shouldValidate: true });
+                  pickedAddress.current = r;
+                }}
+                placeholder="Start typing an address — suggestions appear"
               />
               {errors.projectAddress && (
                 <p className="text-sm text-red-600 mt-1">{errors.projectAddress.message}</p>

@@ -41,6 +41,18 @@ export function resolveFlow(rules: RulesShape, triggerKey: string, audience: Aud
   return defaultFlow(triggerKey, audience);
 }
 
+/** Convenience: load rules + resolve a single flow. For non-fireTrigger callers
+ *  (e.g. the bid-invite routes that deliver to external vendors) that just need
+ *  the admin's channel toggles + templates for a trigger × audience. */
+export async function loadFlowFor(
+  db: admin.firestore.Firestore,
+  triggerKey: string,
+  audience: Audience,
+): Promise<Flow> {
+  const rules = await loadRules(db);
+  return resolveFlow(rules, triggerKey, audience);
+}
+
 /** Replace {variable} tokens in a template string. Unknown vars render empty. */
 export function renderTemplate(tpl: string | undefined, vars: Record<string, any>): string {
   if (!tpl) return '';

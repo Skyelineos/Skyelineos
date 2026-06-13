@@ -23,23 +23,28 @@ export async function loadKnownAddresses(): Promise<string[]> {
   if (inflight) return inflight;
   inflight = (async () => {
     const set = new Set<string>();
-    try {
-      const [clients, projects] = await Promise.all([
-        getDocs(collection(db, 'clients')),
-        getDocs(collection(db, 'projects')),
-      ]);
-      clients.forEach(d => {
+    // Settle each collection independently. Security rules let any signed-in
+    // user LIST clients, but listing ALL projects is rejected for subs/
+    // designers/clients (they can only read projects they're assigned to). With
+    // Promise.all a single rejection would wipe out the clients results too —
+    // allSettled keeps whichever query the caller is allowed to run.
+    const [clientsRes, projectsRes] = await Promise.allSettled([
+      getDocs(collection(db, 'clients')),
+      getDocs(collection(db, 'projects')),
+    ]);
+    if (clientsRes.status === 'fulfilled') {
+      clientsRes.value.forEach(d => {
         const c = d.data() as any;
         pushAddr(set, c.jobAddress || c.address);
         pushAddr(set, c.jobAddress || c.address, c.city, c.state, c.zip);
       });
-      projects.forEach(d => {
+    }
+    if (projectsRes.status === 'fulfilled') {
+      projectsRes.value.forEach(d => {
         const p = d.data() as any;
         pushAddr(set, p.address || p.jobAddress);
         pushAddr(set, p.address || p.jobAddress, p.city, p.state, p.zip);
       });
-    } catch {
-      /* best-effort — suggestions are a convenience, not required */
     }
     cache = Array.from(set).sort((a, b) => a.localeCompare(b));
     return cache;

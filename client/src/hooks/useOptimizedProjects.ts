@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { collection, doc, getDoc, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { collection, doc, getDoc, onSnapshot, query, orderBy, where } from 'firebase/firestore';
 import { db, auth } from '@/lib/firebase';
+import { useAuth } from '@/auth/AuthContext';
 import { cacheKeys, queryCache, invalidateQueries } from '@/lib/apiCache';
 import { transformDbProject, TransformedProject } from '@/lib/projectUtils';
 import { DatabaseProject, Contact } from '@shared/types';
@@ -36,8 +37,23 @@ export function useOptimizedProjects(): OptimizedProjectsResult {
   const [projectsLoading, setProjectsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const queryClient = useQueryClient();
+
+  // Project Managers are scoped to the jobs they're assigned to: they only see
+  // projects whose assignedUserIds contains their uid. Admin / GC / Skyeline
+  // team see everything. (We compare against both the canonical `projectManager`
+  // and the legacy `project_manager` spelling.)
+  const { user } = useAuth();
+  const rawRole = (user?.role || '').toLowerCase();
+  const isProjectManager = rawRole === 'projectmanager' || rawRole === 'project_manager';
+  const pmUid = user?.firebaseUid || '';
+
   useEffect(() => {
-    const q = query(collection(db, 'projects'), orderBy('createdAt', 'desc'));
+    // For a PM we filter by assignedUserIds (array-contains needs no composite
+    // index and can't be combined with the createdAt orderBy, so we drop the
+    // orderBy here — the list is re-sorted client-side in the useMemo below).
+    const q = isProjectManager
+      ? query(collection(db, 'projects'), where('assignedUserIds', 'array-contains', pmUid))
+      : query(collection(db, 'projects'), orderBy('createdAt', 'desc'));
     const unsub = onSnapshot(
       q,
       snap => {
@@ -83,7 +99,7 @@ export function useOptimizedProjects(): OptimizedProjectsResult {
       },
     );
     return () => unsub();
-  }, [queryClient]);
+  }, [queryClient, isProjectManager, pmUid]);
   const refetch = () => {/* live listener — re-render is automatic */};
 
   // Optimized transformation with memoization

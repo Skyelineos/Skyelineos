@@ -12,6 +12,56 @@ Things a future Claude session should know before diving in. Specific file paths
 
 The errors look like a brace/paren mismatch around line 815, with the parser cascading the rest of the file as a single broken expression. The file imports cleanly (it's only used in a few timeline experiments) and `vite build` succeeds because esbuild is more permissive than `tsc`. **Production builds and ships fine** — but `npm run check` will always exit non-zero until these are fixed. Don't gate CI on `tsc` without addressing this first.
 
+## Session 15 — Jobsite map: Google Places autocomplete + portal view access
+
+The jobsite "map section" had two real bugs and one missing capability.
+
+**Bug 1 — phantom auto-filled pin.** `BuildLocation.tsx` (edit mode) always
+dropped a marker on the default center (Mapleton, UT) even when the location was
+empty, so a brand-new project looked like it already had a pin the user never
+placed. Fixed: the marker is now created on-demand (only when a real pin exists
+or the user clicks the map), mirroring `MapPinPicker`. Also fixed a stale-closure
+bug where the map click/drag handlers (bound once at mount) merged onto a
+mount-time snapshot of `value`, reverting any address fields typed afterward —
+now they read `valueRef.current`.
+
+**Bug 2 — broken DB suggestions for non-GC users.** `loadKnownAddresses()`
+(`AddressAutocomplete.tsx`) listed **all** `clients` + `projects` in one
+`Promise.all`. firestore.rules reject a list-all of `projects` for
+subs/designers/clients (per-doc assignment only), and that single rejection wiped
+out the clients suggestions too. Now uses `Promise.allSettled` so each collection
+is independent.
+
+**New — Google Places autocomplete.** Replaced the weak/rate-limited OSM
+Nominatim geocoding with Google Places (New), proxied server-side so the Maps key
+never ships to the browser:
+- `functions/src/places/placesRoutes.ts` → `GET /api/places/autocomplete` +
+  `GET /api/places/details` (signed-in only; session tokens for cheap billing).
+  Registered on the shared `api` Express app (index.ts) — no new Cloud Run
+  service. Reads `GOOGLE_MAPS_API_KEY` from Secret Manager (added to the `api`
+  secrets array).
+- `client/src/lib/places.ts` → client helpers (`placesAutocomplete`,
+  `placeDetails`, `newSessionToken`).
+- `AddressSearchInput.tsx` rewritten to use the proxy + saved-address rows.
+  `MapPinPicker`'s "Find address" geocoder now also uses it. **Graceful
+  fallback:** if `GOOGLE_MAPS_API_KEY` is unset the proxy returns 503 and the UI
+  silently falls back to saved-address suggestions (manual pin-drop always works).
+
+**New — view access for everyone assigned.** Subs and designers previously had NO
+way to see the jobsite. Added `client/src/components/common/JobsiteLocationCard.tsx`
+(read-only: address + one-tap "Open Directions" deep-link to Apple/Google Maps +
+lazy on-demand map). Wired into `SubcontractorPortal` (per assigned project on the
+dashboard) and `DesignerPortal` (selected project's Dashboard tab). Data access
+already existed in firestore.rules (`assignedUserIds`); this is the UI.
+
+**OPERATOR PREREQUISITES (Places won't work until these are done):**
+1. In Google Cloud project `skyelineos`, enable the **Places API (New)**.
+2. Create an **API key** restricted to the Places API (and, ideally, restricted
+   by IP to the Cloud Functions egress — it's only used server-side).
+3. Store it: `firebase functions:secrets:set GOOGLE_MAPS_API_KEY` (or add to
+   Secret Manager as `GOOGLE_MAPS_API_KEY`), then `npm run deploy:functions`.
+   Until then the address field degrades to saved-address suggestions only.
+
 ## Session 14 — SMS text alerts (operator + subs)
 
 Made the SMS pipeline actually fire end-to-end and brought it into carrier

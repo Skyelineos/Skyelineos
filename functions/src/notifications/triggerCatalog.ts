@@ -203,7 +203,9 @@ export function defaultFlow(triggerKey: string, audience: Audience): Flow {
       return {
         enabled: true,
         steps: [immediateStep({
-          channels: { inApp: true, email: true, sms: false, push: true },
+          // SMS on by default — mirrors today's behavior where invited vendors
+          // with a phone get a text. Admin can turn it off in Settings → Triggers.
+          channels: { inApp: true, email: true, sms: true, push: true },
           inAppTitle: 'New bid request: {trade}',
           inAppBody: '{projectName} — due {dueDate}',
           emailSubject: 'New bid request — {projectName}',

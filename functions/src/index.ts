@@ -7,6 +7,7 @@ import { registerGmailIngester } from './ingestionLab/gmailIngester';
 import { registerDriveIngester } from './ingestionLab/driveIngester';
 import { registerUploadEndpoint } from './ingestionLab/uploadEndpoint';
 import { registerBrainPass } from './ingestionLab/brainPass';
+import { registerPlacesRoutes } from './places/placesRoutes';
 
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -26,6 +27,10 @@ registerGmailIngester(app, db);      // POST /api/ingestionLab/ingest/gmail
 registerDriveIngester(app, db);      // POST /api/ingestionLab/ingest/drive
 registerUploadEndpoint(app, db);     // POST /api/ingestionLab/upload
 registerBrainPass(app, db);          // POST /api/ingestionLab/brain/process
+
+// Google Places proxy — address autocomplete for the jobsite "Set pin" flow.
+// Key stays server-side (Secret Manager); see places/placesRoutes.ts.
+registerPlacesRoutes(app);           // GET /api/places/{autocomplete,details}
 
 // Real Firestore API endpoints
 app.get('/api/projects', async (req: any, res: any) => {
@@ -1113,9 +1118,15 @@ app.patch('/api/admin/users/:uid/role', async (req: any, res: any) => {
     }
     const { uid } = req.params;
     const { role } = req.body;
-    const allowed = ['admin', 'gc', 'client', 'sub', 'designer', 'pending_gc'];
+    const allowed = ['admin', 'gc', 'projectManager', 'client', 'sub', 'designer', 'pending_gc'];
     if (!allowed.includes(role)) return res.status(400).json({ error: 'Invalid role' });
-    const permissions = role === 'admin' ? ['all'] : role === 'gc' ? ['read', 'write'] : ['read'];
+    // PM is GC's project-operational delegate (docs/decisions.md §D-001). It gets
+    // read+write like gc; the billing/settings/contract carve-outs are enforced
+    // at the data layer by isGCOnly() in firestore.rules, not by this string.
+    const permissions = role === 'admin'
+      ? ['all']
+      : (role === 'gc' || role === 'projectManager') ? ['read', 'write']
+      : ['read'];
     await db.collection('users').doc(uid).update({
       role,
       permissions,
@@ -2095,6 +2106,8 @@ exports.api = onRequest(
       // Ingestion Lab OAuth — Gmail + Drive use one Google OAuth client.
       'GOOGLE_CLIENT_ID',
       'GOOGLE_CLIENT_SECRET',
+      // Google Places (New) autocomplete proxy for jobsite address entry.
+      'GOOGLE_MAPS_API_KEY',
       // Bid request route (/api/bid-requests/send) reads these via process.env.
       // Same secret names as the standalone dispatchNotification function uses.
       'SENDGRID_API_KEY',

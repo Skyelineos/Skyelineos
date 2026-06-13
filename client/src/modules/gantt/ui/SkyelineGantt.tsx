@@ -22,7 +22,7 @@ import {
   IndentIncrease, IndentDecrease, CornerDownRight,
 } from 'lucide-react';
 import { useGantt } from '../state';
-import type { WbsTask, Zoom } from '../types';
+import type { WbsTask, Zoom, Link } from '../types';
 
 // ---- layout constants ------------------------------------------------------
 const ROW_H = 38;
@@ -259,6 +259,28 @@ function outdentTask(tasks: WbsTask[], id: string): WbsTask[] {
   parentCtx.siblings.splice(parentCtx.index + 1, 0, node);
   return t;
 }
+function addPredecessor(tasks: WbsTask[], targetId: string, link: Link): WbsTask[] {
+  const t = cloneTree(tasks);
+  const c = findCtx(t, targetId);
+  if (c) {
+    const n = c.siblings[c.index];
+    const preds = n.predecessors || [];
+    if (!preds.some((p) => p.sourceId === link.sourceId && p.targetId === link.targetId)) {
+      n.predecessors = [...preds, link];
+    }
+  }
+  return t;
+}
+function removePredecessor(tasks: WbsTask[], sourceId: string, targetId: string): WbsTask[] {
+  const t = cloneTree(tasks);
+  const c = findCtx(t, targetId);
+  if (c && c.siblings[c.index].predecessors) {
+    c.siblings[c.index].predecessors = c.siblings[c.index].predecessors!.filter(
+      (p) => !(p.sourceId === sourceId && p.targetId === targetId),
+    );
+  }
+  return t;
+}
 
 interface DragState {
   id: string;
@@ -281,8 +303,30 @@ export const SkyelineGantt: React.FC<SkyelineGanttProps> = ({ onAddTask, onEditT
   const [dragOffsetDays, setDragOffsetDays] = useState(0);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftName, setDraftName] = useState('');
+  const [linkDrag, setLinkDrag] = useState<{ sourceId: string; fromX: number; fromY: number; toX: number; toY: number } | null>(null);
   const movedRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const timelineRef = useRef<HTMLDivElement>(null);
+
+  // Create / remove a finish-to-start dependency (kept in both `links` for the
+  // arrows and the target task's `predecessors` so auto-schedule respects it).
+  const createDependency = (sourceId: string, targetId: string) => {
+    if (!sourceId || !targetId || sourceId === targetId) return;
+    if (links.some((l) => l.sourceId === sourceId && l.targetId === targetId)) return;
+    const link: Link = { sourceId, targetId, type: 'FS' };
+    setLinks([...links, link]);
+    setTasks(addPredecessor(useGantt.getState().tasks, targetId, link));
+  };
+  const deleteDependency = (sourceId: string, targetId: string) => {
+    setLinks(links.filter((l) => !(l.sourceId === sourceId && l.targetId === targetId)));
+    setTasks(removePredecessor(useGantt.getState().tasks, sourceId, targetId));
+  };
+  // Local coords within the timeline body for hit-testing during a link drag.
+  const localPoint = (clientX: number, clientY: number) => {
+    const r = timelineRef.current?.getBoundingClientRect();
+    if (!r) return { x: 0, y: 0 };
+    return { x: clientX - r.left, y: clientY - r.top };
+  };
 
   // Begin inline-editing a row's name.
   const beginEdit = (id: string, name: string) => {
@@ -407,12 +451,25 @@ export const SkyelineGantt: React.FC<SkyelineGanttProps> = ({ onAddTask, onEditT
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
+    if (linkDrag) {
+      const p = localPoint(e.clientX, e.clientY);
+      setLinkDrag({ ...linkDrag, toX: p.x, toY: p.y });
+      return;
+    }
     if (!drag) return;
     if (Math.abs(e.clientX - drag.startX) > 3) movedRef.current = true;
     setDragOffsetDays(Math.round((e.clientX - drag.startX) / pxPerDay));
   };
 
-  const commitDrag = () => {
+  const commitDrag = (e?: React.PointerEvent) => {
+    if (linkDrag) {
+      const p = e ? localPoint(e.clientX, e.clientY) : { x: linkDrag.toX, y: linkDrag.toY };
+      const idx = Math.floor(p.y / ROW_H);
+      const target = rows[idx];
+      if (target) createDependency(linkDrag.sourceId, target.task.id);
+      setLinkDrag(null);
+      return;
+    }
     if (!drag) return;
     const delta = dragOffsetDays;
     if (delta !== 0) {
@@ -461,10 +518,18 @@ export const SkyelineGantt: React.FC<SkyelineGanttProps> = ({ onAddTask, onEditT
   }, [rows]);
 
   const connectors = useMemo(() => {
-    const lines: { id: string; d: string }[] = [];
-    links.forEach((l) => {
-      const si = rowIndex.get(l.sourceId);
-      const ti = rowIndex.get(l.targetId);
+    // Edge set from both `links` and each task's `predecessors`, de-duped.
+    const edges = new Map<string, { sourceId: string; targetId: string }>();
+    links.forEach((l) => edges.set(`${l.sourceId}->${l.targetId}`, { sourceId: l.sourceId, targetId: l.targetId }));
+    rows.forEach((r) =>
+      r.task.predecessors?.forEach((p) =>
+        edges.set(`${p.sourceId}->${p.targetId}`, { sourceId: p.sourceId, targetId: p.targetId }),
+      ),
+    );
+    const lines: { id: string; d: string; sourceId: string; targetId: string }[] = [];
+    edges.forEach((e) => {
+      const si = rowIndex.get(e.sourceId);
+      const ti = rowIndex.get(e.targetId);
       if (si === undefined || ti === undefined) return;
       const src = rows[si];
       const tgt = rows[ti];
@@ -474,8 +539,10 @@ export const SkyelineGantt: React.FC<SkyelineGanttProps> = ({ onAddTask, onEditT
       const y2 = ti * ROW_H + ROW_H / 2;
       const midX = Math.max(x1 + 8, x2 - 8);
       lines.push({
-        id: `${l.sourceId}-${l.targetId}`,
+        id: `${e.sourceId}-${e.targetId}`,
         d: `M ${x1} ${y1} H ${midX} V ${y2} H ${x2}`,
+        sourceId: e.sourceId,
+        targetId: e.targetId,
       });
     });
     return lines;
@@ -517,8 +584,8 @@ export const SkyelineGantt: React.FC<SkyelineGanttProps> = ({ onAddTask, onEditT
       ref={scrollRef}
       className="relative h-full w-full overflow-auto bg-white select-none"
       onPointerMove={onPointerMove}
-      onPointerUp={commitDrag}
-      onPointerLeave={() => drag && commitDrag()}
+      onPointerUp={(e) => commitDrag(e)}
+      onPointerLeave={() => (drag || linkDrag) && commitDrag()}
     >
       <div style={{ width: LEFT_W + timelineW, position: 'relative' }}>
         {/* ===== Header row (sticky top) ===== */}
@@ -685,7 +752,7 @@ export const SkyelineGantt: React.FC<SkyelineGanttProps> = ({ onAddTask, onEditT
           </div>
 
           {/* timeline body */}
-          <div className="relative" style={{ width: timelineW, height: bodyH }}>
+          <div ref={timelineRef} className="relative" style={{ width: timelineW, height: bodyH }}>
             {/* vertical month/week gridlines */}
             {scale.top.map((s, i) => (
               <div
@@ -739,10 +806,41 @@ export const SkyelineGantt: React.FC<SkyelineGanttProps> = ({ onAddTask, onEditT
                   key={c.id}
                   d={c.d}
                   fill="none"
-                  stroke="#cbd5e1"
+                  stroke="#94a3b8"
                   strokeWidth={1.5}
                   markerEnd="url(#sl-arrow)"
                 />
+              ))}
+              {/* live ghost link while dragging from a connection bubble */}
+              {linkDrag && (
+                <path
+                  d={`M ${linkDrag.fromX} ${linkDrag.fromY} L ${linkDrag.toX} ${linkDrag.toY}`}
+                  fill="none"
+                  stroke="#C9A96E"
+                  strokeWidth={2}
+                  strokeDasharray="4 3"
+                />
+              )}
+            </svg>
+
+            {/* clickable layer to delete a dependency (separate so it can
+                receive pointer events; the arrows layer stays non-interactive) */}
+            <svg className="absolute left-0 top-0" width={timelineW} height={bodyH} style={{ pointerEvents: 'none' }}>
+              {connectors.map((c) => (
+                <path
+                  key={`hit-${c.id}`}
+                  d={c.d}
+                  fill="none"
+                  stroke="transparent"
+                  strokeWidth={9}
+                  style={{ pointerEvents: 'stroke', cursor: 'pointer' }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (confirm('Remove this dependency?')) deleteDependency(c.sourceId, c.targetId);
+                  }}
+                >
+                  <title>Click to remove dependency</title>
+                </path>
               ))}
             </svg>
 
@@ -867,6 +965,20 @@ export const SkyelineGantt: React.FC<SkyelineGanttProps> = ({ onAddTask, onEditT
                     className="absolute right-0 top-0 h-full w-1.5 cursor-ew-resize opacity-0 group-hover:opacity-100"
                     style={{ background: 'rgba(255,255,255,0.5)' }}
                     onPointerDown={(e) => onBarPointerDown(e, row, 'end')}
+                  />
+                  {/* dependency connection bubble — drag onto another bar to
+                      create a finish-to-start link */}
+                  <div
+                    title="Drag to another activity to link them"
+                    className="absolute top-1/2 z-20 h-3 w-3 -translate-y-1/2 cursor-crosshair rounded-full border-2 bg-white opacity-0 group-hover:opacity-100"
+                    style={{ right: -7, borderColor: '#C9A96E' }}
+                    onPointerDown={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      const fx = left + width;
+                      const fy = i * ROW_H + ROW_H / 2;
+                      setLinkDrag({ sourceId: row.task.id, fromX: fx, fromY: fy, toX: fx, toY: fy });
+                    }}
                   />
                   {/* label to the right */}
                   <span

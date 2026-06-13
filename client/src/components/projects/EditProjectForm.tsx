@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { AddressSearchInput } from '@/components/common/AddressSearchInput';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { SubcontractorComboBox } from '@/components/ui/subcontractor-combobox';
@@ -479,7 +480,12 @@ export function EditProjectForm({ project, open, onOpenChange }: EditProjectForm
                   name="address"
                   render={({ field }) => (
                     <EditableField label="Project Address" icon={MapPin}>
-                      <Input placeholder="Enter project address" {...field} />
+                      <AddressSearchInput
+                        value={field.value || ''}
+                        onChange={field.onChange}
+                        onSelect={(r) => field.onChange(r.label || r.address?.line1 || '')}
+                        placeholder="Start typing an address — suggestions appear"
+                      />
                     </EditableField>
                   )}
                 />
