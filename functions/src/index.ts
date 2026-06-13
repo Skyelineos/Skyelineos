@@ -1118,9 +1118,15 @@ app.patch('/api/admin/users/:uid/role', async (req: any, res: any) => {
     }
     const { uid } = req.params;
     const { role } = req.body;
-    const allowed = ['admin', 'gc', 'client', 'sub', 'designer', 'pending_gc'];
+    const allowed = ['admin', 'gc', 'projectManager', 'client', 'sub', 'designer', 'pending_gc'];
     if (!allowed.includes(role)) return res.status(400).json({ error: 'Invalid role' });
-    const permissions = role === 'admin' ? ['all'] : role === 'gc' ? ['read', 'write'] : ['read'];
+    // PM is GC's project-operational delegate (docs/decisions.md §D-001). It gets
+    // read+write like gc; the billing/settings/contract carve-outs are enforced
+    // at the data layer by isGCOnly() in firestore.rules, not by this string.
+    const permissions = role === 'admin'
+      ? ['all']
+      : (role === 'gc' || role === 'projectManager') ? ['read', 'write']
+      : ['read'];
     await db.collection('users').doc(uid).update({
       role,
       permissions,
