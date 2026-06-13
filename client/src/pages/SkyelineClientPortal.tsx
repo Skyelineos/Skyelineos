@@ -19,6 +19,7 @@ import { ProjectChat } from '@/components/messaging/ProjectChat';
 import ClientDashboard from '@/components/client-portal/ClientDashboard';
 import { ClientWelcomePreview } from '@/components/client-portal/ClientWelcomePreview';
 import { ClientTabPreview } from '@/components/client-portal/ClientTabPreview';
+import { SalesPitchSection } from '@/components/client-portal/SalesPitchSection';
 import { InspirationBoard } from '@/components/client-portal/InspirationBoard';
 import SelectionsBoard from '@/components/client-portal/SelectionsBoard';
 import ClientSelectionsTimeline from '@/components/client/ClientSelectionsTimeline';
@@ -256,11 +257,16 @@ export default function SkyelineClientPortal() {
         case 'dashboard':
         default:
           return (
-            <ClientWelcomePreview
-              clientFirstName={clientFirstName}
-              hasProject={false}
-              onNavigate={handleNavigate}
-            />
+            <div className="space-y-2 pb-6">
+              <ClientWelcomePreview
+                clientFirstName={clientFirstName}
+                hasProject={false}
+                onNavigate={handleNavigate}
+              />
+              {/* Soft sales pitch — interactive one-pagers that answer the
+                  questions prospective clients have before a project exists. */}
+              <SalesPitchSection />
+            </div>
           );
       }
     }
@@ -295,6 +301,9 @@ export default function SkyelineClientPortal() {
                 onNavigate={handleNavigate}
               />
               {buildLocationCard}
+              {/* Pre-construction clients still benefit from the soft pitch /
+                  one-pagers while their project is being set up. */}
+              <SalesPitchSection />
             </div>
           );
         }

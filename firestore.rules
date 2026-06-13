@@ -175,6 +175,14 @@ service cloud.firestore {
       allow write: if isGC();
     }
 
+    // Sales-pitch one-pagers shown in the client portal before a project exists.
+    // Any signed-in user (prospective clients included) can read; only staff
+    // (admin/gc/pm) can curate the content from the portal.
+    match /salesPitchSections/{sectionId} {
+      allow read: if isSignedIn();
+      allow write: if isGC();
+    }
+
     // Pending trade requests (submitted during sub registration)
     match /pendingTrades/{tradeId} {
       allow read: if isAdmin();
