@@ -550,7 +550,17 @@ service cloud.firestore {
     // capability); write is GC-only.
     match /portalInvites/{inviteId} {
       allow read: if true;
-      allow write: if isGC();
+      allow create, delete: if isGC();
+      // GC can edit freely. Otherwise, the just-registered invitee may flip
+      // ONLY their own invite (matched by email) to 'used' — nothing else —
+      // so the one-time token is consumed at signup.
+      allow update: if isGC() || (
+        isSignedIn()
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['status', 'claimedAt', 'claimedByUid'])
+        && request.resource.data.status == 'used'
+        && resource.data.email == request.auth.token.email
+      );
     }
 
     // Portal-invite email templates — staff-managed library of selectable
