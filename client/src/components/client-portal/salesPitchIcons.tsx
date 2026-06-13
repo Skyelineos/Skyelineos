@@ -4,13 +4,13 @@
 
 import {
   HardHat, DollarSign, Palette, LayoutDashboard, CalendarClock, ShieldCheck,
-  Award, Rocket, Sparkles, Home, Hammer, Users, FileText, MapPin, Heart,
+  Award, Rocket, Sparkles, Home, Hammer, Users, User, FileText, MapPin, Heart,
   Lightbulb, Camera, MessageSquare, type LucideIcon,
 } from 'lucide-react';
 
 const MAP: Record<string, LucideIcon> = {
   HardHat, DollarSign, Palette, LayoutDashboard, CalendarClock, ShieldCheck,
-  Award, Rocket, Sparkles, Home, Hammer, Users, FileText, MapPin, Heart,
+  Award, Rocket, Sparkles, Home, Hammer, Users, User, FileText, MapPin, Heart,
   Lightbulb, Camera, MessageSquare,
 };
 

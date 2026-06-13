@@ -57,8 +57,16 @@ Deploy with `npm run deploy:rules` (Firestore) — note the Storage rules ship v
 `firebase deploy --only storage` if not already covered by the deploy scripts.
 
 ## Notes / future
-- The eight starter sections (How We Build, Pricing & Transparency, Design & Selections,
-  Your Portal & Communication, Timeline, Warranty & After-Care, Why Skyeline, Getting
-  Started) are **editable drafts** — copy should be tuned to the owner's ChatGPT brief.
+- The thirteen starter sections map to the owner's video content strategy — each planned
+  video becomes a one-pager now, with a video slot for when it's shot:
+  1. The Skyeline Story (hero) · 2. Why Build With Skyeline · 3. The Client Journey ·
+  4. Welcome to Skyeline · 5. What Does It Actually Cost? · 6. Biggest Mistakes to Avoid ·
+  7. Custom vs. Buying Existing · 8. SkyelineOS Technology · 9. Meet Tyler ·
+  10. Meet the Team · 11. Meet Our Trade Partners · 12. What Our Clients Say ·
+  13. Design Inspiration.
+- Pure outbound-marketing assets from the brief (website-hero placement, ad cuts, the
+  30–50 social clips) were intentionally left out of the in-portal pitch — they aren't
+  portal-facing. Add them as sections later if desired.
+- Copy is an **editable draft** — tune every word from the portal.
 - Videos: paste a YouTube/Vimeo/MP4 URL per section; until then a tasteful "coming soon"
   slot shows.
