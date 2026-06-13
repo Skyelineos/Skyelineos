@@ -282,6 +282,72 @@ function removePredecessor(tasks: WbsTask[], sourceId: string, targetId: string)
   return t;
 }
 
+// Forward-schedule dependents: every leaf task that has predecessors and is NOT
+// locked (manually placed) is moved to start the day after its latest
+// predecessor finishes (+ optional lag), preserving its duration. Cascades
+// through the chain in topological order. Edges come from `links` and each
+// task's `predecessors`. Returns the input unchanged if a cycle is detected.
+function cascadeSchedule(tasks: WbsTask[], links: Link[]): WbsTask[] {
+  const t = cloneTree(tasks);
+  const byId = new Map<string, WbsTask>();
+  const walk = (ns: WbsTask[]) => ns.forEach((n) => { byId.set(n.id, n); n.children && walk(n.children); });
+  walk(t);
+
+  const seen = new Set<string>();
+  const incoming = new Map<string, { source: string; lag: number }[]>();
+  const succ = new Map<string, string[]>();
+  const indeg = new Map<string, number>();
+  const ensure = (id: string) => { if (!indeg.has(id)) indeg.set(id, 0); };
+  const addEdge = (s: string, tg: string, lag: number) => {
+    if (!byId.has(s) || !byId.has(tg)) return;
+    const k = `${s}->${tg}`;
+    if (seen.has(k)) return;
+    seen.add(k);
+    ensure(s); ensure(tg);
+    (succ.get(s) || succ.set(s, []).get(s)!).push(tg);
+    (incoming.get(tg) || incoming.set(tg, []).get(tg)!).push({ source: s, lag });
+    indeg.set(tg, (indeg.get(tg) || 0) + 1);
+  };
+  links.forEach((l) => addEdge(l.sourceId, l.targetId, l.lagDays || 0));
+  byId.forEach((n) => n.predecessors?.forEach((p) => addEdge(p.sourceId, p.targetId, p.lagDays || 0)));
+
+  // Kahn topological order.
+  const indegCopy = new Map(indeg);
+  const queue: string[] = [];
+  indeg.forEach((d, id) => { if (d === 0) queue.push(id); });
+  const order: string[] = [];
+  while (queue.length) {
+    const id = queue.shift()!;
+    order.push(id);
+    (succ.get(id) || []).forEach((tg) => {
+      indegCopy.set(tg, (indegCopy.get(tg) || 0) - 1);
+      if (indegCopy.get(tg) === 0) queue.push(tg);
+    });
+  }
+  if (order.length < indeg.size) return tasks; // cycle — leave as-is
+
+  for (const id of order) {
+    const node = byId.get(id);
+    if (!node) continue;
+    if (node.locked) continue;                          // manually edited → stays put
+    if (node.children && node.children.length) continue; // summaries are derived
+    const inc = incoming.get(id);
+    if (!inc || inc.length === 0) continue;              // no predecessor → don't move
+    let newStart: Date | null = null;
+    for (const { source, lag } of inc) {
+      const p = byId.get(source);
+      if (!p) continue;
+      const cand = addDays(parseISO(p.endDate), 1 + (lag || 0));
+      if (!newStart || cand > newStart) newStart = cand;
+    }
+    if (!newStart) continue;
+    const dur = node.durationDays ?? Math.max(1, differenceInCalendarDays(parseISO(node.endDate), parseISO(node.startDate)) + 1);
+    node.startDate = format(newStart, 'yyyy-MM-dd');
+    node.endDate = format(addDays(newStart, dur - 1), 'yyyy-MM-dd');
+  }
+  return t;
+}
+
 interface DragState {
   id: string;
   mode: 'move' | 'start' | 'end';
@@ -303,7 +369,7 @@ export const SkyelineGantt: React.FC<SkyelineGanttProps> = ({ onAddTask, onEditT
   const [dragOffsetDays, setDragOffsetDays] = useState(0);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftName, setDraftName] = useState('');
-  const [linkDrag, setLinkDrag] = useState<{ sourceId: string; fromX: number; fromY: number; toX: number; toY: number } | null>(null);
+  const [linkDrag, setLinkDrag] = useState<{ originId: string; fromStart: boolean; fromX: number; fromY: number; toX: number; toY: number } | null>(null);
   const movedRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
@@ -314,8 +380,11 @@ export const SkyelineGantt: React.FC<SkyelineGanttProps> = ({ onAddTask, onEditT
     if (!sourceId || !targetId || sourceId === targetId) return;
     if (links.some((l) => l.sourceId === sourceId && l.targetId === targetId)) return;
     const link: Link = { sourceId, targetId, type: 'FS' };
-    setLinks([...links, link]);
-    setTasks(addPredecessor(useGantt.getState().tasks, targetId, link));
+    const newLinks = [...links, link];
+    setLinks(newLinks);
+    // Add the predecessor, then auto-position the dependent after it.
+    const withPred = addPredecessor(useGantt.getState().tasks, targetId, link);
+    setTasks(cascadeSchedule(withPred, newLinks));
   };
   const deleteDependency = (sourceId: string, targetId: string) => {
     setLinks(links.filter((l) => !(l.sourceId === sourceId && l.targetId === targetId)));
@@ -360,7 +429,8 @@ export const SkyelineGantt: React.FC<SkyelineGanttProps> = ({ onAddTask, onEditT
   };
   const indent = (id: string) => setTasks(indentTask(useGantt.getState().tasks, id));
   const outdent = (id: string) => setTasks(outdentTask(useGantt.getState().tasks, id));
-  const setDuration = (id: string, d: number) => setTasks(setTaskDuration(useGantt.getState().tasks, id, d));
+  const setDuration = (id: string, d: number) =>
+    setTasks(cascadeSchedule(setTaskDuration(useGantt.getState().tasks, id, d), links));
 
   const pxPerDay = PX_PER_DAY[zoom];
   const rows = useMemo(() => flatten(tasks, collapsed), [tasks, collapsed]);
@@ -421,14 +491,17 @@ export const SkyelineGantt: React.FC<SkyelineGanttProps> = ({ onAddTask, onEditT
     });
 
   // ---- drag handling -------------------------------------------------------
-  const findAndUpdate = (id: string, start: string, end: string) => {
+  // Commit dragged dates. A manual MOVE pins the task (locked) so it stops
+  // auto-following its predecessor; resizes just change the span. Either way we
+  // re-cascade so dependents shift after it.
+  const findAndUpdate = (id: string, start: string, end: string, lock: boolean) => {
     const update = (nodes: WbsTask[]): WbsTask[] =>
       nodes.map((n) => {
-        if (n.id === id) return { ...n, startDate: start, endDate: end };
+        if (n.id === id) return { ...n, startDate: start, endDate: end, ...(lock ? { locked: true } : {}) };
         if (n.children) return { ...n, children: update(n.children) };
         return n;
       });
-    setTasks(update(tasks));
+    setTasks(cascadeSchedule(update(useGantt.getState().tasks), links));
   };
 
   const onBarPointerDown = (
@@ -464,9 +537,13 @@ export const SkyelineGantt: React.FC<SkyelineGanttProps> = ({ onAddTask, onEditT
   const commitDrag = (e?: React.PointerEvent) => {
     if (linkDrag) {
       const p = e ? localPoint(e.clientX, e.clientY) : { x: linkDrag.toX, y: linkDrag.toY };
-      const idx = Math.floor(p.y / ROW_H);
-      const target = rows[idx];
-      if (target) createDependency(linkDrag.sourceId, target.task.id);
+      const other = rows[Math.floor(p.y / ROW_H)];
+      if (other && other.task.id !== linkDrag.originId) {
+        // From the END bubble: this task finishes → other starts.
+        // From the START bubble: other finishes → this task starts.
+        if (linkDrag.fromStart) createDependency(other.task.id, linkDrag.originId);
+        else createDependency(linkDrag.originId, other.task.id);
+      }
       setLinkDrag(null);
       return;
     }
@@ -485,7 +562,7 @@ export const SkyelineGantt: React.FC<SkyelineGanttProps> = ({ onAddTask, onEditT
         en = addDays(en, delta);
         if (en < s) en = s;
       }
-      findAndUpdate(drag.id, format(s, 'yyyy-MM-dd'), format(en, 'yyyy-MM-dd'));
+      findAndUpdate(drag.id, format(s, 'yyyy-MM-dd'), format(en, 'yyyy-MM-dd'), drag.mode === 'move');
     }
     setDrag(null);
     setDragOffsetDays(0);
@@ -966,10 +1043,23 @@ export const SkyelineGantt: React.FC<SkyelineGanttProps> = ({ onAddTask, onEditT
                     style={{ background: 'rgba(255,255,255,0.5)' }}
                     onPointerDown={(e) => onBarPointerDown(e, row, 'end')}
                   />
-                  {/* dependency connection bubble — drag onto another bar to
-                      create a finish-to-start link */}
+                  {/* dependency connection bubbles — one on each end. Drag
+                      onto another activity to link them (front = this depends
+                      on that; back = that depends on this). */}
                   <div
-                    title="Drag to another activity to link them"
+                    title="Drag onto another activity — this task will follow it"
+                    className="absolute top-1/2 z-20 h-3 w-3 -translate-y-1/2 cursor-crosshair rounded-full border-2 bg-white opacity-0 group-hover:opacity-100"
+                    style={{ left: -7, borderColor: '#C9A96E' }}
+                    onPointerDown={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      const fx = left;
+                      const fy = i * ROW_H + ROW_H / 2;
+                      setLinkDrag({ originId: row.task.id, fromStart: true, fromX: fx, fromY: fy, toX: fx, toY: fy });
+                    }}
+                  />
+                  <div
+                    title="Drag onto another activity — it will follow this task"
                     className="absolute top-1/2 z-20 h-3 w-3 -translate-y-1/2 cursor-crosshair rounded-full border-2 bg-white opacity-0 group-hover:opacity-100"
                     style={{ right: -7, borderColor: '#C9A96E' }}
                     onPointerDown={(e) => {
@@ -977,7 +1067,7 @@ export const SkyelineGantt: React.FC<SkyelineGanttProps> = ({ onAddTask, onEditT
                       e.preventDefault();
                       const fx = left + width;
                       const fy = i * ROW_H + ROW_H / 2;
-                      setLinkDrag({ sourceId: row.task.id, fromX: fx, fromY: fy, toX: fx, toY: fy });
+                      setLinkDrag({ originId: row.task.id, fromStart: false, fromX: fx, fromY: fy, toX: fx, toY: fy });
                     }}
                   />
                   {/* label to the right */}
