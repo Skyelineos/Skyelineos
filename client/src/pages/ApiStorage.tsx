@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import {
   KeyRound, Search, ShieldCheck, Database, Bot, Image as ImageIcon,
-  Mail, MessageSquare, Share2, Calculator, Cloud, Link2, ExternalLink,
+  Mail, MessageSquare, Share2, Calculator, Cloud, Link2, ExternalLink, MapPin,
 } from 'lucide-react';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -149,6 +149,18 @@ const INTEGRATIONS: Integration[] = [
     usedIn: ['Ingestion Lab (admin)'],
     secrets: ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'],
     status: 'placeholder',
+    manageUrl: 'https://console.cloud.google.com/apis/credentials?project=skyelineos',
+  },
+  {
+    name: 'Google Maps — Places (New)',
+    vendor: 'Google',
+    category: 'Maps',
+    icon: MapPin,
+    description:
+      'Address autocomplete + forward geocoding for the jobsite "Set pin" flow. Proxied server-side (POST /api/places/autocomplete + /api/places/details) so the key never reaches the browser; uses session tokens for cheap billing. Powers the address typeahead in BuildLocation, MapPinPicker, and the lead/project address fields. If unset, the UI falls back to saved-address suggestions.',
+    usedIn: ['Jobsite location', 'Lead/project address entry', 'Portal Directions'],
+    secrets: ['GOOGLE_MAPS_API_KEY'],
+    status: 'active',
     manageUrl: 'https://console.cloud.google.com/apis/credentials?project=skyelineos',
   },
   {
