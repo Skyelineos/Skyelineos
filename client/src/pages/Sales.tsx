@@ -8,6 +8,7 @@ import { db } from '@/lib/firebase';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { InviteToPortalButton } from '@/components/portal/InviteToPortalButton';
 import { AddressAutocomplete } from '@/components/common/AddressAutocomplete';
 import { MapPinPicker } from '@/components/common/MapPinPicker';
 import { Label } from '@/components/ui/label';
@@ -842,10 +843,21 @@ function CreateProjectDialog({ client, mode, previousStage, previousStageLabel, 
           }
         : null;
 
+      // Link the homeowner so their client portal can find this project. The
+      // portal resolves a client by their CONTACT-doc id (contacts.linkedUserId
+      // = auth.uid) and email — so we key the project by the lead's contactId
+      // and email here. Without this, lead→project conversions are invisible to
+      // the client. clientIds[] is the canonical shape; clientId mirrors it for
+      // legacy readers.
+      const contactId = (client as any).contactId || null;
+
       // 1. Create project
       const projectRef = await addDoc(collection(db, 'projects'), {
         name: form.projectName.trim(),
         clientName: client.name,
+        clientId: contactId,
+        clientIds: contactId ? [contactId] : [],
+        clientEmail: client.email || null,
         address: form.address || null,
         ...(buildLocation ? { buildLocation } : {}),
         status: 'active',
@@ -1237,6 +1249,16 @@ function PipelineCard({ client, stages, onEdit, onDelete, onAdvance }: {
                     className="w-full text-left flex items-center gap-2 px-3 py-2 hover:bg-gray-50">
                     <ArrowRight className="w-4 h-4" />Advance Stage
                   </button>
+                )}
+                {client.email && (
+                  <InviteToPortalButton
+                    email={client.email || undefined}
+                    firstName={client.firstName || undefined}
+                    contactId={(client as any).contactId}
+                    variant="ghost"
+                    size="sm"
+                    className="w-full justify-start gap-2 px-3 py-2 font-normal h-auto rounded-none"
+                  />
                 )}
                 <div className="border-t border-gray-100 my-1" />
                 <button onClick={() => { setMenuOpen(false); onDelete(); }}

@@ -18,7 +18,7 @@ function pushAddr(set: Set<string>, ...parts: (string | undefined)[]) {
   if (joined) set.add(joined);
 }
 
-async function loadKnownAddresses(): Promise<string[]> {
+export async function loadKnownAddresses(): Promise<string[]> {
   if (cache) return cache;
   if (inflight) return inflight;
   inflight = (async () => {

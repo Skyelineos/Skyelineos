@@ -2,6 +2,10 @@ import { createContext, useContext, useEffect, useState, useCallback } from "rea
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged, User as FirebaseUser, signOut } from "firebase/auth";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { logClientActivity } from "@/lib/clientActivity";
+
+// Portal (non-staff) roles whose engagement we log for the GC's activity view.
+const PORTAL_ROLES = new Set(["client", "designer", "sub"]);
 
 // Backend user interface with role and permissions
 interface BackendUser {
@@ -139,15 +143,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (userDoc.exists()) {
         const data = userDoc.data();
+        const role = data.role || 'client';
         setUser({
           id: 0,
           email: data.email || firebaseUser.email || '',
           name: data.name || data.fullName || firebaseUser.displayName || '',
-          role: data.role || 'client',
+          role,
           permissions: data.permissions || [],
           firebaseUid: firebaseUser.uid,
           navDisabled: data.navDisabled || [],
         });
+        // Record a portal sign-in (once per browser session) so the GC can see
+        // engagement on the project's Portal Activity panel. Fire-and-forget.
+        if (PORTAL_ROLES.has(role)) {
+          logClientActivity({
+            uid: firebaseUser.uid,
+            type: 'login',
+            role,
+            contactId: data.linkedContactId || undefined,
+            once: `login:${firebaseUser.uid}`,
+          });
+        }
       } else {
         // No Firestore profile yet — create one so the user appears in the admin UI
         const newProfile = {
