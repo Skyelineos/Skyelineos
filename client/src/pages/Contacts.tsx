@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { contactsWithEmail, confirmDuplicateEmail } from '@/lib/contacts/duplicateEmail';
+import { findDuplicateContacts, computeMergeUpdates, type DuplicateMatch } from '@/lib/contacts/duplicateDetection';
+import { DuplicateContactDialog, type DuplicateResolution } from '@/components/contacts/DuplicateContactDialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -125,6 +126,15 @@ export default function Contacts() {
   const { toast } = useToast();
   const { user } = useAuth();
 
+  // Duplicate-detection flow. When a new contact looks like an existing one,
+  // we surface DuplicateContactDialog and pause handleAddContact on a promise
+  // until the operator chooses merge / create-anyway / cancel.
+  const [dupState, setDupState] = useState<{
+    candidate: Parameters<typeof findDuplicateContacts>[0];
+    matches: DuplicateMatch[];
+    resolve: (r: DuplicateResolution) => void;
+  } | null>(null);
+
   // Subscribe to contacts
   useEffect(() => {
     const q = query(collection(db, 'contacts'), orderBy('createdAt', 'desc'));
@@ -230,13 +240,45 @@ export default function Contacts() {
       return;
     }
 
-    // Soft duplicate-email warning — contacts that share an email can't each
-    // get their own portal login (Firebase Auth is one account per email).
-    if (newContactFormData.email.trim()) {
-      const dupes = await contactsWithEmail(newContactFormData.email);
-      if (dupes.length > 0 && !confirmDuplicateEmail(newContactFormData.email.trim(), dupes)) {
+    // Duplicate detection — surface existing contacts that share a name, email,
+    // phone, or address. The operator decides: merge into the existing record,
+    // create a new one anyway (optionally noting what's different), or cancel.
+    const candidate = {
+      firstName: newContactFormData.firstName,
+      lastName: newContactFormData.lastName,
+      email: newContactFormData.email,
+      phone: newContactFormData.phone,
+      company: newContactFormData.company,
+    };
+    let differenceNote: string | undefined;
+    const matches = await findDuplicateContacts(candidate);
+    if (matches.length > 0) {
+      const resolution = await new Promise<DuplicateResolution>((resolve) => {
+        setDupState({ candidate, matches, resolve });
+      });
+      setDupState(null);
+      if (resolution.action === 'cancel') return; // keep the form open to edit
+      if (resolution.action === 'merge') {
+        const updates = computeMergeUpdates(resolution.match.data, candidate);
+        try {
+          await updateDoc(doc(db, 'contacts', resolution.match.id), {
+            ...updates,
+            updatedAt: serverTimestamp(),
+          });
+          toast({
+            title: 'Merged into existing contact',
+            description: Object.keys(updates).length
+              ? `Filled in missing details on “${resolution.match.name}”.`
+              : `“${resolution.match.name}” already had everything — nothing to change.`,
+          });
+        } catch (e: any) {
+          toast({ title: 'Merge failed', description: e?.message || '', variant: 'destructive' });
+        }
+        resetContactForm();
+        setShowAddModal(false);
         return;
       }
+      differenceNote = resolution.differenceNote;
     }
 
     // Optimistic UX: close the modal immediately so the user isn't stuck
@@ -265,6 +307,7 @@ export default function Contacts() {
           trade: '',
           trades: [],
           isActive: true,
+          notes: differenceNote || '',
           salesClientId: clientRef.id,
           // Record the portal-invite choice. Clients are NOT auto-invited by
           // the backend — the invite is opt-in (sent below when checked).
@@ -323,6 +366,7 @@ export default function Contacts() {
           trade: formSnapshot.trades[0] || '',
           trades: formSnapshot.trades,
           isActive: true,
+          notes: differenceNote || '',
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         });
@@ -1237,6 +1281,16 @@ export default function Contacts() {
           open={!!editingContact}
           onClose={() => setEditingContact(null)}
         />
+
+        {dupState && (
+          <DuplicateContactDialog
+            open={true}
+            candidate={dupState.candidate}
+            matches={dupState.matches}
+            entityLabel="contact"
+            onResolve={dupState.resolve}
+          />
+        )}
 
         {preferredFor && (
           <PreferredCategoriesEditor
