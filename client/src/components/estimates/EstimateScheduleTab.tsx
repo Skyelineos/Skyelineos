@@ -12,6 +12,8 @@ import { db } from '@/lib/firebase';
 import { estimateToSchedule } from '@/lib/schedule/estimateToSchedule';
 import { templateToSchedule, type TemplateTask } from '@/lib/schedule/templateToSchedule';
 import { clientSafeSchedule } from '@/lib/schedule/scheduleFinancials';
+import { publishScheduleToClient } from '@/lib/schedule/publishSchedule';
+import { useAuth } from '@/hooks/use-auth';
 import type { ScheduleLineInput } from '@/lib/schedule/types';
 import { ScheduleTimeline } from '@/components/schedule/ScheduleTimeline';
 import { Button } from '@/components/ui/button';
@@ -28,6 +30,7 @@ const ESTIMATE_SOURCE = 'estimate';
 
 export function EstimateScheduleTab({ estimateId }: { estimateId: string }) {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [lineItems, setLineItems] = useState<ScheduleLineInput[]>([]);
   const [totalRevenue, setTotalRevenue] = useState<number>(0);  // estimate client total
   const [targetStart, setTargetStart] = useState<string>('');
@@ -108,18 +111,20 @@ export function EstimateScheduleTab({ estimateId }: { estimateId: string }) {
     if (!projectId || !schedule) return;
     setPublishing(true);
     try {
-      await updateDoc(doc(db, 'projects', projectId), {
+      await publishScheduleToClient({
+        projectId,
         // Client-safe: strip GC-only cost/profit; keep the revenue draw schedule.
-        estimatedSchedule: clientSafeSchedule(schedule),
-        estimatedScheduleStartDate: targetStart,
-        estimatedScheduleSource: usingTemplate
+        schedule: clientSafeSchedule(schedule),
+        startDate: targetStart,
+        source: usingTemplate
           ? (templates.find(t => t.id === sourceId)?.name || 'Template')
           : 'Estimate line items',
-        estimatedSchedulePublishedAt: serverTimestamp(),
+        fromUserId: user?.id?.toString(),
+        fromUserName: user?.name || user?.email || 'GC',
       });
       toast({
         title: 'Schedule published to client',
-        description: 'It now appears in the client portal Schedule tab and seeds tasks on signing.',
+        description: 'It now appears in the client portal Schedule tab and the homeowner was notified.',
       });
     } catch (e: any) {
       toast({ title: 'Could not publish', description: e?.message || 'Unknown error', variant: 'destructive' });
