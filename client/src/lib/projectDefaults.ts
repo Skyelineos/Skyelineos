@@ -214,17 +214,39 @@ async function seedTasks(projectId: string, startDate: string, defaults: Project
   await applyJobTemplate(jobTemplateId, projectId, startDate);
 }
 
+// The default estimate is the Templates-tab estimate template marked isDefault
+// (structured lineItems). Falls back to the legacy "clone an existing estimate"
+// id from settings.
 async function seedEstimate(projectId: string, projectName: string, defaults: ProjectDefaults) {
-  if (!defaults.estimateTemplateId) return;
   if (await projectHasEstimate(projectId)) return;
 
+  // 1) Structured estimate template from the Templates tab (preferred).
+  try {
+    const snap = await getDocs(query(collection(db, 'templates'), where('category', '==', 'estimate')));
+    const def = snap.docs.find(d => (d.data() as any).isDefault === true);
+    const t = def?.data() as any;
+    if (t && Array.isArray(t.lineItems) && t.lineItems.length > 0) {
+      await addDoc(collection(db, 'estimates'), {
+        projectId,
+        projectName,
+        title: t.name ? `${t.name}` : 'Estimate',
+        lineItems: t.lineItems,
+        taxPct: t.taxPct ?? 0,
+        seededFromTemplateId: def!.id,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      return;
+    }
+  } catch (e) { console.warn('[projectDefaults] estimate template lookup failed', e); }
+
+  // 2) Legacy fallback: clone a designated existing estimate doc (+ subcollections).
+  if (!defaults.estimateTemplateId) return;
   const tmplSnap = await getDoc(doc(db, 'estimates', defaults.estimateTemplateId));
   if (!tmplSnap.exists()) return;
   const t = tmplSnap.data() as any;
-
   const newRef = await addDoc(collection(db, 'estimates'), {
-    projectId,
-    projectName,
+    projectId, projectName,
     title: t.title ? `${t.title} (from template)` : 'Estimate',
     lineItems: Array.isArray(t.lineItems) ? t.lineItems : [],
     markupConfig: t.markupConfig ?? null,
@@ -234,13 +256,10 @@ async function seedEstimate(projectId: string, projectName: string, defaults: Pr
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
-
-  // Copy costGroups + costCodes subcollections if the template uses them.
   try {
     const groups = await getDocs(collection(db, 'estimates', defaults.estimateTemplateId, 'costGroups'));
     for (const g of groups.docs) {
-      const gData = g.data();
-      const newGroup = await addDoc(collection(db, 'estimates', newRef.id, 'costGroups'), { ...gData });
+      const newGroup = await addDoc(collection(db, 'estimates', newRef.id, 'costGroups'), { ...g.data() });
       const codes = await getDocs(collection(db, 'estimates', defaults.estimateTemplateId, 'costGroups', g.id, 'costCodes'));
       if (!codes.empty) {
         const batch = writeBatch(db);
@@ -255,27 +274,41 @@ async function seedEstimate(projectId: string, projectName: string, defaults: Pr
   }
 }
 
+// The "selections needed" list is the Templates-tab selections template marked
+// isDefault (rows: floor/room/category/area/phase). Falls back to the bundled
+// client-owned SELECTIONS_TEMPLATE.
 async function seedSelections(projectId: string, defaults: ProjectDefaults) {
   if (defaults.seedSelections === false) return;
   if (await collectionHasAny(['projects', projectId, 'selections'])) return;
 
-  // Seed the CLIENT-owned decisions as the "selections needed" list — that's
-  // what the homeowner acts on in the portal. (Builder/architect items stay on
-  // the GC side and aren't seeded as client selections.)
-  const items = SELECTIONS_TEMPLATE.filter(i => i.owner === 'Client');
-  if (items.length === 0) return;
+  type Row = { floor: string; room: string; category: string; area: string; phase: string };
+  let rows: Row[] = [];
 
-  // Firestore batch cap is 500 — chunk to 400.
-  for (let i = 0; i < items.length; i += 400) {
-    const chunk = items.slice(i, i + 400);
+  try {
+    const snap = await getDocs(query(collection(db, 'templates'), where('category', '==', 'selections')));
+    const def = snap.docs.find(d => (d.data() as any).isDefault === true);
+    const items = (def?.data() as any)?.items;
+    if (Array.isArray(items) && items.length > 0) rows = items;
+  } catch (e) { console.warn('[projectDefaults] selections template lookup failed', e); }
+
+  if (rows.length === 0) {
+    // Built-in fallback: client-owned items mapped room→floor.
+    rows = SELECTIONS_TEMPLATE.filter(i => i.owner === 'Client').map(i => ({
+      floor: roomToFloor(i.room), room: i.room, category: i.category, area: i.item, phase: i.phase,
+    }));
+  }
+  if (rows.length === 0) return;
+
+  for (let i = 0; i < rows.length; i += 400) {
+    const chunk = rows.slice(i, i + 400);
     const batch = writeBatch(db);
     for (const it of chunk) {
       batch.set(doc(collection(db, 'projects', projectId, 'selections')), {
         projectId,
-        floor: roomToFloor(it.room),
+        floor: it.floor || 'Main Floor',
         room: it.room,
         category: it.category,
-        area: it.item,
+        area: it.area,
         allowanceAmount: 0,
         allowanceUnit: 'lump sum',
         clientApprovalStatus: 'Pending Options',

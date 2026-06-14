@@ -727,6 +727,14 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create, update: if isGC();
       allow delete: if isAdmin() || isGC();
+
+      // Template subcollections (e.g. job templates' `jobTasks`). The catch-all
+      // denies these otherwise, which would break applyJobTemplate + the
+      // standard-task-list seeder.
+      match /{sub=**} {
+        allow read: if isSignedIn();
+        allow write: if isGC();
+      }
     }
 
     // Automations
