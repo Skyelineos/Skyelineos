@@ -9,7 +9,9 @@
 // (Templates → Style Quiz → option → photo manager). See render prompts shared
 // with the team. Image generation happens externally — the app only stores/links.
 
-export type StyleImageType = 'hero' | 'context1' | 'context2' | 'detail' | 'comparison';
+// First-class image types. 'lifestyle' is the realistic in-home shot (formerly
+// 'comparison'); the old value is still accepted for backward compatibility.
+export type StyleImageType = 'hero' | 'context1' | 'context2' | 'detail' | 'lifestyle' | 'comparison';
 
 // Reusable schema for a style-quiz image asset (kept generic so future
 // AI-generated renderings attach the same way).
@@ -25,6 +27,13 @@ export interface StyleOptionImage {
   storagePath?: string;     // Firebase Storage path (when uploaded)
   imageUrl?: string;        // download URL — EMPTY until a rendering is uploaded
   isHero?: boolean;
+  // Future side-by-side comparison grouping (no UI yet — schema only).
+  comparisonGroupId?: string | null;
+  // Future AI-rendering tracking (null for now).
+  promptTemplate?: string | null;
+  promptVersion?: string | null;
+  renderSource?: string | null;   // e.g. 'manual' | 'chatgpt' | 'sdxl' | ...
+  generatedAt?: any;
   createdAt?: any;
   updatedAt?: any;
 }
@@ -45,16 +54,18 @@ export interface StyleQuestion {
   options: StyleOption[];
 }
 
-// The five standard placeholder slots created for every option.
+// The five standard placeholder slots created for every option:
+// Hero · Context View 1 · Context View 2 · Detail View · Lifestyle View.
 export const STYLE_IMAGE_SLOTS: { type: StyleImageType; title: string }[] = [
-  { type: 'hero', title: 'Hero' },
+  { type: 'hero', title: 'Hero View' },
   { type: 'context1', title: 'Context View 1' },
   { type: 'context2', title: 'Context View 2' },
   { type: 'detail', title: 'Detail View' },
-  { type: 'comparison', title: 'Comparison View' },
+  { type: 'lifestyle', title: 'Lifestyle View' },
 ];
 
-// Build the empty placeholder slots for one option.
+// Build the empty placeholder slots for one option (5 per option × 27 options
+// = 135 slots ready to receive renderings without schema changes).
 export function makeImageSlots(questionId: string, optionId: string): StyleOptionImage[] {
   return STYLE_IMAGE_SLOTS.map((s, i) => ({
     imageId: `${optionId}-${s.type}`,
@@ -66,7 +77,30 @@ export function makeImageSlots(questionId: string, optionId: string): StyleOptio
     sortOrder: i,
     imageUrl: '', // TODO(renderings): upload the generated image here
     isHero: s.type === 'hero',
+    comparisonGroupId: null,
+    promptTemplate: null,
+    promptVersion: null,
+    renderSource: null,
+    generatedAt: null,
   }));
+}
+
+// Friendly "pending" copy for an empty slot's branded placeholder.
+export function placeholderText(imageType: string): string {
+  return imageType === 'hero' ? 'Rendering Coming Soon' : 'Rendering Pending';
+}
+
+// The full ordered gallery for an option — ALWAYS the five slots so the gallery
+// feels complete even before renderings exist (empty slots render as branded
+// placeholders). Backward-compatible: merges a legacy single imageUrl into hero,
+// and back-fills slots for hand-made/old options.
+export function optionGallery(option: Pick<StyleOption, 'images' | 'imageUrl' | 'id'> & { id?: string }, questionId = ''): StyleOptionImage[] {
+  let imgs = (option.images || []).slice().sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+  if (imgs.length === 0) {
+    imgs = makeImageSlots(questionId, option.id || 'opt');
+    if (option.imageUrl) imgs = imgs.map(im => im.imageType === 'hero' ? { ...im, imageUrl: option.imageUrl } : im);
+  }
+  return imgs;
 }
 
 // ── Backward-compatible accessors (never hardcode image lookups in UI) ───────

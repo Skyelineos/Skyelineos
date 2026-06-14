@@ -3,7 +3,7 @@
 // question at a time with image option cards, and logs answers to
 // projects/{id}/stylePreferences/quiz for the GC/designer to act on.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   collection, doc, getDoc, getDocs, query, where, setDoc, serverTimestamp,
 } from 'firebase/firestore';
@@ -14,8 +14,9 @@ import { useToast } from '@/hooks/use-toast';
 import { Sparkles, Check, ChevronLeft, ChevronRight, ImageIcon, Images } from 'lucide-react';
 import {
   type StyleQuestion, type StyleOption, type StyleOptionImage,
-  heroImageUrl, galleryImages,
+  heroImageUrl, optionGallery,
 } from '@/data/standardStyleQuiz';
+import { StyleImagePlaceholder } from '@/components/style/StyleImagePlaceholder';
 
 interface StyleQuizProps {
   projectId: string;
@@ -35,6 +36,7 @@ export default function StyleQuiz({ projectId, fromUserId, fromUserName }: Style
   // Gallery modal: which option's examples are open + carousel index.
   const [gallery, setGallery] = useState<{ option: StyleOption; images: StyleOptionImage[] } | null>(null);
   const [galleryIdx, setGalleryIdx] = useState(0);
+  const touchX = useRef<number | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -171,7 +173,8 @@ export default function StyleQuiz({ projectId, fromUserId, fromUserName }: Style
         {qn.options.map(o => {
           const selected = answers[qn.id] === o.id;
           const hero = heroImageUrl(o);
-          const imgs = galleryImages(o);
+          const story = optionGallery(o, qn.id);
+          const uploadedCount = story.filter(i => i.imageUrl).length;
           return (
             <div
               key={o.id}
@@ -179,11 +182,11 @@ export default function StyleQuiz({ projectId, fromUserId, fromUserName }: Style
               style={selected ? { borderColor: '#C9A96E', boxShadow: '0 0 0 2px #C9A96E55' } : {}}
             >
               <button onClick={() => choose(qn.id, o.id)} className="block w-full text-left">
-                <div className="aspect-[4/3] bg-gray-50 flex items-center justify-center overflow-hidden relative">
+                <div className="aspect-[4/3] flex items-center justify-center overflow-hidden relative">
                   {hero ? (
                     <img src={hero} alt={o.label} className="w-full h-full object-cover" />
                   ) : (
-                    <ImageIcon className="h-7 w-7 text-gray-300" />
+                    <StyleImagePlaceholder label={o.label} slotTitle="Hero View" imageType="hero" />
                   )}
                   {selected && (
                     <span className="absolute top-2 right-2 bg-green-600 text-white rounded-full p-1">
@@ -195,14 +198,12 @@ export default function StyleQuiz({ projectId, fromUserId, fromUserName }: Style
               <div className="p-2.5">
                 <p className="text-sm font-semibold text-gray-900">{o.label}</p>
                 {o.description && <p className="text-xs text-gray-500 mt-0.5 leading-snug">{o.description}</p>}
-                {imgs.length > 1 && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setGallery({ option: o, images: imgs }); setGalleryIdx(0); }}
-                    className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-[#8a6a3a] hover:underline"
-                  >
-                    <Images className="h-3.5 w-3.5" /> View examples ({imgs.length})
-                  </button>
-                )}
+                <button
+                  onClick={(e) => { e.stopPropagation(); setGallery({ option: o, images: story }); setGalleryIdx(0); }}
+                  className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-[#8a6a3a] hover:underline"
+                >
+                  <Images className="h-3.5 w-3.5" /> View examples{uploadedCount ? ` (${uploadedCount})` : ''}
+                </button>
               </div>
             </div>
           );
@@ -215,21 +216,33 @@ export default function StyleQuiz({ projectId, fromUserId, fromUserName }: Style
           {gallery && (() => {
             const img = gallery.images[Math.min(galleryIdx, gallery.images.length - 1)];
             const last = gallery.images.length - 1;
+            const go = (dir: -1 | 1) => setGalleryIdx(i => (dir < 0 ? (i <= 0 ? last : i - 1) : (i >= last ? 0 : i + 1)));
+            // Mobile swipe.
+            const onTouchStart = (e: React.TouchEvent) => { touchX.current = e.touches[0].clientX; };
+            const onTouchEnd = (e: React.TouchEvent) => {
+              if (touchX.current == null) return;
+              const dx = e.changedTouches[0].clientX - touchX.current;
+              if (Math.abs(dx) > 40) go(dx < 0 ? 1 : -1);
+              touchX.current = null;
+            };
             return (
               <div>
-                <div className="relative bg-black flex items-center justify-center">
+                <div className="relative bg-black flex items-center justify-center select-none"
+                  onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
                   {img?.imageUrl ? (
                     <img src={img.imageUrl} alt={img.altText || img.title || gallery.option.label} className="max-h-[70vh] w-full object-contain" />
                   ) : (
-                    <div className="h-64 flex items-center justify-center text-gray-400"><ImageIcon className="h-8 w-8" /></div>
+                    <div className="w-full aspect-[4/3] max-h-[70vh]">
+                      <StyleImagePlaceholder label={gallery.option.label} slotTitle={img?.title} imageType={String(img?.imageType || 'hero')} />
+                    </div>
                   )}
                   {gallery.images.length > 1 && (
                     <>
-                      <button onClick={() => setGalleryIdx(i => (i <= 0 ? last : i - 1))}
+                      <button onClick={() => go(-1)}
                         className="absolute left-2 top-1/2 -translate-y-1/2 bg-white/80 rounded-full p-1.5 hover:bg-white">
                         <ChevronLeft className="h-5 w-5" />
                       </button>
-                      <button onClick={() => setGalleryIdx(i => (i >= last ? 0 : i + 1))}
+                      <button onClick={() => go(1)}
                         className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/80 rounded-full p-1.5 hover:bg-white">
                         <ChevronRight className="h-5 w-5" />
                       </button>
@@ -256,7 +269,9 @@ export default function StyleQuiz({ projectId, fromUserId, fromUserName }: Style
                     {gallery.images.map((g, k) => (
                       <button key={g.imageId || k} onClick={() => setGalleryIdx(k)}
                         className={`flex-shrink-0 w-14 h-14 rounded overflow-hidden border ${k === galleryIdx ? 'ring-2 ring-[#C9A96E]' : 'border-gray-200'}`}>
-                        {g.imageUrl ? <img src={g.imageUrl} alt={g.title} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-gray-50" />}
+                        {g.imageUrl
+                          ? <img src={g.imageUrl} alt={g.title} className="w-full h-full object-cover" />
+                          : <StyleImagePlaceholder slotTitle={g.title} imageType={String(g.imageType)} compact />}
                       </button>
                     ))}
                   </div>

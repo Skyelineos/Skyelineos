@@ -17,6 +17,7 @@ import {
   type StyleQuestion, type StyleOption, type StyleOptionImage,
   makeImageSlots,
 } from '@/data/standardStyleQuiz';
+import { StyleImagePlaceholder } from '@/components/style/StyleImagePlaceholder';
 
 const uid = () => Math.random().toString(36).slice(2, 9);
 
@@ -188,7 +189,7 @@ export function StyleQuizTemplateEditor({ templateId, onBack }: { templateId: st
                             {im.imageUrl ? (
                               <img src={im.imageUrl} alt={im.altText || im.title} className="w-full h-full object-cover" />
                             ) : (
-                              <span className="text-[9px] text-gray-400 text-center px-1">empty</span>
+                              <StyleImagePlaceholder label={o.label} slotTitle={im.title} imageType={String(im.imageType)} compact />
                             )}
                             {im.isHero && (
                               <span className="absolute top-1 left-1 bg-amber-500 text-white rounded px-1 text-[8px] flex items-center gap-0.5">
