@@ -1581,17 +1581,25 @@ export default function Sales() {
     }, () => setLoading(false));
   }, []);
 
-  // Load team members for "Assigned To"
+  // Load team members for "Assigned To" — a lead can only be assigned to a
+  // Project Manager or to yourself (the signed-in admin/GC). Other roles
+  // (clients, subs, designers, generic office staff) are filtered out.
+  // Canonical PM role is `projectManager` (camelCase); accept normalized
+  // variants (project_manager / pm) too.
   useEffect(() => {
+    const isPmRole = (v: any) =>
+      ['projectmanager', 'pm'].includes(String(v || '').toLowerCase().replace(/_/g, ''));
     return onSnapshot(
       query(collection(db, 'users'), orderBy('name', 'asc')),
       snap => setTeamMembers(
         snap.docs
-          .map(d => ({ id: d.id, name: (d.data() as any).name || '', email: (d.data() as any).email || '' }))
+          .map(d => ({ id: d.id, name: (d.data() as any).name || '', email: (d.data() as any).email || '', role: (d.data() as any).role }))
           .filter(m => m.name)
+          .filter(m => isPmRole(m.role) || m.id === user?.firebaseUid)
+          .map(({ id, name, email }) => ({ id, name, email }))
       )
     );
-  }, []);
+  }, [user?.firebaseUid]);
 
   // All unique tags across clients
   const allTags = [...new Set(clients.flatMap(c => c.tags || []))].sort();
