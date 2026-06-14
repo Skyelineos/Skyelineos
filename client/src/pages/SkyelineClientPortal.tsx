@@ -22,6 +22,7 @@ import { ClientTabPreview } from '@/components/client-portal/ClientTabPreview';
 import { SalesPitchSection } from '@/components/client-portal/SalesPitchSection';
 import { InspirationBoard } from '@/components/client-portal/InspirationBoard';
 import SelectionsBoard from '@/components/client-portal/SelectionsBoard';
+import DesignStudio from '@/components/client-portal/DesignStudio';
 import ClientSelectionsTimeline from '@/components/client/ClientSelectionsTimeline';
 import ChangeOrdersTab from '@/components/client-portal/ChangeOrdersTab';
 import ClientFinancials from '@/components/client-portal/ClientFinancials';
@@ -32,7 +33,7 @@ import type { GeneratedSchedule } from '@/lib/schedule/types';
 
 import {
   LayoutDashboard, Palette, DollarSign, FileText, MessageSquare,
-  Image, ClipboardList, ChevronDown, ClipboardCheck, CalendarClock,
+  Image, ClipboardList, ChevronDown, ClipboardCheck, CalendarClock, Sparkles,
 } from 'lucide-react';
 
 interface FirestoreProject {
@@ -59,6 +60,7 @@ const TABS = [
   { key: 'dashboard',     label: 'Dashboard',      icon: LayoutDashboard },
   { key: 'schedule',      label: 'Schedule',        icon: CalendarClock },
   { key: 'financials',    label: 'Financials',      icon: DollarSign },
+  { key: 'design',        label: 'Design Studio',   icon: Sparkles },
   { key: 'selections',    label: 'Selections',      icon: Palette },
   { key: 'change-orders', label: 'Change Orders',   icon: ClipboardList },
   { key: 'site-log',      label: 'Site Log',        icon: ClipboardCheck },
@@ -350,8 +352,17 @@ export default function SkyelineClientPortal() {
           />
         );
 
-      case 'selections':
       case 'design':
+        return (
+          <DesignStudio
+            projectId={selectedProjectId}
+            clientContactId={primaryClientId}
+            clientName={clientFullName}
+            onNavigate={handleNavigate}
+          />
+        );
+
+      case 'selections':
         return (
           <div className="space-y-6 p-6">
             <ClientSelectionsTimeline
