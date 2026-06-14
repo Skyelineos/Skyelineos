@@ -394,6 +394,24 @@ export function NewProjectForm({ isOpen, onClose, onProjectCreated }: NewProject
         }
       }
 
+      // Seed the rest of the project's defaults (Gantt, task list, estimate,
+      // selections) from the designated defaults (or built-in starters) for any
+      // surface the form didn't already hand-pick. Guarded + non-fatal.
+      try {
+        const { seedProjectDefaults } = await import('@/lib/projectDefaults');
+        await seedProjectDefaults({
+          projectId: newProjectId,
+          projectName: data.projectName,
+          startDate: data.startDate,
+          fromUserId: user.id?.toString(),
+          fromUserName: user.name || '',
+          skipSchedule: !!selectedScheduleTemplateId, // form already applied a Gantt template
+          skipTasks: !!selectedTemplateId,            // form already applied a task template
+        });
+      } catch (e: any) {
+        console.warn('Failed to seed project defaults', e?.message || e);
+      }
+
       toast({
         title: 'Project Created Successfully',
         description: `${data.projectName} has been linked to ${finalClients.map((c: any) => c.name).join(' & ')}.${templateMsg}`,
