@@ -54,8 +54,14 @@ function deriveUserRole(contactRole: string | undefined): string {
 
 // Only these contact roles get a proactive portal invite when newly added (or
 // when invited for bids — bid invitees are added as `subcontractor` contacts).
-// Vendors, suppliers, and internal team/employees are NOT auto-invited.
-const INVITE_ROLES = new Set(['subcontractor', 'sub', 'client', 'homeowner', 'designer']);
+//
+// Clients/homeowners are deliberately NOT auto-invited: many are early-stage
+// leads who aren't ready for a portal yet. They're invited EXPLICITLY from the
+// UI instead — the "Send portal invite" opt-in on contact creation and the
+// "Invite to portal" button both send a templated SendGrid email via the
+// /api/send-portal-invite route. Vendors, suppliers, and internal team are not
+// auto-invited either.
+const INVITE_ROLES = new Set(['subcontractor', 'sub', 'designer']);
 function shouldInvite(contactRole: string | undefined): boolean {
   return INVITE_ROLES.has((contactRole || '').toLowerCase());
 }
