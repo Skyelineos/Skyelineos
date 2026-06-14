@@ -8,6 +8,7 @@ import { registerDriveIngester } from './ingestionLab/driveIngester';
 import { registerUploadEndpoint } from './ingestionLab/uploadEndpoint';
 import { registerBrainPass } from './ingestionLab/brainPass';
 import { registerPlacesRoutes } from './places/placesRoutes';
+import { registerTaskLibrary } from './taskLibrary/routes';
 
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -31,6 +32,11 @@ registerBrainPass(app, db);          // POST /api/ingestionLab/brain/process
 // Google Places proxy — address autocomplete for the jobsite "Set pin" flow.
 // Key stays server-side (Secret Manager); see places/placesRoutes.ts.
 registerPlacesRoutes(app);           // GET /api/places/{autocomplete,details}
+
+// Master Task Library & Project Task Template system. Library CRUD + closeout
+// are admin-only; project task generation/editing is GC-level. See
+// taskLibrary/routes.ts for the full route map.
+registerTaskLibrary(app, db);        // /api/taskLibrary/...
 
 // Real Firestore API endpoints
 app.get('/api/projects', async (req: any, res: any) => {

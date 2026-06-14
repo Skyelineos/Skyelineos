@@ -29,6 +29,8 @@ import {
   HelpCircle,
   ChevronDown,
   ChevronRight,
+  ListChecks,
+  GraduationCap,
 } from 'lucide-react';
 
 interface ProjectSidebarProps {
@@ -57,8 +59,9 @@ const navGroups = [
     id: 'schedule',
     label: 'Schedule',
     items: [
-      { id: 'schedule', label: 'Schedule', icon: Calendar },
-      { id: 'tasks',    label: 'Tasks',    icon: CheckSquare },
+      { id: 'schedule',   label: 'Schedule',   icon: Calendar },
+      { id: 'tasks',      label: 'Tasks',      icon: CheckSquare },
+      { id: 'build-plan', label: 'Build Plan', icon: ListChecks },
     ],
   },
   {
@@ -87,6 +90,13 @@ const navGroups = [
       { id: 'design',         label: 'Design',         icon: Palette },
       { id: 'documents',      label: 'Documents',      icon: FolderOpen },
       { id: 'move-in-binder', label: 'Move-in Binder', icon: ClipboardCheck },
+    ],
+  },
+  {
+    id: 'closeout',
+    label: 'Closeout',
+    items: [
+      { id: 'closeout', label: 'Lessons Learned', icon: GraduationCap },
     ],
   },
 ];
