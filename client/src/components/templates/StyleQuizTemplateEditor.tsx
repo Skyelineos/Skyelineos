@@ -157,6 +157,9 @@ export function StyleQuizTemplateEditor({ templateId, onBack }: { templateId: st
       <p className="text-xs text-gray-400">
         Upload a rendering into each slot. The ★ image is the card thumbnail clients see; the rest show in “View Examples”.
       </p>
+      <p className="text-xs text-amber-600">
+        TODO: Replace placeholders with final AI renderings (each option supports Hero · Context 1 · Context 2 · Detail · Lifestyle).
+      </p>
 
       <div className="space-y-5">
         {questions.map((q, qi) => (
@@ -203,6 +206,8 @@ export function StyleQuizTemplateEditor({ templateId, onBack }: { templateId: st
                             </label>
                           </div>
                           <Input value={im.title} onChange={e => updateImage(qi, oi, ii, { title: e.target.value })} className="h-6 text-[10px] px-1" placeholder="Title" />
+                          <Input value={im.description || ''} onChange={e => updateImage(qi, oi, ii, { description: e.target.value })} className="h-6 text-[10px] px-1" placeholder="Description" />
+                          <Input value={im.altText || ''} onChange={e => updateImage(qi, oi, ii, { altText: e.target.value })} className="h-6 text-[10px] px-1" placeholder="Alt text" />
                           <Badge variant="outline" className="text-[8px] w-full justify-center">{String(im.imageType)}</Badge>
                           <div className="flex items-center justify-between">
                             <button title="Set as hero" onClick={() => setHero(qi, oi, ii)} className={`text-[9px] ${im.isHero ? 'text-amber-600' : 'text-gray-400 hover:text-amber-600'}`}>

@@ -44,6 +44,8 @@ export interface StyleOption {
   description?: string;
   imageUrl?: string;              // legacy single image — kept for backward compat
   images?: StyleOptionImage[];    // structured gallery (preferred)
+  featured?: boolean;             // shown in the first row (before "Show More Styles")
+  kind?: 'style' | 'upload';      // 'upload' = the Other / Upload Inspiration card
 }
 
 export interface StyleQuestion {
@@ -75,7 +77,7 @@ export function makeImageSlots(questionId: string, optionId: string): StyleOptio
     title: s.title,
     altText: '',
     sortOrder: i,
-    imageUrl: '', // TODO(renderings): upload the generated image here
+    imageUrl: '', // TODO: Replace placeholder with final AI rendering.
     isHero: s.type === 'hero',
     comparisonGroupId: null,
     promptTemplate: null,
@@ -135,13 +137,38 @@ const q = (id: string, area: string, prompt: string, opts: [string, string, stri
   })),
 });
 
+// The overall-style question (Step 1 of Design Style Discovery). Top 4 are
+// `featured` (shown first); the rest reveal behind "Show More Styles". The final
+// option is the Other / Upload Inspiration card.
+// TODO: Replace placeholders with final AI renderings (11 styles × 5 views = 55).
+const OVERALL_STYLE_ID = 'overall-style';
+const overallStyleOption = (oid: string, label: string, description: string, featured = false): StyleOption => ({
+  id: oid, label, description, featured,
+  images: makeImageSlots(OVERALL_STYLE_ID, oid),
+});
+
+const OVERALL_STYLE_OPTIONS: StyleOption[] = [
+  overallStyleOption('organic-modern', 'Organic Modern', 'Warm minimal, natural materials, soft curves', true),
+  overallStyleOption('mountain-modern', 'Mountain Modern', 'Rugged + refined — timber, stone, big glass', true),
+  overallStyleOption('japandi', 'Japandi', 'Japanese calm meets Scandinavian warmth', true),
+  overallStyleOption('transitional', 'Transitional', 'A blend of classic and contemporary', true),
+  overallStyleOption('modern-farmhouse', 'Modern Farmhouse', 'Warm woods, black accents, shiplap'),
+  overallStyleOption('scandinavian', 'Scandinavian', 'Light, airy, functional, cozy'),
+  overallStyleOption('european-heritage', 'European Heritage', 'Old-world detail, arches, timeless materials'),
+  overallStyleOption('contemporary', 'Contemporary', 'Clean lines, minimal, sleek'),
+  overallStyleOption('mid-century-modern', 'Mid-Century Modern', 'Warm wood, clean retro lines'),
+  overallStyleOption('traditional', 'Traditional', 'Timeless, detailed millwork, classic'),
+  { id: 'other-upload', label: 'Other / Upload Inspiration', description: 'Show us looks you love instead', kind: 'upload' },
+];
+
 export const STANDARD_STYLE_QUIZ: StyleQuestion[] = [
-  q('overall-style', 'Overall', 'Which overall look feels most like you?', [
-    ['modern-farmhouse', 'Modern Farmhouse', 'Warm woods, black accents, shiplap'],
-    ['transitional', 'Transitional', 'A blend of classic and contemporary'],
-    ['contemporary', 'Contemporary', 'Clean lines, minimal, sleek'],
-    ['traditional', 'Traditional', 'Timeless, detailed millwork, classic'],
-  ], 'Sets the tone — we tailor the rest of your selections around this.'),
+  {
+    id: OVERALL_STYLE_ID,
+    area: 'Overall',
+    prompt: 'Which overall look feels most like you?',
+    helpText: 'Sets the tone — we tailor the rest of your selections around this.',
+    options: OVERALL_STYLE_OPTIONS,
+  },
 
   q('main-flooring', 'Flooring', 'Main-level flooring?', [
     ['engineered-hardwood', 'Engineered Hardwood', 'Real wood feel, warm'],

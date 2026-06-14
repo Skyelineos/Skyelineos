@@ -454,6 +454,22 @@ service cloud.firestore {
       allow write: if isGC() || (isClient() && clientOwnsProject(projectId));
     }
 
+    // Design Style Discovery — pairwise comparison results. Client (owner)
+    // creates/reads their own; GC + designer read.
+    match /projects/{projectId}/styleComparisons/{docId} {
+      allow read: if isGC() || isDesigner() || (isClient() && clientOwnsProject(projectId));
+      allow create, update: if isGC() || (isClient() && clientOwnsProject(projectId));
+      allow delete: if isGC();
+    }
+
+    // Design Style Discovery — Other / Upload Inspiration submissions. Client
+    // (owner) creates/reads their own; GC + designer read (+ mark reviewed).
+    match /projects/{projectId}/styleInspiration/{docId} {
+      allow read: if isGC() || isDesigner() || (isClient() && clientOwnsProject(projectId));
+      allow create, update: if isGC() || isDesigner() || (isClient() && clientOwnsProject(projectId));
+      allow delete: if isGC();
+    }
+
     match /projects/{projectId}/schedules/{scheduleId} {
       allow read: if isGC() || isDesigner()
         || (isClient() && clientOwnsProject(projectId));
