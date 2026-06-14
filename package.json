@@ -13,6 +13,11 @@
     "check": "tsc",
     "test:smoke": "node scripts/smoke-lumber.mjs",
     "test:smoke:local": "node scripts/smoke-lumber.mjs --url http://localhost:5173",
+    "test:e2e": "node scripts/e2e/run.mjs",
+    "test:e2e:all": "node scripts/e2e/run.mjs --ui",
+    "test:e2e:ui": "node scripts/e2e/run.mjs --suite ui",
+    "test:e2e:cleanup": "node scripts/e2e/cleanup.mjs",
+    "test:tour": "node scripts/page-tour.mjs",
     "prepare": "husky || true"
   },
   "dependencies": {
