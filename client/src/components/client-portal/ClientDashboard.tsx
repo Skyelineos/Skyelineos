@@ -179,6 +179,13 @@ export default function ClientDashboard({ projectId, project, onNavigate }: Clie
                 <Wrench className="h-4 w-4" style={{ color: '#92713A' }} />
               </div>
               <h3 className="text-sm font-bold text-gray-900">Up Next on Site</h3>
+              {(() => {
+                const at = project?.estimatedSchedulePublishedAt;
+                const ms = at?.toMillis?.() ?? (at ? Date.parse(at) : NaN);
+                return Number.isFinite(ms) ? (
+                  <span className="text-[11px] text-gray-400 ml-auto">Updated {fmtShort(new Date(ms))}</span>
+                ) : null;
+              })()}
             </div>
             {upcomingTrades.length === 0 ? (
               <p className="text-sm text-gray-400 py-4 text-center">

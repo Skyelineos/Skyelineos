@@ -328,6 +328,15 @@ export default function SkyelineClientPortal() {
           <div className="p-6">
             {selectedProject?.estimatedSchedule ? (
               <div className="rounded-xl border border-gray-200 bg-white p-5 max-w-3xl">
+                {(() => {
+                  const at = (selectedProject as any).estimatedSchedulePublishedAt;
+                  const ms = at?.toMillis?.() ?? (at ? Date.parse(at) : NaN);
+                  return Number.isFinite(ms) ? (
+                    <p className="text-xs text-gray-400 mb-3">
+                      Updated {new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </p>
+                  ) : null;
+                })()}
                 <ScheduleTimeline schedule={selectedProject.estimatedSchedule} />
               </div>
             ) : (

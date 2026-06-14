@@ -10,6 +10,7 @@ import { useGantt } from '@/modules/gantt/state';
 import { loadSchedule, saveSchedule, type ScheduleTemplate } from '@/modules/gantt/useSchedulePersistence';
 import type { WbsTask } from '@/modules/gantt/types';
 import { ScheduleSignoffBanner } from '@/components/schedule/ScheduleSignoffBanner';
+import { PublishScheduleButton } from '@/components/schedule/PublishScheduleButton';
 
 // Re-anchor a template's tasks so the earliest activity starts on `startISO`.
 function anchorTasks(tasks: WbsTask[], startISO: string): WbsTask[] {
@@ -124,6 +125,7 @@ export default function ProjectSchedule() {
     <ProjectLayout projectId={projectId!} projectName={transformedProject.name}>
       <div className="h-full flex flex-col overflow-hidden">
         <ScheduleSignoffBanner projectId={projectId!} />
+        <PublishScheduleButton projectId={projectId!} />
         <div className="flex-1 overflow-auto">
           <GanttScheduleWrapper
             projectId={projectId!}
