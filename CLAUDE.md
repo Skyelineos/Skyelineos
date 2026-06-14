@@ -92,6 +92,13 @@ There are 20 historical role-string variants scattered across the codebase plus 
 5. If responses slow or repeat, run `/compact` immediately.
 6. End every session by updating `CHECKPOINT.md` (or removing it if work is fully committed).
 
+## API keys & secrets (READ THIS before adding any integration)
+- **Every external API key/secret lives in Google Secret Manager** (bound to the `api` Cloud Function via the `secrets:` array in `functions/src/index.ts`). Keys are **never** committed to the repo and **never** shipped to the browser.
+- **Whenever a new API key/integration is created, add a catalog entry to the in-app API Storage page** (`client/src/pages/ApiStorage.tsx`, route `/api-storage`). That page is the human-facing index of every integration: what it is, what it does for the app, which features touch it, and the **Secret Manager variable name** to look up for rotation.
+- **Store the variable NAME only — never the secret value.** The page intentionally shows no values; the value stays in Secret Manager.
+- The API Storage page is **admin-only** (`RoleGuard allowedRoles={['admin']}`) and is gated behind **re-entering the account password** to view — treat it as the sensitive page it is.
+- When you add/remove a secret in `functions/src/index.ts`, update `ApiStorage.tsx` in the same change so the two stay in sync.
+
 ## Conventions
 - **Test before shipping.** Smoke-test the page in a headless browser before deploy — `tsc` + `vite build` miss runtime errors. Pattern: write a quick Playwright probe in `scripts/probe-*.mjs`.
 - **No time-of-day assumptions** in user-facing copy or replies — sessions span time zones; don't say "good evening" or assume the user should sleep.

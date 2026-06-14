@@ -18,15 +18,6 @@ service firebase.storage {
     match /subTakeoffs/{allPaths=**} {
       allow read, write: if request.auth != null;
     }
-
-    // Bid attachments — subs upload quote PDFs, COI, and supporting files when
-    // submitting a bid (path: bids/{projectId}/{subId}/...). Authed write so
-    // subs can submit; authed read so the GC reviews them in the portal.
-    // Without this block, uploads to bids/** were denied by default (no
-    // cascading), which silently broke the sub bid submission flow.
-    match /bids/{projectId}/{allPaths=**} {
-      allow read, write: if request.auth != null;
-    }
     
     // Site log media — any authenticated user can upload; any auth user can read
     match /site-logs/{allPaths=**} {
@@ -52,6 +43,15 @@ service firebase.storage {
     
     // Company branding/assets - readable by all, writable by admins only
     match /branding/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
+    // Sales-pitch documents/videos shown in the client portal one-pagers.
+    // Readable by anyone (downloaded straight from the portal); the UI only
+    // exposes the upload/delete affordances to staff. Firestore rules gate who
+    // can reference these on a section doc.
+    match /salesPitch/{allPaths=**} {
       allow read: if true;
       allow write: if request.auth != null;
     }

@@ -1,7 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
-import { collection, query, where, onSnapshot, orderBy, or } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { collection, query, where, onSnapshot, doc, updateDoc } from 'firebase/firestore';
+import { db, auth } from '@/lib/firebase';
+import { resolveClientIdentity } from '@/lib/clientIdentity';
+import { logClientActivity, type ClientActivityType } from '@/lib/clientActivity';
+import { BuildLocation } from '@/components/common/BuildLocation';
+import { locationFromProject, logLocationEvent, type BuildLocation as BLType } from '@/lib/buildLocation';
 import { useAuth } from '@/hooks/use-auth';
 import { AdminPortalControls } from '@/components/admin/AdminPortalControls';
 import { useAdminView } from '@/contexts/AdminViewContext';
@@ -11,18 +15,24 @@ import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 
 import DocumentsTab from '@/components/documents/DocumentsTab';
 import PhotosTab from '@/components/photos/PhotosTab';
-import { MessagingModule } from '@/components/messaging/MessagingModule';
+import { ProjectChat } from '@/components/messaging/ProjectChat';
 import ClientDashboard from '@/components/client-portal/ClientDashboard';
+import { ClientWelcomePreview } from '@/components/client-portal/ClientWelcomePreview';
+import { ClientTabPreview } from '@/components/client-portal/ClientTabPreview';
+import { SalesPitchSection } from '@/components/client-portal/SalesPitchSection';
+import { InspirationBoard } from '@/components/client-portal/InspirationBoard';
 import SelectionsBoard from '@/components/client-portal/SelectionsBoard';
 import ClientSelectionsTimeline from '@/components/client/ClientSelectionsTimeline';
 import ChangeOrdersTab from '@/components/client-portal/ChangeOrdersTab';
 import ClientFinancials from '@/components/client-portal/ClientFinancials';
 import ClientSiteLog from '@/components/site-log/ClientSiteLog';
 import { ClientTodayFeed } from '@/components/today/ClientTodayFeed';
+import { ScheduleTimeline } from '@/components/schedule/ScheduleTimeline';
+import type { GeneratedSchedule } from '@/lib/schedule/types';
 
 import {
   LayoutDashboard, Palette, DollarSign, FileText, MessageSquare,
-  Image, ClipboardList, ChevronDown, ClipboardCheck,
+  Image, ClipboardList, ChevronDown, ClipboardCheck, CalendarClock,
 } from 'lucide-react';
 
 interface FirestoreProject {
@@ -40,10 +50,14 @@ interface FirestoreProject {
   startDate?: string;
   estimatedCompletion?: string;
   actualCompletion?: string;
+  estimatedSchedule?: GeneratedSchedule;       // published estimated timeline
+  estimatedSchedulePublishedAt?: any;
+  buildLocation?: BLType | null;
 }
 
 const TABS = [
   { key: 'dashboard',     label: 'Dashboard',      icon: LayoutDashboard },
+  { key: 'schedule',      label: 'Schedule',        icon: CalendarClock },
   { key: 'financials',    label: 'Financials',      icon: DollarSign },
   { key: 'selections',    label: 'Selections',      icon: Palette },
   { key: 'change-orders', label: 'Change Orders',   icon: ClipboardList },
@@ -64,10 +78,38 @@ export default function SkyelineClientPortal() {
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
   const [projectsLoading, setProjectsLoading] = useState(true);
 
-  // Determine the effective user (admin impersonation vs real user)
-  const effectiveUid = isAdminView && viewedUser
-    ? viewedUser.id
-    : user?.firebaseUid || '';
+  // Resolve the full identifier union for this client. Real clients are keyed
+  // on projects by their CONTACT-doc id (via contact.linkedUserId = auth.uid),
+  // NOT their Firebase uid — so querying by uid alone returns nothing. This
+  // mirrors ClientTodayFeed: resolve uid + email → contact ids, then match any.
+  // `primaryClientId` is the single id passed to child tabs (the contact id, or
+  // the impersonated id) so selections / change-orders / site-log scope right.
+  const [identifiers, setIdentifiers] = useState<string[]>([]);
+  const [primaryClientId, setPrimaryClientId] = useState<string>('');
+  const [identityResolved, setIdentityResolved] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const authUser = auth.currentUser;
+      const impersonatedContactId = isAdminView && viewedUser ? viewedUser.id : undefined;
+      const id = await resolveClientIdentity({
+        uid: authUser?.uid || '',
+        email: authUser?.email || user?.email || '',
+        legacyUserId: user?.id,
+        impersonatedContactId,
+      });
+      if (cancelled) return;
+      setIdentifiers(id.arrayContainsAny);
+      setPrimaryClientId(impersonatedContactId || id.contactIds[0] || id.uid || '');
+      setIdentityResolved(true);
+    })();
+    return () => { cancelled = true; };
+  }, [user?.id, user?.email, isAdminView, viewedUser?.id]);
+
+  // Kept as `effectiveUid` so the rest of the component (location confirm +
+  // child tab props) reads unchanged.
+  const effectiveUid = primaryClientId;
 
   // Derive current tab from URL
   const urlParts = location.split('/');
@@ -80,73 +122,223 @@ export default function SkyelineClientPortal() {
     }
   }, [location, navigate]);
 
-  // Load projects from Firestore for this client
+  // Log which sections the client opens (once per tab per session) so the GC's
+  // Portal Activity panel reflects real engagement. Skip admin impersonation.
   useEffect(() => {
-    if (!effectiveUid) { setProjectsLoading(false); return; }
+    const uid = auth.currentUser?.uid;
+    if (!uid || isAdminView || !selectedProjectId) return;
+    const tab = TABS.find((t) => t.key === currentTab);
+    const type: ClientActivityType =
+      currentTab === 'selections' ? 'view_selections'
+      : currentTab === 'financials' ? 'view_invoice'
+      : 'view_tab';
+    logClientActivity({
+      uid,
+      type,
+      role: user?.role,
+      contactId: primaryClientId || undefined,
+      projectId: selectedProjectId,
+      label: tab?.label || currentTab,
+      once: `tab:${selectedProjectId}:${currentTab}`,
+    });
+  }, [currentTab, selectedProjectId, isAdminView, primaryClientId, user?.role]);
 
-    // Query for projects where clientId matches OR assignedUserIds contains the uid
-    // Firestore doesn't support OR across different fields without a composite query,
-    // so we run two queries and merge.
-    const q1 = query(collection(db, 'projects'), where('clientId', '==', effectiveUid), orderBy('name', 'asc'));
-    const q2 = query(collection(db, 'projects'), where('assignedUserIds', 'array-contains', effectiveUid), orderBy('name', 'asc'));
+  // Load this client's projects. Projects store the client link in three
+  // shapes across creation paths: canonical `clientIds[]`, legacy `clientId`,
+  // and occasionally `assignedUserIds`. We query all three against the
+  // identifier union and merge. Sorting is client-side to avoid composite
+  // indexes (array-contains-any/in + orderBy would need one).
+  useEffect(() => {
+    if (!identityResolved) return;
+    if (identifiers.length === 0) { setProjects([]); setProjectsLoading(false); return; }
+    const ids = identifiers.slice(0, 10);
 
-    const seen = new Set<string>();
-    let results1: FirestoreProject[] = [];
-    let results2: FirestoreProject[] = [];
+    let rArr: FirestoreProject[] = [];
+    let rLeg: FirestoreProject[] = [];
 
     const merge = () => {
+      const seen = new Set<string>();
       const combined: FirestoreProject[] = [];
-      const all = [...results1, ...results2];
-      for (const p of all) {
+      for (const p of [...rArr, ...rLeg]) {
         if (!seen.has(p.id)) { seen.add(p.id); combined.push(p); }
       }
+      combined.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
       setProjects(combined);
-      if (combined.length > 0 && !selectedProjectId) {
-        setSelectedProjectId(combined[0].id);
-      }
+      setSelectedProjectId(prev => prev || (combined[0]?.id || ''));
       setProjectsLoading(false);
     };
 
-    const unsub1 = onSnapshot(q1, snap => {
-      results1 = snap.docs.map(d => ({ id: d.id, ...d.data() } as FirestoreProject));
-      seen.clear();
-      merge();
-    }, () => { setProjectsLoading(false); });
+    const map = (snap: any): FirestoreProject[] => snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as FirestoreProject));
+    const onErr = () => setProjectsLoading(false);
 
-    const unsub2 = onSnapshot(q2, snap => {
-      results2 = snap.docs.map(d => ({ id: d.id, ...d.data() } as FirestoreProject));
-      seen.clear();
-      merge();
-    }, () => { setProjectsLoading(false); });
+    // Two shapes: canonical `clientIds[]` and legacy `clientId`. (assignedUserIds
+    // holds team/designer/sub uids, never the homeowner, so it's not queried.)
+    const u1 = onSnapshot(query(collection(db, 'projects'), where('clientIds', 'array-contains-any', ids)),
+      snap => { rArr = map(snap); merge(); }, onErr);
+    const u2 = onSnapshot(query(collection(db, 'projects'), where('clientId', 'in', ids)),
+      snap => { rLeg = map(snap); merge(); }, onErr);
 
-    return () => { unsub1(); unsub2(); };
-  }, [effectiveUid]);
+    return () => { u1(); u2(); };
+  }, [identifiers, identityResolved]);
 
   const selectedProject = projects.find(p => p.id === selectedProjectId);
   const handleNavigate = (tab: string) => navigate(`/client-portal/${tab}`);
 
+  // A project is "set up" once there's something real for the client to track:
+  // a published schedule, started progress, or scheduled dates. Until then the
+  // dashboard would be a wall of zeros, so we show the welcome/preview instead.
+  const projectIsSetUp = !!(
+    selectedProject && (
+      selectedProject.estimatedSchedule ||
+      (typeof selectedProject.progress === 'number' && selectedProject.progress > 0) ||
+      selectedProject.startDate ||
+      selectedProject.estimatedCompletion
+    )
+  );
+  // The portal is "the client's" — so the welcome should greet the client, not
+  // whoever is logged in. When an admin is impersonating, that's `viewedUser`;
+  // for a real client it's their own `user`. The project's clientName is the
+  // most authoritative when present.
+  const clientFullName =
+    (isAdminView && viewedUser?.name) ||
+    selectedProject?.clientName ||
+    user?.name ||
+    '';
+  const clientFirstName = clientFullName.trim().split(/\s+/)[0] || '';
+
+  const confirmLocation = async () => {
+    if (!selectedProjectId) return;
+    try {
+      await updateDoc(doc(db, 'projects', selectedProjectId), {
+        'buildLocation.status': 'confirmed',
+        'buildLocation.locationConfirmedByClient': true,
+        'buildLocation.locationConfirmedAt': new Date().toISOString(),
+        'buildLocation.locationConfirmedByUserId': effectiveUid,
+      });
+      await logLocationEvent(selectedProjectId, { type: 'client_confirmed', byUserId: effectiveUid });
+      toast({ title: 'Location confirmed', description: 'Thanks — the team has your verified build location.' });
+    } catch (e: any) {
+      toast({ title: 'Could not confirm', description: e?.message, variant: 'destructive' });
+    }
+  };
+
+  const requestCorrection = async (notes: string) => {
+    if (!selectedProjectId) return;
+    try {
+      await updateDoc(doc(db, 'projects', selectedProjectId), {
+        'buildLocation.status': 'correction_requested',
+        'buildLocation.correctionNotes': notes || '',
+      });
+      await logLocationEvent(selectedProjectId, { type: 'client_requested_correction', byUserId: effectiveUid, details: notes });
+      toast({ title: 'Correction sent', description: "We let the team know — they'll update the location." });
+    } catch (e: any) {
+      toast({ title: 'Could not send correction', description: e?.message, variant: 'destructive' });
+    }
+  };
+
   const renderContent = () => {
-    if (!selectedProjectId && !projectsLoading) {
-      return (
-        <div className="flex items-center justify-center h-64 p-8 text-center">
-          <div>
-            <p className="text-gray-500 font-medium">No projects found</p>
-            <p className="text-sm text-gray-400 mt-1">You haven't been assigned to any projects yet</p>
-          </div>
-        </div>
-      );
+    // No project yet (lead / pre-plans). Each tab gets tailored content so the
+    // nav actually goes somewhere: a welcome on Dashboard, a working inspiration
+    // board on Selections + Photos, and a "what to expect" preview elsewhere.
+    if (!selectedProjectId) {
+      const goInspiration = () => handleNavigate('selections');
+      switch (currentTab) {
+        case 'selections':
+        case 'design':
+        case 'photos':
+          return <InspirationBoard clientContactId={primaryClientId} clientName={clientFullName} />;
+        case 'schedule':
+        case 'financials':
+        case 'change-orders':
+        case 'site-log':
+        case 'documents':
+        case 'messages':
+          return <ClientTabPreview tab={currentTab as any} onStartInspiration={goInspiration} />;
+        case 'dashboard':
+        default:
+          return (
+            <div className="space-y-2 pb-6">
+              <ClientWelcomePreview
+                clientFirstName={clientFirstName}
+                hasProject={false}
+                onNavigate={handleNavigate}
+              />
+              {/* Soft sales pitch — interactive one-pagers that answer the
+                  questions prospective clients have before a project exists. */}
+              <SalesPitchSection onNavigate={handleNavigate} />
+            </div>
+          );
+      }
     }
 
     switch (currentTab) {
-      case 'dashboard':
+      case 'dashboard': {
+        // Build-location confirm card — relevant in every state, so it renders
+        // for both the welcome preview and the full dashboard.
+        const buildLocationCard = selectedProject?.buildLocation ? (
+          <div className="rounded-xl border border-gray-200 bg-white p-5 mx-4 sm:mx-6">
+            <h3 className="font-semibold text-gray-900 mb-1">Your build location</h3>
+            <p className="text-sm text-gray-500 mb-3">Please confirm this is the correct build location.</p>
+            <BuildLocation
+              mode="confirm"
+              value={locationFromProject(selectedProject)}
+              onConfirm={confirmLocation}
+              onRequestCorrection={requestCorrection}
+            />
+          </div>
+        ) : null;
+
+        // Project not set up yet → warm welcome + feature preview instead of a
+        // dashboard full of zeros.
+        if (!projectIsSetUp) {
+          return (
+            <div className="space-y-6 pb-6">
+              <ClientWelcomePreview
+                clientFirstName={clientFirstName}
+                projectName={selectedProject?.name}
+                projectAddress={selectedProject?.address}
+                hasProject={true}
+                onNavigate={handleNavigate}
+              />
+              {buildLocationCard}
+              {/* Pre-construction clients still benefit from the soft pitch /
+                  one-pagers while their project is being set up. */}
+              <SalesPitchSection onNavigate={handleNavigate} />
+            </div>
+          );
+        }
+
         return (
           <div className="space-y-6">
             <ClientTodayFeed />
+            {buildLocationCard}
             <ClientDashboard
               projectId={selectedProjectId}
               project={selectedProject}
               onNavigate={handleNavigate}
             />
+          </div>
+        );
+      }
+
+      case 'schedule':
+        return (
+          <div className="p-6">
+            {selectedProject?.estimatedSchedule ? (
+              <div className="rounded-xl border border-gray-200 bg-white p-5 max-w-3xl">
+                <ScheduleTimeline schedule={selectedProject.estimatedSchedule} />
+              </div>
+            ) : (
+              <div className="flex items-center justify-center h-64 text-center">
+                <div>
+                  <CalendarClock className="h-8 w-8 text-gray-300 mx-auto mb-3" />
+                  <p className="text-gray-500 font-medium">Your schedule isn't ready yet</p>
+                  <p className="text-sm text-gray-400 mt-1">
+                    Your estimated build timeline will appear here once your estimate is finalized.
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         );
 
@@ -210,10 +402,9 @@ export default function SkyelineClientPortal() {
         return (
           <div className="p-6">
             <h1 className="text-xl font-bold text-gray-900 mb-4">Messages</h1>
-            <MessagingModule
-              projectId={selectedProjectId as any}
-              currentUser={{ id: effectiveUid, name: user?.name || '', email: user?.email || '', role: 'client' as const, avatar: '' }}
-            />
+            {selectedProjectId
+              ? <ProjectChat projectId={selectedProjectId} />
+              : <p className="text-sm text-gray-500">Select a project to see its messages.</p>}
           </div>
         );
 
@@ -296,7 +487,7 @@ export default function SkyelineClientPortal() {
                   <button
                     key={tab.key}
                     onClick={() => handleNavigate(tab.key)}
-                    className={`flex items-center gap-1.5 px-4 py-3 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
+                    className={`flex flex-shrink-0 items-center gap-1.5 px-4 py-3 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
                       active
                         ? 'border-[#C9A96E] text-[#8a6a3a]'
                         : 'border-transparent text-gray-500 hover:text-gray-700'

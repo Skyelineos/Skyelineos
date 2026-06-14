@@ -4,7 +4,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { saveAsTemplate, listTemplates, ScheduleTemplate } from '../useSchedulePersistence';
+import { PROJECT_TYPES } from '../projectTypes';
 import type { WbsTask, Link } from '../types';
 import { BookTemplate, Save, FolderOpen, Trash2 } from 'lucide-react';
 
@@ -16,21 +18,23 @@ interface SaveTemplateModalProps {
   tasks: WbsTask[];
   links: Link[];
   createdBy?: string;
+  defaultProjectType?: string;
   onSaved: (name: string) => void;
 }
 
-export function SaveTemplateModal({ open, onClose, tasks, links, createdBy, onSaved }: SaveTemplateModalProps) {
+export function SaveTemplateModal({ open, onClose, tasks, links, createdBy, defaultProjectType, onSaved }: SaveTemplateModalProps) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [projectType, setProjectType] = useState(defaultProjectType || 'Other');
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => { if (open) { setName(''); setDescription(''); } }, [open]);
+  useEffect(() => { if (open) { setName(''); setDescription(''); setProjectType(defaultProjectType || 'Other'); } }, [open, defaultProjectType]);
 
   const handleSave = async () => {
     if (!name.trim()) return;
     setSaving(true);
     try {
-      await saveAsTemplate(name.trim(), description.trim(), tasks, links, createdBy);
+      await saveAsTemplate(name.trim(), description.trim(), tasks, links, createdBy, projectType);
       onSaved(name.trim());
       onClose();
     } finally {
@@ -54,6 +58,15 @@ export function SaveTemplateModal({ open, onClose, tasks, links, createdBy, onSa
           <div className="space-y-1.5">
             <Label>Template Name *</Label>
             <Input value={name} onChange={e => setName(e.target.value)} placeholder="Custom Home — Standard Build" autoFocus />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Project type</Label>
+            <Select value={projectType} onValueChange={setProjectType}>
+              <SelectTrigger><SelectValue placeholder="Project type" /></SelectTrigger>
+              <SelectContent>
+                {PROJECT_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
           <div className="space-y-1.5">
             <Label>Description</Label>

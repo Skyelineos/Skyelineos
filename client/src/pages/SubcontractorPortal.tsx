@@ -18,15 +18,17 @@ import { useToast } from '@/hooks/use-toast';
 import {
   Calendar, DollarSign, Upload, CheckCircle, AlertTriangle, Clock,
   Briefcase, Shield, FileCheck, Building, MessageSquare, Camera,
-  FileText, ChevronRight,
+  FileText, ChevronRight, HelpCircle,
 } from 'lucide-react';
 import PhotosTab from '@/components/photos/PhotosTab';
-import { MessagingModule } from '@/components/messaging/MessagingModule';
+import { RFIPanel } from '@/components/rfi/RFIPanel';
+import { ProjectChat } from '@/components/messaging/ProjectChat';
 import { SubTodayFeed } from '@/components/today/SubTodayFeed';
 import { SubBidRequestsTab } from '@/components/bidding/SubBidRequestsTab';
 import { MyContractsView } from '@/components/contracts/MyContractsView';
 import { EnablePushButton } from '@/components/notifications/EnablePushButton';
 import { RecipientMismatchBanner } from '@/components/bidding/RecipientMismatchBanner';
+import { JobsiteLocationCard } from '@/components/common/JobsiteLocationCard';
 import { StatCard } from '@/components/dashboard/StatCard';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -155,6 +157,9 @@ export default function SubcontractorPortal() {
   const [purchaseOrders, setPurchaseOrders] = useState<FSPO[]>([]);
   const [compliance, setCompliance] = useState<ComplianceData>({});
   const [loading, setLoading] = useState(true);
+  // Which assigned project the RFIs tab is scoped to (subs can be on several).
+  const [rfiProjectId, setRfiProjectId] = useState<string>('');
+  const [msgProjectId, setMsgProjectId] = useState<string>('');
 
   useEffect(() => {
     if (!effectiveUid) { setLoading(false); return; }
@@ -307,22 +312,20 @@ export default function SubcontractorPortal() {
             {activeProjects.length === 0 ? (
               <p className="text-sm text-gray-400 py-4 text-center">No projects assigned yet</p>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {activeProjects.map(p => (
-                  <div key={p.id} className="flex items-center justify-between py-2 border-b last:border-0">
-                    <div>
-                      <p className="text-sm font-medium text-gray-800">{p.name}</p>
-                      {p.address && <p className="text-xs text-gray-400">{p.address}</p>}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {p.currentPhase && <span className="text-xs text-gray-400">{p.currentPhase}</span>}
-                      {p.status && (
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
-                          {p.status}
-                        </span>
-                      )}
-                    </div>
-                  </div>
+                  <JobsiteLocationCard
+                    key={p.id}
+                    project={p}
+                    badge={
+                      <>
+                        {p.currentPhase && <span className="text-xs text-gray-500">{p.currentPhase}</span>}
+                        {p.status && (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">{p.status}</span>
+                        )}
+                      </>
+                    }
+                  />
                 ))}
               </div>
             )}
@@ -607,20 +610,73 @@ export default function SubcontractorPortal() {
     </div>
   );
 
-  const renderMessages = () => (
-    <div className="h-[calc(100vh-200px)]">
-      <MessagingModule
-        projectId={0}
-        currentUser={{
-          id: effectiveUid,
-          name: userName,
-          email: userEmail,
-          role: 'sub' as const,
-          avatar: '',
-        }}
-      />
-    </div>
-  );
+  const renderMessages = () => {
+    const activeId = msgProjectId || projects[0]?.id || '';
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <h2 className="text-xl font-bold text-gray-900">Messages</h2>
+          {projects.length > 0 && (
+            <select
+              value={activeId}
+              onChange={e => setMsgProjectId(e.target.value)}
+              className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+            >
+              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          )}
+        </div>
+        {!activeId ? (
+          <Card>
+            <CardContent className="py-12 text-center">
+              <p className="text-gray-700 font-medium">No projects assigned yet</p>
+              <p className="text-sm text-gray-500 mt-1">You'll see a channel here when the team tags you on a job.</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <ProjectChat projectId={activeId} />
+        )}
+      </div>
+    );
+  };
+
+  // RFIs — field questions the sub raises and the team answers. Scoped to one
+  // assigned project at a time (a sub may be on several jobs at once).
+  const renderRFIs = () => {
+    const activeId = rfiProjectId || projects[0]?.id || '';
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <h2 className="text-xl font-bold text-gray-900">RFIs &amp; Field Questions</h2>
+          {projects.length > 0 && (
+            <select
+              value={activeId}
+              onChange={e => setRfiProjectId(e.target.value)}
+              className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+            >
+              {projects.map(p => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          )}
+        </div>
+        {!activeId ? (
+          <Card>
+            <CardContent className="py-12 text-center">
+              <HelpCircle className="w-10 h-10 mx-auto mb-3 text-gray-300" />
+              <p className="text-gray-700 font-medium">No projects assigned yet</p>
+              <p className="text-sm text-gray-500 mt-1">Once you're assigned to a job, you can raise RFIs here.</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <RFIPanel
+            projectId={activeId}
+            projectName={projects.find(p => p.id === activeId)?.name}
+          />
+        )}
+      </div>
+    );
+  };
 
   const renderTabContent = () => {
     if (loading) {
@@ -642,6 +698,7 @@ export default function SubcontractorPortal() {
       case 'invoices': return renderInvoices();
       case 'purchase-orders': return renderPurchaseOrders();
       case 'progress-photos': return <PhotosTab />;
+      case 'rfis': return renderRFIs();
       case 'messages': return renderMessages();
       default: return renderDashboard();
     }
