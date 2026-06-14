@@ -82,6 +82,9 @@ const Templates = lazy(() => import("@/pages/Templates"));
 const Playbook = lazy(() => import("@/pages/Playbook"));
 const SocialMedia = lazy(() => import("@/pages/SocialMedia"));
 const Automations = lazy(() => import("@/pages/Automations"));
+const MasterTaskLibrary = lazy(() => import("@/pages/MasterTaskLibrary"));
+const ProjectBuildPlan = lazy(() => import("@/pages/ProjectBuildPlan"));
+const ProjectCloseout = lazy(() => import("@/pages/ProjectCloseout"));
 const ImportCenter = lazy(() => import("@/pages/ImportCenter"));
 const ProjectTasks = lazy(() => import("@/pages/ProjectTasks"));
 const ProjectChangeOrders = lazy(() => import("@/pages/ProjectChangeOrders"));
@@ -316,6 +319,16 @@ function Router() {
         </ProtectedRoute>
       </Route>
 
+      <Route path="/master-tasks">
+        <ProtectedRoute>
+          <RoleGuard allowedRoles={['admin']} showNotAuthorized>
+            <Suspense fallback={<MinimalSpinner title="Loading Master Task Library" />}>
+              <MasterTaskLibrary />
+            </Suspense>
+          </RoleGuard>
+        </ProtectedRoute>
+      </Route>
+
       <Route path="/bills">
         <ProtectedRoute>
           <RoleGuard allowedRoles={['admin', 'gc']} showNotAuthorized>
@@ -401,6 +414,26 @@ function Router() {
           <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
             <Suspense fallback={<MinimalSpinner title="Loading Tasks" />}>
               <ProjectTasks />
+            </Suspense>
+          </RoleGuard>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/projects/:id/build-plan">
+        <ProtectedRoute>
+          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+            <Suspense fallback={<MinimalSpinner title="Loading Build Plan" />}>
+              <ProjectBuildPlan />
+            </Suspense>
+          </RoleGuard>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/projects/:id/closeout">
+        <ProtectedRoute>
+          <RoleGuard allowedRoles={['admin']} showNotAuthorized>
+            <Suspense fallback={<MinimalSpinner title="Loading Closeout" />}>
+              <ProjectCloseout />
             </Suspense>
           </RoleGuard>
         </ProtectedRoute>

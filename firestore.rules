@@ -304,6 +304,37 @@ service cloud.firestore {
       allow write: if isGC();
     }
 
+    // ── Master Task Library & Project Task Template system ────────────────────
+    // masterTasks — the editable company library (TEMPLATES). Staff read for the
+    // library board; only admins write. Heavy mutations (seed/create/edit/
+    // archive/reorder) actually run through the api Cloud Function, whose Admin
+    // SDK bypasses these rules; this gate covers any direct client access.
+    match /masterTasks/{taskId} {
+      allow read: if isGC();
+      allow write: if isAdmin();
+    }
+
+    // projectTasks — INDEPENDENT per-project copies. Editing one never touches
+    // the master. Staff read/write; clients see only client-visible tasks (clean
+    // simplified portal view); subs see only subcontractor-visible tasks. Most
+    // writes go through the api (server-side validation: skip-reason required,
+    // quality-gate acceptance), but direct staff writes are allowed for liveness.
+    match /projectTasks/{taskId} {
+      allow read: if isGC()
+        || (isClient() && resource.data.clientVisible == true)
+        || (isSub() && resource.data.subcontractorVisible == true);
+      allow create, update: if isGC();
+      allow delete: if isGCOnly();
+    }
+
+    // taskImprovements — closeout lessons-learned suggestions awaiting admin
+    // approval. Admin-only read; written exclusively by the api Cloud Function
+    // (Admin SDK). Improvements are NEVER auto-applied to the master.
+    match /taskImprovements/{impId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
     // Messages and threads
     match /messages/{messageId} {
       // Author + staff only. (Was `if isSignedIn()`, which let any signed-in
