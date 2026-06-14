@@ -1,11 +1,40 @@
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged, User as FirebaseUser, signOut } from "firebase/auth";
-import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import {
+  doc, getDoc, setDoc, updateDoc, serverTimestamp,
+  collection, query, where, getDocs,
+} from "firebase/firestore";
 import { logClientActivity } from "@/lib/clientActivity";
 
 // Portal (non-staff) roles whose engagement we log for the GC's activity view.
 const PORTAL_ROLES = new Set(["client", "designer", "sub"]);
+
+// Map a contact-card role onto the portal role a freshly-signed-in user should
+// get. Clients, subs, and designers are invite-only portal users — they should
+// land straight in their portal with NO admin-approval step. Only internal
+// team/employee contacts route to the pending-approval screen. Anyone we can't
+// classify defaults to the low-privilege client portal (Firestore rules still
+// gate every read on linkedUserId/linkedClientId, so this exposes nothing).
+// Mirrors functions/src/auth/ensureContactAuth.ts deriveUserRole().
+function derivePortalRole(contactRole: string | undefined): string {
+  switch ((contactRole || "").toLowerCase()) {
+    case "designer":
+      return "designer";
+    case "team":
+    case "employee":
+      return "pending_gc";
+    case "subcontractor":
+    case "sub":
+    case "vendor":
+    case "supplier":
+      return "sub";
+    case "client":
+    case "homeowner":
+    default:
+      return "client";
+  }
+}
 
 // Backend user interface with role and permissions
 interface BackendUser {
@@ -165,21 +194,64 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           });
         }
       } else {
-        // No Firestore profile yet — create one so the user appears in the admin UI
+        // No Firestore profile yet (first sign-in — e.g. a sub arriving via a
+        // bid magic-link, or any Google sign-in that never ran the registration
+        // form). Resolve the right portal role from an existing contact card so
+        // invited clients / subs / designers land in their portal WITHOUT
+        // waiting on admin approval. Previously every cold sign-in defaulted to
+        // `pending_gc`, which walled legitimate portal users behind the
+        // "Access Pending Approval" screen — the bug this fixes.
+        const emailLower = (firebaseUser.email || '').toLowerCase().trim();
+        let resolvedRole = 'client';
+        let linkedContactId: string | null = null;
+        if (emailLower) {
+          try {
+            // Try the canonical (lowercased) email first, then the raw-cased
+            // address in case the contact was created with mixed case — Firestore
+            // equality is case-sensitive.
+            let match = (await getDocs(
+              query(collection(db, 'contacts'), where('email', '==', emailLower)),
+            )).docs[0];
+            const rawEmail = (firebaseUser.email || '').trim();
+            if (!match && rawEmail && rawEmail !== emailLower) {
+              match = (await getDocs(
+                query(collection(db, 'contacts'), where('email', '==', rawEmail)),
+              )).docs[0];
+            }
+            if (match) {
+              const c = match.data() as any;
+              resolvedRole = derivePortalRole(c.role);
+              linkedContactId = match.id;
+              // Stamp linkedUserId so bid-request + portal queries resolve this
+              // user by contact ID on the very next load (best-effort).
+              if (!c.linkedUserId) {
+                updateDoc(doc(db, 'contacts', match.id), {
+                  linkedUserId: firebaseUser.uid,
+                  linkedAt: serverTimestamp(),
+                }).catch(() => {});
+              }
+            }
+          } catch (e) {
+            console.warn('Contact role resolution failed; defaulting to client', e);
+          }
+        }
         const newProfile = {
           email: firebaseUser.email || '',
           name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || '',
-          role: 'pending_gc',
+          role: resolvedRole,
           permissions: [],
           firebaseUid: firebaseUser.uid,
+          linkedContactId,
           provider: firebaseUser.providerData[0]?.providerId || 'unknown',
+          active: true,
+          status: 'active',
           createdAt: serverTimestamp(),
         };
         await setDoc(doc(db, 'users', firebaseUser.uid), newProfile);
         setUser({
           id: 0,
           ...newProfile,
-          role: 'pending_gc',
+          role: resolvedRole,
         });
       }
     } catch (error) {

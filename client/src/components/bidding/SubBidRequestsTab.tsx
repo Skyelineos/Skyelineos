@@ -13,6 +13,14 @@ import { SubBidSubmissionForm } from './SubBidSubmissionForm';
 import { ClaimContactDialog } from './ClaimContactDialog';
 import type { BidRequest } from './types';
 
+// Order identifiers so the most specific invite keys (Firebase UID + contact
+// document IDs — none contain '@') come before email variants. Firestore caps
+// array-contains-any / in queries at 10 values, and the GC overwhelmingly
+// invites subs by contact ID + linkedUserId, so these must survive truncation.
+function prioritize(ids: string[]): string[] {
+  return [...ids].sort((a, b) => (a.includes('@') ? 1 : 0) - (b.includes('@') ? 1 : 0));
+}
+
 export function SubBidRequestsTab() {
   const { user } = useAuth();
   // Admin impersonation: when an admin is "viewing as" a specific sub, the
@@ -168,7 +176,12 @@ export function SubBidRequestsTab() {
   // hit in practice — a sub usually has 1–3 identifiers).
   useEffect(() => {
     if (subIds.length === 0) return;
-    const search = subIds.slice(0, 10);
+    // Firestore caps array-contains-any at 10 values. The GC invites by contact
+    // ID + linkedUserId far more often than by raw email, so order the most
+    // specific keys (uid / contact IDs — no '@') ahead of email variants before
+    // truncating, otherwise a sub with many email aliases could lose the very ID
+    // that matches their invitation.
+    const search = prioritize(subIds).slice(0, 10);
     const q = query(
       collectionGroup(db, 'bidRequests'),
       where('invitedSubIds', 'array-contains-any', search),
@@ -188,7 +201,7 @@ export function SubBidRequestsTab() {
   // Subscribe to my own submitted bids (same union of identifiers).
   useEffect(() => {
     if (subIds.length === 0) return;
-    const search = subIds.slice(0, 10);
+    const search = prioritize(subIds).slice(0, 10);
     const q = query(
       collectionGroup(db, 'bids'),
       where('subContactId', 'in', search),
