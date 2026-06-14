@@ -7,6 +7,7 @@ import { registerGmailIngester } from './ingestionLab/gmailIngester';
 import { registerDriveIngester } from './ingestionLab/driveIngester';
 import { registerUploadEndpoint } from './ingestionLab/uploadEndpoint';
 import { registerBrainPass } from './ingestionLab/brainPass';
+import { registerPlacesRoutes } from './places/placesRoutes';
 
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -26,6 +27,10 @@ registerGmailIngester(app, db);      // POST /api/ingestionLab/ingest/gmail
 registerDriveIngester(app, db);      // POST /api/ingestionLab/ingest/drive
 registerUploadEndpoint(app, db);     // POST /api/ingestionLab/upload
 registerBrainPass(app, db);          // POST /api/ingestionLab/brain/process
+
+// Google Places proxy — address autocomplete for the jobsite "Set pin" flow.
+// Key stays server-side (Secret Manager); see places/placesRoutes.ts.
+registerPlacesRoutes(app);           // GET /api/places/{autocomplete,details}
 
 // Real Firestore API endpoints
 app.get('/api/projects', async (req: any, res: any) => {
@@ -1113,9 +1118,15 @@ app.patch('/api/admin/users/:uid/role', async (req: any, res: any) => {
     }
     const { uid } = req.params;
     const { role } = req.body;
-    const allowed = ['admin', 'gc', 'client', 'sub', 'designer', 'pending_gc'];
+    const allowed = ['admin', 'gc', 'projectManager', 'client', 'sub', 'designer', 'pending_gc'];
     if (!allowed.includes(role)) return res.status(400).json({ error: 'Invalid role' });
-    const permissions = role === 'admin' ? ['all'] : role === 'gc' ? ['read', 'write'] : ['read'];
+    // PM is GC's project-operational delegate (docs/decisions.md §D-001). It gets
+    // read+write like gc; the billing/settings/contract carve-outs are enforced
+    // at the data layer by isGCOnly() in firestore.rules, not by this string.
+    const permissions = role === 'admin'
+      ? ['all']
+      : (role === 'gc' || role === 'projectManager') ? ['read', 'write']
+      : ['read'];
     await db.collection('users').doc(uid).update({
       role,
       permissions,
@@ -2010,6 +2021,11 @@ app.get('/qbo/oauth/callback', async (req: any, res: any) => {
 import { registerBidRequestRoute } from './bids/sendBidRequestRoute';
 registerBidRequestRoute(app, admin.firestore());
 
+// QBO draw payment links: POST /api/qbo/draw-payment-link + GET /api/qbo/status.
+// Lets the client portal mint a QuickBooks online-payment link for a draw.
+import { registerQboPaymentLink } from './qbo/paymentLink';
+registerQboPaymentLink(app, admin.firestore());
+
 // Public token-resolution endpoint for the magic-link bid response flow.
 // Route: GET /api/bid-requests/by-token/:token (public, no auth)
 import { registerBidTokenEndpoint } from './bids/bidTokenEndpoint';
@@ -2056,6 +2072,17 @@ registerLeadIntakeRoute(app, admin.firestore());
 import { registerSmsInboundRoute } from './notifications/smsInboundRoute';
 registerSmsInboundRoute(app, admin.firestore());
 
+// Portal-invite email — sends a stage-specific template (emailTemplates/{id})
+// to a client's documented address via SendGrid. Route: POST /api/send-portal-invite
+import { registerSendPortalInviteRoute } from './email/sendPortalInviteRoute';
+registerSendPortalInviteRoute(app, admin.firestore());
+
+// Configurable notification engine — catalog + seed defaults + live test send.
+// Routes: GET /api/notifications/catalog, POST /api/notifications/rules/init,
+// POST /api/notifications/test
+import { registerNotificationRulesRoutes } from './notifications/rulesRoutes';
+registerNotificationRulesRoutes(app, admin.firestore());
+
 // Catch-all 404 — must come AFTER all route registrations (QBO routes above included)
 app.use('*', (req: any, res: any) => {
   console.log(`❌ 404 - API endpoint not found: ${req.method} ${req.originalUrl}`);
@@ -2084,6 +2111,8 @@ exports.api = onRequest(
       // Ingestion Lab OAuth — Gmail + Drive use one Google OAuth client.
       'GOOGLE_CLIENT_ID',
       'GOOGLE_CLIENT_SECRET',
+      // Google Places (New) autocomplete proxy for jobsite address entry.
+      'GOOGLE_MAPS_API_KEY',
       // Bid request route (/api/bid-requests/send) reads these via process.env.
       // Same secret names as the standalone dispatchNotification function uses.
       'SENDGRID_API_KEY',
@@ -2104,6 +2133,10 @@ exports.api = onRequest(
 
 // ── Phase 3: Notification dispatch (email + SMS) ─────────────────────────────
 export { dispatchNotification } from './notifications/dispatch';
+
+// ── Delayed-step executor for the configurable notification engine. Runs every
+//    5 min; fires due notificationJobs (multi-step / delayed automation steps).
+export { notificationJobSweep } from './notifications/notificationJobs';
 
 // ── New-lead alert: on every clients/{id} create (any avenue), notify admins
 //    in-app + push + forced SMS. dispatchNotification does the actual sending.

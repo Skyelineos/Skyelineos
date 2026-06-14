@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import * as React from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -10,6 +10,7 @@ import { applyJobTemplate } from '@/lib/applyJobTemplate';
 import { buildProjectCode } from '@/lib/projectUtils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { AddressSearchInput, type GeoResult } from '@/components/common/AddressSearchInput';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import {
@@ -33,6 +34,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { useAuth } from '@/hooks/use-auth';
 import { NewClientModal } from '@/components/contacts/NewClientModal';
+import { useAuth } from '@/auth/AuthContext';
 import type { Contact } from '@shared/messaging-types';
 
 const projectSchema = z.object({
@@ -165,11 +167,34 @@ export function NewProjectForm({ isOpen, onClose, onProjectCreated }: NewProject
     contact.type === 'Client'
   );
 
-  // Filter to only show project manager contacts (both 'pm' and 'project_manager' roles)
-  const projectManagerContacts = allContacts.filter((contact: any) =>
-    (contact.role && (contact.role === 'project_manager' || contact.role === 'pm')) ||
-    (contact.type && (contact.type === 'project_manager' || contact.type === 'pm'))
-  );
+  // Project-manager options = the Skyeline team. Real team members live in the
+  // `users` collection (admin-listable; fails silently for non-admins). PM-
+  // tagged contacts are folded in, and the signed-in GC ("you") is always an
+  // option so there's at least yourself to assign.
+  // Role match: the canonical value is `projectManager` (camelCase) — see
+  // firestore.rules / taskDefaults — so normalize underscores and also accept
+  // pm/gc/admin/team/employee, since a GC or office team member may run a job.
+  const { user: me } = useAuth();
+  const [teamUsers, setTeamUsers] = useState<any[]>([]);
+  useEffect(() => {
+    getDocs(collection(db, 'users'))
+      .then(snap => setTeamUsers(snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }))))
+      .catch(() => setTeamUsers([]));
+  }, []);
+  const isPmRole = (v: any) =>
+    ['projectmanager', 'pm', 'gc', 'admin', 'team', 'employee']
+      .includes(String(v || '').toLowerCase().replace(/_/g, ''));
+  const projectManagerContacts = (() => {
+    const byId = new Map<string, any>();
+    const add = (c: any) => { if (c && c.id != null) byId.set(String(c.id), { ...c, id: String(c.id) }); };
+    teamUsers.filter((u: any) => isPmRole(u.role)).forEach(add);
+    allContacts.filter((c: any) => isPmRole(c.role) || isPmRole(c.type)).forEach(add);
+    if ((me as any)?.firebaseUid) {
+      const meId = String((me as any).firebaseUid);
+      byId.set(meId, { id: meId, name: `${me?.name || 'Me'} (you)`, role: me?.role });
+    }
+    return Array.from(byId.values());
+  })();
 
   // Designer contacts — only surface real designers (not subs / clients / etc.)
   const designerContacts = allContacts.filter((contact: any) =>
@@ -201,6 +226,10 @@ export function NewProjectForm({ isOpen, onClose, onProjectCreated }: NewProject
   React.useEffect(() => {
     setValue('selectedClientIds', selectedClientIds);
   }, [selectedClientIds, setValue]);
+
+  // Coordinates + parsed parts captured when the user picks an address
+  // suggestion — lets a new project start with a real map pin (buildLocation).
+  const pickedAddress = useRef<GeoResult | null>(null);
 
   const selectedProjectType = watch('projectType');
   const designerChoice = watch('designerChoice');
@@ -258,12 +287,29 @@ export function NewProjectForm({ isOpen, onClose, onProjectCreated }: NewProject
       // Stable display code: LastName + MMDDYYYY. Computed from the primary
       // (first selected) client's name and today's date so it stays human-readable.
       const projectCode = buildProjectCode(primaryClient?.name, new Date());
+      // If the address was picked from a suggestion, seed buildLocation with the
+      // exact pin + parsed parts so the jobsite map/Directions work immediately.
+      const picked = pickedAddress.current;
+      const a = picked?.address;
+      const buildLocation = picked && typeof picked.lat === 'number' && typeof picked.lng === 'number'
+        ? {
+            addressLine1: a?.line1 || data.projectAddress,
+            city: a?.city || '',
+            state: a?.state || '',
+            zipCode: a?.zip || '',
+            county: a?.county || '',
+            latitude: picked.lat,
+            longitude: picked.lng,
+            status: 'unconfirmed' as const,
+          }
+        : null;
       const projectData = {
         name: data.projectName,
         projectCode,
         clientName: finalClients.map((c: any) => c.name).join(' & '), // "Steve Gardanier & Laura Gardanier"
         clientIds: data.selectedClientIds, // Store all client IDs
         address: data.projectAddress,
+        ...(buildLocation ? { buildLocation, city: buildLocation.city, state: buildLocation.state, zip: buildLocation.zipCode } : {}),
         description: data.notes || '',
         clientEmail: primaryClient.email,
         clientPhone: primaryClient.phone || '',
@@ -363,6 +409,24 @@ export function NewProjectForm({ isOpen, onClose, onProjectCreated }: NewProject
         }
       }
 
+      // Seed the rest of the project's defaults (Gantt, task list, estimate,
+      // selections) from the designated defaults (or built-in starters) for any
+      // surface the form didn't already hand-pick. Guarded + non-fatal.
+      try {
+        const { seedProjectDefaults } = await import('@/lib/projectDefaults');
+        await seedProjectDefaults({
+          projectId: newProjectId,
+          projectName: data.projectName,
+          startDate: data.startDate,
+          fromUserId: user.id?.toString(),
+          fromUserName: user.name || '',
+          skipSchedule: !!selectedScheduleTemplateId, // form already applied a Gantt template
+          skipTasks: !!selectedTemplateId,            // form already applied a task template
+        });
+      } catch (e: any) {
+        console.warn('Failed to seed project defaults', e?.message || e);
+      }
+
       toast({
         title: 'Project Created Successfully',
         description: `${data.projectName} has been linked to ${finalClients.map((c: any) => c.name).join(' & ')}.${templateMsg}`,
@@ -396,36 +460,30 @@ export function NewProjectForm({ isOpen, onClose, onProjectCreated }: NewProject
   };
 
   const handleClientCreated = async (newClient: any) => {
-    console.log('🎯 Client created callback:', newClient);
-    
-    // Close the modal first
     setIsNewClientModalOpen(false);
-    
-    try {
-      // Refresh the contacts query to include the new client
-      await queryClient.invalidateQueries({ queryKey: ['/api/contacts'] });
-      await refetchContacts(); // Force immediate refetch and wait for completion
-      
-      // Add a small delay to ensure UI updates
-      setTimeout(() => {
-        // Add the new client to selected clients
-        const newClientIds = [...selectedClientIds, newClient.id.toString()];
-        setSelectedClientIds(newClientIds);
-        
-        toast({
-          title: 'Client Added',
-          description: `${newClient.name} has been added and selected for this project.`,
-        });
-      }, 200);
-      
-    } catch (error) {
-      console.error('Error refreshing client data:', error);
-      toast({
-        title: 'Warning',
-        description: `${newClient.name} was created but may not appear immediately. Try refreshing if needed.`,
-        variant: 'destructive',
-      });
-    }
+    if (!newClient?.id) return;
+    const id = String(newClient.id);
+
+    // Insert the new client straight into the cached contact list so it shows
+    // in the picker IMMEDIATELY — no waiting on (and not dependent on) the
+    // /api/contacts round-trip. The mutation already returns the full record
+    // (id + role:'client' + name/email), which is all the picker needs.
+    queryClient.setQueryData(['/api/contacts'], (old: any) => {
+      const list = Array.isArray(old) ? old : [];
+      if (list.some((c: any) => String(c.id) === id)) return list;
+      return [...list, { ...newClient, associatedProjects: [], tags: [] }];
+    });
+
+    // Select it for this project.
+    setSelectedClientIds(prev => (prev.includes(id) ? prev : [...prev, id]));
+    toast({
+      title: 'Client Added',
+      description: `${newClient.name} has been added and selected for this project.`,
+    });
+
+    // Reconcile with the server in the background (best-effort).
+    queryClient.invalidateQueries({ queryKey: ['/api/contacts'] });
+    refetchContacts().catch(() => { /* optimistic entry already shows it */ });
   };
 
   return (
@@ -483,10 +541,15 @@ export function NewProjectForm({ isOpen, onClose, onProjectCreated }: NewProject
             
             <div>
               <Label htmlFor="projectAddress">Project Address *</Label>
-              <Input
+              <AddressSearchInput
                 id="projectAddress"
-                {...register('projectAddress')}
-                placeholder="456 Construction St, City, State 12345"
+                value={watch('projectAddress') || ''}
+                onChange={(t) => { setValue('projectAddress', t, { shouldValidate: true }); pickedAddress.current = null; }}
+                onSelect={(r) => {
+                  setValue('projectAddress', r.label || r.address?.line1 || '', { shouldValidate: true });
+                  pickedAddress.current = r;
+                }}
+                placeholder="Start typing an address — suggestions appear"
               />
               {errors.projectAddress && (
                 <p className="text-sm text-red-600 mt-1">{errors.projectAddress.message}</p>
@@ -547,6 +610,8 @@ export function NewProjectForm({ isOpen, onClose, onProjectCreated }: NewProject
                   value={watch('assignedProjectManager')}
                   onValueChange={(value) => setValue('assignedProjectManager', value)}
                   placeholder="Select project manager"
+                  searchPlaceholder="Search team members..."
+                  emptyMessage="No team member found."
                   showTrade={false}
                 />
               </div>

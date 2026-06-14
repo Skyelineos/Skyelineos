@@ -21,6 +21,7 @@ import sgMail from '@sendgrid/mail';
 import twilio from 'twilio';
 import crypto from 'crypto';
 import { toE164, isSmsOptedOut } from '../notifications/sms';
+import { loadFlowFor, renderTemplate } from '../notifications/fireTrigger';
 
 // ───────────────────────────────────────────────────────────────────────────
 // Types
@@ -467,6 +468,13 @@ export function registerBidRequestRoute(app: Express, db: admin.firestore.Firest
       const results: Array<any> = [];
       const dispatchSuppressed = !!data.skipDispatch;
 
+      // Channel governance for direct (non-batched) sends — honor the admin's
+      // 'bid_invitation' (audience: sub) channel toggles from Settings → Triggers.
+      const inviteFlow = await loadFlowFor(db, 'bid_invitation', 'sub');
+      const inviteStep = inviteFlow.steps?.[0];
+      const allowInviteEmail = inviteFlow.enabled !== false && inviteStep?.channels?.email !== false;
+      const allowInviteSms = inviteFlow.enabled !== false && inviteStep?.channels?.sms === true;
+
       // Send to each vendor, with their unique token in the link
       for (const v of augmentedVendors) {
         if (dispatchSuppressed) {
@@ -485,7 +493,7 @@ export function registerBidRequestRoute(app: Express, db: admin.firestore.Firest
           type,
         };
 
-        if (v.email) {
+        if (v.email && allowInviteEmail) {
           if (!sendgridReady) {
             r.email = { sent: false, error: 'SendGrid not configured' };
           } else {
@@ -503,7 +511,7 @@ export function registerBidRequestRoute(app: Express, db: admin.firestore.Firest
             }
           }
         }
-        if (v.phone && twilioClient) {
+        if (v.phone && twilioClient && allowInviteSms) {
           const toNumber = toE164(v.phone);
           if (!toNumber) {
             r.sms = { sent: false, error: `Invalid phone "${v.phone}" (not E.164)` };
@@ -511,16 +519,25 @@ export function registerBidRequestRoute(app: Express, db: admin.firestore.Firest
             r.sms = { sent: false, error: 'Recipient opted out (STOP)' };
           } else {
             try {
-              await twilioClient.messages.create({
-                from: twilioFrom!,
-                to: toNumber,
-                body: buildSms(builderArgs),
-              });
+              const tpl = inviteStep?.smsBody?.trim();
+              const body = tpl
+                ? renderTemplate(tpl, {
+                    vendorName: v.vendorName,
+                    projectName: data.projectName || '',
+                    trade: data.trade || '',
+                    magicLink: link,
+                    link,
+                    dueDate: data.dueDate || '',
+                  })
+                : buildSms(builderArgs);
+              await twilioClient.messages.create({ from: twilioFrom!, to: toNumber, body });
               r.sms = { sent: true };
             } catch (e: any) {
               r.sms = { sent: false, error: e?.message || String(e) };
             }
           }
+        } else if (v.phone && twilioClient && !allowInviteSms) {
+          r.sms = { sent: false, error: 'Bid-invite SMS disabled in Settings → Triggers' };
         }
         results.push(r);
       }

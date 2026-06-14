@@ -9,7 +9,7 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { InviteToPortalButton } from '@/components/portal/InviteToPortalButton';
-import { AddressAutocomplete } from '@/components/common/AddressAutocomplete';
+import { AddressSearchInput } from '@/components/common/AddressSearchInput';
 import { MapPinPicker } from '@/components/common/MapPinPicker';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -608,7 +608,20 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
           {/* Address — full row for street, then City / State / Zip on one row */}
           <div className="sm:col-span-2">
             <Label>Job Address</Label>
-            <AddressAutocomplete value={form.jobAddress} onChange={v => set('jobAddress', v)} placeholder="—" className="placeholder:text-gray-300" />
+            <AddressSearchInput
+              value={form.jobAddress}
+              onChange={v => set('jobAddress', v)}
+              onSelect={(r) => {
+                set('jobAddress', r.address?.line1 || r.label);
+                if (r.address?.city) set('city', r.address.city);
+                if (r.address?.state) set('state', r.address.state);
+                if (r.address?.zip) set('zip', r.address.zip);
+                if (typeof r.lat === 'number') set('latitude', r.lat);
+                if (typeof r.lng === 'number') set('longitude', r.lng);
+              }}
+              placeholder="—"
+              className="placeholder:text-gray-300"
+            />
           </div>
           <div className="sm:col-span-2 grid grid-cols-6 gap-3">
             <div className="col-span-3">
@@ -938,9 +951,10 @@ function CreateProjectDialog({ client, mode, previousStage, previousStageLabel, 
           </div>
           <div>
             <Label>Job Address</Label>
-            <AddressAutocomplete
+            <AddressSearchInput
               value={form.address}
               onChange={v => set('address', v)}
+              onSelect={(r) => set('address', r.label || r.address?.line1 || '')}
               placeholder="123 Main St, Salt Lake City"
             />
           </div>
@@ -1567,17 +1581,25 @@ export default function Sales() {
     }, () => setLoading(false));
   }, []);
 
-  // Load team members for "Assigned To"
+  // Load team members for "Assigned To" — a lead can only be assigned to a
+  // Project Manager or to yourself (the signed-in admin/GC). Other roles
+  // (clients, subs, designers, generic office staff) are filtered out.
+  // Canonical PM role is `projectManager` (camelCase); accept normalized
+  // variants (project_manager / pm) too.
   useEffect(() => {
+    const isPmRole = (v: any) =>
+      ['projectmanager', 'pm'].includes(String(v || '').toLowerCase().replace(/_/g, ''));
     return onSnapshot(
       query(collection(db, 'users'), orderBy('name', 'asc')),
       snap => setTeamMembers(
         snap.docs
-          .map(d => ({ id: d.id, name: (d.data() as any).name || '', email: (d.data() as any).email || '' }))
+          .map(d => ({ id: d.id, name: (d.data() as any).name || '', email: (d.data() as any).email || '', role: (d.data() as any).role }))
           .filter(m => m.name)
+          .filter(m => isPmRole(m.role) || m.id === user?.firebaseUid)
+          .map(({ id, name, email }) => ({ id, name, email }))
       )
     );
-  }, []);
+  }, [user?.firebaseUid]);
 
   // All unique tags across clients
   const allTags = [...new Set(clients.flatMap(c => c.tags || []))].sort();

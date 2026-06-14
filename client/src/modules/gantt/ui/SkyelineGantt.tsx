@@ -17,9 +17,12 @@ import {
   eachDayOfInterval,
   eachYearOfInterval,
 } from 'date-fns';
-import { ChevronRight, ChevronDown, Plus } from 'lucide-react';
+import {
+  ChevronRight, ChevronDown, Plus, Trash2, Pencil,
+  IndentIncrease, IndentDecrease, CornerDownRight,
+} from 'lucide-react';
 import { useGantt } from '../state';
-import type { WbsTask, Zoom } from '../types';
+import type { WbsTask, Zoom, Link } from '../types';
 
 // ---- layout constants ------------------------------------------------------
 const ROW_H = 38;
@@ -145,6 +148,206 @@ function buildScale(rangeStart: Date, rangeEnd: Date, zoom: Zoom, pxPerDay: numb
   return { top, bottom };
 }
 
+// ---- WBS tree editing helpers ---------------------------------------------
+let _idSeq = 0;
+function genId(): string {
+  _idSeq += 1;
+  return `t_${Date.now().toString(36)}_${_idSeq}`;
+}
+function cloneTree(t: WbsTask[]): WbsTask[] {
+  return t.map((n) => ({ ...n, children: n.children ? cloneTree(n.children) : undefined }));
+}
+interface Ctx {
+  siblings: WbsTask[];
+  index: number;
+  parent: WbsTask | null;
+}
+function findCtx(tasks: WbsTask[], id: string, parent: WbsTask | null = null): Ctx | null {
+  for (let i = 0; i < tasks.length; i++) {
+    if (tasks[i].id === id) return { siblings: tasks, index: i, parent };
+    const ch = tasks[i].children;
+    if (ch) {
+      const r = findCtx(ch, id, tasks[i]);
+      if (r) return r;
+    }
+  }
+  return null;
+}
+function newLeaf(startISO: string, duration = 1): WbsTask {
+  const start = parseISO(startISO);
+  const end = addDays(start, Math.max(0, duration - 1));
+  return {
+    id: genId(),
+    name: '',
+    startDate: format(start, 'yyyy-MM-dd'),
+    endDate: format(end, 'yyyy-MM-dd'),
+    durationDays: duration,
+    progress: 0,
+  };
+}
+function latestEnd(tasks: WbsTask[]): string | null {
+  let latest: string | null = null;
+  const walk = (ns: WbsTask[]) =>
+    ns.forEach((n) => {
+      if (!latest || n.endDate > latest) latest = n.endDate;
+      n.children && walk(n.children);
+    });
+  walk(tasks);
+  return latest;
+}
+function renameTask(tasks: WbsTask[], id: string, name: string): WbsTask[] {
+  const t = cloneTree(tasks);
+  const c = findCtx(t, id);
+  if (c) c.siblings[c.index].name = name;
+  return t;
+}
+function setTaskDuration(tasks: WbsTask[], id: string, duration: number): WbsTask[] {
+  const t = cloneTree(tasks);
+  const c = findCtx(t, id);
+  if (c) {
+    const n = c.siblings[c.index];
+    n.durationDays = Math.max(1, duration);
+    n.endDate = format(addDays(parseISO(n.startDate), n.durationDays - 1), 'yyyy-MM-dd');
+  }
+  return t;
+}
+function addSiblingAfter(tasks: WbsTask[], id: string): { tasks: WbsTask[]; id: string } {
+  const t = cloneTree(tasks);
+  const c = findCtx(t, id);
+  const ref = c ? c.siblings[c.index] : null;
+  const leaf = newLeaf(ref ? ref.endDate : format(new Date(), 'yyyy-MM-dd'), ref?.durationDays ?? 1);
+  if (c) c.siblings.splice(c.index + 1, 0, leaf);
+  else t.push(leaf);
+  return { tasks: t, id: leaf.id };
+}
+function addChildTask(tasks: WbsTask[], parentId: string): { tasks: WbsTask[]; id: string } {
+  const t = cloneTree(tasks);
+  const c = findCtx(t, parentId);
+  if (!c) return { tasks: t, id: '' };
+  const p = c.siblings[c.index];
+  const last = p.children && p.children.length ? p.children[p.children.length - 1] : null;
+  const leaf = newLeaf(last ? last.endDate : p.startDate, 1);
+  p.children = [...(p.children || []), leaf];
+  return { tasks: t, id: leaf.id };
+}
+function addRootTask(tasks: WbsTask[]): { tasks: WbsTask[]; id: string } {
+  const leaf = newLeaf(latestEnd(tasks) || format(new Date(), 'yyyy-MM-dd'), 1);
+  return { tasks: [...cloneTree(tasks), leaf], id: leaf.id };
+}
+function removeTask(tasks: WbsTask[], id: string): WbsTask[] {
+  const t = cloneTree(tasks);
+  const c = findCtx(t, id);
+  if (c) c.siblings.splice(c.index, 1);
+  return t;
+}
+function indentTask(tasks: WbsTask[], id: string): WbsTask[] {
+  const t = cloneTree(tasks);
+  const c = findCtx(t, id);
+  if (!c || c.index === 0) return tasks; // needs a previous sibling to nest under
+  const prev = c.siblings[c.index - 1];
+  const [node] = c.siblings.splice(c.index, 1);
+  prev.children = [...(prev.children || []), node];
+  return t;
+}
+function outdentTask(tasks: WbsTask[], id: string): WbsTask[] {
+  const t = cloneTree(tasks);
+  const c = findCtx(t, id);
+  if (!c || !c.parent) return tasks; // already at root
+  const parentCtx = findCtx(t, c.parent.id);
+  if (!parentCtx) return tasks;
+  const [node] = c.siblings.splice(c.index, 1);
+  parentCtx.siblings.splice(parentCtx.index + 1, 0, node);
+  return t;
+}
+function addPredecessor(tasks: WbsTask[], targetId: string, link: Link): WbsTask[] {
+  const t = cloneTree(tasks);
+  const c = findCtx(t, targetId);
+  if (c) {
+    const n = c.siblings[c.index];
+    const preds = n.predecessors || [];
+    if (!preds.some((p) => p.sourceId === link.sourceId && p.targetId === link.targetId)) {
+      n.predecessors = [...preds, link];
+    }
+  }
+  return t;
+}
+function removePredecessor(tasks: WbsTask[], sourceId: string, targetId: string): WbsTask[] {
+  const t = cloneTree(tasks);
+  const c = findCtx(t, targetId);
+  if (c && c.siblings[c.index].predecessors) {
+    c.siblings[c.index].predecessors = c.siblings[c.index].predecessors!.filter(
+      (p) => !(p.sourceId === sourceId && p.targetId === targetId),
+    );
+  }
+  return t;
+}
+
+// Forward-schedule dependents: every leaf task that has predecessors and is NOT
+// locked (manually placed) is moved to start the day after its latest
+// predecessor finishes (+ optional lag), preserving its duration. Cascades
+// through the chain in topological order. Edges come from `links` and each
+// task's `predecessors`. Returns the input unchanged if a cycle is detected.
+function cascadeSchedule(tasks: WbsTask[], links: Link[]): WbsTask[] {
+  const t = cloneTree(tasks);
+  const byId = new Map<string, WbsTask>();
+  const walk = (ns: WbsTask[]) => ns.forEach((n) => { byId.set(n.id, n); n.children && walk(n.children); });
+  walk(t);
+
+  const seen = new Set<string>();
+  const incoming = new Map<string, { source: string; lag: number }[]>();
+  const succ = new Map<string, string[]>();
+  const indeg = new Map<string, number>();
+  const ensure = (id: string) => { if (!indeg.has(id)) indeg.set(id, 0); };
+  const addEdge = (s: string, tg: string, lag: number) => {
+    if (!byId.has(s) || !byId.has(tg)) return;
+    const k = `${s}->${tg}`;
+    if (seen.has(k)) return;
+    seen.add(k);
+    ensure(s); ensure(tg);
+    (succ.get(s) || succ.set(s, []).get(s)!).push(tg);
+    (incoming.get(tg) || incoming.set(tg, []).get(tg)!).push({ source: s, lag });
+    indeg.set(tg, (indeg.get(tg) || 0) + 1);
+  };
+  links.forEach((l) => addEdge(l.sourceId, l.targetId, l.lagDays || 0));
+  byId.forEach((n) => n.predecessors?.forEach((p) => addEdge(p.sourceId, p.targetId, p.lagDays || 0)));
+
+  // Kahn topological order.
+  const indegCopy = new Map(indeg);
+  const queue: string[] = [];
+  indeg.forEach((d, id) => { if (d === 0) queue.push(id); });
+  const order: string[] = [];
+  while (queue.length) {
+    const id = queue.shift()!;
+    order.push(id);
+    (succ.get(id) || []).forEach((tg) => {
+      indegCopy.set(tg, (indegCopy.get(tg) || 0) - 1);
+      if (indegCopy.get(tg) === 0) queue.push(tg);
+    });
+  }
+  if (order.length < indeg.size) return tasks; // cycle — leave as-is
+
+  for (const id of order) {
+    const node = byId.get(id);
+    if (!node) continue;
+    if (node.locked) continue;                          // manually edited → stays put
+    if (node.children && node.children.length) continue; // summaries are derived
+    const inc = incoming.get(id);
+    if (!inc || inc.length === 0) continue;              // no predecessor → don't move
+    let newStart: Date | null = null;
+    for (const { source, lag } of inc) {
+      const p = byId.get(source);
+      if (!p) continue;
+      const cand = addDays(parseISO(p.endDate), 1 + (lag || 0));
+      if (!newStart || cand > newStart) newStart = cand;
+    }
+    if (!newStart) continue;
+    const dur = node.durationDays ?? Math.max(1, differenceInCalendarDays(parseISO(node.endDate), parseISO(node.startDate)) + 1);
+    node.startDate = format(newStart, 'yyyy-MM-dd');
+    node.endDate = format(addDays(newStart, dur - 1), 'yyyy-MM-dd');
+  }
+  return t;
+}
+
 interface DragState {
   id: string;
   mode: 'move' | 'start' | 'end';
@@ -159,13 +362,75 @@ interface SkyelineGanttProps {
 }
 
 export const SkyelineGantt: React.FC<SkyelineGanttProps> = ({ onAddTask, onEditTask }) => {
-  const { tasks, links, zoom, showCritical, showBaseline, showWeekends, metrics, setTasks } = useGantt();
+  const { tasks, links, zoom, showCritical, showBaseline, showWeekends, metrics, setTasks, setLinks } = useGantt();
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
   const [dragOffsetDays, setDragOffsetDays] = useState(0);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draftName, setDraftName] = useState('');
+  const [linkDrag, setLinkDrag] = useState<{ originId: string; fromStart: boolean; fromX: number; fromY: number; toX: number; toY: number } | null>(null);
   const movedRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const timelineRef = useRef<HTMLDivElement>(null);
+
+  // Create / remove a finish-to-start dependency (kept in both `links` for the
+  // arrows and the target task's `predecessors` so auto-schedule respects it).
+  const createDependency = (sourceId: string, targetId: string) => {
+    if (!sourceId || !targetId || sourceId === targetId) return;
+    if (links.some((l) => l.sourceId === sourceId && l.targetId === targetId)) return;
+    const link: Link = { sourceId, targetId, type: 'FS' };
+    const newLinks = [...links, link];
+    setLinks(newLinks);
+    // Add the predecessor, then auto-position the dependent after it.
+    const withPred = addPredecessor(useGantt.getState().tasks, targetId, link);
+    setTasks(cascadeSchedule(withPred, newLinks));
+  };
+  const deleteDependency = (sourceId: string, targetId: string) => {
+    setLinks(links.filter((l) => !(l.sourceId === sourceId && l.targetId === targetId)));
+    setTasks(removePredecessor(useGantt.getState().tasks, sourceId, targetId));
+  };
+  // Local coords within the timeline body for hit-testing during a link drag.
+  const localPoint = (clientX: number, clientY: number) => {
+    const r = timelineRef.current?.getBoundingClientRect();
+    if (!r) return { x: 0, y: 0 };
+    return { x: clientX - r.left, y: clientY - r.top };
+  };
+
+  // Begin inline-editing a row's name.
+  const beginEdit = (id: string, name: string) => {
+    setEditingId(id);
+    setDraftName(name);
+    setSelectedId(id);
+  };
+  // Commit the in-progress name edit against the freshest task tree.
+  const commitName = (id: string, name: string) => {
+    setTasks(renameTask(useGantt.getState().tasks, id, name.trim() || 'Untitled task'));
+  };
+  const addRoot = () => {
+    const { tasks: next, id } = addRootTask(useGantt.getState().tasks);
+    setTasks(next);
+    beginEdit(id, '');
+  };
+  const addAfter = (afterId: string) => {
+    const { tasks: next, id } = addSiblingAfter(useGantt.getState().tasks, afterId);
+    setTasks(next);
+    beginEdit(id, '');
+  };
+  const addChild = (parentId: string) => {
+    const { tasks: next, id } = addChildTask(useGantt.getState().tasks, parentId);
+    setTasks(next);
+    if (id) beginEdit(id, '');
+  };
+  const removeRow = (id: string) => {
+    setTasks(removeTask(useGantt.getState().tasks, id));
+    setLinks(links.filter((l) => l.sourceId !== id && l.targetId !== id));
+    if (editingId === id) setEditingId(null);
+  };
+  const indent = (id: string) => setTasks(indentTask(useGantt.getState().tasks, id));
+  const outdent = (id: string) => setTasks(outdentTask(useGantt.getState().tasks, id));
+  const setDuration = (id: string, d: number) =>
+    setTasks(cascadeSchedule(setTaskDuration(useGantt.getState().tasks, id, d), links));
 
   const pxPerDay = PX_PER_DAY[zoom];
   const rows = useMemo(() => flatten(tasks, collapsed), [tasks, collapsed]);
@@ -226,14 +491,17 @@ export const SkyelineGantt: React.FC<SkyelineGanttProps> = ({ onAddTask, onEditT
     });
 
   // ---- drag handling -------------------------------------------------------
-  const findAndUpdate = (id: string, start: string, end: string) => {
+  // Commit dragged dates. A manual MOVE pins the task (locked) so it stops
+  // auto-following its predecessor; resizes just change the span. Either way we
+  // re-cascade so dependents shift after it.
+  const findAndUpdate = (id: string, start: string, end: string, lock: boolean) => {
     const update = (nodes: WbsTask[]): WbsTask[] =>
       nodes.map((n) => {
-        if (n.id === id) return { ...n, startDate: start, endDate: end };
+        if (n.id === id) return { ...n, startDate: start, endDate: end, ...(lock ? { locked: true } : {}) };
         if (n.children) return { ...n, children: update(n.children) };
         return n;
       });
-    setTasks(update(tasks));
+    setTasks(cascadeSchedule(update(useGantt.getState().tasks), links));
   };
 
   const onBarPointerDown = (
@@ -256,12 +524,29 @@ export const SkyelineGantt: React.FC<SkyelineGanttProps> = ({ onAddTask, onEditT
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
+    if (linkDrag) {
+      const p = localPoint(e.clientX, e.clientY);
+      setLinkDrag({ ...linkDrag, toX: p.x, toY: p.y });
+      return;
+    }
     if (!drag) return;
     if (Math.abs(e.clientX - drag.startX) > 3) movedRef.current = true;
     setDragOffsetDays(Math.round((e.clientX - drag.startX) / pxPerDay));
   };
 
-  const commitDrag = () => {
+  const commitDrag = (e?: React.PointerEvent) => {
+    if (linkDrag) {
+      const p = e ? localPoint(e.clientX, e.clientY) : { x: linkDrag.toX, y: linkDrag.toY };
+      const other = rows[Math.floor(p.y / ROW_H)];
+      if (other && other.task.id !== linkDrag.originId) {
+        // From the END bubble: this task finishes → other starts.
+        // From the START bubble: other finishes → this task starts.
+        if (linkDrag.fromStart) createDependency(other.task.id, linkDrag.originId);
+        else createDependency(linkDrag.originId, other.task.id);
+      }
+      setLinkDrag(null);
+      return;
+    }
     if (!drag) return;
     const delta = dragOffsetDays;
     if (delta !== 0) {
@@ -277,7 +562,7 @@ export const SkyelineGantt: React.FC<SkyelineGanttProps> = ({ onAddTask, onEditT
         en = addDays(en, delta);
         if (en < s) en = s;
       }
-      findAndUpdate(drag.id, format(s, 'yyyy-MM-dd'), format(en, 'yyyy-MM-dd'));
+      findAndUpdate(drag.id, format(s, 'yyyy-MM-dd'), format(en, 'yyyy-MM-dd'), drag.mode === 'move');
     }
     setDrag(null);
     setDragOffsetDays(0);
@@ -310,10 +595,18 @@ export const SkyelineGantt: React.FC<SkyelineGanttProps> = ({ onAddTask, onEditT
   }, [rows]);
 
   const connectors = useMemo(() => {
-    const lines: { id: string; d: string }[] = [];
-    links.forEach((l) => {
-      const si = rowIndex.get(l.sourceId);
-      const ti = rowIndex.get(l.targetId);
+    // Edge set from both `links` and each task's `predecessors`, de-duped.
+    const edges = new Map<string, { sourceId: string; targetId: string }>();
+    links.forEach((l) => edges.set(`${l.sourceId}->${l.targetId}`, { sourceId: l.sourceId, targetId: l.targetId }));
+    rows.forEach((r) =>
+      r.task.predecessors?.forEach((p) =>
+        edges.set(`${p.sourceId}->${p.targetId}`, { sourceId: p.sourceId, targetId: p.targetId }),
+      ),
+    );
+    const lines: { id: string; d: string; sourceId: string; targetId: string }[] = [];
+    edges.forEach((e) => {
+      const si = rowIndex.get(e.sourceId);
+      const ti = rowIndex.get(e.targetId);
       if (si === undefined || ti === undefined) return;
       const src = rows[si];
       const tgt = rows[ti];
@@ -323,8 +616,10 @@ export const SkyelineGantt: React.FC<SkyelineGanttProps> = ({ onAddTask, onEditT
       const y2 = ti * ROW_H + ROW_H / 2;
       const midX = Math.max(x1 + 8, x2 - 8);
       lines.push({
-        id: `${l.sourceId}-${l.targetId}`,
+        id: `${e.sourceId}-${e.targetId}`,
         d: `M ${x1} ${y1} H ${midX} V ${y2} H ${x2}`,
+        sourceId: e.sourceId,
+        targetId: e.targetId,
       });
     });
     return lines;
@@ -349,13 +644,13 @@ export const SkyelineGantt: React.FC<SkyelineGanttProps> = ({ onAddTask, onEditT
   if (rows.length === 0) {
     return (
       <div className="h-full flex flex-col items-center justify-center text-gray-500 gap-3">
-        <p className="text-sm">No schedule yet.</p>
+        <p className="text-sm">No activities yet — start building the schedule.</p>
         <button
-          onClick={onAddTask}
+          onClick={addRoot}
           className="inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium text-white"
           style={{ backgroundColor: BRAND_BLACK }}
         >
-          <Plus className="h-4 w-4" /> Add first task
+          <Plus className="h-4 w-4" /> Add first activity
         </button>
       </div>
     );
@@ -366,8 +661,8 @@ export const SkyelineGantt: React.FC<SkyelineGanttProps> = ({ onAddTask, onEditT
       ref={scrollRef}
       className="relative h-full w-full overflow-auto bg-white select-none"
       onPointerMove={onPointerMove}
-      onPointerUp={commitDrag}
-      onPointerLeave={() => drag && commitDrag()}
+      onPointerUp={(e) => commitDrag(e)}
+      onPointerLeave={() => (drag || linkDrag) && commitDrag()}
     >
       <div style={{ width: LEFT_W + timelineW, position: 'relative' }}>
         {/* ===== Header row (sticky top) ===== */}
@@ -408,39 +703,35 @@ export const SkyelineGantt: React.FC<SkyelineGanttProps> = ({ onAddTask, onEditT
         </div>
 
         {/* ===== Body ===== */}
-        <div className="flex" style={{ height: bodyH }}>
-          {/* left task panel (sticky left) */}
+        <div className="flex items-start" style={{ height: bodyH + ROW_H }}>
+          {/* left task panel (sticky left) — editable WBS grid */}
           <div
             className="sticky left-0 z-20 border-r bg-white"
             style={{ width: LEFT_W }}
           >
-            {rows.map((row, i) => {
+            {rows.map((row) => {
               const dotColor = row.isMilestone ? BRAND_GOLD : paletteFor(row).bar;
+              const isEditing = editingId === row.task.id;
+              const dur =
+                row.task.durationDays ??
+                Math.max(1, differenceInCalendarDays(row.end, row.start) + 1);
               return (
                 <div
                   key={row.task.id}
-                  className={`flex items-center gap-1.5 border-b border-gray-50 pr-2 ${
+                  className={`group/row relative flex items-center gap-1.5 border-b border-gray-50 pr-1 ${
                     selectedId === row.task.id ? 'bg-amber-50' : 'hover:bg-gray-50'
                   }`}
-                  style={{ height: ROW_H, paddingLeft: 8 + row.depth * 16 }}
-                  onClick={() => {
-                    setSelectedId(row.task.id);
-                    onEditTask?.(row.task);
-                  }}
+                  style={{ height: ROW_H, paddingLeft: 6 + row.depth * 16 }}
+                  onClick={() => setSelectedId(row.task.id)}
                 >
                   {row.isParent ? (
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleCollapse(row.task.id);
-                      }}
-                      className="flex h-4 w-4 items-center justify-center text-gray-400 hover:text-gray-700"
+                      onClick={(e) => { e.stopPropagation(); toggleCollapse(row.task.id); }}
+                      className="flex h-4 w-4 min-h-0 min-w-0 shrink-0 items-center justify-center text-gray-400 hover:text-gray-700"
                     >
-                      {collapsed.has(row.task.id) ? (
-                        <ChevronRight className="h-3.5 w-3.5" />
-                      ) : (
-                        <ChevronDown className="h-3.5 w-3.5" />
-                      )}
+                      {collapsed.has(row.task.id)
+                        ? <ChevronRight className="h-3.5 w-3.5" />
+                        : <ChevronDown className="h-3.5 w-3.5" />}
                     </button>
                   ) : (
                     <span
@@ -452,21 +743,93 @@ export const SkyelineGantt: React.FC<SkyelineGanttProps> = ({ onAddTask, onEditT
                       }}
                     />
                   )}
-                  <span
-                    className={`truncate text-sm ${
-                      row.isParent ? 'font-semibold text-gray-900' : 'text-gray-700'
-                    }`}
-                    title={row.task.name}
-                  >
-                    {row.task.name}
-                  </span>
+
+                  {isEditing ? (
+                    <input
+                      autoFocus
+                      value={draftName}
+                      onChange={(e) => setDraftName(e.target.value)}
+                      onClick={(e) => e.stopPropagation()}
+                      onBlur={() => { commitName(row.task.id, draftName); setEditingId(null); }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          commitName(row.task.id, draftName);
+                          addAfter(row.task.id); // rapid entry: commit + open next row
+                        } else if (e.key === 'Tab') {
+                          e.preventDefault();
+                          commitName(row.task.id, draftName);
+                          if (e.shiftKey) outdent(row.task.id); else indent(row.task.id);
+                        } else if (e.key === 'Escape') {
+                          setEditingId(null);
+                        } else if (e.key === 'Backspace' && draftName === '') {
+                          e.preventDefault();
+                          removeRow(row.task.id);
+                        }
+                      }}
+                      className="min-h-0 min-w-0 flex-1 rounded border border-amber-300 bg-white px-1 py-0.5 text-sm outline-none focus:ring-1 focus:ring-amber-300"
+                      placeholder="Activity name…"
+                    />
+                  ) : (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); beginEdit(row.task.id, row.task.name); }}
+                      className={`min-h-0 min-w-0 flex-1 truncate text-left text-sm ${
+                        row.isParent ? 'font-semibold text-gray-900' : 'text-gray-700'
+                      }`}
+                      title={row.task.name || 'Untitled'}
+                    >
+                      {row.task.name || <span className="text-gray-400 italic">Untitled</span>}
+                    </button>
+                  )}
+
+                  {/* duration cell */}
+                  {!row.isParent && !row.isMilestone && (
+                    <input
+                      type="number"
+                      min={1}
+                      value={dur}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => setDuration(row.task.id, parseInt(e.target.value) || 1)}
+                      className="w-9 min-h-0 shrink-0 rounded border border-transparent bg-transparent px-0.5 text-right text-xs text-gray-500 hover:border-gray-200 focus:border-amber-300 focus:outline-none"
+                      title="Duration (days)"
+                    />
+                  )}
+
+                  {/* hover row actions — absolutely positioned so they never
+                      squeeze the name column. */}
+                  <div className="absolute right-1 top-1/2 hidden -translate-y-1/2 items-center gap-0.5 rounded-md border border-gray-100 bg-white/95 px-0.5 shadow-sm group-hover/row:flex">
+                    {[
+                      { t: 'Add sub-task', I: CornerDownRight, on: () => addChild(row.task.id), c: 'hover:text-gray-700' },
+                      { t: 'Outdent', I: IndentDecrease, on: () => outdent(row.task.id), c: 'hover:text-gray-700' },
+                      { t: 'Indent', I: IndentIncrease, on: () => indent(row.task.id), c: 'hover:text-gray-700' },
+                      { t: 'Details', I: Pencil, on: () => onEditTask?.(row.task), c: 'hover:text-gray-700' },
+                      { t: 'Delete', I: Trash2, on: () => removeRow(row.task.id), c: 'hover:text-red-600' },
+                    ].map(({ t, I, on, c }) => (
+                      <button
+                        key={t}
+                        title={t}
+                        onClick={(e) => { e.stopPropagation(); on(); }}
+                        className={`flex h-6 w-6 min-h-0 min-w-0 items-center justify-center rounded text-gray-400 hover:bg-gray-100 ${c}`}
+                      >
+                        <I className="h-3.5 w-3.5" />
+                      </button>
+                    ))}
+                  </div>
                 </div>
               );
             })}
+            {/* add-activity row */}
+            <button
+              onClick={addRoot}
+              className="flex w-full min-h-0 items-center gap-1.5 px-3 text-sm text-gray-400 hover:bg-gray-50 hover:text-gray-700"
+              style={{ height: ROW_H }}
+            >
+              <Plus className="h-4 w-4" /> Add activity
+            </button>
           </div>
 
           {/* timeline body */}
-          <div className="relative" style={{ width: timelineW, height: bodyH }}>
+          <div ref={timelineRef} className="relative" style={{ width: timelineW, height: bodyH }}>
             {/* vertical month/week gridlines */}
             {scale.top.map((s, i) => (
               <div
@@ -520,10 +883,41 @@ export const SkyelineGantt: React.FC<SkyelineGanttProps> = ({ onAddTask, onEditT
                   key={c.id}
                   d={c.d}
                   fill="none"
-                  stroke="#cbd5e1"
+                  stroke="#94a3b8"
                   strokeWidth={1.5}
                   markerEnd="url(#sl-arrow)"
                 />
+              ))}
+              {/* live ghost link while dragging from a connection bubble */}
+              {linkDrag && (
+                <path
+                  d={`M ${linkDrag.fromX} ${linkDrag.fromY} L ${linkDrag.toX} ${linkDrag.toY}`}
+                  fill="none"
+                  stroke="#C9A96E"
+                  strokeWidth={2}
+                  strokeDasharray="4 3"
+                />
+              )}
+            </svg>
+
+            {/* clickable layer to delete a dependency (separate so it can
+                receive pointer events; the arrows layer stays non-interactive) */}
+            <svg className="absolute left-0 top-0" width={timelineW} height={bodyH} style={{ pointerEvents: 'none' }}>
+              {connectors.map((c) => (
+                <path
+                  key={`hit-${c.id}`}
+                  d={c.d}
+                  fill="none"
+                  stroke="transparent"
+                  strokeWidth={9}
+                  style={{ pointerEvents: 'stroke', cursor: 'pointer' }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (confirm('Remove this dependency?')) deleteDependency(c.sourceId, c.targetId);
+                  }}
+                >
+                  <title>Click to remove dependency</title>
+                </path>
               ))}
             </svg>
 
@@ -648,6 +1042,33 @@ export const SkyelineGantt: React.FC<SkyelineGanttProps> = ({ onAddTask, onEditT
                     className="absolute right-0 top-0 h-full w-1.5 cursor-ew-resize opacity-0 group-hover:opacity-100"
                     style={{ background: 'rgba(255,255,255,0.5)' }}
                     onPointerDown={(e) => onBarPointerDown(e, row, 'end')}
+                  />
+                  {/* dependency connection bubbles — one on each end. Drag
+                      onto another activity to link them (front = this depends
+                      on that; back = that depends on this). */}
+                  <div
+                    title="Drag onto another activity — this task will follow it"
+                    className="absolute top-1/2 z-20 h-3 w-3 -translate-y-1/2 cursor-crosshair rounded-full border-2 bg-white opacity-0 group-hover:opacity-100"
+                    style={{ left: -7, borderColor: '#C9A96E' }}
+                    onPointerDown={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      const fx = left;
+                      const fy = i * ROW_H + ROW_H / 2;
+                      setLinkDrag({ originId: row.task.id, fromStart: true, fromX: fx, fromY: fy, toX: fx, toY: fy });
+                    }}
+                  />
+                  <div
+                    title="Drag onto another activity — it will follow this task"
+                    className="absolute top-1/2 z-20 h-3 w-3 -translate-y-1/2 cursor-crosshair rounded-full border-2 bg-white opacity-0 group-hover:opacity-100"
+                    style={{ right: -7, borderColor: '#C9A96E' }}
+                    onPointerDown={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      const fx = left + width;
+                      const fy = i * ROW_H + ROW_H / 2;
+                      setLinkDrag({ originId: row.task.id, fromStart: false, fromX: fx, fromY: fy, toX: fx, toY: fy });
+                    }}
                   />
                   {/* label to the right */}
                   <span

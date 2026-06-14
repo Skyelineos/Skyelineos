@@ -12,6 +12,7 @@ import { useEffect, useRef, useState } from 'react';
 import type maplibregl from 'maplibre-gl';
 import { Button } from '@/components/ui/button';
 import { Navigation, Satellite, Map as MapIcon, Crosshair, X } from 'lucide-react';
+import { placesAutocomplete, placeDetails, newSessionToken } from '@/lib/places';
 
 const STREET_STYLE = 'https://tiles.openfreemap.org/styles/liberty';
 const SATELLITE_STYLE: any = {
@@ -39,19 +40,15 @@ interface Props {
   className?: string;
 }
 
-/** Best-effort forward geocode via OSM Nominatim. No API key; low volume only. */
+/** Best-effort forward geocode via the Google Places proxy (key stays
+ *  server-side). Returns [lng, lat]. Null if Places is off — manual drop still
+ *  works. */
 async function geocode(address: string): Promise<[number, number] | null> {
-  try {
-    const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=us&q=${encodeURIComponent(address)}`;
-    const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
-    if (!res.ok) return null;
-    const data = await res.json();
-    if (Array.isArray(data) && data[0]?.lat && data[0]?.lon) {
-      return [parseFloat(data[0].lon), parseFloat(data[0].lat)];
-    }
-  } catch {
-    /* geocode is a convenience — manual drop always works */
-  }
+  const token = newSessionToken();
+  const preds = await placesAutocomplete(address, token);
+  if (!preds || !preds[0]) return null;
+  const d = await placeDetails(preds[0].placeId, token);
+  if (d && typeof d.lat === 'number' && typeof d.lng === 'number') return [d.lng, d.lat];
   return null;
 }
 

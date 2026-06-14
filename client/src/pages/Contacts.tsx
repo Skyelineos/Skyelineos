@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { contactsWithEmail, confirmDuplicateEmail } from '@/lib/contacts/duplicateEmail';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -229,6 +230,15 @@ export default function Contacts() {
       return;
     }
 
+    // Soft duplicate-email warning — contacts that share an email can't each
+    // get their own portal login (Firebase Auth is one account per email).
+    if (newContactFormData.email.trim()) {
+      const dupes = await contactsWithEmail(newContactFormData.email);
+      if (dupes.length > 0 && !confirmDuplicateEmail(newContactFormData.email.trim(), dupes)) {
+        return;
+      }
+    }
+
     // Optimistic UX: close the modal immediately so the user isn't stuck
     // watching a spinner. The write keeps running in the background and we
     // toast either success or failure once it resolves.
@@ -256,6 +266,9 @@ export default function Contacts() {
           trades: [],
           isActive: true,
           salesClientId: clientRef.id,
+          // Record the portal-invite choice. Clients are NOT auto-invited by
+          // the backend — the invite is opt-in (sent below when checked).
+          portalInviteOptIn: formSnapshot.sendInvite,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         });
@@ -278,6 +291,25 @@ export default function Contacts() {
           title: 'Contact added',
           description: `Client created — also placed in Sales at "${stageLabel}".`,
         });
+
+        // Portal invite is opt-in for clients: only send when the box is
+        // checked. Unready leads just sit in the pipeline for nurture.
+        if (formSnapshot.sendInvite && formSnapshot.email) {
+          try {
+            const { sendPortalInviteEmail } = await import('@/lib/portalInvite');
+            const { templateName } = await sendPortalInviteEmail({
+              contactId: contactRef.id,
+              email: formSnapshot.email,
+              role: 'client',
+              firstName: formSnapshot.firstName,
+              invitedBy: user?.email || '',
+              preferStage: 'lead',
+            });
+            toast({ title: 'Portal invite sent', description: `Emailed “${templateName}” to ${formSnapshot.email}.` });
+          } catch (e: any) {
+            toast({ title: 'Invite not sent', description: e?.message || '', variant: 'destructive' });
+          }
+        }
       } else {
         const fullName = `${formSnapshot.firstName} ${formSnapshot.lastName}`.trim();
         const newRef = await addDoc(collection(db, 'contacts'), {
@@ -296,17 +328,19 @@ export default function Contacts() {
         });
         toast({ title: 'Contact added', description: `${fullName} added to contacts.` });
         if (formSnapshot.sendInvite && formSnapshot.email) {
-          // Fire-and-forget invite — opens the user's mail client.
-          const { createPortalInvite, openInviteMail } = await import('@/lib/portalInvite');
+          // Send a real portal-invite email (SendGrid) using the default
+          // template for a new contact. No mail client involved.
+          const { sendPortalInviteEmail } = await import('@/lib/portalInvite');
           try {
-            const token = await createPortalInvite({
+            const { templateName } = await sendPortalInviteEmail({
               contactId: newRef.id,
               email: formSnapshot.email,
               role: validRole,
               firstName: formSnapshot.firstName,
               invitedBy: user?.email || '',
+              preferStage: 'lead',
             });
-            openInviteMail({ email: formSnapshot.email, firstName: formSnapshot.firstName, token });
+            toast({ title: 'Portal invite sent', description: `Emailed “${templateName}” to ${formSnapshot.email}.` });
           } catch (e: any) {
             toast({ title: 'Invite not sent', description: e?.message || '', variant: 'destructive' });
           }
@@ -1006,9 +1040,9 @@ export default function Contacts() {
                       className="mt-1"
                     />
                     <div className="text-sm">
-                      <p className="font-medium text-amber-900">Send portal invite after saving</p>
+                      <p className="font-medium text-amber-900">Send portal login invite now</p>
                       <p className="text-xs text-amber-700/80">
-                        Opens your email with a pre-filled sign-up link. When they register, their account auto-links to this contact.
+                        Emails them a sign-up link to create their portal account. Leave unchecked for leads you're still nurturing — you can invite them later from the contact or project.
                       </p>
                     </div>
                   </label>

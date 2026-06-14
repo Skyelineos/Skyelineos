@@ -3,6 +3,7 @@ import { Link } from 'wouter';
 import { collection, query, where, onSnapshot, orderBy, limit } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
+import { useRoleAccess } from '@/hooks/useRoleAccess';
 import { TodaySection, TodayRow, greeting, todayLabel } from './TodaySection';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -30,6 +31,13 @@ const sevenDaysYMD = ymd(sevenDays);
 
 export function GCTodayFeed() {
   const { user } = useAuth();
+  // Project managers are blocked from financial data. Bills + Draws tiles
+  // and sections hide for them; the rest of the feed (tasks, notifs,
+  // projects, hot/new leads) stays visible. Firestore rules also block the
+  // underlying reads, so even if a render leaked through, the snapshot
+  // would return empty.
+  const { canAccessFinancials } = useRoleAccess();
+  const showFinancials = canAccessFinancials();
   const [tasksToday, setTasksToday] = useState<any[]>([]);
   const [billsDueWeek, setBillsDueWeek] = useState<any[]>([]);
   const [walkthroughsOpen, setWalkthroughsOpen] = useState<any[]>([]);
@@ -54,8 +62,11 @@ export function GCTodayFeed() {
     }, () => {});
   }, []);
 
-  // Bills due in next 7 days, unpaid
+  // Bills due in next 7 days, unpaid. Gated on financial access — PMs
+  // won't even subscribe (rules would block read anyway, but skipping
+  // saves a roundtrip and avoids permission-denied warnings in console).
   useEffect(() => {
+    if (!showFinancials) { setBillsDueWeek([]); return; }
     const q = query(
       collection(db, 'financials'),
       where('type', '==', 'bill'),
@@ -67,7 +78,7 @@ export function GCTodayFeed() {
       const items = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
       setBillsDueWeek(items.filter(b => !b.dueDate || b.dueDate <= sevenDaysYMD).slice(0, 8));
     }, () => {});
-  }, []);
+  }, [showFinancials]);
 
   // Open walkthroughs across all projects (collectionGroup)
   useEffect(() => {
@@ -95,8 +106,9 @@ export function GCTodayFeed() {
     }, () => {});
   }, [user]);
 
-  // Draws — pending status, by due date soonest
+  // Draws — pending status, by due date soonest. Gated on financial access.
   useEffect(() => {
+    if (!showFinancials) { setDrawsPending([]); return; }
     // Draws live in projects/{id}/draws — collectionGroup query
     const q = query(
       collection(db, 'draws'),
@@ -107,7 +119,7 @@ export function GCTodayFeed() {
     return onSnapshot(q, snap => {
       setDrawsPending(snap.docs.map(d => ({ id: d.id, ...d.data() } as any)));
     }, () => {});
-  }, []);
+  }, [showFinancials]);
 
   // High-priority leads created or updated in the past 7 days. Anchors the
   // GC's "what's hot in the pipeline" attention.
@@ -196,8 +208,9 @@ export function GCTodayFeed() {
         <p className="text-sm text-gray-500">{todayLabel()}</p>
       </div>
 
-      {/* Quick stats strip — each tile drills into its detail page. */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      {/* Quick stats strip — each tile drills into its detail page.
+          Bills + Draws tiles hide for PMs (no financial access). */}
+      <div className={`grid grid-cols-2 ${showFinancials ? 'md:grid-cols-4' : 'md:grid-cols-2'} gap-3`}>
         <Stat
           icon={<ClipboardList className="w-4 h-4" />}
           label="Tasks today"
@@ -205,13 +218,15 @@ export function GCTodayFeed() {
           color={tasksToday.length > 5 ? 'text-orange-600' : 'text-gray-900'}
           href="/tasks"
         />
-        <Stat
-          icon={<DollarSign className="w-4 h-4" />}
-          label="Bills this week"
-          value={`$${(totalBillsDue / 1000).toFixed(1)}k`}
-          sublabel={`${billsDueWeek.length} bills`}
-          href="/bills"
-        />
+        {showFinancials && (
+          <Stat
+            icon={<DollarSign className="w-4 h-4" />}
+            label="Bills this week"
+            value={`$${(totalBillsDue / 1000).toFixed(1)}k`}
+            sublabel={`${billsDueWeek.length} bills`}
+            href="/bills"
+          />
+        )}
         <Stat
           icon={<MessageSquare className="w-4 h-4" />}
           label="Unread notifs"
@@ -222,13 +237,15 @@ export function GCTodayFeed() {
         {/* TODO: no dedicated draws tab yet — point at /financials/payments
             (closest existing surface) until a Draws tab lands. Audit doc
             #5 (Financials → Reports tab) is the parent of this gap. */}
-        <Stat
-          icon={<Wallet className="w-4 h-4" />}
-          label="Draws pending"
-          value={drawsPending.length}
-          color={drawsPending.length > 0 ? 'text-amber-600' : 'text-gray-900'}
-          href="/financials/payments"
-        />
+        {showFinancials && (
+          <Stat
+            icon={<Wallet className="w-4 h-4" />}
+            label="Draws pending"
+            value={drawsPending.length}
+            color={drawsPending.length > 0 ? 'text-amber-600' : 'text-gray-900'}
+            href="/financials/payments"
+          />
+        )}
       </div>
 
       {/* New leads — everything that came in over the past 7 days, regardless
@@ -318,29 +335,31 @@ export function GCTodayFeed() {
           ))}
         </TodaySection>
 
-        {/* Bills due */}
-        <TodaySection
-          title="Bills due this week"
-          count={billsDueWeek.length}
-          icon={<DollarSign className="w-4 h-4" />}
-          emptyState="No bills due in the next 7 days."
-          viewAllHref="/finance"
-        >
-          {billsDueWeek.map(b => (
-            <TodayRow
-              key={b.id}
-              primary={<span className="font-medium">{b.vendor || 'Unknown vendor'}</span>}
-              secondary={b.description || b.invoiceNumber || ''}
-              meta={
-                <span className="font-mono">
-                  ${(b.amount || 0).toLocaleString()}
-                  {b.dueDate && <span className="text-gray-400 ml-1.5">· {b.dueDate}</span>}
-                </span>
-              }
-              href="/finance"
-            />
-          ))}
-        </TodaySection>
+        {/* Bills due — hidden for PM (no financial access). */}
+        {showFinancials && (
+          <TodaySection
+            title="Bills due this week"
+            count={billsDueWeek.length}
+            icon={<DollarSign className="w-4 h-4" />}
+            emptyState="No bills due in the next 7 days."
+            viewAllHref="/finance"
+          >
+            {billsDueWeek.map(b => (
+              <TodayRow
+                key={b.id}
+                primary={<span className="font-medium">{b.vendor || 'Unknown vendor'}</span>}
+                secondary={b.description || b.invoiceNumber || ''}
+                meta={
+                  <span className="font-mono">
+                    ${(b.amount || 0).toLocaleString()}
+                    {b.dueDate && <span className="text-gray-400 ml-1.5">· {b.dueDate}</span>}
+                  </span>
+                }
+                href="/finance"
+              />
+            ))}
+          </TodaySection>
+        )}
 
         {/* Notifications */}
         <TodaySection
@@ -361,29 +380,31 @@ export function GCTodayFeed() {
           ))}
         </TodaySection>
 
-        {/* Draws pending */}
-        <TodaySection
-          title="Draws pending release"
-          count={drawsPending.length}
-          icon={<Wallet className="w-4 h-4" />}
-          emptyState="No draws waiting."
-          viewAllHref="/finance"
-        >
-          {drawsPending.slice(0, 5).map(d => (
-            <TodayRow
-              key={d.id}
-              primary={<span className="font-medium">{d.milestone || `Draw ${d.drawNumber || ''}`}</span>}
-              secondary={d.projectName || ''}
-              meta={
-                <span className="font-mono">
-                  ${(d.amount || 0).toLocaleString()}
-                  {d.dueDate && <span className="text-gray-400 ml-1.5">· {d.dueDate}</span>}
-                </span>
-              }
-              href="/finance"
-            />
-          ))}
-        </TodaySection>
+        {/* Draws pending — hidden for PM (no financial access). */}
+        {showFinancials && (
+          <TodaySection
+            title="Draws pending release"
+            count={drawsPending.length}
+            icon={<Wallet className="w-4 h-4" />}
+            emptyState="No draws waiting."
+            viewAllHref="/finance"
+          >
+            {drawsPending.slice(0, 5).map(d => (
+              <TodayRow
+                key={d.id}
+                primary={<span className="font-medium">{d.milestone || `Draw ${d.drawNumber || ''}`}</span>}
+                secondary={d.projectName || ''}
+                meta={
+                  <span className="font-mono">
+                    ${(d.amount || 0).toLocaleString()}
+                    {d.dueDate && <span className="text-gray-400 ml-1.5">· {d.dueDate}</span>}
+                  </span>
+                }
+                href="/finance"
+              />
+            ))}
+          </TodaySection>
+        )}
 
         {/* Active projects — full width */}
         <div className="lg:col-span-2">

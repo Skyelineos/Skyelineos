@@ -1,15 +1,24 @@
-// Address search field for the jobsite "Set pin" flow. As you type it shows
-// suggestions from (a) the database of addresses Skyeline has already used and
-// (b) live OpenStreetMap (Nominatim) geocoding — each carrying coordinates so
-// picking one drops the map pin exactly. It also nudges the pin to the best
-// match as you type, so the map tracks what you've entered so far.
+// Address search for the jobsite "Set pin" flow. As you type it shows
+// suggestions from two sources:
+//   • Google Places (live, high-quality US address autocomplete) — proxied
+//     through our Cloud Function so the Maps API key never reaches the browser.
+//     Picking one drops the map pin on exact coordinates and fills the address
+//     fields.
+//   • Saved addresses (instant, offline) — addresses Skyeline has already used,
+//     pulled from the clients/projects collections. Used as a fallback and a
+//     fast path for repeat job sites.
 //
-// No API key. Nominatim is rate-limited (~1 req/sec) so live lookups are
-// debounced; the DB suggestions are instant and work offline.
+// If Places isn't configured (or the user is offline) the field degrades
+// gracefully to saved-address suggestions only.
+
 import { useEffect, useRef, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { MapPin, Loader2, Database } from 'lucide-react';
 import { loadKnownAddresses } from './AddressAutocomplete';
+import {
+  placesAutocomplete, placeDetails, newSessionToken,
+  type PlacePrediction,
+} from '@/lib/places';
 
 export interface AddressParts {
   line1?: string;
@@ -25,56 +34,14 @@ export interface GeoResult {
   address?: AddressParts;
 }
 
-// Full state-name → USPS abbreviation so geocoded results match how the rest
-// of the app stores state (two-letter).
-const US_STATE_ABBR: Record<string, string> = {
-  Alabama: 'AL', Alaska: 'AK', Arizona: 'AZ', Arkansas: 'AR', California: 'CA',
-  Colorado: 'CO', Connecticut: 'CT', Delaware: 'DE', Florida: 'FL', Georgia: 'GA',
-  Hawaii: 'HI', Idaho: 'ID', Illinois: 'IL', Indiana: 'IN', Iowa: 'IA',
-  Kansas: 'KS', Kentucky: 'KY', Louisiana: 'LA', Maine: 'ME', Maryland: 'MD',
-  Massachusetts: 'MA', Michigan: 'MI', Minnesota: 'MN', Mississippi: 'MS', Missouri: 'MO',
-  Montana: 'MT', Nebraska: 'NE', Nevada: 'NV', 'New Hampshire': 'NH', 'New Jersey': 'NJ',
-  'New Mexico': 'NM', 'New York': 'NY', 'North Carolina': 'NC', 'North Dakota': 'ND', Ohio: 'OH',
-  Oklahoma: 'OK', Oregon: 'OR', Pennsylvania: 'PA', 'Rhode Island': 'RI', 'South Carolina': 'SC',
-  'South Dakota': 'SD', Tennessee: 'TN', Texas: 'TX', Utah: 'UT', Vermont: 'VT',
-  Virginia: 'VA', Washington: 'WA', 'West Virginia': 'WV', Wisconsin: 'WI', Wyoming: 'WY',
-};
-const stateAbbr = (s?: string) => (s ? US_STATE_ABBR[s] || s : undefined);
-
-async function nominatimSearch(q: string, signal?: AbortSignal): Promise<GeoResult[]> {
-  try {
-    const url =
-      `https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=5&countrycodes=us&q=${encodeURIComponent(q)}`;
-    const res = await fetch(url, { headers: { Accept: 'application/json' }, signal });
-    if (!res.ok) return [];
-    const data = await res.json();
-    return (Array.isArray(data) ? data : []).map((d: any) => {
-      const a = d.address || {};
-      const line1 = [a.house_number, a.road].filter(Boolean).join(' ');
-      return {
-        label: d.display_name as string,
-        lat: parseFloat(d.lat),
-        lng: parseFloat(d.lon),
-        address: {
-          line1: line1 || undefined,
-          city: a.city || a.town || a.village || a.hamlet || a.suburb,
-          state: stateAbbr(a.state),
-          zip: a.postcode,
-          county: a.county,
-        },
-      } as GeoResult;
-    });
-  } catch {
-    return []; // live geocoding is a convenience; DB suggestions + manual drop still work
-  }
-}
-
 interface Props {
   value: string;
   onChange: (text: string) => void;
   /** A suggestion was explicitly chosen — commit full address + coordinates. */
   onSelect: (r: GeoResult) => void;
-  /** The best match as the user types — move the pin/map without rewriting text. */
+  /** Reserved for future "nudge the pin as you type" behavior. Currently the
+   *  pin is placed only on an explicit pick (precise, no jumping) so this is
+   *  unused — kept for call-site compatibility. */
   onPreview?: (r: GeoResult) => void;
   id?: string;
   placeholder?: string;
@@ -83,21 +50,23 @@ interface Props {
 
 interface Row {
   key: string;
-  label: string;
-  source: 'db' | 'geo';
-  geo?: GeoResult;
+  primary: string;
+  secondary?: string;
+  source: 'db' | 'place';
+  placeId?: string;
   dbText?: string;
 }
 
-export function AddressSearchInput({ value, onChange, onSelect, onPreview, id, placeholder, className }: Props) {
+export function AddressSearchInput({ value, onChange, onSelect, id, placeholder, className }: Props) {
   const [known, setKnown] = useState<string[]>([]);
-  const [geo, setGeo] = useState<GeoResult[]>([]);
+  const [places, setPlaces] = useState<PlacePrediction[]>([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(-1);
   const wrapRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
-  const previewedRef = useRef<string>('');
+  // One Places billing session per "type → pick" sequence; rotated after a pick.
+  const sessionRef = useRef<string>(newSessionToken());
 
   useEffect(() => {
     let cancelled = false;
@@ -116,24 +85,20 @@ export function AddressSearchInput({ value, onChange, onSelect, onPreview, id, p
   const q = value.trim();
   const ql = q.toLowerCase();
 
-  // Debounced live geocoding once the query looks specific enough.
+  // Debounced live Places autocomplete once the query looks specific enough.
   useEffect(() => {
-    if (q.length < 5) { setGeo([]); setLoading(false); return; }
+    if (q.length < 3) { setPlaces([]); setLoading(false); return; }
     setLoading(true);
     const handle = setTimeout(async () => {
       abortRef.current?.abort();
       const ctrl = new AbortController();
       abortRef.current = ctrl;
-      const results = await nominatimSearch(q, ctrl.signal);
-      setGeo(results);
+      const results = await placesAutocomplete(q, sessionRef.current, ctrl.signal);
+      if (ctrl.signal.aborted) return;
+      // null = Places unavailable → leave the (empty) list; DB rows still show.
+      setPlaces(results || []);
       setLoading(false);
-      // Nudge the pin to the top match (only once per distinct query, and only
-      // when the text has a number so we don't jump on partial city names).
-      if (results[0] && onPreview && /\d/.test(q) && previewedRef.current !== q) {
-        previewedRef.current = q;
-        onPreview(results[0]);
-      }
-    }, 600);
+    }, 300);
     return () => clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q]);
@@ -141,24 +106,41 @@ export function AddressSearchInput({ value, onChange, onSelect, onPreview, id, p
   const dbMatches: Row[] = ql.length >= 2
     ? known
         .filter((a) => a.toLowerCase().includes(ql) && a.toLowerCase() !== ql)
-        .slice(0, 4)
-        .map((a) => ({ key: `db:${a}`, label: a, source: 'db', dbText: a }))
+        .slice(0, 3)
+        .map((a) => ({ key: `db:${a}`, primary: a, source: 'db', dbText: a }))
     : [];
-  const geoRows: Row[] = geo.map((g, i) => ({ key: `geo:${i}:${g.label}`, label: g.label, source: 'geo', geo: g }));
-  const rows: Row[] = [...dbMatches, ...geoRows];
+  const placeRows: Row[] = places.map((p) => ({
+    key: `place:${p.placeId}`,
+    primary: p.primaryText || p.description,
+    secondary: p.secondaryText,
+    source: 'place',
+    placeId: p.placeId,
+  }));
+  const rows: Row[] = [...placeRows, ...dbMatches];
+
+  const commitDetails = async (placeId: string, fallbackLabel: string) => {
+    const d = await placeDetails(placeId, sessionRef.current);
+    sessionRef.current = newSessionToken(); // close the billing session
+    if (d && typeof d.lat === 'number' && typeof d.lng === 'number') {
+      onChange(d.address.line1 || d.formatted || fallbackLabel);
+      onSelect({ label: d.formatted || fallbackLabel, lat: d.lat, lng: d.lng, address: d.address });
+    } else {
+      onChange(fallbackLabel);
+    }
+  };
 
   const choose = async (row: Row) => {
     setOpen(false);
     setHighlight(-1);
-    if (row.source === 'geo' && row.geo) {
-      onChange(row.geo.address?.line1 || row.label);
-      onSelect(row.geo);
+    if (row.source === 'place' && row.placeId) {
+      await commitDetails(row.placeId, row.primary);
       return;
     }
-    // DB string has no coordinates — geocode it, then commit.
-    onChange(row.dbText || row.label);
-    const hits = await nominatimSearch(row.dbText || row.label);
-    if (hits[0]) onSelect(hits[0]);
+    // Saved address: just text. Try to resolve it to coordinates via Places so a
+    // repeat job site still drops a pin; if Places is off, the text stands alone.
+    onChange(row.dbText || row.primary);
+    const preds = await placesAutocomplete(row.dbText || row.primary, sessionRef.current);
+    if (preds && preds[0]) await commitDetails(preds[0].placeId, row.dbText || row.primary);
   };
 
   return (
@@ -201,7 +183,10 @@ export function AddressSearchInput({ value, onChange, onSelect, onPreview, id, p
               ) : (
                 <MapPin className="h-3.5 w-3.5 flex-shrink-0 text-gray-400" />
               )}
-              <span className="truncate">{row.label}</span>
+              <span className="flex-1 min-w-0">
+                <span className="block truncate">{row.primary}</span>
+                {row.secondary && <span className="block truncate text-[11px] text-gray-400">{row.secondary}</span>}
+              </span>
               {row.source === 'db' && <span className="ml-auto text-[10px] uppercase text-gray-400">saved</span>}
             </button>
           ))}

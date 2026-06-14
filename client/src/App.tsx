@@ -228,7 +228,7 @@ function Router() {
       
       <Route path="/projects/:id/estimates">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+          <RoleGuard allowedRoles={['admin', 'gc']} showNotAuthorized>
             <Suspense fallback={<MinimalSpinner title="Loading Estimates" />}>
               <ProjectEstimates />
             </Suspense>
@@ -318,7 +318,7 @@ function Router() {
 
       <Route path="/bills">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+          <RoleGuard allowedRoles={['admin', 'gc']} showNotAuthorized>
             <Suspense fallback={<MinimalSpinner title="Loading Bills" />}>
               <Bills />
             </Suspense>
@@ -358,7 +358,7 @@ function Router() {
       
       <Route path="/projects/:id/budget">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+          <RoleGuard allowedRoles={['admin', 'gc']} showNotAuthorized>
             <Suspense fallback={<MinimalSpinner title="Loading Budget" />}>
               <ProjectBudget />
             </Suspense>
@@ -438,7 +438,7 @@ function Router() {
 
       <Route path="/projects/:id/bills">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+          <RoleGuard allowedRoles={['admin', 'gc']} showNotAuthorized>
             <Suspense fallback={<MinimalSpinner title="Loading Bills" />}>
               <ProjectBills />
             </Suspense>
@@ -498,7 +498,7 @@ function Router() {
       
       <Route path="/financials/:tab?">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+          <RoleGuard allowedRoles={['admin', 'gc']} showNotAuthorized>
             <Suspense fallback={<MinimalSpinner title="Loading Financials" />}>
               <Financials />
             </Suspense>
@@ -508,7 +508,7 @@ function Router() {
 
       <Route path="/estimates">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+          <RoleGuard allowedRoles={['admin', 'gc']} showNotAuthorized>
             <Suspense fallback={<MinimalSpinner title="Loading Estimates" />}>
               <EstimateBuilder />
             </Suspense>
