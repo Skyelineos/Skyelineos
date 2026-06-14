@@ -470,6 +470,16 @@ service cloud.firestore {
       allow delete: if isGC();
     }
 
+    // "Recommended For You" — the bridge between Style Discovery and selections.
+    // Client (owner) generates them + responds (love / not-for-me / upload photo);
+    // GC + designer read + add/override. The recommendationTaskBridge Cloud
+    // Function (admin SDK) creates/completes the linked client upload task.
+    match /projects/{projectId}/selectionRecommendations/{docId} {
+      allow read: if isGC() || isDesigner() || (isClient() && clientOwnsProject(projectId));
+      allow create, update: if isGC() || isDesigner() || (isClient() && clientOwnsProject(projectId));
+      allow delete: if isGC() || isDesigner();
+    }
+
     match /projects/{projectId}/schedules/{scheduleId} {
       allow read: if isGC() || isDesigner()
         || (isClient() && clientOwnsProject(projectId));

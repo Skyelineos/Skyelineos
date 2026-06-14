@@ -4,6 +4,7 @@ import { db } from '@/lib/firebase';
 import { Selection, Room, SELECTION_CATEGORIES } from '@/types/selections';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { RecommendationsManager } from '@/components/designer/RecommendationsManager';
 import {
   CheckCircle,
   AlertTriangle,
@@ -378,6 +379,9 @@ export function ProjectDesignDashboard({
           )}
         </div>
       </div>
+
+      {/* Recommended-for-client control (bridges the style quiz → selections) */}
+      <RecommendationsManager projectId={projectId} />
     </div>
   );
 }
