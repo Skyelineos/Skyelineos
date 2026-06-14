@@ -1,26 +1,104 @@
 // Skyeline's standard "discover your style" quiz — the guided, image-based
 // preference questions a homeowner clicks through before/while picking finishes.
-// Ships as a starter; the GC adds representative photos per option in the
-// Templates → Style Quiz editor. Each option's imageUrl is filled in there.
+//
+// Each option supports a STRUCTURED GALLERY of renderings (hero + context +
+// detail + comparison), not just one photo. The GC adds the rendered images per
+// slot in Templates → Style Quiz; until then the slots are empty placeholders.
+//
+// TODO(renderings): upload the generated images into each option's slots
+// (Templates → Style Quiz → option → photo manager). See render prompts shared
+// with the team. Image generation happens externally — the app only stores/links.
+
+export type StyleImageType = 'hero' | 'context1' | 'context2' | 'detail' | 'comparison';
+
+// Reusable schema for a style-quiz image asset (kept generic so future
+// AI-generated renderings attach the same way).
+export interface StyleOptionImage {
+  imageId: string;
+  optionId: string;
+  questionId: string;
+  imageType: StyleImageType | string;
+  title: string;
+  description?: string;
+  altText?: string;
+  sortOrder: number;
+  storagePath?: string;     // Firebase Storage path (when uploaded)
+  imageUrl?: string;        // download URL — EMPTY until a rendering is uploaded
+  isHero?: boolean;
+  createdAt?: any;
+  updatedAt?: any;
+}
 
 export interface StyleOption {
   id: string;
   label: string;
   description?: string;
-  imageUrl?: string;   // representative photo (GC uploads/sets in the editor)
+  imageUrl?: string;              // legacy single image — kept for backward compat
+  images?: StyleOptionImage[];    // structured gallery (preferred)
 }
 
 export interface StyleQuestion {
   id: string;
-  area: string;        // e.g. "Bathrooms", "Walls", "Kitchen"
+  area: string;
   prompt: string;
   helpText?: string;
   options: StyleOption[];
 }
 
+// The five standard placeholder slots created for every option.
+export const STYLE_IMAGE_SLOTS: { type: StyleImageType; title: string }[] = [
+  { type: 'hero', title: 'Hero' },
+  { type: 'context1', title: 'Context View 1' },
+  { type: 'context2', title: 'Context View 2' },
+  { type: 'detail', title: 'Detail View' },
+  { type: 'comparison', title: 'Comparison View' },
+];
+
+// Build the empty placeholder slots for one option.
+export function makeImageSlots(questionId: string, optionId: string): StyleOptionImage[] {
+  return STYLE_IMAGE_SLOTS.map((s, i) => ({
+    imageId: `${optionId}-${s.type}`,
+    optionId,
+    questionId,
+    imageType: s.type,
+    title: s.title,
+    altText: '',
+    sortOrder: i,
+    imageUrl: '', // TODO(renderings): upload the generated image here
+    isHero: s.type === 'hero',
+  }));
+}
+
+// ── Backward-compatible accessors (never hardcode image lookups in UI) ───────
+
+// The thumbnail shown on an option card. Prefers the gallery's hero, then any
+// gallery image with a URL, then the legacy single imageUrl.
+export function heroImageUrl(option: Pick<StyleOption, 'images' | 'imageUrl'>): string | undefined {
+  const imgs = (option.images || []).filter(i => i.imageUrl);
+  const hero = imgs.find(i => i.isHero) || imgs.find(i => i.imageType === 'hero') || imgs[0];
+  return hero?.imageUrl || option.imageUrl || undefined;
+}
+
+// All displayable gallery images for an option (only ones with a URL), ordered.
+// Falls back to the legacy single image so old data still shows.
+export function galleryImages(option: Pick<StyleOption, 'images' | 'imageUrl' | 'id'>): StyleOptionImage[] {
+  const imgs = (option.images || [])
+    .filter(i => i.imageUrl)
+    .slice()
+    .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+  if (imgs.length) return imgs;
+  if (option.imageUrl) {
+    return [{ imageId: `${option.id || 'legacy'}-legacy`, optionId: option.id || '', questionId: '', imageType: 'hero', title: '', sortOrder: 0, imageUrl: option.imageUrl, isHero: true }];
+  }
+  return [];
+}
+
 const q = (id: string, area: string, prompt: string, opts: [string, string, string?][], helpText?: string): StyleQuestion => ({
   id, area, prompt, helpText,
-  options: opts.map(([oid, label, description]) => ({ id: oid, label, description })),
+  options: opts.map(([oid, label, description]) => ({
+    id: oid, label, description,
+    images: makeImageSlots(id, oid),
+  })),
 });
 
 export const STANDARD_STYLE_QUIZ: StyleQuestion[] = [

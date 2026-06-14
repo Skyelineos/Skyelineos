@@ -9,9 +9,13 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { Sparkles, Check, ChevronLeft, RotateCcw, ImageIcon } from 'lucide-react';
-import type { StyleQuestion } from '@/data/standardStyleQuiz';
+import { Sparkles, Check, ChevronLeft, ChevronRight, ImageIcon, Images } from 'lucide-react';
+import {
+  type StyleQuestion, type StyleOption, type StyleOptionImage,
+  heroImageUrl, galleryImages,
+} from '@/data/standardStyleQuiz';
 
 interface StyleQuizProps {
   projectId: string;
@@ -28,6 +32,9 @@ export default function StyleQuiz({ projectId, fromUserId, fromUserName }: Style
   const [step, setStep] = useState(0);
   const [started, setStarted] = useState(false);
   const [completedAt, setCompletedAt] = useState<any>(null);
+  // Gallery modal: which option's examples are open + carousel index.
+  const [gallery, setGallery] = useState<{ option: StyleOption; images: StyleOptionImage[] } | null>(null);
+  const [galleryIdx, setGalleryIdx] = useState(0);
 
   useEffect(() => {
     (async () => {
@@ -163,31 +170,102 @@ export default function StyleQuiz({ projectId, fromUserId, fromUserName }: Style
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mt-4">
         {qn.options.map(o => {
           const selected = answers[qn.id] === o.id;
+          const hero = heroImageUrl(o);
+          const imgs = galleryImages(o);
           return (
-            <button
+            <div
               key={o.id}
-              onClick={() => choose(qn.id, o.id)}
-              className={`text-left rounded-xl border overflow-hidden transition-all hover:shadow-md ${selected ? 'ring-2 ring-offset-1' : 'border-gray-200'}`}
+              className={`group text-left rounded-xl border overflow-hidden transition-all hover:shadow-md ${selected ? 'ring-2 ring-offset-1' : 'border-gray-200'}`}
               style={selected ? { borderColor: '#C9A96E', boxShadow: '0 0 0 2px #C9A96E55' } : {}}
             >
-              <div className="aspect-[4/3] bg-gray-50 flex items-center justify-center overflow-hidden">
-                {o.imageUrl ? (
-                  <img src={o.imageUrl} alt={o.label} className="w-full h-full object-cover" />
-                ) : (
-                  <ImageIcon className="h-7 w-7 text-gray-300" />
+              <button onClick={() => choose(qn.id, o.id)} className="block w-full text-left">
+                <div className="aspect-[4/3] bg-gray-50 flex items-center justify-center overflow-hidden relative">
+                  {hero ? (
+                    <img src={hero} alt={o.label} className="w-full h-full object-cover" />
+                  ) : (
+                    <ImageIcon className="h-7 w-7 text-gray-300" />
+                  )}
+                  {selected && (
+                    <span className="absolute top-2 right-2 bg-green-600 text-white rounded-full p-1">
+                      <Check className="h-3.5 w-3.5" />
+                    </span>
+                  )}
+                </div>
+              </button>
+              <div className="p-2.5">
+                <p className="text-sm font-semibold text-gray-900">{o.label}</p>
+                {o.description && <p className="text-xs text-gray-500 mt-0.5 leading-snug">{o.description}</p>}
+                {imgs.length > 1 && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setGallery({ option: o, images: imgs }); setGalleryIdx(0); }}
+                    className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-[#8a6a3a] hover:underline"
+                  >
+                    <Images className="h-3.5 w-3.5" /> View examples ({imgs.length})
+                  </button>
                 )}
               </div>
-              <div className="p-2.5">
-                <p className="text-sm font-semibold text-gray-900 flex items-center gap-1">
-                  {selected && <Check className="h-3.5 w-3.5 text-green-600" />}
-                  {o.label}
-                </p>
-                {o.description && <p className="text-xs text-gray-500 mt-0.5 leading-snug">{o.description}</p>}
-              </div>
-            </button>
+            </div>
           );
         })}
       </div>
+
+      {/* Examples gallery — carousel of an option's renderings */}
+      <Dialog open={!!gallery} onOpenChange={() => setGallery(null)}>
+        <DialogContent className="max-w-3xl p-0 overflow-hidden">
+          {gallery && (() => {
+            const img = gallery.images[Math.min(galleryIdx, gallery.images.length - 1)];
+            const last = gallery.images.length - 1;
+            return (
+              <div>
+                <div className="relative bg-black flex items-center justify-center">
+                  {img?.imageUrl ? (
+                    <img src={img.imageUrl} alt={img.altText || img.title || gallery.option.label} className="max-h-[70vh] w-full object-contain" />
+                  ) : (
+                    <div className="h-64 flex items-center justify-center text-gray-400"><ImageIcon className="h-8 w-8" /></div>
+                  )}
+                  {gallery.images.length > 1 && (
+                    <>
+                      <button onClick={() => setGalleryIdx(i => (i <= 0 ? last : i - 1))}
+                        className="absolute left-2 top-1/2 -translate-y-1/2 bg-white/80 rounded-full p-1.5 hover:bg-white">
+                        <ChevronLeft className="h-5 w-5" />
+                      </button>
+                      <button onClick={() => setGalleryIdx(i => (i >= last ? 0 : i + 1))}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/80 rounded-full p-1.5 hover:bg-white">
+                        <ChevronRight className="h-5 w-5" />
+                      </button>
+                    </>
+                  )}
+                </div>
+                <div className="p-4 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-gray-900">{gallery.option.label}</p>
+                    <p className="text-xs text-gray-500 truncate">{img?.title}{img?.description ? ` — ${img.description}` : ''}</p>
+                    <p className="text-[11px] text-gray-400 mt-0.5">{galleryIdx + 1} of {gallery.images.length}</p>
+                  </div>
+                  <Button
+                    size="sm"
+                    style={{ backgroundColor: '#C9A96E', color: '#141414' }}
+                    onClick={() => { choose(qn.id, gallery.option.id); setGallery(null); }}
+                  >
+                    <Check className="h-3.5 w-3.5 mr-1" /> Choose this
+                  </Button>
+                </div>
+                {/* thumbnail strip */}
+                {gallery.images.length > 1 && (
+                  <div className="flex gap-1.5 px-4 pb-4 overflow-x-auto">
+                    {gallery.images.map((g, k) => (
+                      <button key={g.imageId || k} onClick={() => setGalleryIdx(k)}
+                        className={`flex-shrink-0 w-14 h-14 rounded overflow-hidden border ${k === galleryIdx ? 'ring-2 ring-[#C9A96E]' : 'border-gray-200'}`}>
+                        {g.imageUrl ? <img src={g.imageUrl} alt={g.title} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-gray-50" />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

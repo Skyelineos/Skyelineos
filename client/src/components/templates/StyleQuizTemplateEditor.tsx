@@ -1,6 +1,8 @@
 // Editor for a Style Quiz template (templates doc, category 'styleQuiz').
-// The GC edits the questions + options and uploads a representative photo for
-// each option (what the client sees while clicking through). ★ to set default.
+// The GC edits questions + options and manages a GALLERY of renderings per
+// option (hero + context + detail + comparison). Upload, set-hero, reorder,
+// replace, delete. Backward-compatible: an option that only has the legacy
+// single `imageUrl` is shown as a hero image you can build on.
 
 import { useEffect, useState } from 'react';
 import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
@@ -8,11 +10,24 @@ import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebas
 import { db, storage } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { ChevronLeft, Plus, Trash2, ImagePlus, Loader2 } from 'lucide-react';
-import type { StyleQuestion, StyleOption } from '@/data/standardStyleQuiz';
+import { ChevronLeft, Plus, Trash2, ImagePlus, Loader2, Star, ArrowUp, ArrowDown } from 'lucide-react';
+import {
+  type StyleQuestion, type StyleOption, type StyleOptionImage,
+  makeImageSlots,
+} from '@/data/standardStyleQuiz';
 
 const uid = () => Math.random().toString(36).slice(2, 9);
+
+// Ensure an option has a gallery to edit (migrate legacy single imageUrl).
+function ensureImages(o: StyleOption, questionId: string): StyleOptionImage[] {
+  if (o.images && o.images.length) return o.images;
+  if (o.imageUrl) {
+    return [{ imageId: uid(), optionId: o.id, questionId, imageType: 'hero', title: 'Hero', sortOrder: 0, imageUrl: o.imageUrl, isHero: true }];
+  }
+  return makeImageSlots(questionId, o.id);
+}
 
 export function StyleQuizTemplateEditor({ templateId, onBack }: { templateId: string; onBack: () => void }) {
   const { toast } = useToast();
@@ -27,31 +42,74 @@ export function StyleQuizTemplateEditor({ templateId, onBack }: { templateId: st
       const snap = await getDoc(doc(db, 'templates', templateId));
       const d = snap.data() as any;
       setName(d?.name || 'Style Quiz');
-      setQuestions(Array.isArray(d?.questions) ? d.questions : []);
+      const qs: StyleQuestion[] = Array.isArray(d?.questions) ? d.questions : [];
+      // Normalize: guarantee every option has an images[] gallery.
+      qs.forEach(q => q.options.forEach(o => { o.images = ensureImages(o, q.id); }));
+      setQuestions(qs);
       setLoading(false);
     })();
   }, [templateId]);
 
+  // ── mutation helpers ────────────────────────────────────────────────────
   const updateQ = (qi: number, patch: Partial<StyleQuestion>) =>
     setQuestions(qs => qs.map((q, i) => i === qi ? { ...q, ...patch } : q));
   const updateOpt = (qi: number, oi: number, patch: Partial<StyleOption>) =>
     setQuestions(qs => qs.map((q, i) => i === qi
       ? { ...q, options: q.options.map((o, j) => j === oi ? { ...o, ...patch } : o) } : q));
+  const setImages = (qi: number, oi: number, images: StyleOptionImage[]) =>
+    updateOpt(qi, oi, { images });
+
   const addQuestion = () =>
-    setQuestions(qs => [...qs, { id: uid(), area: '', prompt: 'New question', options: [{ id: uid(), label: 'Option A' }, { id: uid(), label: 'Option B' }] }]);
+    setQuestions(qs => [...qs, { id: uid(), area: '', prompt: 'New question', options: [
+      { id: uid(), label: 'Option A', images: [] }, { id: uid(), label: 'Option B', images: [] },
+    ] }]);
   const removeQuestion = (qi: number) => setQuestions(qs => qs.filter((_, i) => i !== qi));
-  const addOption = (qi: number) => updateQ(qi, { options: [...questions[qi].options, { id: uid(), label: 'New option' }] });
+  const addOption = (qi: number) => {
+    const q = questions[qi];
+    const oid = uid();
+    updateQ(qi, { options: [...q.options, { id: oid, label: 'New option', images: makeImageSlots(q.id, oid) }] });
+  };
   const removeOption = (qi: number, oi: number) => updateQ(qi, { options: questions[qi].options.filter((_, j) => j !== oi) });
 
-  const uploadImage = async (qi: number, oi: number, file: File) => {
-    const key = `${qi}-${oi}`;
+  const addImage = (qi: number, oi: number) => {
+    const o = questions[qi].options[oi];
+    const imgs = o.images || [];
+    setImages(qi, oi, [...imgs, {
+      imageId: uid(), optionId: o.id, questionId: questions[qi].id,
+      imageType: 'context2', title: `Image ${imgs.length + 1}`, sortOrder: imgs.length, imageUrl: '',
+      isHero: imgs.length === 0,
+    }]);
+  };
+  const updateImage = (qi: number, oi: number, ii: number, patch: Partial<StyleOptionImage>) => {
+    const imgs = (questions[qi].options[oi].images || []).map((im, k) => k === ii ? { ...im, ...patch } : im);
+    setImages(qi, oi, imgs);
+  };
+  const removeImage = (qi: number, oi: number, ii: number) => {
+    let imgs = (questions[qi].options[oi].images || []).filter((_, k) => k !== ii);
+    if (imgs.length && !imgs.some(im => im.isHero)) imgs = imgs.map((im, k) => k === 0 ? { ...im, isHero: true } : im);
+    setImages(qi, oi, imgs.map((im, k) => ({ ...im, sortOrder: k })));
+  };
+  const setHero = (qi: number, oi: number, ii: number) => {
+    const imgs = (questions[qi].options[oi].images || []).map((im, k) => ({ ...im, isHero: k === ii }));
+    setImages(qi, oi, imgs);
+  };
+  const moveImage = (qi: number, oi: number, ii: number, dir: -1 | 1) => {
+    const imgs = (questions[qi].options[oi].images || []).slice();
+    const j = ii + dir;
+    if (j < 0 || j >= imgs.length) return;
+    [imgs[ii], imgs[j]] = [imgs[j], imgs[ii]];
+    setImages(qi, oi, imgs.map((im, k) => ({ ...im, sortOrder: k })));
+  };
+
+  const uploadTo = async (qi: number, oi: number, ii: number, file: File) => {
+    const key = `${qi}-${oi}-${ii}`;
     setUploading(key);
     try {
-      const path = `styleQuiz/${templateId}/${Date.now()}-${file.name}`;
+      const path = `styleQuiz/${templateId}/${questions[qi].options[oi].id}/${Date.now()}-${file.name}`;
       const sref = storageRef(storage, path);
       await uploadBytesResumable(sref, file);
       const url = await getDownloadURL(sref);
-      updateOpt(qi, oi, { imageUrl: url });
+      updateImage(qi, oi, ii, { imageUrl: url, storagePath: path, updatedAt: Date.now() });
     } catch (e: any) {
       toast({ title: 'Upload failed', description: e?.message || '', variant: 'destructive' });
     } finally {
@@ -62,7 +120,16 @@ export function StyleQuizTemplateEditor({ templateId, onBack }: { templateId: st
   const save = async () => {
     setSaving(true);
     try {
-      await updateDoc(doc(db, 'templates', templateId), { name, questions, updatedAt: serverTimestamp() });
+      // Normalize sortOrder + ensure a hero per option before saving.
+      const clean = questions.map(q => ({
+        ...q,
+        options: q.options.map(o => {
+          const imgs = (o.images || []).map((im, k) => ({ ...im, sortOrder: k }));
+          if (imgs.length && !imgs.some(im => im.isHero)) imgs[0].isHero = true;
+          return { ...o, images: imgs };
+        }),
+      }));
+      await updateDoc(doc(db, 'templates', templateId), { name, questions: clean, updatedAt: serverTimestamp() });
       toast({ title: 'Style quiz saved' });
       onBack();
     } catch (e: any) {
@@ -86,12 +153,15 @@ export function StyleQuizTemplateEditor({ templateId, onBack }: { templateId: st
       </div>
 
       <Input value={name} onChange={e => setName(e.target.value)} className="max-w-sm font-semibold" placeholder="Quiz name" />
+      <p className="text-xs text-gray-400">
+        Upload a rendering into each slot. The ★ image is the card thumbnail clients see; the rest show in “View Examples”.
+      </p>
 
-      <div className="space-y-4">
+      <div className="space-y-5">
         {questions.map((q, qi) => (
-          <div key={q.id} className="rounded-xl border border-gray-200 p-4 space-y-3">
+          <div key={q.id} className="rounded-xl border border-gray-200 p-4 space-y-4">
             <div className="flex items-center gap-2">
-              <Input value={q.area} onChange={e => updateQ(qi, { area: e.target.value })} placeholder="Area (e.g. Bathrooms)" className="w-44 h-8 text-xs" />
+              <Input value={q.area} onChange={e => updateQ(qi, { area: e.target.value })} placeholder="Area" className="w-40 h-8 text-xs" />
               <Input value={q.prompt} onChange={e => updateQ(qi, { prompt: e.target.value })} placeholder="Question prompt" className="flex-1 h-8 text-sm font-medium" />
               <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-red-500" onClick={() => removeQuestion(qi)}>
                 <Trash2 className="w-3.5 h-3.5" />
@@ -99,24 +169,57 @@ export function StyleQuizTemplateEditor({ templateId, onBack }: { templateId: st
             </div>
             <Input value={q.helpText || ''} onChange={e => updateQ(qi, { helpText: e.target.value })} placeholder="Help text (optional)" className="h-8 text-xs" />
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="space-y-4">
               {q.options.map((o, oi) => (
-                <div key={o.id} className="rounded-lg border border-gray-200 p-2 space-y-1.5">
-                  <div className="aspect-square rounded-md bg-gray-50 overflow-hidden flex items-center justify-center relative">
-                    {o.imageUrl ? (
-                      <img src={o.imageUrl} alt={o.label} className="w-full h-full object-cover" />
-                    ) : (
-                      <span className="text-[10px] text-gray-400 text-center px-2">No photo yet</span>
-                    )}
-                    <label className="absolute bottom-1 right-1 cursor-pointer bg-white/90 rounded px-1.5 py-1 text-[10px] flex items-center gap-1 border">
-                      {uploading === `${qi}-${oi}` ? <Loader2 className="w-3 h-3 animate-spin" /> : <ImagePlus className="w-3 h-3" />}
-                      <input type="file" accept="image/*" className="hidden"
-                        onChange={e => { const f = e.target.files?.[0]; if (f) uploadImage(qi, oi, f); }} />
-                    </label>
+                <div key={o.id} className="rounded-lg border border-gray-200 p-3 bg-gray-50/50">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Input value={o.label} onChange={e => updateOpt(qi, oi, { label: e.target.value })} placeholder="Option label" className="w-48 h-8 text-xs font-semibold bg-white" />
+                    <Input value={o.description || ''} onChange={e => updateOpt(qi, oi, { description: e.target.value })} placeholder="Short note" className="flex-1 h-8 text-xs bg-white" />
+                    <Button size="sm" variant="ghost" className="h-8 px-2 text-red-500 text-xs" onClick={() => removeOption(qi, oi)}>Remove option</Button>
                   </div>
-                  <Input value={o.label} onChange={e => updateOpt(qi, oi, { label: e.target.value })} placeholder="Label" className="h-7 text-xs font-medium" />
-                  <Input value={o.description || ''} onChange={e => updateOpt(qi, oi, { description: e.target.value })} placeholder="Short note" className="h-7 text-[11px]" />
-                  <button onClick={() => removeOption(qi, oi)} className="text-[10px] text-red-500 hover:underline">Remove</button>
+
+                  {/* Gallery slots */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+                    {(o.images || []).map((im, ii) => {
+                      const key = `${qi}-${oi}-${ii}`;
+                      return (
+                        <div key={im.imageId || ii} className="rounded-md border border-gray-200 bg-white p-1.5 space-y-1">
+                          <div className="aspect-square rounded bg-gray-50 overflow-hidden flex items-center justify-center relative">
+                            {im.imageUrl ? (
+                              <img src={im.imageUrl} alt={im.altText || im.title} className="w-full h-full object-cover" />
+                            ) : (
+                              <span className="text-[9px] text-gray-400 text-center px-1">empty</span>
+                            )}
+                            {im.isHero && (
+                              <span className="absolute top-1 left-1 bg-amber-500 text-white rounded px-1 text-[8px] flex items-center gap-0.5">
+                                <Star className="w-2 h-2 fill-white" /> Hero
+                              </span>
+                            )}
+                            <label className="absolute bottom-1 right-1 cursor-pointer bg-white/90 rounded px-1 py-0.5 text-[9px] flex items-center gap-0.5 border">
+                              {uploading === key ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <ImagePlus className="w-2.5 h-2.5" />}
+                              <input type="file" accept="image/*" className="hidden"
+                                onChange={e => { const f = e.target.files?.[0]; if (f) uploadTo(qi, oi, ii, f); }} />
+                            </label>
+                          </div>
+                          <Input value={im.title} onChange={e => updateImage(qi, oi, ii, { title: e.target.value })} className="h-6 text-[10px] px-1" placeholder="Title" />
+                          <Badge variant="outline" className="text-[8px] w-full justify-center">{String(im.imageType)}</Badge>
+                          <div className="flex items-center justify-between">
+                            <button title="Set as hero" onClick={() => setHero(qi, oi, ii)} className={`text-[9px] ${im.isHero ? 'text-amber-600' : 'text-gray-400 hover:text-amber-600'}`}>
+                              <Star className={`w-3 h-3 ${im.isHero ? 'fill-amber-500 stroke-amber-500' : ''}`} />
+                            </button>
+                            <div className="flex items-center gap-0.5">
+                              <button onClick={() => moveImage(qi, oi, ii, -1)} className="text-gray-400 hover:text-gray-700"><ArrowUp className="w-3 h-3" /></button>
+                              <button onClick={() => moveImage(qi, oi, ii, 1)} className="text-gray-400 hover:text-gray-700"><ArrowDown className="w-3 h-3" /></button>
+                              <button onClick={() => removeImage(qi, oi, ii)} className="text-red-400 hover:text-red-600"><Trash2 className="w-3 h-3" /></button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <Button size="sm" variant="outline" onClick={() => addImage(qi, oi)} className="gap-1 text-[11px] mt-2 h-7">
+                    <Plus className="w-3 h-3" /> Add image
+                  </Button>
                 </div>
               ))}
             </div>
