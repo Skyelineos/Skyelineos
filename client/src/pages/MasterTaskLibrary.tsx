@@ -8,6 +8,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { useEffect, useMemo, useState } from 'react';
 import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
+import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 import { db } from '@/lib/firebase';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
@@ -29,12 +30,11 @@ import {
   ArchiveRestore,
   ArrowUp,
   ArrowDown,
+  GripVertical,
   ClipboardList,
   Camera,
   DollarSign,
   ShieldCheck,
-  Eye,
-  HardHat,
   Loader2,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -47,6 +47,7 @@ import {
   type TaskPhase,
 } from '@shared/taskLibrary-types';
 import { MasterTaskModal } from '@/components/taskLibrary/MasterTaskModal';
+import { AudienceBadges, AudienceLegend } from '@/components/taskLibrary/AudienceBadges';
 import {
   archiveMasterTask,
   unarchiveMasterTask,
@@ -154,18 +155,39 @@ export default function MasterTaskLibrary() {
     }
   };
 
-  // Move a task up/down within its phase by swapping order with its neighbor.
-  const handleMove = async (phaseTasks: MasterTask[], index: number, dir: -1 | 1) => {
-    const target = index + dir;
-    if (target < 0 || target >= phaseTasks.length) return;
-    const reordered = [...phaseTasks];
-    const [moved] = reordered.splice(index, 1);
-    reordered.splice(target, 0, moved);
+  // Persist a new within-phase ordering (shared by arrows + drag-and-drop).
+  const persistOrder = async (reordered: MasterTask[]) => {
     try {
       await reorderMasterTasks(reordered.map((t) => t.id));
     } catch (e: any) {
       toast({ title: 'Reorder failed', description: e.message, variant: 'destructive' });
     }
+  };
+
+  // Move a task up/down within its phase by swapping order with its neighbor.
+  const handleMove = (phaseTasks: MasterTask[], index: number, dir: -1 | 1) => {
+    const target = index + dir;
+    if (target < 0 || target >= phaseTasks.length) return;
+    const reordered = [...phaseTasks];
+    const [moved] = reordered.splice(index, 1);
+    reordered.splice(target, 0, moved);
+    persistOrder(reordered);
+  };
+
+  // Drag-and-drop reorder (grab the side handle). Same-phase only — the board
+  // groups by phase, so dragging across phases is ignored (use Edit to change a
+  // task's phase). Order is relative within a phase, matching the arrows.
+  const handleDragEnd = (result: DropResult) => {
+    const { source, destination } = result;
+    if (!destination) return;
+    if (source.droppableId !== destination.droppableId) return;
+    if (source.index === destination.index) return;
+    const entry = grouped.find(([phase]) => phase === source.droppableId);
+    if (!entry) return;
+    const reordered = [...entry[1]];
+    const [moved] = reordered.splice(source.index, 1);
+    reordered.splice(destination.index, 0, moved);
+    persistOrder(reordered);
   };
 
   return (
@@ -244,63 +266,91 @@ export default function MasterTaskLibrary() {
         ) : grouped.length === 0 ? (
           <div className="text-center py-16 text-gray-500">No tasks match your filters.</div>
         ) : (
-          <div className="space-y-6">
-            {grouped.map(([phase, phaseTasks]) => (
-              <div key={phase} className="bg-white border rounded-lg overflow-hidden">
-                <div className="px-4 py-2.5 bg-[#141414] text-white flex items-center justify-between">
-                  <h2 className="font-semibold">{phase}</h2>
-                  <span className="text-xs text-slate-300">{phaseTasks.length} task{phaseTasks.length === 1 ? '' : 's'}</span>
+          <DragDropContext onDragEnd={handleDragEnd}>
+            <div className="space-y-6">
+              <AudienceLegend />
+              {grouped.map(([phase, phaseTasks]) => (
+                <div key={phase} className="bg-white border rounded-lg overflow-hidden">
+                  <div className="px-4 py-2.5 bg-[#141414] text-white flex items-center justify-between">
+                    <h2 className="font-semibold">{phase}</h2>
+                    <span className="text-xs text-slate-300">{phaseTasks.length} task{phaseTasks.length === 1 ? '' : 's'}</span>
+                  </div>
+                  <Droppable droppableId={phase}>
+                    {(dropProvided) => (
+                      <div ref={dropProvided.innerRef} {...dropProvided.droppableProps} className="divide-y">
+                        {phaseTasks.map((t, i) => (
+                          <Draggable key={t.id} draggableId={t.id} index={i}>
+                            {(dragProvided, snapshot) => (
+                              <div
+                                ref={dragProvided.innerRef}
+                                {...dragProvided.draggableProps}
+                                className={`px-4 py-3 flex items-start gap-2 bg-white hover:bg-gray-50 ${
+                                  snapshot.isDragging ? 'shadow-lg ring-1 ring-[#C9A96E]' : ''
+                                }`}
+                              >
+                                {/* Drag handle — grab the side to reorder */}
+                                <div
+                                  {...dragProvided.dragHandleProps}
+                                  title="Drag to reorder"
+                                  className="pt-1 cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500"
+                                >
+                                  <GripVertical className="h-4 w-4" />
+                                </div>
+                                {/* Up/down arrows (keyboard / no-mouse alternative) */}
+                                <div className="flex flex-col gap-0.5 pt-1">
+                                  <button
+                                    onClick={() => handleMove(phaseTasks, i, -1)}
+                                    disabled={i === 0}
+                                    className="text-gray-300 hover:text-gray-600 disabled:opacity-30"
+                                  >
+                                    <ArrowUp className="h-3.5 w-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleMove(phaseTasks, i, 1)}
+                                    disabled={i === phaseTasks.length - 1}
+                                    className="text-gray-300 hover:text-gray-600 disabled:opacity-30"
+                                  >
+                                    <ArrowDown className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <code className="text-xs text-gray-400">{t.taskCode}</code>
+                                    <span className="font-medium">{t.title}</span>
+                                    <TaskBadges task={t} />
+                                  </div>
+                                  {t.description && (
+                                    <p className="text-sm text-gray-500 mt-0.5 line-clamp-2">{t.description}</p>
+                                  )}
+                                  <div className="flex flex-wrap items-center gap-1 mt-1.5">
+                                    <AudienceBadges task={t} size="xs" />
+                                    {(t.tags || []).map((tag) => (
+                                      <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                                        {tag}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <Button variant="ghost" size="icon" onClick={() => { setEditing(t); setModalOpen(true); }}>
+                                    <Pencil className="h-4 w-4" />
+                                  </Button>
+                                  <Button variant="ghost" size="icon" onClick={() => handleArchive(t)}>
+                                    {t.archivedAt ? <ArchiveRestore className="h-4 w-4" /> : <Archive className="h-4 w-4" />}
+                                  </Button>
+                                </div>
+                              </div>
+                            )}
+                          </Draggable>
+                        ))}
+                        {dropProvided.placeholder}
+                      </div>
+                    )}
+                  </Droppable>
                 </div>
-                <div className="divide-y">
-                  {phaseTasks.map((t, i) => (
-                    <div key={t.id} className="px-4 py-3 flex items-start gap-3 hover:bg-gray-50">
-                      <div className="flex flex-col gap-0.5 pt-1">
-                        <button
-                          onClick={() => handleMove(phaseTasks, i, -1)}
-                          disabled={i === 0}
-                          className="text-gray-300 hover:text-gray-600 disabled:opacity-30"
-                        >
-                          <ArrowUp className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          onClick={() => handleMove(phaseTasks, i, 1)}
-                          disabled={i === phaseTasks.length - 1}
-                          className="text-gray-300 hover:text-gray-600 disabled:opacity-30"
-                        >
-                          <ArrowDown className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <code className="text-xs text-gray-400">{t.taskCode}</code>
-                          <span className="font-medium">{t.title}</span>
-                          <TaskBadges task={t} />
-                        </div>
-                        {t.description && (
-                          <p className="text-sm text-gray-500 mt-0.5 line-clamp-2">{t.description}</p>
-                        )}
-                        <div className="flex flex-wrap gap-1 mt-1.5">
-                          {(t.tags || []).map((tag) => (
-                            <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
-                              {tag}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Button variant="ghost" size="icon" onClick={() => { setEditing(t); setModalOpen(true); }}>
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" onClick={() => handleArchive(t)}>
-                          {t.archivedAt ? <ArchiveRestore className="h-4 w-4" /> : <Archive className="h-4 w-4" />}
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          </DragDropContext>
         )}
       </div>
 
@@ -366,16 +416,6 @@ export function TaskBadges({ task }: { task: MasterTask }) {
       {task.requiredPhotos > 0 && (
         <Badge className="bg-blue-50 text-blue-600 border-blue-200 text-[10px] px-1.5 py-0 gap-0.5">
           <Camera className="h-2.5 w-2.5" /> {task.requiredPhotos}
-        </Badge>
-      )}
-      {task.clientVisible && (
-        <Badge className="bg-indigo-50 text-indigo-600 border-indigo-200 text-[10px] px-1.5 py-0 gap-0.5">
-          <Eye className="h-2.5 w-2.5" /> Client
-        </Badge>
-      )}
-      {task.subcontractorVisible && (
-        <Badge className="bg-orange-50 text-orange-600 border-orange-200 text-[10px] px-1.5 py-0 gap-0.5">
-          <HardHat className="h-2.5 w-2.5" /> Sub
         </Badge>
       )}
     </span>

@@ -7,6 +7,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { useEffect, useMemo, useState } from 'react';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 import { db } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -38,6 +39,7 @@ import {
   DollarSign,
   Calendar,
   AlertTriangle,
+  GripVertical,
   Loader2,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -52,7 +54,8 @@ import {
   type TaskPhase,
 } from '@shared/taskLibrary-types';
 import { ProjectTaskDrawer } from './ProjectTaskDrawer';
-import { addCustomProjectTask } from '@/lib/taskLibrary/api';
+import { AudienceBadges, AudienceLegend } from './AudienceBadges';
+import { addCustomProjectTask, reorderProjectTasks } from '@/lib/taskLibrary/api';
 
 interface Props {
   projectId: string;
@@ -137,6 +140,23 @@ export function ProjectTaskBoard({ projectId, onRequestGenerate }: Props) {
     setDrawerOpen(true);
   };
 
+  // Drag-and-drop reorder within a phase (grab the side handle). Same-phase only
+  // — order is relative within a phase. Persists via the batch reorder endpoint.
+  const handleDragEnd = (result: DropResult) => {
+    const { source, destination } = result;
+    if (!destination) return;
+    if (source.droppableId !== destination.droppableId) return;
+    if (source.index === destination.index) return;
+    const entry = grouped.find(([phase]) => phase === source.droppableId);
+    if (!entry) return;
+    const reordered = [...entry[1]];
+    const [moved] = reordered.splice(source.index, 1);
+    reordered.splice(destination.index, 0, moved);
+    reorderProjectTasks(projectId, reordered.map((t) => t.id)).catch((e: any) =>
+      toast({ title: 'Reorder failed', description: e.message, variant: 'destructive' }),
+    );
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20 text-gray-400">
@@ -182,73 +202,98 @@ export function ProjectTaskBoard({ projectId, onRequestGenerate }: Props) {
         <ToggleFilter label="Sub visible" checked={subVisibleOnly} onChange={setSubVisibleOnly} />
       </div>
 
+      <AudienceLegend />
+
       {/* Board */}
       {grouped.length === 0 ? (
         <div className="text-center py-16 text-gray-500">No tasks match your filters.</div>
       ) : (
-        <div className="space-y-5">
-          {grouped.map(([phase, phaseTasks]) => (
-            <div key={phase} className="bg-white border rounded-lg overflow-hidden">
-              <div className="px-4 py-2.5 bg-[#141414] text-white flex items-center justify-between">
-                <h2 className="font-semibold text-sm">{phase}</h2>
-                <span className="text-xs text-slate-300">
-                  {phaseTasks.filter((t) => t.status === 'Complete').length}/{phaseTasks.length}
-                </span>
-              </div>
-              <div className="divide-y">
-                {phaseTasks.map((t) => (
-                  <button
-                    key={t.id}
-                    onClick={() => openTask(t)}
-                    className="w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-gray-50"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <code className="text-[11px] text-gray-400">{t.taskCode}</code>
-                        <span className="font-medium text-sm">{t.title}</span>
-                        {t.isCustomTask && (
-                          <Badge className="bg-amber-100 text-amber-700 border-amber-200 text-[10px] px-1.5 py-0">Custom</Badge>
-                        )}
-                        {t.qualityGate && <ShieldCheck className="h-3.5 w-3.5 text-purple-500" />}
-                        {t.inspectionRequired && (
-                          <Badge className="bg-cyan-100 text-cyan-700 border-cyan-200 text-[10px] px-1.5 py-0">
-                            {t.inspectionStatus?.replace(/_/g, ' ')}
-                          </Badge>
-                        )}
-                        {t.drawMilestoneRelevant && <DollarSign className="h-3.5 w-3.5 text-green-500" />}
-                        {t.requiredPhotos > 0 && (
-                          <span className="text-[10px] text-gray-400 flex items-center gap-0.5">
-                            <Camera className="h-3 w-3" />
-                            {(t.uploadedPhotos || []).length}/{t.requiredPhotos}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
-                        <span>{t.assignedRole}</span>
-                        {t.dueDate && (
-                          <span className="flex items-center gap-0.5">
-                            <Calendar className="h-3 w-3" /> {t.dueDate}
-                          </span>
-                        )}
-                        {t.status === 'Blocked' && (
-                          <span className="flex items-center gap-0.5 text-red-500">
-                            <AlertTriangle className="h-3 w-3" /> blocked
-                          </span>
-                        )}
-                      </div>
+        <DragDropContext onDragEnd={handleDragEnd}>
+          <div className="space-y-5">
+            {grouped.map(([phase, phaseTasks]) => (
+              <div key={phase} className="bg-white border rounded-lg overflow-hidden">
+                <div className="px-4 py-2.5 bg-[#141414] text-white flex items-center justify-between">
+                  <h2 className="font-semibold text-sm">{phase}</h2>
+                  <span className="text-xs text-slate-300">
+                    {phaseTasks.filter((t) => t.status === 'Complete').length}/{phaseTasks.length}
+                  </span>
+                </div>
+                <Droppable droppableId={phase}>
+                  {(dropProvided) => (
+                    <div ref={dropProvided.innerRef} {...dropProvided.droppableProps} className="divide-y">
+                      {phaseTasks.map((t, i) => (
+                        <Draggable key={t.id} draggableId={t.id} index={i}>
+                          {(dragProvided, snapshot) => (
+                            <div
+                              ref={dragProvided.innerRef}
+                              {...dragProvided.draggableProps}
+                              className={`px-3 py-3 flex items-center gap-2 bg-white hover:bg-gray-50 ${
+                                snapshot.isDragging ? 'shadow-lg ring-1 ring-[#C9A96E]' : ''
+                              }`}
+                            >
+                              {/* Drag handle — grab the side to reorder */}
+                              <div
+                                {...dragProvided.dragHandleProps}
+                                title="Drag to reorder"
+                                className="cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 flex-shrink-0"
+                              >
+                                <GripVertical className="h-4 w-4" />
+                              </div>
+                              {/* Clickable content opens the detail drawer */}
+                              <button onClick={() => openTask(t)} className="flex-1 min-w-0 text-left">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <code className="text-[11px] text-gray-400">{t.taskCode}</code>
+                                  <span className="font-medium text-sm">{t.title}</span>
+                                  {t.isCustomTask && (
+                                    <Badge className="bg-amber-100 text-amber-700 border-amber-200 text-[10px] px-1.5 py-0">Custom</Badge>
+                                  )}
+                                  {t.qualityGate && <ShieldCheck className="h-3.5 w-3.5 text-purple-500" />}
+                                  {t.inspectionRequired && (
+                                    <Badge className="bg-cyan-100 text-cyan-700 border-cyan-200 text-[10px] px-1.5 py-0">
+                                      {t.inspectionStatus?.replace(/_/g, ' ')}
+                                    </Badge>
+                                  )}
+                                  {t.drawMilestoneRelevant && <DollarSign className="h-3.5 w-3.5 text-green-500" />}
+                                  {t.requiredPhotos > 0 && (
+                                    <span className="text-[10px] text-gray-400 flex items-center gap-0.5">
+                                      <Camera className="h-3 w-3" />
+                                      {(t.uploadedPhotos || []).length}/{t.requiredPhotos}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2 mt-1 text-xs text-gray-500 flex-wrap">
+                                  <span>{t.assignedRole}</span>
+                                  {t.dueDate && (
+                                    <span className="flex items-center gap-0.5">
+                                      <Calendar className="h-3 w-3" /> {t.dueDate}
+                                    </span>
+                                  )}
+                                  {t.status === 'Blocked' && (
+                                    <span className="flex items-center gap-0.5 text-red-500">
+                                      <AlertTriangle className="h-3 w-3" /> blocked
+                                    </span>
+                                  )}
+                                  <AudienceBadges task={t} size="xs" />
+                                </div>
+                              </button>
+                              <Badge variant="outline" className={`${PRIORITY_BADGE_CLASS[t.priority]} text-[10px] px-1.5 py-0 border-0`}>
+                                {t.priority}
+                              </Badge>
+                              <Badge variant="outline" className={`${STATUS_BADGE_CLASS[t.status]} text-[11px] whitespace-nowrap`}>
+                                {t.status}
+                              </Badge>
+                            </div>
+                          )}
+                        </Draggable>
+                      ))}
+                      {dropProvided.placeholder}
                     </div>
-                    <Badge variant="outline" className={`${PRIORITY_BADGE_CLASS[t.priority]} text-[10px] px-1.5 py-0 border-0`}>
-                      {t.priority}
-                    </Badge>
-                    <Badge variant="outline" className={`${STATUS_BADGE_CLASS[t.status]} text-[11px] whitespace-nowrap`}>
-                      {t.status}
-                    </Badge>
-                  </button>
-                ))}
+                  )}
+                </Droppable>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </DragDropContext>
       )}
 
       <ProjectTaskDrawer

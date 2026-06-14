@@ -81,6 +81,17 @@ function makeCriterion(text: string) {
   return { id: `ac_${Date.now().toString(36)}_${criterionSeq}`, text, done: false };
 }
 
+// Baseline design/selection-driven tasks that should surface in the Designer
+// Portal. Used to default `designerVisible` when a seed entry doesn't set it.
+const DESIGNER_VISIBLE_CODES = new Set([
+  'PRE-010', // architectural design & plans
+  'PRE-060', // HOA / ARC design approval
+  'FIN-010', // interior trim, doors & millwork
+  'FIN-020', // cabinets & countertops (selections)
+  'FIN-030', // flooring (selections)
+  'FIN-090', // commissioning & client orientation
+]);
+
 /** Build a full master-task document from a seed entry (fills defaults). */
 function masterDocFromSeed(seed: SeedMasterTask, order: number) {
   return {
@@ -100,6 +111,7 @@ function masterDocFromSeed(seed: SeedMasterTask, order: number) {
     drawMilestoneRelevant: !!seed.drawMilestoneRelevant,
     clientVisible: !!seed.clientVisible,
     subcontractorVisible: !!seed.subcontractorVisible,
+    designerVisible: seed.designerVisible ?? DESIGNER_VISIBLE_CODES.has(seed.taskCode),
     isRequired: !!seed.isRequired,
     isOptional: !seed.isRequired,
     tags: seed.tags || [],
@@ -150,6 +162,7 @@ function projectTaskFromMaster(master: any, projectId: string) {
     drawMilestoneRelevant: !!master.drawMilestoneRelevant,
     clientVisible: !!master.clientVisible,
     subcontractorVisible: !!master.subcontractorVisible,
+    designerVisible: !!master.designerVisible,
     projectSpecificNotes: '',
     changeReason: '',
     isCustomTask: false,
@@ -252,6 +265,7 @@ export function registerTaskLibrary(app: Express, db: Db): void {
         drawMilestoneRelevant: !!b.drawMilestoneRelevant,
         clientVisible: !!b.clientVisible,
         subcontractorVisible: !!b.subcontractorVisible,
+        designerVisible: !!b.designerVisible,
         isRequired: b.isRequired !== false,
         isOptional: b.isRequired === false,
         tags: Array.isArray(b.tags) ? b.tags : [],
@@ -285,8 +299,8 @@ export function registerTaskLibrary(app: Express, db: Db): void {
         'title', 'description', 'phase', 'recommendedRole', 'defaultAssigneeRole',
         'defaultDurationDays', 'suggestedStartOffset', 'dependencies', 'requiredPhotos',
         'requiredDocuments', 'inspectionRequired', 'drawMilestoneRelevant', 'clientVisible',
-        'subcontractorVisible', 'tags', 'appliesWhen', 'riskLevel', 'qualityGate',
-        'improvementNotes',
+        'subcontractorVisible', 'designerVisible', 'tags', 'appliesWhen', 'riskLevel',
+        'qualityGate', 'improvementNotes',
       ];
       const update: any = { updatedAt: FieldValue.serverTimestamp(), version: FieldValue.increment(1) };
       for (const key of EDITABLE) if (key in b) update[key] = b[key];
@@ -487,6 +501,7 @@ export function registerTaskLibrary(app: Express, db: Db): void {
           drawMilestoneRelevant: !!b.drawMilestoneRelevant,
           clientVisible: !!b.clientVisible,
           subcontractorVisible: !!b.subcontractorVisible,
+          designerVisible: !!b.designerVisible,
           projectSpecificNotes: b.projectSpecificNotes || '',
           changeReason: b.changeReason || '',
           isCustomTask: true,
@@ -513,6 +528,28 @@ export function registerTaskLibrary(app: Express, db: Db): void {
     },
   );
 
+  // ── Reorder project tasks within a phase (drag-and-drop / arrows) ──────────
+  // Order is only meaningful WITHIN a phase (the board groups by phase first),
+  // so passing one phase's ordered ids is safe.
+  app.post(
+    '/api/taskLibrary/projects/:projectId/tasks/reorder',
+    gcOnly(),
+    async (req: any, res: any) => {
+      try {
+        const orderedIds: string[] = Array.isArray(req.body?.orderedIds) ? req.body.orderedIds : [];
+        if (!orderedIds.length) return res.status(400).json({ error: 'orderedIds required' });
+        const batch = db.batch();
+        orderedIds.forEach((id, i) => {
+          batch.update(projectTasks().doc(id), { order: i, updatedAt: FieldValue.serverTimestamp() });
+        });
+        await batch.commit();
+        res.json({ ok: true });
+      } catch (e: any) {
+        res.status(500).json({ error: e?.message || 'reorder failed' });
+      }
+    },
+  );
+
   // ── Update a project task (with system-rule validation) ────────────────────
   // NOTE: this only ever writes to projectTasks/{id} — the master is untouched.
   app.patch(
@@ -534,7 +571,8 @@ export function registerTaskLibrary(app: Express, db: Db): void {
           'assignedSubcontractorId', 'priority', 'startDate', 'dueDate', 'dependencies',
           'requiredPhotos', 'requiredDocuments', 'uploadedPhotos', 'uploadedDocuments',
           'inspectionRequired', 'inspectionStatus', 'drawMilestoneRelevant', 'clientVisible',
-          'subcontractorVisible', 'projectSpecificNotes', 'changeReason', 'tags', 'order',
+          'subcontractorVisible', 'designerVisible', 'projectSpecificNotes', 'changeReason',
+          'tags', 'order',
           'riskLevel', 'qualityGate',
           // future-integration link fields:
           'inspectionId', 'drawRequestId', 'changeOrderId', 'clientSelectionId',
@@ -804,6 +842,7 @@ async function applyImprovementToMaster(
       drawMilestoneRelevant: !!(payload.drawMilestoneRelevant ?? base.drawMilestoneRelevant),
       clientVisible: !!(payload.clientVisible ?? base.clientVisible),
       subcontractorVisible: !!(payload.subcontractorVisible ?? base.subcontractorVisible),
+      designerVisible: !!(payload.designerVisible ?? base.designerVisible),
       isRequired: payload.isRequired ?? false,
       isOptional: !(payload.isRequired ?? false),
       tags: payload.tags || base.tags || [],

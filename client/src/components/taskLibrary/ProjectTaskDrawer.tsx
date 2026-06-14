@@ -41,6 +41,7 @@ import {
   type ProjectTaskStatus,
 } from '@shared/taskLibrary-types';
 import { updateProjectTask, deleteCustomProjectTask } from '@/lib/taskLibrary/api';
+import { AudienceBadges } from './AudienceBadges';
 
 interface Props {
   projectId: string;
@@ -107,6 +108,7 @@ export function ProjectTaskDrawer({ projectId, task, open, onClose }: Props) {
         inspectionStatus: form.inspectionStatus,
         clientVisible: form.clientVisible,
         subcontractorVisible: form.subcontractorVisible,
+        designerVisible: form.designerVisible,
         uploadedPhotos: form.uploadedPhotos,
         uploadedDocuments: form.uploadedDocuments,
         // Future-module links (editable here; null until those modules wire in):
@@ -391,16 +393,29 @@ export function ProjectTaskDrawer({ projectId, task, open, onClose }: Props) {
             />
           </div>
 
-          {/* Visibility */}
-          <div className="flex gap-4 text-sm">
-            <label className="flex items-center gap-1.5 cursor-pointer">
-              <Checkbox checked={form.clientVisible} onCheckedChange={(v) => set('clientVisible', !!v)} />
-              Client visible
-            </label>
-            <label className="flex items-center gap-1.5 cursor-pointer">
-              <Checkbox checked={form.subcontractorVisible} onCheckedChange={(v) => set('subcontractorVisible', !!v)} />
-              Sub visible
-            </label>
+          {/* Visibility — who sees this task in their portal */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Label>Visibility</Label>
+              <AudienceBadges task={form} />
+            </div>
+            <div className="flex flex-wrap gap-4 text-sm">
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <Checkbox checked={form.clientVisible} onCheckedChange={(v) => set('clientVisible', !!v)} />
+                Client
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <Checkbox checked={form.subcontractorVisible} onCheckedChange={(v) => set('subcontractorVisible', !!v)} />
+                Subcontractor
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <Checkbox checked={form.designerVisible} onCheckedChange={(v) => set('designerVisible', !!v)} />
+                Designer
+              </label>
+            </div>
+            <p className="text-[11px] text-gray-400">
+              The Skyeline team always sees this task. Others see it only in their own portal when checked.
+            </p>
           </div>
 
           {/* Future-module links — connect to change orders, draws, selections,

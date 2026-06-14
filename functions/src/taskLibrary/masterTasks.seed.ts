@@ -39,6 +39,9 @@ export interface SeedMasterTask {
   drawMilestoneRelevant: boolean;
   clientVisible: boolean;
   subcontractorVisible: boolean;
+  /** Visible in the planned Designer Portal — defaults false; set true on
+   *  design/selection-driven tasks. */
+  designerVisible?: boolean;
   isRequired: boolean;
   tags: string[];
   appliesWhen: string;

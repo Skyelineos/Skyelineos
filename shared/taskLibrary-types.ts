@@ -177,6 +177,8 @@ export interface MasterTask {
   drawMilestoneRelevant: boolean;
   clientVisible: boolean;
   subcontractorVisible: boolean;
+  /** Visible in the (planned) Designer Portal — design/selection-driven tasks. */
+  designerVisible: boolean;
   isRequired: boolean;
   isOptional: boolean;
   tags: string[];
@@ -230,6 +232,7 @@ export interface ProjectTask {
   drawMilestoneRelevant: boolean;
   clientVisible: boolean;
   subcontractorVisible: boolean;
+  designerVisible: boolean;
   projectSpecificNotes: string;
   /** Required when a (required) task is skipped or materially changed. */
   changeReason: string;
@@ -359,3 +362,30 @@ export const STATUSES_REQUIRING_REASON: ProjectTaskStatus[] = ['Skipped'];
 export function isPhase(value: string): value is TaskPhase {
   return (TASK_PHASES as readonly string[]).includes(value);
 }
+
+// ── Audience model ───────────────────────────────────────────────────────────
+// Who can see a task. The Skyeline Team always sees every task; clients, subs,
+// and designers only see tasks explicitly flagged for them (clean, scoped views
+// in their portals). Centralized here so every surface labels audiences the same.
+export type TaskAudience = 'Team' | 'Client' | 'Subs' | 'Designers';
+
+export interface AudienceFlags {
+  clientVisible?: boolean;
+  subcontractorVisible?: boolean;
+  designerVisible?: boolean;
+}
+
+export function taskAudiences(t: AudienceFlags): TaskAudience[] {
+  const out: TaskAudience[] = ['Team'];
+  if (t.clientVisible) out.push('Client');
+  if (t.subcontractorVisible) out.push('Subs');
+  if (t.designerVisible) out.push('Designers');
+  return out;
+}
+
+export const AUDIENCE_BADGE_CLASS: Record<TaskAudience, string> = {
+  Team: 'bg-slate-100 text-slate-700 border-slate-200',
+  Client: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+  Subs: 'bg-orange-50 text-orange-700 border-orange-200',
+  Designers: 'bg-pink-50 text-pink-700 border-pink-200',
+};

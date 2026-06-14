@@ -98,9 +98,24 @@ client/subcontractor visibility flags are ready for the client milestone
 calendar and the sub/designer portals. An AI "recommend tasks from project
 details" pass can read the master library + project tags.
 
+## Reordering & audiences
+
+- **Reorder** tasks within a phase by **dragging the side grip handle**
+  (`@hello-pangea/dnd`, same library the timeline/PhaseManager use) **or** the
+  up/down arrows. Both call the same persist path. Reordering is **within-phase
+  only** (the board groups by phase); change a task's phase via Edit. Works on
+  the Master Task Library and the Project Build Plan board.
+- **Audiences** (`shared/taskLibrary-types.ts` → `taskAudiences`): every task
+  shows pills for **Team / Client / Subs / Designers** via
+  `AudienceBadges`, with an `AudienceLegend` above each board. The Team always
+  sees everything; Client/Subs/Designers see a task only when its
+  `clientVisible` / `subcontractorVisible` / `designerVisible` flag is set —
+  giving each portal a clean, scoped view. `designerVisible` defaults true on
+  design/selection-driven baseline tasks and ties into the planned Designer
+  Portal; the Firestore rule lets designers read designer-visible project tasks.
+
 ## Known limitations
 
-- Reorder is up/down buttons (no drag-and-drop yet).
 - Photo/document upload is add-by-URL placeholder; real Firebase Storage upload
   wires into `ProjectTaskDrawer.addAttachment`.
 - Cross-project "skipped frequently" reads all `projectTasks` (fine for a single

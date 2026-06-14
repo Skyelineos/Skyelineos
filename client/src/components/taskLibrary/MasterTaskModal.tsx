@@ -56,6 +56,7 @@ const blankForm = {
   drawMilestoneRelevant: false,
   clientVisible: false,
   subcontractorVisible: false,
+  designerVisible: false,
   isRequired: true,
   tags: [] as string[],
   appliesWhen: '',
@@ -91,6 +92,7 @@ export function MasterTaskModal({ open, onClose, task }: Props) {
         drawMilestoneRelevant: !!task.drawMilestoneRelevant,
         clientVisible: !!task.clientVisible,
         subcontractorVisible: !!task.subcontractorVisible,
+        designerVisible: !!task.designerVisible,
         isRequired: task.isRequired !== false,
         tags: task.tags || [],
         appliesWhen: task.appliesWhen || '',
@@ -417,6 +419,7 @@ export function MasterTaskModal({ open, onClose, task }: Props) {
             <FlagRow label="Draw milestone relevant" checked={form.drawMilestoneRelevant} onChange={(v) => set('drawMilestoneRelevant', v)} />
             <FlagRow label="Client visible" checked={form.clientVisible} onChange={(v) => set('clientVisible', v)} />
             <FlagRow label="Subcontractor visible" checked={form.subcontractorVisible} onChange={(v) => set('subcontractorVisible', v)} />
+            <FlagRow label="Designer visible" checked={form.designerVisible} onChange={(v) => set('designerVisible', v)} />
           </div>
         </div>
 

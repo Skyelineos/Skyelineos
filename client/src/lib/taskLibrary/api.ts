@@ -73,6 +73,8 @@ export const updateProjectTask = (projectId: string, taskId: string, data: any) 
   call(`${BASE}/projects/${projectId}/tasks/${taskId}`, 'PATCH', data);
 export const deleteCustomProjectTask = (projectId: string, taskId: string) =>
   call(`${BASE}/projects/${projectId}/tasks/${taskId}`, 'DELETE');
+export const reorderProjectTasks = (projectId: string, orderedIds: string[]) =>
+  call(`${BASE}/projects/${projectId}/tasks/reorder`, 'POST', { orderedIds });
 
 // ── Closeout / improvements ──────────────────────────────────────────────────
 export const analyzeCloseout = (projectId: string) =>

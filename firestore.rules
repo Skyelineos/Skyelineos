@@ -322,7 +322,8 @@ service cloud.firestore {
     match /projectTasks/{taskId} {
       allow read: if isGC()
         || (isClient() && resource.data.clientVisible == true)
-        || (isSub() && resource.data.subcontractorVisible == true);
+        || (isSub() && resource.data.subcontractorVisible == true)
+        || (isDesigner() && resource.data.designerVisible == true);
       allow create, update: if isGC();
       allow delete: if isGCOnly();
     }
