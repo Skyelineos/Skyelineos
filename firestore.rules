@@ -414,6 +414,14 @@ service cloud.firestore {
       allow delete: if isAdmin() || isGC();
     }
 
+    // Style quiz answers — the homeowner's guided style preferences. The client
+    // (project owner) reads/writes their own; GC + designer read to guide the
+    // selections.
+    match /projects/{projectId}/stylePreferences/{docId} {
+      allow read: if isGC() || isDesigner() || (isClient() && clientOwnsProject(projectId));
+      allow write: if isGC() || (isClient() && clientOwnsProject(projectId));
+    }
+
     match /projects/{projectId}/schedules/{scheduleId} {
       allow read: if isGC() || isDesigner()
         || (isClient() && clientOwnsProject(projectId));

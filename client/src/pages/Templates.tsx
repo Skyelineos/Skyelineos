@@ -17,17 +17,18 @@ import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import {
   Plus, ChevronRight, ChevronLeft, Star, Pencil, Trash2,
-  FileText, FolderOpen, CheckSquare, Briefcase, Calendar, Palette,
+  FileText, FolderOpen, CheckSquare, Briefcase, Calendar, Palette, Sparkles,
 } from 'lucide-react';
 import { JobTemplateEditor } from '@/components/templates/JobTemplateEditor';
 import { DocumentTemplateEditor } from '@/components/templates/DocumentTemplateEditor';
 import { ScheduleTemplateEditor } from '@/components/templates/ScheduleTemplateEditor';
 import { SelectionsTemplateEditor } from '@/components/templates/SelectionsTemplateEditor';
 import { EstimateTemplateEditor } from '@/components/templates/EstimateTemplateEditor';
+import { StyleQuizTemplateEditor } from '@/components/templates/StyleQuizTemplateEditor';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type TemplateCategory = 'estimate' | 'document' | 'task' | 'job' | 'schedule' | 'selections';
+type TemplateCategory = 'estimate' | 'document' | 'task' | 'job' | 'schedule' | 'selections' | 'styleQuiz';
 
 interface Template {
   id: string;
@@ -109,9 +110,18 @@ const CATEGORIES: Record<TemplateCategory, CategoryMeta> = {
     border: '#eaddc4',
     contentPlaceholder: 'Floor / room / category / area decisions…',
   },
+  styleQuiz: {
+    label: 'Style Quiz',
+    description: 'The guided, image-based style quiz clients click through in the portal.',
+    icon: Sparkles,
+    color: '#8b5cf6',
+    bg: '#f5f3ff',
+    border: '#ddd6fe',
+    contentPlaceholder: 'Questions + image options per area…',
+  },
 };
 
-const CATEGORY_ORDER: TemplateCategory[] = ['estimate', 'document', 'task', 'job', 'schedule', 'selections'];
+const CATEGORY_ORDER: TemplateCategory[] = ['estimate', 'document', 'task', 'job', 'schedule', 'selections', 'styleQuiz'];
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -277,12 +287,15 @@ function DetailView({
       }
       return;
     }
-    if (category === 'selections' || category === 'estimate') {
+    if (category === 'selections' || category === 'estimate' || category === 'styleQuiz') {
       try {
+        const seed = category === 'selections' ? { items: [] }
+          : category === 'estimate' ? { lineItems: [] }
+          : { questions: [] };
         const ref = await addDoc(collection(db, 'templates'), {
-          name: category === 'selections' ? 'New Selections List' : 'New Estimate',
+          name: category === 'selections' ? 'New Selections List' : category === 'estimate' ? 'New Estimate' : 'New Style Quiz',
           category,
-          ...(category === 'selections' ? { items: [] } : { lineItems: [] }),
+          ...seed,
           description: '',
           isDefault: false,
           createdBy: user?.id,
@@ -416,6 +429,10 @@ function DetailView({
     return <EstimateTemplateEditor templateId={editingTemplate.id} onBack={() => setEditingTemplate(null)} />;
   }
 
+  if (category === 'styleQuiz' && editingTemplate) {
+    return <StyleQuizTemplateEditor templateId={editingTemplate.id} onBack={() => setEditingTemplate(null)} />;
+  }
+
   return (
     <div className="space-y-6">
       {/* Back + header */}
@@ -526,6 +543,26 @@ function DetailView({
               <Plus className="w-4 h-4" /> Add Standard Estimate
             </Button>
           )}
+          {category === 'styleQuiz' && (
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={async () => {
+                try {
+                  const { seedStandardStyleQuiz } = await import('@/lib/seedStandardStyleQuiz');
+                  const { created, count } = await seedStandardStyleQuiz(user?.email || '');
+                  toast({
+                    title: created ? 'Standard style quiz added' : 'Already exists',
+                    description: created ? `${count} questions — open to add photos, then ★ to set as default.` : 'A "Standard Style Quiz" already exists.',
+                  });
+                } catch (e: any) {
+                  toast({ title: 'Seed failed', description: e?.message || '', variant: 'destructive' });
+                }
+              }}
+            >
+              <Plus className="w-4 h-4" /> Add Standard Style Quiz
+            </Button>
+          )}
           <Button
             onClick={openCreate}
             style={{ backgroundColor: '#C9A96E' }}
@@ -585,13 +622,13 @@ function DetailView({
                     style={{ backgroundColor: meta.bg, color: meta.color }}
                     variant="outline"
                     onClick={() => {
-                      if (category === 'job' || category === 'document' || category === 'schedule' || category === 'selections' || category === 'estimate') setEditingTemplate(tmpl);
+                      if (category === 'job' || category === 'document' || category === 'schedule' || category === 'selections' || category === 'estimate' || category === 'styleQuiz') setEditingTemplate(tmpl);
                       else toast({ title: `Applied "${tmpl.name}"` });
                     }}
                   >
                     {category === 'schedule' ? 'Open' : 'Use Template'}
                   </Button>
-                  {(category === 'schedule' || category === 'job' || category === 'selections' || category === 'estimate') && (
+                  {(category === 'schedule' || category === 'job' || category === 'selections' || category === 'estimate' || category === 'styleQuiz') && (
                     <Button
                       size="sm"
                       variant="outline"
@@ -608,7 +645,7 @@ function DetailView({
                     variant="outline"
                     className="px-2.5"
                     onClick={() => {
-                      if (category === 'job' || category === 'document' || category === 'schedule' || category === 'selections' || category === 'estimate') setEditingTemplate(tmpl);
+                      if (category === 'job' || category === 'document' || category === 'schedule' || category === 'selections' || category === 'estimate' || category === 'styleQuiz') setEditingTemplate(tmpl);
                       else openEdit(tmpl);
                     }}
                   >

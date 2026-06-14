@@ -278,7 +278,10 @@ async function seedEstimate(projectId: string, projectName: string, defaults: Pr
 // isDefault (rows: floor/room/category/area/phase). Falls back to the bundled
 // client-owned SELECTIONS_TEMPLATE.
 async function seedSelections(projectId: string, defaults: ProjectDefaults) {
-  if (defaults.seedSelections === false) return;
+  // Off by default: clients start with the style quiz + inspiration board, not a
+  // giant pre-loaded selections list. Per-room selections come after plans.
+  // Only seed the full list when explicitly opted in (Settings → Defaults).
+  if (defaults.seedSelections !== true) return;
   if (await collectionHasAny(['projects', projectId, 'selections'])) return;
 
   type Row = { floor: string; room: string; category: string; area: string; phase: string };

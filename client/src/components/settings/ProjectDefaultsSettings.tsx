@@ -13,7 +13,7 @@ import { Layers, Star } from 'lucide-react';
 
 export function ProjectDefaultsSettings() {
   const { toast } = useToast();
-  const [defaults, setDefaults] = useState<ProjectDefaults>({ seedSelections: true });
+  const [defaults, setDefaults] = useState<ProjectDefaults>({ seedSelections: false });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -21,7 +21,7 @@ export function ProjectDefaultsSettings() {
     (async () => {
       try {
         const current = await getProjectDefaults();
-        setDefaults({ seedSelections: true, ...current });
+        setDefaults({ seedSelections: false, ...current });
       } finally {
         setLoading(false);
       }
@@ -67,8 +67,11 @@ export function ProjectDefaultsSettings() {
         {/* Selections toggle — the one global on/off that isn't a template choice */}
         <div className="flex items-center justify-between">
           <div>
-            <Label className="text-sm">Seed “selections needed” list</Label>
-            <p className="text-xs text-gray-400 mt-0.5">Pre-load the client decision list from the standard template.</p>
+            <Label className="text-sm">Pre-load full “selections needed” list</Label>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Off by default — clients start with the Style Quiz + inspiration board instead of a long list.
+              Turn on to seed the full selections list at project creation.
+            </p>
           </div>
           <Switch
             checked={defaults.seedSelections !== false}
