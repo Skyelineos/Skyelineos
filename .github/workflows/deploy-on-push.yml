@@ -28,6 +28,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Deploy lock — if a QA run is in flight (system/deployLock.locked == true),
+      # abort so nothing ships mid-test and breaks the run. Reads the flag from
+      # Firestore's public REST endpoint (the doc is world-readable by rule).
+      # Re-run this job from the Actions tab once the QA run finishes.
+      - name: Check deploy lock
+        run: |
+          URL="https://firestore.googleapis.com/v1/projects/skyelineos/databases/(default)/documents/system/deployLock"
+          LOCKED=$(curl -s "$URL" | jq -r '.fields.locked.booleanValue // false' 2>/dev/null || echo false)
+          echo "deployLock.locked = $LOCKED"
+          if [ "$LOCKED" = "true" ]; then
+            echo "::error::Deploy blocked — a QA run is in progress (system/deployLock). Re-run this job once it finishes."
+            exit 1
+          fi
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20'

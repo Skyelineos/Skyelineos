@@ -2089,6 +2089,9 @@ registerSendPortalInviteRoute(app, admin.firestore());
 import { registerNotificationRulesRoutes } from './notifications/rulesRoutes';
 registerNotificationRulesRoutes(app, admin.firestore());
 
+import { registerQaRoutes } from './qa/qaRoutes';
+registerQaRoutes(app, admin.firestore());  // /api/qa/{trigger,report,lock}
+
 // Catch-all 404 — must come AFTER all route registrations (QBO routes above included)
 app.use('*', (req: any, res: any) => {
   console.log(`❌ 404 - API endpoint not found: ${req.method} ${req.originalUrl}`);
@@ -2129,6 +2132,10 @@ exports.api = onRequest(
       'APP_BASE_URL',
       // Crestview Solace lead-intake form (/api/leads/intake) shared secret.
       'LEAD_INTAKE_SECRET',
+      // QA harness: GitHub PAT (actions:write) to dispatch the qa-suite workflow,
+      // and the shared bearer the workflow uses to post results back.
+      'GH_DISPATCH_TOKEN',
+      'QA_REPORT_TOKEN',
     ],
     memory: '512MiB',
     timeoutSeconds: 540, // Reels can take 30-90s to process

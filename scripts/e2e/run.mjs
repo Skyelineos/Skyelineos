@@ -12,6 +12,7 @@
 // any test failed, so it's CI-friendly.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { writeFileSync } from 'node:fs';
 import { createHarness, BASE_URL, API_BASE, RUN_ID } from './lib/harness.mjs';
 import { run as runTaskLibrary } from './suites/taskLibrary.suite.mjs';
 import { run as runUiSmoke } from './suites/uiSmoke.suite.mjs';
@@ -24,6 +25,38 @@ const suiteArg = (() => {
 })();
 const keep = has('--keep');
 const yes = has('--yes') || process.env.E2E_CONFIRM === '1';
+
+// ── Optional reporting layer ────────────────────────────────────────────────
+// When triggered by the dashboard "Test app" button, the qa-suite workflow sets
+// E2E_RUN_ID + E2E_REPORT_URL + E2E_REPORT_TOKEN so we can stream results into
+// qa_runs/{id} (the dashboard QA panel reads them live) and clear the deploy
+// lock on the final report. Absent these, this is a no-op — local runs are
+// unaffected.
+const REPORT_RUN_ID = process.env.E2E_RUN_ID || '';
+const REPORT_URL = process.env.E2E_REPORT_URL || '';
+const REPORT_TOKEN = process.env.E2E_REPORT_TOKEN || '';
+
+function buildChecks(h) {
+  return (h.results || []).map((r) => ({
+    name: r.name,
+    status: r.ok ? 'ok' : 'failed',
+    ms: r.ms,
+    error: r.err || null,
+  }));
+}
+
+async function report(phase, patch) {
+  if (!REPORT_RUN_ID || !REPORT_URL || !REPORT_TOKEN) return;
+  try {
+    await fetch(REPORT_URL, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${REPORT_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ runId: REPORT_RUN_ID, phase, patch }),
+    });
+  } catch (e) {
+    console.error('report failed:', e.message);
+  }
+}
 
 // Which suites to run.
 const runData = suiteArg ? suiteArg === 'taskLibrary' : true;
@@ -52,6 +85,7 @@ async function confirm() {
   await confirm();
   const h = createHarness();
   console.log(`\n🚀 E2E run ${RUN_ID} against ${BASE_URL}\n`);
+  await report('running', { status: 'running' });
 
   let hadError = false;
   try {
@@ -69,7 +103,18 @@ async function confirm() {
     console.error('\n💥 Fatal error during run:', e.message);
   } finally {
     await h.teardown({ keep });
-    const { failed } = h.summary();
+    const { passed, failed } = h.summary();
+    const checks = buildChecks(h);
+    const status = hadError ? 'error' : failed > 0 ? 'failed' : 'passed';
+    const reportDoc = {
+      runId: REPORT_RUN_ID || RUN_ID,
+      status,
+      summary: { total: checks.length, passed, failed, errored: hadError ? 1 : 0 },
+      checks,
+    };
+    try { writeFileSync('qa-report.json', JSON.stringify(reportDoc, null, 2)); } catch { /* ignore */ }
+    // Final report clears the deploy lock (the /api/qa/report handler does it).
+    await report('final', { status, summary: reportDoc.summary, checks });
     try {
       await h.signOut();
     } catch {

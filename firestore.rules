@@ -902,6 +902,22 @@ service cloud.firestore {
       allow read, write: if false; // Cloud Function only
     }
 
+    // QA harness deploy lock — a single flag the api Cloud Function sets while a
+    // QA run is in flight; deploy-on-push.yml reads it (publicly, via Firestore
+    // REST) and aborts deploys while locked. Not sensitive (just a boolean +
+    // reason), so world-readable; only the Cloud Function (Admin SDK) writes it.
+    match /system/deployLock {
+      allow read: if true;
+      allow write: if false; // Cloud Function only
+    }
+
+    // QA run records — status + per-check results streamed in by the workflow.
+    // Admins read them in the dashboard QA panel; only Cloud Functions write.
+    match /qa_runs/{runId} {
+      allow read: if isAdmin();
+      allow write: if false; // Cloud Function only
+    }
+
     // Deny everything else
     match /{document=**} {
       allow read, write: if false;
