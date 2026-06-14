@@ -11,6 +11,8 @@
     "deploy:rules": "firebase deploy --only firestore:rules --project skyelineos",
     "deploy:functions": "firebase deploy --only functions --project skyelineos",
     "check": "tsc",
+    "sync": "bash scripts/git-sync-check.sh",
+    "predeploy": "bash scripts/git-sync-check.sh --strict",
     "test:smoke": "node scripts/smoke-lumber.mjs",
     "test:smoke:local": "node scripts/smoke-lumber.mjs --url http://localhost:5173",
     "test:e2e": "node scripts/e2e/run.mjs",
