@@ -506,6 +506,26 @@ function DetailView({
               <Plus className="w-4 h-4" /> Add Standard Selections
             </Button>
           )}
+          {category === 'estimate' && (
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={async () => {
+                try {
+                  const { seedStandardEstimateTemplate } = await import('@/lib/seedStandardEstimateTemplate');
+                  const { created, count, total } = await seedStandardEstimateTemplate(user?.email || '');
+                  toast({
+                    title: created ? 'Standard estimate added' : 'Already exists',
+                    description: created ? `${count} line items ($${total.toLocaleString()}) — open to edit, then ★ to set as default.` : 'A "Standard Estimate" template already exists.',
+                  });
+                } catch (e: any) {
+                  toast({ title: 'Seed failed', description: e?.message || '', variant: 'destructive' });
+                }
+              }}
+            >
+              <Plus className="w-4 h-4" /> Add Standard Estimate
+            </Button>
+          )}
           <Button
             onClick={openCreate}
             style={{ backgroundColor: '#C9A96E' }}
