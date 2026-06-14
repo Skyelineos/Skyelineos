@@ -324,6 +324,21 @@ function DetailView({
     }
   }
 
+  // "Publish" a template as the project default for its category. New projects
+  // seed from whatever is marked default here (schedule → Gantt, job → task
+  // list). Setting one clears the flag on the others in the same category.
+  async function setAsDefault(id: string) {
+    try {
+      const collectionName = category === 'schedule' ? 'scheduleTemplates' : 'templates';
+      await Promise.all(templates.map(t =>
+        updateDoc(doc(db, collectionName, t.id), { isDefault: t.id === id, updatedAt: serverTimestamp() })
+      ));
+      toast({ title: 'Set as default', description: 'New projects will seed from this template.' });
+    } catch (e: any) {
+      toast({ title: 'Could not set default', description: e?.message || '', variant: 'destructive' });
+    }
+  }
+
   if (category === 'document' && editingTemplate) {
     return (
       <DocumentTemplateEditor
@@ -479,6 +494,18 @@ function DetailView({
                   >
                     {category === 'schedule' ? 'Open' : 'Use Template'}
                   </Button>
+                  {(category === 'schedule' || category === 'job') && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className={`px-2.5 ${tmpl.isDefault ? 'text-amber-600 border-amber-300' : ''}`}
+                      title={tmpl.isDefault ? 'This is the project default' : 'Set as project default (publish)'}
+                      disabled={tmpl.isDefault}
+                      onClick={() => setAsDefault(tmpl.id)}
+                    >
+                      <Star className={`w-3.5 h-3.5 ${tmpl.isDefault ? 'fill-amber-500 stroke-amber-500' : ''}`} />
+                    </Button>
+                  )}
                   <Button
                     size="sm"
                     variant="outline"

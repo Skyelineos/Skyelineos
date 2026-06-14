@@ -12,7 +12,7 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { getProjectDefaults, saveProjectDefaults, type ProjectDefaults } from '@/lib/projectDefaults';
-import { Layers } from 'lucide-react';
+import { Layers, Star } from 'lucide-react';
 
 interface Opt { id: string; name: string }
 
@@ -20,8 +20,6 @@ const STARTER = '__starter__';
 
 export function ProjectDefaultsSettings() {
   const { toast } = useToast();
-  const [scheduleTemplates, setScheduleTemplates] = useState<Opt[]>([]);
-  const [taskTemplates, setTaskTemplates] = useState<Opt[]>([]);
   const [estimates, setEstimates] = useState<Opt[]>([]);
   const [defaults, setDefaults] = useState<ProjectDefaults>({ seedSelections: true });
   const [loading, setLoading] = useState(true);
@@ -30,14 +28,10 @@ export function ProjectDefaultsSettings() {
   useEffect(() => {
     (async () => {
       try {
-        const [sched, tasks, ests, current] = await Promise.all([
-          getDocs(query(collection(db, 'scheduleTemplates'), orderBy('createdAt', 'desc'))).catch(() => null),
-          getDocs(query(collection(db, 'templates'), orderBy('createdAt', 'desc'))).catch(() => null),
+        const [ests, current] = await Promise.all([
           getDocs(query(collection(db, 'estimates'), orderBy('createdAt', 'desc'), limit(50))).catch(() => null),
           getProjectDefaults(),
         ]);
-        if (sched) setScheduleTemplates(sched.docs.map(d => ({ id: d.id, name: (d.data() as any).name || 'Untitled' })));
-        if (tasks) setTaskTemplates(tasks.docs.map(d => ({ id: d.id, name: (d.data() as any).name || 'Untitled' })));
         if (ests) setEstimates(ests.docs.map(d => ({ id: d.id, name: (d.data() as any).title || (d.data() as any).projectName || 'Estimate' })));
         setDefaults({ seedSelections: true, ...current });
       } finally {
@@ -73,35 +67,12 @@ export function ProjectDefaultsSettings() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
-        {/* Default Gantt */}
-        <div>
-          <Label className="text-sm">Default schedule (Gantt)</Label>
-          <Select
-            value={defaults.scheduleTemplateId || STARTER}
-            onValueChange={v => setDefaults(d => ({ ...d, scheduleTemplateId: v === STARTER ? undefined : v }))}
-          >
-            <SelectTrigger className="bg-white mt-1"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value={STARTER}>Built-in starter (House Build)</SelectItem>
-              {scheduleTemplates.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Default task list */}
-        <div>
-          <Label className="text-sm">Default task list</Label>
-          <Select
-            value={defaults.jobTaskTemplateId || STARTER}
-            onValueChange={v => setDefaults(d => ({ ...d, jobTaskTemplateId: v === STARTER ? undefined : v }))}
-          >
-            <SelectTrigger className="bg-white mt-1"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value={STARTER}>None (don’t seed tasks)</SelectItem>
-              {taskTemplates.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <p className="text-xs text-gray-400 mt-1">Task templates are managed in Templates.</p>
+        {/* Schedule + task defaults are now published from the Templates tab. */}
+        <div className="rounded-lg border border-gray-200 bg-white p-3 text-xs text-gray-500">
+          <span className="font-medium text-gray-700">Schedule (Gantt) &amp; task list defaults</span> are set in the
+          <span className="font-medium text-gray-700"> Templates</span> tab — open a Schedule or Job template and click the
+          <Star className="inline h-3 w-3 mx-0.5 fill-amber-500 stroke-amber-500" />“Set as default” star. New projects seed
+          from whatever's marked default there (or the built-in starter if none is).
         </div>
 
         {/* Default estimate */}

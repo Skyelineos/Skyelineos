@@ -39,6 +39,29 @@ export async function getProjectDefaults(): Promise<ProjectDefaults> {
   }
 }
 
+// The default per category is whatever the GC marked as "default" in the
+// Templates tab (isDefault === true) — that's the single source of truth, so
+// editing/creating + publishing a template there changes what new projects get.
+// Falls back to the legacy settings/projectDefaults id, then to built-in starters.
+async function defaultScheduleTemplateId(settings: ProjectDefaults): Promise<string | undefined> {
+  try {
+    const snap = await getDocs(query(collection(db, 'scheduleTemplates'), where('isDefault', '==', true), limit(1)));
+    if (!snap.empty) return snap.docs[0].id;
+  } catch { /* index/permission — fall through */ }
+  return settings.scheduleTemplateId;
+}
+
+async function defaultJobTemplateId(settings: ProjectDefaults): Promise<string | undefined> {
+  try {
+    // Job templates carry the structured task list. Filter isDefault client-side
+    // to avoid a composite index.
+    const snap = await getDocs(query(collection(db, 'templates'), where('category', '==', 'job')));
+    const def = snap.docs.find(d => (d.data() as any).isDefault === true);
+    if (def) return def.id;
+  } catch { /* fall through */ }
+  return settings.jobTaskTemplateId;
+}
+
 export async function saveProjectDefaults(d: ProjectDefaults): Promise<void> {
   const { setDoc } = await import('firebase/firestore');
   await setDoc(doc(db, 'settings', 'projectDefaults'), { ...d, updatedAt: serverTimestamp() }, { merge: true });
@@ -152,8 +175,9 @@ async function seedSchedule(projectId: string, startDate: string, defaults: Proj
   let links: any[] = [];
   let clientSchedule: GeneratedSchedule | null = null;
 
-  if (defaults.scheduleTemplateId) {
-    const tmpl = await loadTemplate(defaults.scheduleTemplateId);
+  const scheduleTemplateId = await defaultScheduleTemplateId(defaults);
+  if (scheduleTemplateId) {
+    const tmpl = await loadTemplate(scheduleTemplateId);
     if (tmpl) { tasks = tmpl.tasks || []; links = tmpl.links || []; clientSchedule = wbsToClientSchedule(tasks); }
   }
   if (tasks.length === 0) {
@@ -184,9 +208,10 @@ async function seedSchedule(projectId: string, startDate: string, defaults: Proj
 }
 
 async function seedTasks(projectId: string, startDate: string, defaults: ProjectDefaults) {
-  if (!defaults.jobTaskTemplateId) return;
+  const jobTemplateId = await defaultJobTemplateId(defaults);
+  if (!jobTemplateId) return;
   if (await projectHasTasks(projectId)) return;
-  await applyJobTemplate(defaults.jobTaskTemplateId, projectId, startDate);
+  await applyJobTemplate(jobTemplateId, projectId, startDate);
 }
 
 async function seedEstimate(projectId: string, projectName: string, defaults: ProjectDefaults) {
