@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { InspirationBoard } from '@/components/client-portal/InspirationBoard';
+import StyleQuiz from '@/components/client-portal/StyleQuiz';
 import {
   Image as ImageIcon, Layers, CheckCircle2, ChevronRight, Sparkles, Lock,
 } from 'lucide-react';
@@ -128,6 +129,18 @@ export default function DesignStudio({ projectId, clientContactId, clientName, o
             <ChevronRight className="h-3.5 w-3.5 ml-1" />
           </Button>
         )}
+      </div>
+
+      {/* ── Discover your style (guided quiz) ───────────────────────────── */}
+      <StyleQuiz projectId={projectId} fromUserId={clientContactId} fromUserName={clientName} />
+
+      {/* ── Your inspiration (front-and-center before plans/options exist) ─ */}
+      <div>
+        <h3 className="text-sm font-bold text-gray-900 mb-1">Your Inspiration</h3>
+        <p className="text-xs text-gray-500 mb-3">
+          Upload photos of looks you love — your designer sees these and pulls from them.
+        </p>
+        <InspirationBoard clientContactId={clientContactId} clientName={clientName} />
       </div>
 
       {/* ── Renderings & options gallery ───────────────────────────────── */}
@@ -264,15 +277,6 @@ export default function DesignStudio({ projectId, clientContactId, clientName, o
           </div>
         </div>
       )}
-
-      {/* ── Inspiration ────────────────────────────────────────────────── */}
-      <div>
-        <h3 className="text-sm font-bold text-gray-900 mb-1">Your Inspiration</h3>
-        <p className="text-xs text-gray-500 mb-3">
-          Upload photos of looks you love — your designer sees these and pulls from them.
-        </p>
-        <InspirationBoard clientContactId={clientContactId} clientName={clientName} />
-      </div>
 
       {/* Lightbox */}
       <Dialog open={!!lightbox} onOpenChange={() => setLightbox(null)}>

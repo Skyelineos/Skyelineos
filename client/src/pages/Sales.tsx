@@ -19,6 +19,8 @@ import { useToast } from '@/hooks/use-toast';
 import { useConfirm } from '@/hooks/use-confirm';
 import { useAuth } from '@/auth/AuthContext';
 import { VcardImportZone } from '@/components/sales/VcardImportZone';
+import { findDuplicateContacts, computeMergeUpdates, type DuplicateMatch } from '@/lib/contacts/duplicateDetection';
+import { DuplicateContactDialog, type DuplicateResolution } from '@/components/contacts/DuplicateContactDialog';
 import {
   Plus, Search, MoreVertical, Filter, X, ChevronUp, ChevronDown,
   ExternalLink, FolderOpen, List, LayoutGrid, Settings2, Trash2,
@@ -319,7 +321,9 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
   teamMembers: TeamMember[];
   prefill?: LeadPrefill;
   onClose: () => void;
-  onSave: (data: Partial<Client>) => Promise<void>;
+  // Returns false when the save was abandoned (e.g. the operator cancelled the
+  // duplicate-detection prompt) so the dialog stays open for editing.
+  onSave: (data: Partial<Client>) => Promise<void | false>;
 }) {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -490,7 +494,7 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
               phone: form.spousePhone.trim() || null,
             }
           : null;
-      await onSave({
+      const result = await onSave({
         name: fullName,
         firstName: form.firstName.trim() || null,
         lastName:  form.lastName.trim()  || null,
@@ -516,7 +520,7 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
         assignedToName: assignedMember?.name || form.assignedToName || null,
         tags: form.tags,
       });
-      onClose();
+      if (result !== false) onClose();
     } catch (e: any) {
       toast({ title: 'Error saving', description: e.message, variant: 'destructive' });
     } finally { setSaving(false); }
@@ -1391,6 +1395,13 @@ export default function Sales() {
   const [stages, setStages] = useState<StageConfig[]>(DEFAULT_STAGES);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
+  // Duplicate-detection flow for new leads (see handleSave). Pauses on a promise
+  // resolved by DuplicateContactDialog: merge / create-anyway / cancel.
+  const [dupState, setDupState] = useState<{
+    candidate: Parameters<typeof findDuplicateContacts>[0];
+    matches: DuplicateMatch[];
+    resolve: (r: DuplicateResolution) => void;
+  } | null>(null);
   const [viewMode, setViewMode] = useState<'pipeline' | 'list'>('pipeline');
   const [filterOpen, setFilterOpen] = useState(false);
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
@@ -1581,17 +1592,25 @@ export default function Sales() {
     }, () => setLoading(false));
   }, []);
 
-  // Load team members for "Assigned To"
+  // Load team members for "Assigned To" — a lead can only be assigned to a
+  // Project Manager or to yourself (the signed-in admin/GC). Other roles
+  // (clients, subs, designers, generic office staff) are filtered out.
+  // Canonical PM role is `projectManager` (camelCase); accept normalized
+  // variants (project_manager / pm) too.
   useEffect(() => {
+    const isPmRole = (v: any) =>
+      ['projectmanager', 'pm'].includes(String(v || '').toLowerCase().replace(/_/g, ''));
     return onSnapshot(
       query(collection(db, 'users'), orderBy('name', 'asc')),
       snap => setTeamMembers(
         snap.docs
-          .map(d => ({ id: d.id, name: (d.data() as any).name || '', email: (d.data() as any).email || '' }))
+          .map(d => ({ id: d.id, name: (d.data() as any).name || '', email: (d.data() as any).email || '', role: (d.data() as any).role }))
           .filter(m => m.name)
+          .filter(m => isPmRole(m.role) || m.id === user?.firebaseUid)
+          .map(({ id, name, email }) => ({ id, name, email }))
       )
     );
-  }, []);
+  }, [user?.firebaseUid]);
 
   // All unique tags across clients
   const allTags = [...new Set(clients.flatMap(c => c.tags || []))].sort();
@@ -1648,6 +1667,47 @@ export default function Sales() {
         checkProjectCreation(updatedClient, prevStage, data.stage);
       }
     } else {
+      // Duplicate detection — before creating a brand-new lead, check for an
+      // existing contact that shares a name, email, phone, or address. The
+      // operator chooses: merge into the existing record (no new lead created),
+      // create a new lead anyway (optionally noting what's different), or cancel.
+      const candidate = {
+        name: data.name || '',
+        email: data.email || '',
+        phone: data.phone || '',
+        company: data.company || '',
+        address: data.jobAddress || '',
+        city: data.city || '',
+      };
+      const matches = await findDuplicateContacts(candidate);
+      if (matches.length > 0) {
+        const resolution = await new Promise<DuplicateResolution>((resolve) => {
+          setDupState({ candidate, matches, resolve });
+        });
+        setDupState(null);
+        if (resolution.action === 'cancel') return false; // keep the lead dialog open
+        if (resolution.action === 'merge') {
+          const updates = computeMergeUpdates(resolution.match.data, candidate);
+          try {
+            await updateDoc(doc(db, 'contacts', resolution.match.id), {
+              ...updates,
+              updatedAt: serverTimestamp(),
+            });
+            toast({
+              title: 'Merged into existing contact',
+              description: `Updated “${resolution.match.name}” — no duplicate lead created.`,
+            });
+          } catch (e: any) {
+            toast({ title: 'Merge failed', description: e?.message || '', variant: 'destructive' });
+          }
+          setEditing(null);
+          return;
+        }
+        // create anyway — fold the "what's different" note into the lead notes.
+        if (resolution.differenceNote) {
+          data = { ...data, notes: [data.notes, `Duplicate check: ${resolution.differenceNote}`].filter(Boolean).join('\n') };
+        }
+      }
       // Two writes, one batch: a Sales/CRM client row AND a matching contact row
       // (so the new lead also appears in Contacts as type='client'). The two
       // docs cross-reference each other via salesClientId/contactId.
@@ -1924,6 +1984,16 @@ export default function Sales() {
         onClose={() => { setLeadDialogOpen(false); setEditing(null); setLeadPrefill(undefined); }}
         onSave={handleSave}
       />
+
+      {dupState && (
+        <DuplicateContactDialog
+          open={true}
+          candidate={dupState.candidate}
+          matches={dupState.matches}
+          entityLabel="lead"
+          onResolve={dupState.resolve}
+        />
+      )}
 
       <EditStagesModal
         open={editStagesOpen}

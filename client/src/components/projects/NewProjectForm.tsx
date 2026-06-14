@@ -34,6 +34,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { useAuth } from '@/hooks/use-auth';
 import { NewClientModal } from '@/components/contacts/NewClientModal';
+import { useAuth } from '@/auth/AuthContext';
 import type { Contact } from '@shared/messaging-types';
 
 const projectSchema = z.object({
@@ -166,20 +167,34 @@ export function NewProjectForm({ isOpen, onClose, onProjectCreated }: NewProject
     contact.type === 'Client'
   );
 
-  // Filter to team members eligible to be a project manager. The canonical
-  // role string in this codebase is `projectManager` (camelCase, no
-  // underscore) — see firestore.rules, useRoleAccess, taskDefaults. The
-  // legacy filter only matched 'project_manager'/'pm' and missed every
-  // contact with the canonical value, which is why a real PM showed
-  // "No subcontractor found." Accept every variation + 'admin' / 'gc' /
-  // 'team' / 'employee' since a GC or office team member may also be
-  // assigned as the project manager on a given job.
-  const projectManagerContacts = allContacts.filter((contact: any) => {
-    const r = String(contact.role || '').toLowerCase().replace(/_/g, '');
-    const t = String(contact.type || '').toLowerCase().replace(/_/g, '');
-    const ok = (v: string) => ['projectmanager', 'pm', 'gc', 'admin', 'team', 'employee'].includes(v);
-    return ok(r) || ok(t);
-  });
+  // Project-manager options = the Skyeline team. Real team members live in the
+  // `users` collection (admin-listable; fails silently for non-admins). PM-
+  // tagged contacts are folded in, and the signed-in GC ("you") is always an
+  // option so there's at least yourself to assign.
+  // Role match: the canonical value is `projectManager` (camelCase) — see
+  // firestore.rules / taskDefaults — so normalize underscores and also accept
+  // pm/gc/admin/team/employee, since a GC or office team member may run a job.
+  const { user: me } = useAuth();
+  const [teamUsers, setTeamUsers] = useState<any[]>([]);
+  useEffect(() => {
+    getDocs(collection(db, 'users'))
+      .then(snap => setTeamUsers(snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }))))
+      .catch(() => setTeamUsers([]));
+  }, []);
+  const isPmRole = (v: any) =>
+    ['projectmanager', 'pm', 'gc', 'admin', 'team', 'employee']
+      .includes(String(v || '').toLowerCase().replace(/_/g, ''));
+  const projectManagerContacts = (() => {
+    const byId = new Map<string, any>();
+    const add = (c: any) => { if (c && c.id != null) byId.set(String(c.id), { ...c, id: String(c.id) }); };
+    teamUsers.filter((u: any) => isPmRole(u.role)).forEach(add);
+    allContacts.filter((c: any) => isPmRole(c.role) || isPmRole(c.type)).forEach(add);
+    if ((me as any)?.firebaseUid) {
+      const meId = String((me as any).firebaseUid);
+      byId.set(meId, { id: meId, name: `${me?.name || 'Me'} (you)`, role: me?.role });
+    }
+    return Array.from(byId.values());
+  })();
 
   // Designer contacts — only surface real designers (not subs / clients / etc.)
   const designerContacts = allContacts.filter((contact: any) =>
@@ -392,6 +407,24 @@ export function NewProjectForm({ isOpen, onClose, onProjectCreated }: NewProject
             variant: 'destructive',
           });
         }
+      }
+
+      // Seed the rest of the project's defaults (Gantt, task list, estimate,
+      // selections) from the designated defaults (or built-in starters) for any
+      // surface the form didn't already hand-pick. Guarded + non-fatal.
+      try {
+        const { seedProjectDefaults } = await import('@/lib/projectDefaults');
+        await seedProjectDefaults({
+          projectId: newProjectId,
+          projectName: data.projectName,
+          startDate: data.startDate,
+          fromUserId: user.id?.toString(),
+          fromUserName: user.name || '',
+          skipSchedule: !!selectedScheduleTemplateId, // form already applied a Gantt template
+          skipTasks: !!selectedTemplateId,            // form already applied a task template
+        });
+      } catch (e: any) {
+        console.warn('Failed to seed project defaults', e?.message || e);
       }
 
       toast({

@@ -446,6 +446,30 @@ service cloud.firestore {
       allow delete: if isAdmin() || isGC();
     }
 
+    // Style quiz answers — the homeowner's guided style preferences. The client
+    // (project owner) reads/writes their own; GC + designer read to guide the
+    // selections.
+    match /projects/{projectId}/stylePreferences/{docId} {
+      allow read: if isGC() || isDesigner() || (isClient() && clientOwnsProject(projectId));
+      allow write: if isGC() || (isClient() && clientOwnsProject(projectId));
+    }
+
+    // Design Style Discovery — pairwise comparison results. Client (owner)
+    // creates/reads their own; GC + designer read.
+    match /projects/{projectId}/styleComparisons/{docId} {
+      allow read: if isGC() || isDesigner() || (isClient() && clientOwnsProject(projectId));
+      allow create, update: if isGC() || (isClient() && clientOwnsProject(projectId));
+      allow delete: if isGC();
+    }
+
+    // Design Style Discovery — Other / Upload Inspiration submissions. Client
+    // (owner) creates/reads their own; GC + designer read (+ mark reviewed).
+    match /projects/{projectId}/styleInspiration/{docId} {
+      allow read: if isGC() || isDesigner() || (isClient() && clientOwnsProject(projectId));
+      allow create, update: if isGC() || isDesigner() || (isClient() && clientOwnsProject(projectId));
+      allow delete: if isGC();
+    }
+
     match /projects/{projectId}/schedules/{scheduleId} {
       allow read: if isGC() || isDesigner()
         || (isClient() && clientOwnsProject(projectId));
@@ -759,6 +783,14 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create, update: if isGC();
       allow delete: if isAdmin() || isGC();
+
+      // Template subcollections (e.g. job templates' `jobTasks`). The catch-all
+      // denies these otherwise, which would break applyJobTemplate + the
+      // standard-task-list seeder.
+      match /{sub=**} {
+        allow read: if isSignedIn();
+        allow write: if isGC();
+      }
     }
 
     // Automations
