@@ -46,6 +46,7 @@ const ROUTES = [
   { path: '/templates',         category: 'Global' },
   { path: '/playbook',          category: 'Global' },
   { path: '/automations',       category: 'Global' },
+  { path: '/master-tasks',      category: 'Global' },
   { path: '/import-center',     category: 'Global' },
   { path: '/settings',          category: 'Global' },
   // Tools section
@@ -64,6 +65,8 @@ const ROUTES = [
   { path: '/projects/{projectId}/documents',        category: 'Project' },
   { path: '/projects/{projectId}/photos',           category: 'Project' },
   { path: '/projects/{projectId}/tasks',            category: 'Project' },
+  { path: '/projects/{projectId}/build-plan',       category: 'Project' },
+  { path: '/projects/{projectId}/closeout',         category: 'Project' },
   { path: '/projects/{projectId}/change-orders',    category: 'Project' },
   { path: '/projects/{projectId}/site-log',         category: 'Project' },
   { path: '/projects/{projectId}/bills',            category: 'Project' },
