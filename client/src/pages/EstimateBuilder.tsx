@@ -4,10 +4,13 @@ import {
   collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot,
   serverTimestamp, query, orderBy, where, getDocs
 } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { db, auth } from '@/lib/firebase';
+import { createContract } from '@/lib/contracts/firestore';
+import { estimateToContractInput } from '@/lib/contracts/fromEstimate';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { InviteToPortalButton } from '@/components/portal/InviteToPortalButton';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
@@ -18,6 +21,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useConfirm } from '@/hooks/use-confirm';
 import { GmailBidImporter } from '@/components/estimates/GmailBidImporter';
 import { EstimateCostingsTab } from '@/components/estimates/EstimateCostingsTab';
+import { EstimateScheduleTab } from '@/components/estimates/EstimateScheduleTab';
 import { LineDescriptionButton } from '@/components/estimates/LineDescriptionButton';
 import { SubPickerButton } from '@/components/estimates/SubPickerButton';
 import {
@@ -27,7 +31,7 @@ import {
   Hammer, Zap, Droplets, Paintbrush, Thermometer, Package,
   TreePine, Layers, Grid3X3, ShieldCheck, Ruler, Scissors,
   Palette, AlertCircle, SlidersHorizontal, Lock, Eye, TrendingUp,
-  Check,
+  Check, FileSignature,
 } from 'lucide-react';
 import { lazy, Suspense } from 'react';
 import { MinimalSpinner } from '@/components/layout/MinimalSpinner';
@@ -115,7 +119,7 @@ interface Estimate {
   updatedAt?: any;
 }
 
-type EstimateTab = 'details' | 'costings' | 'bid_packages' | 'takeoffs';
+type EstimateTab = 'details' | 'costings' | 'schedule' | 'bid_packages' | 'takeoffs';
 
 interface CRMClient {
   id: string;
@@ -871,6 +875,7 @@ function EstimateModal({
   prefillProject?: { id: string; name: string } | null;
 }) {
   const defaultItems = () => FALLBACK_TRADES.slice(0, 5).map(t => newLineItem(t));
+  const { toast } = useToast();
 
   const [activeTab, setActiveTab]   = useState<EstimateTab>('details');
   const [title, setTitle]           = useState('');
@@ -1004,27 +1009,42 @@ function EstimateModal({
   })();
 
   const handleSave = async () => {
-    if (!title.trim()) return;
+    if (!title.trim()) {
+      toast({ title: 'Add a title', description: 'Give the estimate a title before saving.', variant: 'destructive' });
+      return;
+    }
     setSaving(true);
     const clientName = clients.find(c => c.id === clientId)?.name;
-    await onSave({
-      title: title.trim(),
-      clientId: clientId || undefined,
-      clientName,
-      jobAddress: jobAddress.trim() || undefined,
-      status,
-      lineItems: items,
-      subtotal: totals.subtotal,
-      overhead,
-      profit,
-      markup: markupPct,
-      tax: taxPct,
-      totalAmount: totals.total,
-      notes: notes.trim() || undefined,
-      validUntil: validUntil || undefined,
-    });
-    setSaving(false);
-    onClose();
+    try {
+      await onSave({
+        title: title.trim(),
+        clientId: clientId || undefined,
+        clientName,
+        jobAddress: jobAddress.trim() || undefined,
+        status,
+        lineItems: items,
+        subtotal: totals.subtotal,
+        overhead,
+        profit,
+        markup: markupPct,
+        tax: taxPct,
+        totalAmount: totals.total,
+        notes: notes.trim() || undefined,
+        validUntil: validUntil || undefined,
+      });
+      onClose();
+    } catch (e: any) {
+      // Never leave the button stuck on "Saving…" — surface the failure so the
+      // user knows their edits weren't persisted (and can retry).
+      console.error('Estimate save failed:', e);
+      toast({
+        title: 'Could not save estimate',
+        description: e?.message || 'Something went wrong saving your changes. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -1050,9 +1070,9 @@ function EstimateModal({
           {/* Tab bar — only shown when editing an existing estimate */}
           {editing && (
             <div className="flex gap-0 border-b border-gray-200 -mb-4 mt-2 overflow-x-auto">
-              {(['details', 'costings', 'bid_packages', 'takeoffs'] as EstimateTab[]).map(tab => {
+              {(['details', 'costings', 'schedule', 'bid_packages', 'takeoffs'] as EstimateTab[]).map(tab => {
                 const LABELS: Record<EstimateTab, string> = {
-                  details: 'Details', costings: 'Costings',
+                  details: 'Details', costings: 'Costings', schedule: 'Schedule',
                   bid_packages: 'Bid Packages', takeoffs: 'Takeoffs',
                 };
                 return (
@@ -1089,6 +1109,13 @@ function EstimateModal({
                 await updateDoc(doc(db, 'estimates', editing.id), { tax: v });
               }}
             />
+          </div>
+        )}
+
+        {/* ── Schedule tab (estimate-derived timeline) ── */}
+        {editing && activeTab === 'schedule' && (
+          <div className="overflow-y-auto flex-1">
+            <EstimateScheduleTab estimateId={editing.id} />
           </div>
         )}
 
@@ -1678,6 +1705,37 @@ export function EstimateBuilderContent({ projectId, projectName, embedded = fals
     toast({ title: 'Duplicated', description: 'Draft copy created.' });
   };
 
+  // Lifecycle spine — turn an approved estimate into a pre-filled client-build
+  // contract draft (line items by trade, allowance buckets, a starter draw
+  // schedule) instead of re-typing it all in the Contracts editor.
+  const handleGenerateContract = async (est: Estimate) => {
+    const input = estimateToContractInput(est, {
+      createdBy: auth.currentUser?.uid || '',
+    });
+    if (!input) {
+      toast({
+        title: 'Nothing to contract yet',
+        description: 'This estimate has no included line items to carry over.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    try {
+      await createContract(input);
+      toast({
+        title: 'Contract draft created',
+        description: `Pre-filled from "${est.title}". Opening Contracts…`,
+      });
+      setLocation('/contracts');
+    } catch (e: any) {
+      toast({
+        title: 'Could not create contract',
+        description: e?.message || 'Unknown error',
+        variant: 'destructive',
+      });
+    }
+  };
+
   const GMAIL_TRADE_MAP: Record<string, string> = {
     'Concrete / Foundation': 'concrete', 'Framing / Rough Carpentry': 'framing',
     'Roofing': 'roofing', 'Electrical': 'electrical', 'Plumbing': 'plumbing',
@@ -1907,12 +1965,33 @@ export function EstimateBuilderContent({ projectId, projectName, embedded = fals
                         <DropdownMenuItem onClick={() => { setEditing(est); setModalOpen(true); }}>
                           <Edit2 className="h-4 w-4 mr-2" />Edit
                         </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleGenerateContract(est)}>
+                          <FileSignature className="h-4 w-4 mr-2 text-[#C9A96E]" />Generate contract
+                        </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => { setImportTarget(est); setGmailOpen(true); }}>
                           <Mail className="h-4 w-4 mr-2 text-red-500" />Add bids from Gmail
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => handleDuplicate(est)}>
                           <Copy className="h-4 w-4 mr-2" />Duplicate
                         </DropdownMenuItem>
+                        {(() => {
+                          const lc = est.clientId ? clients.find(c => c.id === est.clientId) : null;
+                          return lc?.email ? (
+                            <>
+                              <DropdownMenuSeparator />
+                              <div className="px-1 py-0.5">
+                                <InviteToPortalButton
+                                  email={lc.email}
+                                  firstName={lc.name?.split(' ')[0]}
+                                  contactId={est.clientId}
+                                  variant="ghost"
+                                  size="sm"
+                                  className="w-full justify-start gap-2 font-normal h-8"
+                                />
+                              </div>
+                            </>
+                          ) : null;
+                        })()}
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={() => handleDelete(est)} className="text-red-600">
                           <Trash2 className="h-4 w-4 mr-2" />Delete

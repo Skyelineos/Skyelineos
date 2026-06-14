@@ -8,6 +8,9 @@ import { db } from '@/lib/firebase';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { InviteToPortalButton } from '@/components/portal/InviteToPortalButton';
+import { AddressSearchInput } from '@/components/common/AddressSearchInput';
+import { MapPinPicker } from '@/components/common/MapPinPicker';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -19,13 +22,15 @@ import { VcardImportZone } from '@/components/sales/VcardImportZone';
 import {
   Plus, Search, MoreVertical, Filter, X, ChevronUp, ChevronDown,
   ExternalLink, FolderOpen, List, LayoutGrid, Settings2, Trash2,
-  ArrowRight, Edit2, User,
+  ArrowRight, Edit2, User, MapPin,
 } from 'lucide-react';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 type ProjectType = 'custom_home' | 'remodel' | 'addition' | 'spec' | 'commercial' | 'other';
-type LeadSource  = 'referral' | 'parade_of_homes' | 'website' | 'instagram' | 'email' | 'phone' | 'other';
+type LeadSource  =
+  | 'website' | 'event' | 'ad_campaign' | 'referral'
+  | 'instagram' | 'parade_of_homes' | 'email' | 'phone' | 'other';
 
 interface StageConfig { key: string; label: string; color: string; }
 
@@ -40,12 +45,20 @@ interface Client {
   stage: string;
   projectType?: ProjectType;
   source?: LeadSource;
+  // Specific event/campaign name behind `source` (e.g. "Parade of Homes 2026").
+  sourceDetail?: string | null;
   jobAddress?: string | null;
   city?: string | null;
   state?: string | null;
   zip?: string | null;
+  // Job-site map pin (set via the lead form's map picker). Carried into the
+  // project's buildLocation when the lead converts.
+  latitude?: number | null;
+  longitude?: number | null;
   spouse?: {
     name: string;
+    firstName?: string | null;
+    lastName?: string | null;
     email?: string | null;
     phone?: string | null;
   } | null;
@@ -88,15 +101,24 @@ const PROJECT_TYPES: { value: ProjectType; label: string }[] = [
   { value: 'other',       label: 'Other'       },
 ];
 
+// Lead-gen avenues. Keep in sync with SOURCE_LABELS in
+// functions/src/leads/newLeadAlert.ts and ALLOWED_SOURCES in
+// functions/src/leads/intakeRoute.ts. `event` and `ad_campaign` pair with the
+// "Source detail" field below so each specific open house / campaign is labeled.
 const LEAD_SOURCES: { value: LeadSource; label: string }[] = [
-  { value: 'referral',        label: 'Referral'        },
-  { value: 'parade_of_homes', label: 'Parade of Homes' },
-  { value: 'website',         label: 'Website'         },
-  { value: 'instagram',       label: 'Instagram'       },
-  { value: 'email',           label: 'Email'           },
-  { value: 'phone',           label: 'Phone'           },
-  { value: 'other',           label: 'Other'           },
+  { value: 'website',         label: 'Website'           },
+  { value: 'event',           label: 'Event / Open House' },
+  { value: 'ad_campaign',     label: 'Ad Campaign'       },
+  { value: 'referral',        label: 'Referral'          },
+  { value: 'instagram',       label: 'Instagram / Social' },
+  { value: 'parade_of_homes', label: 'Parade of Homes'   },
+  { value: 'email',           label: 'Email'             },
+  { value: 'phone',           label: 'Phone / Walk-in'   },
+  { value: 'other',           label: 'Other'             },
 ];
+
+// Sources where naming the specific event/campaign matters for ROI tracking.
+const SOURCES_WITH_DETAIL = new Set<LeadSource>(['event', 'ad_campaign', 'parade_of_homes', 'referral']);
 
 const COLOR_OPTIONS = [
   '#64748b','#3b82f6','#f59e0b','#8b5cf6','#10b981',
@@ -303,18 +325,21 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
   const [tagInput, setTagInput] = useState('');
+  const [showPin, setShowPin] = useState(false);
 
   const blank = {
     firstName: '', lastName: '',
     email: '', phone: '', company: '', jobAddress: '', city: '', state: '', zip: '',
+    latitude: null as number | null, longitude: null as number | null,
     // hasSpouse toggles the spouse fields. We keep the three spouse fields in
     // state regardless so toggling off-then-on doesn't wipe entered text;
     // the save handler only emits a spouse object when hasSpouse is true.
     hasSpouse: false,
-    spouseName: '', spouseEmail: '', spousePhone: '',
+    spouseFirstName: '', spouseLastName: '', spouseEmail: '', spousePhone: '',
     stage: stages[0]?.key || 'new_lead',
     projectType: 'custom_home' as ProjectType,
     source: 'referral' as LeadSource,
+    sourceDetail: '',
     budget: '', squareFootage: '', notes: '',
     priority: 'medium' as 'low' | 'medium' | 'high',
     assignedTo: user?.firebaseUid || '',
@@ -353,13 +378,17 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
           city: editing.city || '',
           state: editing.state || '',
           zip: editing.zip || '',
-          hasSpouse: !!(editing.spouse && editing.spouse.name),
-          spouseName: editing.spouse?.name || '',
+          latitude: typeof editing.latitude === 'number' ? editing.latitude : null,
+          longitude: typeof editing.longitude === 'number' ? editing.longitude : null,
+          hasSpouse: !!(editing.spouse && (editing.spouse.name || editing.spouse.firstName)),
+          spouseFirstName: editing.spouse?.firstName || (editing.spouse?.name || '').trim().split(/\s+/)[0] || '',
+          spouseLastName: editing.spouse?.lastName || (editing.spouse?.name || '').trim().split(/\s+/).slice(1).join(' ') || '',
           spouseEmail: editing.spouse?.email || '',
           spousePhone: editing.spouse?.phone || '',
           stage: editing.stage || stages[0]?.key || 'new_lead',
           projectType: editing.projectType || 'custom_home',
           source: editing.source || 'referral',
+          sourceDetail: editing.sourceDetail || '',
           budget: editing.budget?.toString() || '',
           squareFootage: editing.squareFootage?.toString() || '',
           notes: editing.notes || '',
@@ -382,7 +411,8 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
           state:       prefill.state       ?? blank.state,
           zip:         prefill.zip         ?? blank.zip,
           hasSpouse:   !!prefill.spouseName,
-          spouseName:  prefill.spouseName  ?? blank.spouseName,
+          spouseFirstName: (prefill.spouseName || '').trim().split(/\s+/)[0] || blank.spouseFirstName,
+          spouseLastName:  (prefill.spouseName || '').trim().split(/\s+/).slice(1).join(' ') || blank.spouseLastName,
           spouseEmail: prefill.spouseEmail ?? blank.spouseEmail,
           spousePhone: prefill.spousePhone ?? blank.spousePhone,
           budget:      prefill.budget      ?? blank.budget,
@@ -392,6 +422,8 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
         setForm(blank);
       }
       setTagInput('');
+      // Auto-open the map when the lead already has a pin so it's visible on edit.
+      setShowPin(!!editing && typeof editing.latitude === 'number');
     }
   }, [open, editing, prefill]);
 
@@ -445,10 +477,15 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
       // Emit a spouse object only when the toggle is on AND there's a name.
       // Toggling off (or leaving the name blank) writes spouse: null so the
       // edit dialog reads cleanly on the next open.
+      const spouseFirst = form.spouseFirstName.trim();
+      const spouseLast = form.spouseLastName.trim();
+      const spouseFullName = `${spouseFirst} ${spouseLast}`.trim();
       const spousePayload =
-        form.hasSpouse && form.spouseName.trim()
+        form.hasSpouse && spouseFullName
           ? {
-              name: form.spouseName.trim(),
+              name: spouseFullName,
+              firstName: spouseFirst || null,
+              lastName: spouseLast || null,
               email: form.spouseEmail.trim() || null,
               phone: form.spousePhone.trim() || null,
             }
@@ -464,10 +501,13 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
         city: form.city || null,
         state: form.state || null,
         zip: form.zip || null,
+        latitude: typeof form.latitude === 'number' ? form.latitude : null,
+        longitude: typeof form.longitude === 'number' ? form.longitude : null,
         spouse: spousePayload,
         stage: form.stage,
         projectType: form.projectType,
         source: form.source,
+        sourceDetail: form.sourceDetail.trim() || null,
         budget: form.budget ? parseFloat(form.budget) : null,
         squareFootage: form.squareFootage ? parseFloat(form.squareFootage) : null,
         notes: form.notes || null,
@@ -543,10 +583,45 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
             </Select>
           </div>
 
+          {/* Source detail — which specific event / campaign / referrer. Shown
+              for sources where the specific name matters for ROI tracking. */}
+          {SOURCES_WITH_DETAIL.has(form.source) && (
+            <div>
+              <Label>
+                {form.source === 'ad_campaign' ? 'Campaign Name'
+                  : form.source === 'referral' ? 'Referred By'
+                  : 'Event Name'}
+              </Label>
+              <Input
+                value={form.sourceDetail}
+                onChange={e => set('sourceDetail', e.target.value)}
+                placeholder={
+                  form.source === 'ad_campaign' ? 'e.g. Meta Spring Reno'
+                    : form.source === 'referral' ? 'e.g. Jane Smith'
+                    : 'e.g. Parade of Homes 2026'
+                }
+                className="placeholder:text-gray-300"
+              />
+            </div>
+          )}
+
           {/* Address — full row for street, then City / State / Zip on one row */}
           <div className="sm:col-span-2">
             <Label>Job Address</Label>
-            <Input value={form.jobAddress} onChange={e => set('jobAddress', e.target.value)} placeholder="—" className="placeholder:text-gray-300" />
+            <AddressSearchInput
+              value={form.jobAddress}
+              onChange={v => set('jobAddress', v)}
+              onSelect={(r) => {
+                set('jobAddress', r.address?.line1 || r.label);
+                if (r.address?.city) set('city', r.address.city);
+                if (r.address?.state) set('state', r.address.state);
+                if (r.address?.zip) set('zip', r.address.zip);
+                if (typeof r.lat === 'number') set('latitude', r.lat);
+                if (typeof r.lng === 'number') set('longitude', r.lng);
+              }}
+              placeholder="—"
+              className="placeholder:text-gray-300"
+            />
           </div>
           <div className="sm:col-span-2 grid grid-cols-6 gap-3">
             <div className="col-span-3">
@@ -561,6 +636,33 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
               <Label>Zip</Label>
               <Input value={form.zip} onChange={e => set('zip', e.target.value)} placeholder="—" className="placeholder:text-gray-300" />
             </div>
+          </div>
+
+          {/* Job-site map pin. Collapsed until opened (so the map only mounts on
+              demand), auto-open when a pin already exists. Drop/drag the pin to
+              set the exact lot; carried into the project's buildLocation on
+              conversion. */}
+          <div className="sm:col-span-2">
+            {!showPin && form.latitude == null ? (
+              <Button variant="outline" size="sm" onClick={() => setShowPin(true)} className="gap-2">
+                <MapPin className="w-4 h-4" /> Pin job-site on map
+              </Button>
+            ) : (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label>Job-Site Location {form.latitude != null && <span className="text-green-600 text-xs font-normal">· pin set</span>}</Label>
+                  <Button variant="ghost" size="sm" onClick={() => setShowPin(false)} className="h-7 text-xs text-gray-500">
+                    <ChevronUp className="w-3.5 h-3.5 mr-1" /> Hide map
+                  </Button>
+                </div>
+                <MapPinPicker
+                  latitude={form.latitude}
+                  longitude={form.longitude}
+                  address={[form.jobAddress, form.city, form.state, form.zip].filter(Boolean).join(', ')}
+                  onChange={({ latitude, longitude }) => { set('latitude', latitude); set('longitude', longitude); }}
+                />
+              </div>
+            )}
           </div>
 
           {/* Spouse — hidden by default; "+ Add Spouse" reveals three fields.
@@ -585,7 +687,8 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
                     size="sm"
                     onClick={() => {
                       set('hasSpouse', false);
-                      set('spouseName', '');
+                      set('spouseFirstName', '');
+                      set('spouseLastName', '');
                       set('spouseEmail', '');
                       set('spousePhone', '');
                     }}
@@ -595,9 +698,13 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
                   </Button>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="sm:col-span-2">
-                    <Label>Spouse Name</Label>
-                    <Input value={form.spouseName} onChange={e => set('spouseName', e.target.value)} placeholder="—" className="placeholder:text-gray-300" />
+                  <div>
+                    <Label>Spouse First Name</Label>
+                    <Input value={form.spouseFirstName} onChange={e => set('spouseFirstName', e.target.value)} placeholder="—" className="placeholder:text-gray-300" />
+                  </div>
+                  <div>
+                    <Label>Spouse Last Name</Label>
+                    <Input value={form.spouseLastName} onChange={e => set('spouseLastName', e.target.value)} placeholder="—" className="placeholder:text-gray-300" />
                   </div>
                   <div>
                     <Label>Spouse Email</Label>
@@ -734,11 +841,38 @@ function CreateProjectDialog({ client, mode, previousStage, previousStageLabel, 
     if (!form.projectName.trim()) return;
     setSaving(true);
     try {
+      // Carry the lead's job-site pin into the project's buildLocation so the
+      // jobsite map + directions work immediately on the project overview.
+      const hasPin = typeof client.latitude === 'number' && typeof client.longitude === 'number';
+      const buildLocation = hasPin
+        ? {
+            addressLine1: client.jobAddress || form.address || '',
+            city: client.city || '',
+            state: client.state || '',
+            zipCode: client.zip || '',
+            latitude: client.latitude,
+            longitude: client.longitude,
+            status: 'unconfirmed' as const,
+          }
+        : null;
+
+      // Link the homeowner so their client portal can find this project. The
+      // portal resolves a client by their CONTACT-doc id (contacts.linkedUserId
+      // = auth.uid) and email — so we key the project by the lead's contactId
+      // and email here. Without this, lead→project conversions are invisible to
+      // the client. clientIds[] is the canonical shape; clientId mirrors it for
+      // legacy readers.
+      const contactId = (client as any).contactId || null;
+
       // 1. Create project
       const projectRef = await addDoc(collection(db, 'projects'), {
         name: form.projectName.trim(),
         clientName: client.name,
+        clientId: contactId,
+        clientIds: contactId ? [contactId] : [],
+        clientEmail: client.email || null,
         address: form.address || null,
+        ...(buildLocation ? { buildLocation } : {}),
         status: 'active',
         projectType: client.projectType || 'custom_home',
         contractAmount: client.budget || null,
@@ -817,9 +951,10 @@ function CreateProjectDialog({ client, mode, previousStage, previousStageLabel, 
           </div>
           <div>
             <Label>Job Address</Label>
-            <Input
+            <AddressSearchInput
               value={form.address}
-              onChange={e => set('address', e.target.value)}
+              onChange={v => set('address', v)}
+              onSelect={(r) => set('address', r.label || r.address?.line1 || '')}
               placeholder="123 Main St, Salt Lake City"
             />
           </div>
@@ -1128,6 +1263,16 @@ function PipelineCard({ client, stages, onEdit, onDelete, onAdvance }: {
                     className="w-full text-left flex items-center gap-2 px-3 py-2 hover:bg-gray-50">
                     <ArrowRight className="w-4 h-4" />Advance Stage
                   </button>
+                )}
+                {client.email && (
+                  <InviteToPortalButton
+                    email={client.email || undefined}
+                    firstName={client.firstName || undefined}
+                    contactId={(client as any).contactId}
+                    variant="ghost"
+                    size="sm"
+                    className="w-full justify-start gap-2 px-3 py-2 font-normal h-auto rounded-none"
+                  />
                 )}
                 <div className="border-t border-gray-100 my-1" />
                 <button onClick={() => { setMenuOpen(false); onDelete(); }}
@@ -1616,6 +1761,20 @@ export default function Sales() {
                 <span className="hidden sm:inline">List</span>
               </button>
             </div>
+
+            {/* Public lead-capture form (behind the model-home QR sign).
+                Opens the live form people fill from their phones; submissions
+                land right here in the pipeline. */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.open('/learn-more', '_blank')}
+              className="gap-1.5"
+              title="Open the public lead-capture form (the page behind your QR sign)"
+            >
+              <ExternalLink className="w-4 h-4" />
+              <span className="hidden sm:inline">Lead Form</span>
+            </Button>
 
             {/* Edit Stages */}
             <Button variant="outline" size="sm" onClick={() => setEditStagesOpen(true)} className="gap-1.5">

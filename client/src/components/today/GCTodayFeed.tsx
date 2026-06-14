@@ -8,8 +8,20 @@ import { TodaySection, TodayRow, greeting, todayLabel } from './TodaySection';
 import { Badge } from '@/components/ui/badge';
 import {
   ClipboardList, DollarSign, Camera, MessageSquare, Wallet,
-  AlertTriangle, FolderOpen, Flame,
+  AlertTriangle, FolderOpen, Flame, UserPlus,
 } from 'lucide-react';
+
+// Human label for each lead-gen avenue. Keep in sync with LEAD_SOURCES in
+// client/src/pages/Sales.tsx.
+const SOURCE_LABELS: Record<string, string> = {
+  website: 'Website', event: 'Event', ad_campaign: 'Ad Campaign',
+  referral: 'Referral', instagram: 'Social', parade_of_homes: 'Parade of Homes',
+  email: 'Email', phone: 'Phone', other: 'Other',
+};
+const sourceLabel = (source?: string, detail?: string) => {
+  const base = (source && SOURCE_LABELS[source]) || 'New';
+  return detail ? `${base} · ${detail}` : base;
+};
 
 const ymd = (d: Date) => d.toISOString().slice(0, 10);
 const today = new Date();
@@ -21,7 +33,7 @@ export function GCTodayFeed() {
   const { user } = useAuth();
   // Project managers are blocked from financial data. Bills + Draws tiles
   // and sections hide for them; the rest of the feed (tasks, notifs,
-  // projects, hot leads) stays visible. Firestore rules also block the
+  // projects, hot/new leads) stays visible. Firestore rules also block the
   // underlying reads, so even if a render leaked through, the snapshot
   // would return empty.
   const { canAccessFinancials } = useRoleAccess();
@@ -33,6 +45,7 @@ export function GCTodayFeed() {
   const [drawsPending, setDrawsPending] = useState<any[]>([]);
   const [recentProjects, setRecentProjects] = useState<any[]>([]);
   const [hotLeads, setHotLeads] = useState<any[]>([]);
+  const [newLeads, setNewLeads] = useState<any[]>([]);
 
   // Tasks due today or earlier (overdue + due-today), not done
   useEffect(() => {
@@ -145,6 +158,22 @@ export function GCTodayFeed() {
     return unsub;
   }, []);
 
+  // New leads — every lead created in the past 7 days, any avenue, any
+  // priority. This is the at-a-glance "a lead just came in" alert; the SMS/push
+  // is fired server-side by the newLeadAlert Cloud Function. Single-field
+  // orderBy needs no composite index.
+  useEffect(() => {
+    const q = query(collection(db, 'clients'), orderBy('createdAt', 'desc'), limit(25));
+    return onSnapshot(q, snap => {
+      const cutoffMs = Date.now() - 7 * 86400000;
+      const items = snap.docs.map(d => ({ id: d.id, ...d.data() } as any)).filter(c => {
+        const created = c.createdAt?.seconds ? c.createdAt.seconds * 1000 : 0;
+        return created >= cutoffMs;
+      });
+      setNewLeads(items.slice(0, 8));
+    }, () => {});
+  }, []);
+
   // Recent projects (most recently updated)
   useEffect(() => {
     const q = query(
@@ -218,6 +247,38 @@ export function GCTodayFeed() {
           />
         )}
       </div>
+
+      {/* New leads — everything that came in over the past 7 days, regardless
+          of priority or avenue. The dashboard half of the new-lead alert (the
+          SMS/push half is the newLeadAlert Cloud Function). Each row labels the
+          lead-gen source it arrived from. */}
+      <TodaySection
+        title="New leads (last 7 days)"
+        count={newLeads.length}
+        icon={<UserPlus className="w-4 h-4 text-green-600" />}
+        emptyState="No new leads in the past week."
+        viewAllHref="/sales"
+      >
+        {newLeads.map(c => (
+          <TodayRow
+            key={c.id}
+            primary={
+              <span className="font-medium flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                {c.name || 'Unnamed lead'}
+              </span>
+            }
+            secondary={sourceLabel(c.source, c.sourceDetail)}
+            meta={
+              <span className="font-mono">
+                {c.budget ? `$${(c.budget / 1000).toFixed(0)}k` : ''}
+                {c.city && <span className="text-gray-400 ml-1.5">· {c.city}</span>}
+              </span>
+            }
+            href="/sales"
+          />
+        ))}
+      </TodaySection>
 
       {/* Hot leads — high-priority pipeline items from past 7 days. Always
           renders (empty state included) so it's a stable spot the GC looks. */}

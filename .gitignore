@@ -65,6 +65,3 @@ drizzle/
 *-token.*
 *.pem
 *.key
-
-# Sandbox scratchpad — Claude session outputs that should never reach repo
-outputs/

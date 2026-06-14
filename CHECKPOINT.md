@@ -1,9 +1,84 @@
 # Skyelineos — Session Checkpoint
-**Last updated:** 2026-05-22 (refresh against git history through commit `28f9cd0`)
+**Last updated:** 2026-06-12 (lead intake + model-home sign + deploy/infra fixes; builds on the 2026-06-11 session below)
 **Live URL:** https://skyelineos.web.app
 **Firebase project:** skyelineos (**BLAZE** plan — upgraded 2026-05-06)
-**Deploy command:** `npm run deploy` (or `:hosting` / `:rules` / `:functions` variants — see `package.json`)
+**Deploy command:** `npm run deploy` (or `:hosting` / `:rules` / `:functions` variants — see `package.json`). Note: this repo also deploys via **CI on push to `main`** (GitHub Actions "Deploy to Firebase").
 **Authoritative docs:** `CLAUDE.md`, `PROJECT_OVERVIEW.md`, `SESSION_NOTES.md` (in that order). This file is a session-checkpoint snapshot; the other three are the durable references.
+
+---
+
+## Session 2026-06-12 — what shipped (all merged to `main`)
+
+Lead-capture pipeline + model-home sign + deploy/infra fixes. Merged via PRs #61–63 (and this handoff, #64). Deploy is by push/merge to `main` → the "Deploy to Firebase" Action.
+
+1. **Dashboard boot-hang fix** (#61). `AppContent` had no escape from the top-level "Loading……" auth gate; added a 10s stuck-escape + bounded `loadUserProfile`'s Firestore `getDoc` with an 8s timeout. `client/src/App.tsx`, `client/src/auth/AuthContext.tsx`.
+2. **Lead intake pipeline** (#61, #62). `functions/src/leads/intakeRoute.ts`: `POST /api/leads/intake` (secret-gated via `LEAD_INTAKE_SECRET`) + `POST /api/leads/public-intake` (public, honeypot + validation). Shared `createLead()` → `clients` (stage `new_lead`, source `website`, budget band → number, priority from score). Idempotent via `lead_intake_dedupe`. Public form at `client/src/pages/LearnMore.tsx` (`/learn-more`); Sales toolbar "Lead Form" button. `scripts/build-crestview-lead-form.gs` = optional Google-Form generator (not run).
+3. **API Storage page** (#61). Admin-only `/api-storage` (Management sidebar) — integration catalog + Secret Manager key names, no values. `client/src/pages/ApiStorage.tsx`.
+4. **Clickable Users stat tiles** (#61). Staff/Home Owners/Subs/Designers tiles filter Users by role (Staff = `admin`+`gc`). `client/src/pages/UserManagement.tsx`.
+5. **Giveaway page** (#63). Content Studio → "Giveaway Page" uploads a Canva export to `public/giveaway/...`, recorded at `public_content/giveaway`; public `/giveaway` page renders it. `firestore.rules`: `public_content` world-read, GC-write. `components/content-studio/GiveawayPageManager.tsx`, `pages/Giveaway.tsx`.
+6. **Infra/deploy fixes** (#61). `firebase.json` predeploy `npm run build` → `npm --prefix functions run build` (was building the client, not compiling functions); root `prepare` `husky` → `husky || true`; Functions runtime **Node 20 → 22**.
+
+**Secret Manager:** `LEAD_INTAKE_SECRET` set (real). `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` = **`placeholder`** (set to unblock the `api` deploy; Ingestion Lab OAuth non-functional until real values added).
+
+**Model-home sign (deliverable, NOT in repo):** 3-QR sign for a **100" TV** (4K 3840×2160, 16:9, built with `sharp`): center logo; left "Explore the Finish Selections of this Home" → Christensen selections Sheet; middle "Enter Our Giveaway!" → `/giveaway`; right "Learn More About Building with Skyeline Homes" → `/learn-more`. Build scripts were ephemeral in `/tmp`.
+
+**Open / next:**
+- Left sign QR points at the **internal** Christensen selections Sheet (prices/vendors/private notes) — consider a cleaned buyer-facing destination.
+- Verify the public lead form end-to-end (submit `/learn-more` → lands in Sales); sandbox couldn't reach `skyelineos.web.app` to test (egress).
+- Replace placeholder `GOOGLE_CLIENT_*` secrets before using Ingestion Lab.
+- Delete test leads from Sales ("Test Lead", "Public Form Test").
+
+---
+
+## Session 2026-06-11 — what shipped (all merged to `main`)
+
+1. **Incident: app stuck on "Loading……" → recovered.** The BuildLocation/MapLibre
+   push (#55) imported `maplibre-gl` at module top level, which pulled the 800 kB
+   library into the **startup bundle** and hung the whole app before the auth gate.
+   Reverted via **#56**. Root-caused with the browser console + an incognito test
+   (incognito worked → it was a stale cached shell in the normal browser).
+2. **BuildLocation re-landed safely (#57).** Same feature (canonical jobsite location:
+   address + draggable pin + parcel/lot/subdivision + confirm/correction status +
+   location-event log; set in setup wizard, confirmed by homeowner in client portal),
+   but **MapLibre is now `import type` + dynamic `import()`** inside the map-init
+   effect → its own lazy chunk, **zero refs in the entry bundle** (verified in build).
+   Do **not** reintroduce a top-level value import of `maplibre-gl`.
+3. **Hosting cache headers (#58).** `firebase.json` now sets `no-cache` on the HTML
+   shell + everything unhashed, and `immutable` on `/assets/**`. Prevents the
+   "stale shell after deploy" failure mode that masked the revert during the incident.
+4. **Phase A cleanup (#59).** Deleted **12 verified-dead scaffold files** (App-minimal,
+   BuildTrackerPro page + root BuildTrackerPro-Complete-Fixed, several Gantt/Timeline
+   demos, LoginPage/ProjectMessages/ProjectFinancialsPage/FinancialManagement). tsc
+   660 → 588. The **live** Gantt at `modules/gantt/ui/BuildTrackerPro.tsx` is untouched.
+
+### Verified-false alarms (don't re-chase these)
+- Bid-dispatch secrets **are** bound to the `api` function (`index.ts:2076–2081`).
+- RoleGuard/ProtectedRoute `isLoading` is mapped correctly (`hooks/use-auth.ts:58`).
+- Both `/api/projects/:id/estimates/approved` **and** `/api/estimates/approved/:projectId`
+  exist (`index.ts:391, 411`).
+
+### Real, still-open
+- **`tsc` is 588 errors across live files** and the deploy build (`vite build`) never
+  type-checks — so `tsc` is a dead gate. Greening it (or gating *new* errors) is its
+  own track.
+- **`pending_team` dead role** — contacts of role `team`/`employee` get `pending_team`,
+  which no portal recognizes (normalizes to `client`). Fix inside the role refactor.
+
+## Next up (roadmap, in priority order)
+
+1. **Estimates: email→bid ingestion + workspace ergonomics + mandatory trades.**
+   Tyler's next major ask (2026-06-11). Full spec: **`docs/estimates-email-bids-design.md`**.
+   - WS3: every estimate line item must have a **trade**; alert + "request bids" prompt if missing.
+   - WS2: collapsible + hover-expand sidebar, **wider modals**, estimate focus/split view (email side-by-side).
+   - WS1: **"Check Email for Bids"** button — AI reads 2–3 emails, recommends line items
+     (with trade), attaches the source PDF. Reuses Ingestion Lab Gmail OAuth + Claude
+     extraction. **Blocked on Google OAuth operator setup** (Secret Manager + APIs + consent).
+   - Suggested order: WS3 → WS2 → WS1.
+2. **Role-taxonomy refactor** (`ROLE_AUDIT.md`) — keystone; fixes `pending_team`,
+   dedupes `UserRole` types, de-risks Firestore rules. Migrate data before rules.
+3. **Selections v2** — port `origin/feat/selections-v2-dashboard-reminders` (`6b09bd6`)
+   onto the lifecycle model (see "Unmerged work" below).
+4. **tsc type-health track** — make type-check a real gate again.
 
 ---
 

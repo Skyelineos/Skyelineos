@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import { useTheme } from '@/contexts/ThemeContext';
 import { ThemeSettings } from '@/components/settings/ThemeSettings';
+import { NotificationTriggersSettings } from '@/components/settings/NotificationTriggersSettings';
 import DefaultAgreementUpload from '@/components/admin/DefaultAgreementUpload';
 import { useBranding } from '@/contexts/BrandingContext';
 import { useState } from 'react';
@@ -276,10 +277,11 @@ export default function Settings() {
 
         {/* Settings Tabs */}
         <Tabs defaultValue="profile" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-6">
+          <TabsList className="grid w-full grid-cols-7">
             <TabsTrigger value="profile">Profile</TabsTrigger>
             <TabsTrigger value="theme">Theme</TabsTrigger>
             <TabsTrigger value="notifications">Notifications</TabsTrigger>
+            <TabsTrigger value="triggers">Triggers</TabsTrigger>
             <TabsTrigger value="company">Company</TabsTrigger>
             <TabsTrigger value="integrations">Integrations</TabsTrigger>
             <TabsTrigger value="security">Security</TabsTrigger>
@@ -506,6 +508,11 @@ export default function Settings() {
                 </div>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* Notification Trigger Engine (configurable channels + templates) */}
+          <TabsContent value="triggers" className="space-y-6">
+            <NotificationTriggersSettings />
           </TabsContent>
 
           {/* Company Settings */}

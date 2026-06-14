@@ -245,6 +245,27 @@ function DetailView({
       }
       return;
     }
+    if (category === 'schedule') {
+      // Schedule templates live in `scheduleTemplates` and open straight into the
+      // Gantt editor (the shared dialog wrote to the wrong collection before).
+      try {
+        const ref = await addDoc(collection(db, 'scheduleTemplates'), {
+          name: 'New Schedule',
+          description: '',
+          tasks: [],
+          links: [],
+          taskCount: 0,
+          isStarter: false,
+          createdBy: user?.id,
+          createdByName: user?.name,
+          createdAt: serverTimestamp(),
+        });
+        setEditingTemplate({ id: ref.id, name: 'New Schedule', category: 'schedule' });
+      } catch {
+        toast({ title: 'Error creating template', variant: 'destructive' });
+      }
+      return;
+    }
     setEditTarget(null);
     setForm({ name: '', description: '', content: '' });
     setShowDialog(true);
@@ -365,66 +386,32 @@ function DetailView({
           <h1 className="text-xl font-bold text-gray-900 truncate">{meta.label}</h1>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          {category === 'job' && (
-            <Button
-              variant="outline"
-              onClick={async () => {
-                try {
-                  const { seedStarterJobTemplates } = await import('@/lib/starterJobTemplates');
-                  const { created, skipped, totalTasks } = await seedStarterJobTemplates();
-                  if (created === 0) {
-                    toast({
-                      title: 'Already seeded',
-                      description: `All ${skipped} starter templates already exist. You can edit them above.`,
-                    });
-                  } else {
-                    toast({
-                      title: 'Starter templates added',
-                      description: `${created} template${created === 1 ? '' : 's'} created with ${totalTasks} tasks total. Edit any to customize for your business.`,
-                    });
-                  }
-                } catch (e: any) {
-                  toast({
-                    title: 'Seed failed',
-                    description: e?.message || 'Could not create starter templates.',
-                    variant: 'destructive',
-                  });
-                }
-              }}
-              className="gap-2"
-            >
-              <Plus className="w-4 h-4" /> Add Starter Templates
-            </Button>
-          )}
           {category === 'schedule' && (
             <Button
               variant="outline"
               onClick={async () => {
                 try {
-                  const { seedMasterCustomHomeScheduleTemplate } = await import('@/lib/skyelineMasterSchedule');
-                  const { created, taskCount } = await seedMasterCustomHomeScheduleTemplate(user?.email || '');
-                  if (!created) {
-                    toast({
-                      title: 'Already seeded',
-                      description: 'Skyeline Custom Home Build — Master Schedule already exists.',
-                    });
-                  } else {
-                    toast({
-                      title: 'Master schedule added',
-                      description: `${taskCount} tasks loaded. Open any project's Schedule tab → Load Template to apply it.`,
-                    });
-                  }
+                  const { seedStarterScheduleTemplates } = await import('@/lib/seedStarterScheduleTemplates');
+                  const { created, refreshed, skipped } = await seedStarterScheduleTemplates(user?.email || '');
+                  const parts: string[] = [];
+                  if (created) parts.push(`${created} added`);
+                  if (refreshed) parts.push(`${refreshed} refreshed`);
+                  if (skipped) parts.push(`${skipped} left as-is`);
+                  toast({
+                    title: created || refreshed ? 'Standard templates updated' : 'No changes',
+                    description: `${parts.join(' · ') || 'Nothing to do'} — open any to edit in the Gantt.`,
+                  });
                 } catch (e: any) {
                   toast({
                     title: 'Seed failed',
-                    description: e?.message || 'Could not create master schedule.',
+                    description: e?.message || 'Could not create standard templates.',
                     variant: 'destructive',
                   });
                 }
               }}
               className="gap-2"
             >
-              <Plus className="w-4 h-4" /> Add Skyeline Master Schedule
+              <Plus className="w-4 h-4" /> Add Standard Templates
             </Button>
           )}
           <Button

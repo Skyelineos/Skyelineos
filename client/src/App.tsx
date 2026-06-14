@@ -60,6 +60,11 @@ const UserManagement = lazy(() => import("@/pages/UserManagement"));
 const ProjectDesign = lazy(() => import("@/pages/ProjectDesign"));
 const ProjectTakeoff = lazy(() => import("@/pages/ProjectTakeoff"));
 const Subscriptions = lazy(() => import("@/pages/Subscriptions"));
+const ApiStorage = lazy(() => import("@/pages/ApiStorage"));
+const LearnMore = lazy(() => import("@/pages/LearnMore"));
+const Giveaway = lazy(() => import("@/pages/Giveaway"));
+const SmsPrivacy = lazy(() => import("@/pages/SmsPrivacy"));
+const SmsTerms = lazy(() => import("@/pages/SmsTerms"));
 const Bills = lazy(() => import("@/pages/Bills"));
 const ContentStudio = lazy(() => import("@/pages/ContentStudio"));
 const SiteLog = lazy(() => import("@/pages/SiteLog"));
@@ -80,6 +85,7 @@ const Automations = lazy(() => import("@/pages/Automations"));
 const ImportCenter = lazy(() => import("@/pages/ImportCenter"));
 const ProjectTasks = lazy(() => import("@/pages/ProjectTasks"));
 const ProjectChangeOrders = lazy(() => import("@/pages/ProjectChangeOrders"));
+const ProjectRFIs = lazy(() => import("@/pages/ProjectRFIs"));
 const ProjectSiteLog = lazy(() => import("@/pages/ProjectSiteLog"));
 const ProjectBills = lazy(() => import("@/pages/ProjectBills"));
 const ProjectWalkthroughs = lazy(() => import("@/pages/ProjectWalkthroughs"));
@@ -111,6 +117,37 @@ function Router() {
       <Route path="/bid/respond/:token">
         <Suspense fallback={<MinimalSpinner title="Loading bid request" />}>
           <BidRespond />
+        </Suspense>
+      </Route>
+
+      {/* Public lead-capture form — no auth. Behind the model-home QR sign.
+          Submissions hit /api/leads/public-intake → land in Sales/CRM. */}
+      <Route path="/learn-more">
+        <Suspense fallback={<MinimalSpinner title="Loading" />}>
+          <LearnMore />
+        </Suspense>
+      </Route>
+
+      {/* Public SMS Privacy Policy + Terms — no auth. Linked from the Twilio
+          A2P 10DLC campaign registration; carriers fetch these URLs to verify
+          the required SMS disclosures. */}
+      <Route path="/sms-privacy">
+        <Suspense fallback={<MinimalSpinner title="Loading" />}>
+          <SmsPrivacy />
+        </Suspense>
+      </Route>
+
+      <Route path="/sms-terms">
+        <Suspense fallback={<MinimalSpinner title="Loading" />}>
+          <SmsTerms />
+        </Suspense>
+      </Route>
+
+      {/* Public giveaway page — no auth. Shows the design uploaded via
+          Content Studio → Giveaway Page; the giveaway QR points here. */}
+      <Route path="/giveaway">
+        <Suspense fallback={<MinimalSpinner title="Loading" />}>
+          <Giveaway />
         </Suspense>
       </Route>
 
@@ -259,6 +296,16 @@ function Router() {
         </ProtectedRoute>
       </Route>
 
+      <Route path="/api-storage">
+        <ProtectedRoute>
+          <RoleGuard allowedRoles={['admin']} showNotAuthorized>
+            <Suspense fallback={<MinimalSpinner title="Loading API Storage" />}>
+              <ApiStorage />
+            </Suspense>
+          </RoleGuard>
+        </ProtectedRoute>
+      </Route>
+
       <Route path="/admin/ingestion-lab">
         <ProtectedRoute>
           <RoleGuard allowedRoles={['admin']} showNotAuthorized>
@@ -269,8 +316,6 @@ function Router() {
         </ProtectedRoute>
       </Route>
 
-      {/* Financial routes — GC + admin only. PMs are blocked here per
-          Tyler's call. See useRoleAccess.canAccessFinancials. */}
       <Route path="/bills">
         <ProtectedRoute>
           <RoleGuard allowedRoles={['admin', 'gc']} showNotAuthorized>
@@ -366,6 +411,16 @@ function Router() {
           <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
             <Suspense fallback={<MinimalSpinner title="Loading Change Orders" />}>
               <ProjectChangeOrders />
+            </Suspense>
+          </RoleGuard>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/projects/:id/rfis">
+        <ProtectedRoute>
+          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager', 'designer']} showNotAuthorized>
+            <Suspense fallback={<MinimalSpinner title="Loading RFIs" />}>
+              <ProjectRFIs />
             </Suspense>
           </RoleGuard>
         </ProtectedRoute>
@@ -776,11 +831,66 @@ function Router() {
 
 function AppContent() {
   const { user, loading } = useAuth();
-  
+
+  // Top-level boot gate: the whole app waits here until Firebase auth resolves.
+  // This gate sits ABOVE the Router, so ProtectedRoute's own 8s stuck-escape is
+  // never reached while we're here. Mirror that pattern so a hung auth/profile
+  // load can't pin users on the bare "Loading......" spinner forever. After 10s
+  // of continuous loading, offer reload / hard-reset instead of an infinite spin.
+  const [stuck, setStuck] = useState(false);
+  useEffect(() => {
+    if (!loading) { setStuck(false); return; }
+    const t = setTimeout(() => setStuck(true), 10000);
+    return () => clearTimeout(t);
+  }, [loading]);
+
   if (loading) {
-    return <MinimalSpinner title="Loading..." />;
+    if (!stuck) {
+      return <MinimalSpinner title="Loading..." />;
+    }
+    return (
+      <div className="flex items-center justify-center min-h-screen p-6">
+        <div className="flex flex-col items-center space-y-4 max-w-sm text-center">
+          <div className="w-6 h-6 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin" />
+          <p className="text-sm text-gray-600">Still loading…</p>
+          <p className="text-xs text-amber-700">
+            This is taking longer than expected — authentication or a cached
+            session may be stuck. Try reloading, or reset site data and sign in
+            again.
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className="px-3 py-1.5 rounded border border-gray-300 bg-white text-gray-800 text-sm hover:bg-gray-50"
+              onClick={() => window.location.reload()}
+            >
+              Reload
+            </button>
+            <button
+              type="button"
+              className="px-3 py-1.5 rounded border border-amber-400 bg-amber-50 text-amber-900 text-sm hover:bg-amber-100"
+              onClick={async () => {
+                try {
+                  localStorage.clear();
+                  sessionStorage.clear();
+                  const dbs = (indexedDB as any).databases
+                    ? await (indexedDB as any).databases()
+                    : [];
+                  for (const d of dbs) {
+                    if (d?.name) indexedDB.deleteDatabase(d.name);
+                  }
+                } catch {}
+                window.location.href = '/sign-in';
+              }}
+            >
+              Reset &amp; sign in
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
-  
+
   return (
     <>
       <NavigationHandler />

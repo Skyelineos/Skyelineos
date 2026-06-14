@@ -9,10 +9,12 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import {
   Hammer, Send, Award, Clock, CheckCircle2, Eye, FileText, Shield, Building2, Trash2, Plus,
+  LayoutList, Columns3,
 } from 'lucide-react';
 import { SendBidPackageModal } from './SendBidPackageModal';
 import { AwardBidModal } from './AwardBidModal';
 import { BidRequestDetailModal } from './BidRequestDetailModal';
+import { BidComparisonMatrix } from './BidComparisonMatrix';
 import type { PortalBid, BidRequest } from './types';
 
 interface Props {
@@ -28,6 +30,8 @@ export function PortalBidsPanel({ projectId, projectName }: Props) {
   const [viewingBid, setViewingBid] = useState<PortalBid | null>(null);
   const [viewingRequest, setViewingRequest] = useState<BidRequest | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  // 'summary' = per-sub rows (default); 'matrix' = side-by-side leveling sheet.
+  const [bidView, setBidView] = useState<'summary' | 'matrix'>('summary');
   const { toast } = useToast();
 
   async function handleDeleteRequest(req: BidRequest) {
@@ -202,6 +206,33 @@ export function PortalBidsPanel({ projectId, projectName }: Props) {
             </div>
           ) : (
             <div className="space-y-4">
+              {/* View toggle: per-sub summary vs. side-by-side leveling matrix */}
+              <div className="flex items-center justify-between">
+                <p className="text-xs uppercase tracking-wide text-gray-500">Submitted Bids</p>
+                <div className="inline-flex rounded-md border overflow-hidden">
+                  <button
+                    onClick={() => setBidView('summary')}
+                    className={`flex items-center gap-1 px-2.5 py-1 text-xs ${bidView === 'summary' ? 'bg-[#141414] text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                  >
+                    <LayoutList className="w-3.5 h-3.5" /> Summary
+                  </button>
+                  <button
+                    onClick={() => setBidView('matrix')}
+                    className={`flex items-center gap-1 px-2.5 py-1 text-xs border-l ${bidView === 'matrix' ? 'bg-[#141414] text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                  >
+                    <Columns3 className="w-3.5 h-3.5" /> Compare
+                  </button>
+                </div>
+              </div>
+
+              {bidView === 'matrix' ? (
+                <BidComparisonMatrix
+                  bids={bids}
+                  onAward={setAwardingBid}
+                  onView={setViewingBid}
+                />
+              ) : (
+              <div className="space-y-4">
               {trades.map(trade => {
                 const tradeBids = bidsByTrade[trade].sort((a, b) => a.totalAmount - b.totalAmount);
                 const lowest = tradeBids[0]?.totalAmount;
@@ -272,6 +303,8 @@ export function PortalBidsPanel({ projectId, projectName }: Props) {
                   </div>
                 );
               })}
+            </div>
+              )}
             </div>
           )}
         </CardContent>
