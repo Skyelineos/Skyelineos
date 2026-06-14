@@ -168,9 +168,12 @@ export function NewProjectForm({ isOpen, onClose, onProjectCreated }: NewProject
   );
 
   // Project-manager options = the Skyeline team. Real team members live in the
-  // `users` collection (admin-listable; fails silently for non-admins); PM-
-  // tagged contacts and the signed-in GC ("you") are folded in so there's
-  // always at least yourself to assign.
+  // `users` collection (admin-listable; fails silently for non-admins). PM-
+  // tagged contacts are folded in, and the signed-in GC ("you") is always an
+  // option so there's at least yourself to assign.
+  // Role match: the canonical value is `projectManager` (camelCase) — see
+  // firestore.rules / taskDefaults — so normalize underscores and also accept
+  // pm/gc/admin/team/employee, since a GC or office team member may run a job.
   const { user: me } = useAuth();
   const [teamUsers, setTeamUsers] = useState<any[]>([]);
   useEffect(() => {
@@ -178,14 +181,14 @@ export function NewProjectForm({ isOpen, onClose, onProjectCreated }: NewProject
       .then(snap => setTeamUsers(snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }))))
       .catch(() => setTeamUsers([]));
   }, []);
-  const PM_ROLES = new Set(['project_manager', 'pm', 'gc', 'admin']);
+  const isPmRole = (v: any) =>
+    ['projectmanager', 'pm', 'gc', 'admin', 'team', 'employee']
+      .includes(String(v || '').toLowerCase().replace(/_/g, ''));
   const projectManagerContacts = (() => {
     const byId = new Map<string, any>();
     const add = (c: any) => { if (c && c.id != null) byId.set(String(c.id), { ...c, id: String(c.id) }); };
-    teamUsers.filter((u: any) => PM_ROLES.has(String(u.role || '').toLowerCase())).forEach(add);
-    allContacts.filter((c: any) =>
-      PM_ROLES.has(String(c.role || '').toLowerCase()) || PM_ROLES.has(String(c.type || '').toLowerCase()),
-    ).forEach(add);
+    teamUsers.filter((u: any) => isPmRole(u.role)).forEach(add);
+    allContacts.filter((c: any) => isPmRole(c.role) || isPmRole(c.type)).forEach(add);
     if ((me as any)?.firebaseUid) {
       const meId = String((me as any).firebaseUid);
       byId.set(meId, { id: meId, name: `${me?.name || 'Me'} (you)`, role: me?.role });
@@ -406,6 +409,24 @@ export function NewProjectForm({ isOpen, onClose, onProjectCreated }: NewProject
         }
       }
 
+      // Seed the rest of the project's defaults (Gantt, task list, estimate,
+      // selections) from the designated defaults (or built-in starters) for any
+      // surface the form didn't already hand-pick. Guarded + non-fatal.
+      try {
+        const { seedProjectDefaults } = await import('@/lib/projectDefaults');
+        await seedProjectDefaults({
+          projectId: newProjectId,
+          projectName: data.projectName,
+          startDate: data.startDate,
+          fromUserId: user.id?.toString(),
+          fromUserName: user.name || '',
+          skipSchedule: !!selectedScheduleTemplateId, // form already applied a Gantt template
+          skipTasks: !!selectedTemplateId,            // form already applied a task template
+        });
+      } catch (e: any) {
+        console.warn('Failed to seed project defaults', e?.message || e);
+      }
+
       toast({
         title: 'Project Created Successfully',
         description: `${data.projectName} has been linked to ${finalClients.map((c: any) => c.name).join(' & ')}.${templateMsg}`,
@@ -589,6 +610,8 @@ export function NewProjectForm({ isOpen, onClose, onProjectCreated }: NewProject
                   value={watch('assignedProjectManager')}
                   onValueChange={(value) => setValue('assignedProjectManager', value)}
                   placeholder="Select project manager"
+                  searchPlaceholder="Search team members..."
+                  emptyMessage="No team member found."
                   showTrade={false}
                 />
               </div>

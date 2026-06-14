@@ -19,8 +19,10 @@ import { ProjectChat } from '@/components/messaging/ProjectChat';
 import ClientDashboard from '@/components/client-portal/ClientDashboard';
 import { ClientWelcomePreview } from '@/components/client-portal/ClientWelcomePreview';
 import { ClientTabPreview } from '@/components/client-portal/ClientTabPreview';
+import { SalesPitchSection } from '@/components/client-portal/SalesPitchSection';
 import { InspirationBoard } from '@/components/client-portal/InspirationBoard';
 import SelectionsBoard from '@/components/client-portal/SelectionsBoard';
+import DesignStudio from '@/components/client-portal/DesignStudio';
 import ClientSelectionsTimeline from '@/components/client/ClientSelectionsTimeline';
 import ChangeOrdersTab from '@/components/client-portal/ChangeOrdersTab';
 import ClientFinancials from '@/components/client-portal/ClientFinancials';
@@ -31,7 +33,7 @@ import type { GeneratedSchedule } from '@/lib/schedule/types';
 
 import {
   LayoutDashboard, Palette, DollarSign, FileText, MessageSquare,
-  Image, ClipboardList, ChevronDown, ClipboardCheck, CalendarClock,
+  Image, ClipboardList, ChevronDown, ClipboardCheck, CalendarClock, Sparkles,
 } from 'lucide-react';
 
 interface FirestoreProject {
@@ -58,6 +60,7 @@ const TABS = [
   { key: 'dashboard',     label: 'Dashboard',      icon: LayoutDashboard },
   { key: 'schedule',      label: 'Schedule',        icon: CalendarClock },
   { key: 'financials',    label: 'Financials',      icon: DollarSign },
+  { key: 'design',        label: 'Design Studio',   icon: Sparkles },
   { key: 'selections',    label: 'Selections',      icon: Palette },
   { key: 'change-orders', label: 'Change Orders',   icon: ClipboardList },
   { key: 'site-log',      label: 'Site Log',        icon: ClipboardCheck },
@@ -256,11 +259,16 @@ export default function SkyelineClientPortal() {
         case 'dashboard':
         default:
           return (
-            <ClientWelcomePreview
-              clientFirstName={clientFirstName}
-              hasProject={false}
-              onNavigate={handleNavigate}
-            />
+            <div className="space-y-2 pb-6">
+              <ClientWelcomePreview
+                clientFirstName={clientFirstName}
+                hasProject={false}
+                onNavigate={handleNavigate}
+              />
+              {/* Soft sales pitch — interactive one-pagers that answer the
+                  questions prospective clients have before a project exists. */}
+              <SalesPitchSection onNavigate={handleNavigate} />
+            </div>
           );
       }
     }
@@ -295,6 +303,9 @@ export default function SkyelineClientPortal() {
                 onNavigate={handleNavigate}
               />
               {buildLocationCard}
+              {/* Pre-construction clients still benefit from the soft pitch /
+                  one-pagers while their project is being set up. */}
+              <SalesPitchSection onNavigate={handleNavigate} />
             </div>
           );
         }
@@ -317,6 +328,15 @@ export default function SkyelineClientPortal() {
           <div className="p-6">
             {selectedProject?.estimatedSchedule ? (
               <div className="rounded-xl border border-gray-200 bg-white p-5 max-w-3xl">
+                {(() => {
+                  const at = (selectedProject as any).estimatedSchedulePublishedAt;
+                  const ms = at?.toMillis?.() ?? (at ? Date.parse(at) : NaN);
+                  return Number.isFinite(ms) ? (
+                    <p className="text-xs text-gray-400 mb-3">
+                      Updated {new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </p>
+                  ) : null;
+                })()}
                 <ScheduleTimeline schedule={selectedProject.estimatedSchedule} />
               </div>
             ) : (
@@ -341,8 +361,17 @@ export default function SkyelineClientPortal() {
           />
         );
 
-      case 'selections':
       case 'design':
+        return (
+          <DesignStudio
+            projectId={selectedProjectId}
+            clientContactId={primaryClientId}
+            clientName={clientFullName}
+            onNavigate={handleNavigate}
+          />
+        );
+
+      case 'selections':
         return (
           <div className="space-y-6 p-6">
             <ClientSelectionsTimeline

@@ -2021,6 +2021,11 @@ app.get('/qbo/oauth/callback', async (req: any, res: any) => {
 import { registerBidRequestRoute } from './bids/sendBidRequestRoute';
 registerBidRequestRoute(app, admin.firestore());
 
+// QBO draw payment links: POST /api/qbo/draw-payment-link + GET /api/qbo/status.
+// Lets the client portal mint a QuickBooks online-payment link for a draw.
+import { registerQboPaymentLink } from './qbo/paymentLink';
+registerQboPaymentLink(app, admin.firestore());
+
 // Public token-resolution endpoint for the magic-link bid response flow.
 // Route: GET /api/bid-requests/by-token/:token (public, no auth)
 import { registerBidTokenEndpoint } from './bids/bidTokenEndpoint';

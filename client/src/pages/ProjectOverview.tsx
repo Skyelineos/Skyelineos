@@ -37,6 +37,7 @@ import { SoftBudgetBadge } from '@/components/projects/SoftBudgetBadge';
 import { ContractProfitCard } from '@/components/projects/ContractProfitCard';
 import { SelectionsProgressCard } from '@/components/projects/SelectionsProgressCard';
 import { ProjectJobsiteCard } from '@/components/projects/ProjectJobsiteCard';
+import { useRoleAccess } from '@/hooks/useRoleAccess';
 
 
 
@@ -46,6 +47,12 @@ export default function ProjectOverview() {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [advancing, setAdvancing] = useState(false);
   const [activityOpen, setActivityOpen] = useState(false);
+  // PMs are blocked from financial reads — hide the profit + financials cards
+  // (and the Budget Utilization sub-panel). Project status, schedule,
+  // selections, and walkthroughs remain visible. Firestore rules enforce the
+  // same boundary on the read path.
+  const { canAccessFinancials } = useRoleAccess();
+  const showFinancials = canAccessFinancials();
   const { toast } = useToast();
 
   const { project: transformedProject, rawProject: project, isLoading, error } = useOptimizedProject(projectId);
@@ -267,15 +274,19 @@ export default function ProjectOverview() {
         </Card>
 
         {/* Profit vs. contracts — revenue from client contracts, costs from
-            sub + designer contracts, cash on hand from paid milestones. */}
-        <ContractProfitCard projectId={projectId!} />
+            sub + designer contracts, cash on hand from paid milestones.
+            GC/admin only — hidden from PMs. */}
+        {showFinancials && <ContractProfitCard projectId={projectId!} />}
 
-        {/* Estimate-side financials — pre-contract estimating + COs. */}
-        <ProjectFinancialsCard
-          projectId={projectId!}
-          projectName={transformedProject.name}
-          spent={transformedProject.spent || 0}
-        />
+        {/* Estimate-side financials — pre-contract estimating + COs.
+            GC/admin only — hidden from PMs. */}
+        {showFinancials && (
+          <ProjectFinancialsCard
+            projectId={projectId!}
+            projectName={transformedProject.name}
+            spent={transformedProject.spent || 0}
+          />
+        )}
 
         {/* Live selections-progress bar — same scale + tones as the
             homeowner's client-portal bar, so a glance tells the GC
@@ -377,30 +388,32 @@ export default function ProjectOverview() {
                 )}
               </div>
 
-              {/* Live Budget Utilization */}
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-sm font-medium">Budget Utilization</span>
-                  <span className="text-sm text-gray-600">
-                    {progressLoading ? '...' : `${liveProgress?.budgetUtilization || 0}%`}
-                  </span>
-                </div>
-                <Progress 
-                  value={progressLoading ? 0 : (liveProgress?.budgetUtilization || 0)} 
-                  className={`h-3 mb-2 ${
-                    liveProgress && liveProgress.budgetUtilization > 100 ? '[&>div]:bg-red-500' :
-                    liveProgress && liveProgress.budgetUtilization > 85 ? '[&>div]:bg-yellow-500' : ''
-                  }`}
-                />
-                <p className="text-xs text-gray-500">
-                  ${transformedProject.spent.toLocaleString()} spent of ${transformedProject.budget.toLocaleString()} budget
-                </p>
-                {liveProgress && liveProgress.budgetUtilization > 90 && (
-                  <p className="text-xs text-yellow-600 mt-1">
-                    Approaching budget limit
+              {/* Live Budget Utilization — GC/admin only (spend figures). */}
+              {showFinancials && (
+                <div>
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-sm font-medium">Budget Utilization</span>
+                    <span className="text-sm text-gray-600">
+                      {progressLoading ? '...' : `${liveProgress?.budgetUtilization || 0}%`}
+                    </span>
+                  </div>
+                  <Progress
+                    value={progressLoading ? 0 : (liveProgress?.budgetUtilization || 0)}
+                    className={`h-3 mb-2 ${
+                      liveProgress && liveProgress.budgetUtilization > 100 ? '[&>div]:bg-red-500' :
+                      liveProgress && liveProgress.budgetUtilization > 85 ? '[&>div]:bg-yellow-500' : ''
+                    }`}
+                  />
+                  <p className="text-xs text-gray-500">
+                    ${transformedProject.spent.toLocaleString()} spent of ${transformedProject.budget.toLocaleString()} budget
                   </p>
-                )}
-              </div>
+                  {liveProgress && liveProgress.budgetUtilization > 90 && (
+                    <p className="text-xs text-yellow-600 mt-1">
+                      Approaching budget limit
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Progress Breakdown */}

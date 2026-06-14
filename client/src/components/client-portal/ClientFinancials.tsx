@@ -7,6 +7,7 @@ import { db } from '@/lib/firebase';
 import { CLIENT_PHASES as PHASES } from '@/lib/clientPhases';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
+import { getQboStatus, createDrawPaymentLink } from '@/lib/qbo';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
@@ -18,7 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import {
   DollarSign, TrendingUp, TrendingDown, CheckCircle2, Clock,
   AlertTriangle, Calendar, ChevronRight, Banknote, FileText,
-  Plus, ArrowUpRight, ArrowDownRight, Layers,
+  Plus, ArrowUpRight, ArrowDownRight, Layers, CreditCard,
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -36,6 +37,8 @@ interface Draw {
   phase?: string;
   notes?: string;
   createdAt?: any;
+  qboInvoiceId?: string;
+  paymentLinkUrl?: string;
 }
 
 interface ChangeOrder {
@@ -46,6 +49,15 @@ interface ChangeOrder {
   amount: number;
   status: 'pending' | 'approved' | 'declined' | 'void';
   createdAt?: any;
+}
+
+interface BudgetItem {
+  id: string;
+  category: string;
+  budgetAmount: number;   // original bid / planned allowance
+  actualAmount: number;   // billed/spent so far
+  committedAmount: number; // reserved (POs / approved COs not yet billed)
+  notes?: string;
 }
 
 interface ProjectFinancials {
@@ -106,9 +118,14 @@ function StatCard({ label, value, sub, accent, icon: Icon }: {
 
 // ─── Draw Row ─────────────────────────────────────────────────────────────────
 
-function DrawRow({ draw }: { draw: Draw }) {
+function DrawRow({ draw, canPay, paying, onPay }: {
+  draw: Draw; canPay: boolean; paying: boolean; onPay: (draw: Draw) => void;
+}) {
   const cfg = DRAW_STATUS[draw.status];
   const Icon = cfg.icon;
+  // A draw is payable when it's been requested/approved (i.e. it's due) and not
+  // yet paid, and QuickBooks is connected so a link can be minted.
+  const payable = canPay && draw.status !== 'paid' && (draw.status === 'requested' || draw.status === 'approved');
   return (
     <div className="flex items-center gap-4 p-4 bg-white border border-gray-200 rounded-xl">
       {/* Number */}
@@ -140,6 +157,20 @@ function DrawRow({ draw }: { draw: Draw }) {
           <p className="text-xs text-gray-400 line-through">{fmt(draw.amount)}</p>
         )}
       </div>
+
+      {/* Pay now */}
+      {payable && (
+        <Button
+          size="sm"
+          className="flex-shrink-0"
+          style={{ backgroundColor: '#059669', color: '#fff' }}
+          disabled={paying}
+          onClick={() => onPay(draw)}
+        >
+          <CreditCard className="w-3.5 h-3.5 mr-1.5" />
+          {paying ? 'Opening…' : 'Pay now'}
+        </Button>
+      )}
 
       {/* Status */}
       <div className="flex-shrink-0">
@@ -259,10 +290,36 @@ export default function ClientFinancials({ projectId, userRole }: ClientFinancia
   const [project, setProject] = useState<ProjectFinancials>({});
   const [draws, setDraws] = useState<Draw[]>([]);
   const [changeOrders, setChangeOrders] = useState<ChangeOrder[]>([]);
+  const [budgetItems, setBudgetItems] = useState<BudgetItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [addDrawOpen, setAddDrawOpen] = useState(false);
+  const [qboConnected, setQboConnected] = useState(false);
+  const [payingDrawId, setPayingDrawId] = useState<string | null>(null);
+  const { toast } = useToast();
 
   const canManage = userRole === 'admin' || userRole === 'gc' || userRole === 'project_manager';
+
+  // Is QuickBooks connected? Drives whether "Pay now" buttons show on draws.
+  useEffect(() => {
+    let active = true;
+    getQboStatus().then(s => { if (active) setQboConnected(!!s.connected); });
+    return () => { active = false; };
+  }, []);
+
+  // Mint a QBO payment link for a draw and open it in a new tab.
+  const handlePayDraw = async (draw: Draw) => {
+    setPayingDrawId(draw.id);
+    try {
+      const url = await createDrawPaymentLink(projectId, draw.id);
+      // Open the QuickBooks-hosted pay page. Use a pre-opened tab so the popup
+      // isn't blocked after the await.
+      window.open(url, '_blank', 'noopener');
+    } catch (e: any) {
+      toast({ title: 'Payment link unavailable', description: e.message, variant: 'destructive' });
+    } finally {
+      setPayingDrawId(null);
+    }
+  };
 
   // Project doc
   useEffect(() => {
@@ -280,6 +337,24 @@ export default function ClientFinancials({ projectId, userRole }: ClientFinancia
     const unsub = onSnapshot(
       query(collection(db, 'projects', projectId, 'draws'), orderBy('number', 'asc')),
       snap => setDraws(snap.docs.map(d => ({ id: d.id, ...d.data() } as Draw)))
+    );
+    return unsub;
+  }, [projectId]);
+
+  // Budget items — per-trade/category budget vs actual vs committed. Read-only
+  // for the client (firestore rules: clientOwnsProject). Powers the cost +
+  // overrun breakdown so the homeowner sees exactly where money is tracking
+  // against the original bids.
+  useEffect(() => {
+    if (!projectId) return;
+    const unsub = onSnapshot(
+      collection(db, 'projects', projectId, 'budgetItems'),
+      snap => setBudgetItems(
+        snap.docs
+          .map(d => ({ id: d.id, ...d.data() } as BudgetItem))
+          .sort((a, b) => (b.budgetAmount || 0) - (a.budgetAmount || 0))
+      ),
+      () => {}
     );
     return unsub;
   }, [projectId]);
@@ -318,6 +393,25 @@ export default function ClientFinancials({ projectId, userRole }: ClientFinancia
   const progress = project.progress ?? 0;
   const phaseIndex = PHASES.indexOf(project.currentPhase || '');
   const days = daysRemaining(project.estimatedCompletion);
+
+  // ─── Budget vs actual rollup (per-trade overruns) ────────────────────────
+  const budgetTotals = budgetItems.reduce(
+    (acc, b) => {
+      acc.budget += b.budgetAmount || 0;
+      acc.actual += b.actualAmount || 0;
+      acc.committed += b.committedAmount || 0;
+      return acc;
+    },
+    { budget: 0, actual: 0, committed: 0 },
+  );
+  // "Projected" = what we now expect to spend = max(actual+committed, budget is
+  // the baseline). A category is over budget when actual+committed exceeds its
+  // original budgeted allowance.
+  const budgetProjected = budgetTotals.actual + budgetTotals.committed;
+  const budgetVariance = budgetProjected - budgetTotals.budget; // + = over
+  const overBudgetItems = budgetItems.filter(
+    b => (b.actualAmount || 0) + (b.committedAmount || 0) > (b.budgetAmount || 0) + 0.5,
+  );
 
   // Timeline progress (0-100) from start to estimated completion
   let timelineProgress = 0;
@@ -410,6 +504,110 @@ export default function ClientFinancials({ projectId, userRole }: ClientFinancia
           </div>
         )}
       </div>
+
+      {/* ── Cost Breakdown by Trade ──────────────────────────────── */}
+      {budgetItems.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">Cost Breakdown by Trade</h2>
+              <p className="text-xs text-gray-500 mt-0.5">
+                What each area was bid at vs. what it's tracking to cost
+              </p>
+            </div>
+            {budgetVariance !== 0 && (
+              <span
+                className={`inline-flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 rounded-full ${
+                  budgetVariance > 0
+                    ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                    : 'bg-green-50 text-green-700 border border-green-200'
+                }`}
+              >
+                {budgetVariance > 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
+                {budgetVariance > 0 ? 'Over' : 'Under'} budget by {fmt(Math.abs(budgetVariance))}
+              </span>
+            )}
+          </div>
+
+          {overBudgetItems.length > 0 && (
+            <div className="flex items-center gap-2 px-4 py-2.5 mb-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-800">
+              <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+              <span>
+                {overBudgetItems.length} trade{overBudgetItems.length > 1 ? 's are' : ' is'} tracking over the
+                original bid — {overBudgetItems.map(b => b.category).slice(0, 3).join(', ')}
+                {overBudgetItems.length > 3 ? `, +${overBudgetItems.length - 3} more` : ''}.
+              </span>
+            </div>
+          )}
+
+          <div className="space-y-2.5">
+            {budgetItems.map(b => {
+              const spent = (b.actualAmount || 0) + (b.committedAmount || 0);
+              const budgeted = b.budgetAmount || 0;
+              const variance = spent - budgeted;
+              const over = variance > 0.5;
+              const pct = budgeted > 0 ? Math.min(100, (spent / budgeted) * 100) : spent > 0 ? 100 : 0;
+              const overPct = budgeted > 0 ? Math.max(0, ((spent - budgeted) / budgeted) * 100) : 0;
+              return (
+                <div key={b.id} className="bg-white border border-gray-200 rounded-xl p-4">
+                  <div className="flex items-center justify-between gap-3 mb-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                        <Layers className="w-3.5 h-3.5 text-gray-400" />
+                        {b.category}
+                      </p>
+                      {b.notes && <p className="text-xs text-gray-500 truncate mt-0.5">{b.notes}</p>}
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <p className={`text-sm font-bold ${over ? 'text-amber-700' : 'text-gray-900'}`}>
+                        {fmt(spent)}
+                        <span className="text-xs font-normal text-gray-400"> / {fmt(budgeted)}</span>
+                      </p>
+                      {variance !== 0 && (
+                        <p className={`text-xs font-medium ${over ? 'text-amber-700' : 'text-green-700'}`}>
+                          {over ? '+' : ''}{fmt(variance)} {over ? 'over' : 'under'}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  {/* Budget bar — fills to budget; an amber overflow segment shows overrun */}
+                  <div className="h-2 bg-gray-100 rounded-full overflow-hidden flex">
+                    <div
+                      className="h-full rounded-l-full transition-all"
+                      style={{
+                        width: `${over ? 100 - Math.min(30, overPct) : pct}%`,
+                        backgroundColor: over ? '#d97706' : '#C9A96E',
+                      }}
+                    />
+                    {over && (
+                      <div
+                        className="h-full transition-all"
+                        style={{ width: `${Math.min(30, overPct)}%`, backgroundColor: '#dc2626' }}
+                      />
+                    )}
+                  </div>
+                  {b.committedAmount > 0 && (
+                    <p className="text-[11px] text-gray-400 mt-1.5">
+                      {fmt(b.actualAmount || 0)} billed · {fmt(b.committedAmount)} committed
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+
+            {/* Rollup */}
+            <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl">
+              <span className="text-sm font-semibold text-gray-700">Total (all trades)</span>
+              <div className="text-right">
+                <span className={`text-sm font-bold ${budgetVariance > 0 ? 'text-amber-700' : 'text-gray-900'}`}>
+                  {fmt(budgetProjected)}
+                  <span className="text-xs font-normal text-gray-400"> / {fmt(budgetTotals.budget)} budgeted</span>
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Project Progress ─────────────────────────────────────── */}
       <div>
@@ -530,7 +728,15 @@ export default function ClientFinancials({ projectId, userRole }: ClientFinancia
           </div>
         ) : (
           <div className="space-y-3">
-            {draws.map(draw => <DrawRow key={draw.id} draw={draw} />)}
+            {draws.map(draw => (
+              <DrawRow
+                key={draw.id}
+                draw={draw}
+                canPay={qboConnected}
+                paying={payingDrawId === draw.id}
+                onPay={handlePayDraw}
+              />
+            ))}
             {/* Summary row */}
             <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl">
               <span className="text-sm font-semibold text-gray-700">Total Draw Schedule</span>

@@ -201,6 +201,14 @@ service cloud.firestore {
       allow write: if isGC();
     }
 
+    // Sales-pitch one-pagers shown in the client portal before a project exists.
+    // Any signed-in user (prospective clients included) can read; only staff
+    // (admin/gc/pm) can curate the content from the portal.
+    match /salesPitchSections/{sectionId} {
+      allow read: if isSignedIn();
+      allow write: if isGC();
+    }
+
     // Pending trade requests (submitted during sub registration)
     match /pendingTrades/{tradeId} {
       allow read: if isAdmin();
@@ -214,27 +222,30 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // Estimates — linked to clients and jobs
+    // Estimates — linked to clients and jobs.
+    // Financial. Read-blocked for PM per D-001 ("shouldn't have the
+    // financials" — Tyler 2026-06): isGCOnly() excludes projectManager.
+    // Clients still see their own estimate (price visibility on contract).
     match /estimates/{estimateId} {
       // Estimates key clientId as the sales clients-doc id (a third id shape),
       // so match by the project the estimate belongs to instead.
-      allow read: if isGC()
+      allow read: if isGCOnly()
         || clientOwns(resource.data)
         || (isClient() && 'projectId' in resource.data && clientOwnsProject(resource.data.projectId));
       allow write: if isGCOnly();
       allow delete: if isAdmin();
 
       match /lineItems/{lineItemId} {
-        allow read: if isGC()
+        allow read: if isGCOnly()
           || (isClient() && get(/databases/$(database)/documents/estimates/$(estimateId)).data.clientId == request.auth.uid);
         allow write: if isGCOnly();
         allow delete: if isAdmin();
       }
     }
 
-    // Invoices
+    // Invoices — financial. Read-blocked for PM (isGCOnly). Clients see their own.
     match /invoices/{invoiceId} {
-      allow read: if isGC()
+      allow read: if isGCOnly()
         || (clientOwns(resource.data));
       allow write: if isGCOnly();
       allow delete: if isAdmin();
@@ -312,9 +323,9 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // Financial data
+    // Financial data (bills, financial transactions). Read-blocked for PM.
     match /financials/{docId} {
-      allow read: if isGC();
+      allow read: if isGCOnly();
       allow write: if isGCOnly();
       allow delete: if isAdmin();
     }
@@ -446,16 +457,18 @@ service cloud.firestore {
     }
 
     // Draws (payment milestones) — clients can read their project's draws; GC manages.
+    // Draws — financial. Read-blocked for PM (isGCOnly). Designer + the
+    // project's client keep read access.
     match /projects/{projectId}/draws/{drawId} {
-      allow read: if isGC() || isDesigner()
+      allow read: if isGCOnly() || isDesigner()
         || (isClient() && clientOwnsProject(projectId));
       allow create, update: if isGC();
       allow delete: if isAdmin() || isGC();
     }
 
-    // Budget vs Actual items per project
+    // Budget vs Actual items per project — financial. Read-blocked for PM.
     match /projects/{projectId}/budgetItems/{itemId} {
-      allow read: if isGC()
+      allow read: if isGCOnly()
         || (isClient() && clientOwnsProject(projectId));
       allow create, update: if isGC();
       allow delete: if isAdmin() || isGC();
@@ -714,6 +727,14 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create, update: if isGC();
       allow delete: if isAdmin() || isGC();
+
+      // Template subcollections (e.g. job templates' `jobTasks`). The catch-all
+      // denies these otherwise, which would break applyJobTemplate + the
+      // standard-task-list seeder.
+      match /{sub=**} {
+        allow read: if isSignedIn();
+        allow write: if isGC();
+      }
     }
 
     // Automations
@@ -748,8 +769,10 @@ service cloud.firestore {
     // Contracts — legal/financial spine. Each party can read their own.
     // GC reads/writes everything; client/sub/designer/employee read only
     // contracts where they are the `other` party (matched by uid).
+    // Contracts — financial. Read-blocked for PM (isGCOnly). The counterparty
+    // (sub/designer/client on the contract) keeps read access via userId.
     match /contracts/{contractId} {
-      allow read: if isGC()
+      allow read: if isGCOnly()
         || (isSignedIn() && resource.data.other.userId == request.auth.uid);
       allow create, update: if isGCOnly();
       allow delete: if isAdmin();

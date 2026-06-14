@@ -64,12 +64,14 @@ export function WorkingEditProjectForm({ project, open, onOpenChange }: EditProj
     );
     return () => unsub();
   }, []);
-  const PM_ROLES = new Set(['project_manager', 'pm', 'gc', 'admin']);
+  const PM_ROLES = (v: any) =>
+    ['projectmanager', 'pm', 'gc', 'admin', 'team', 'employee']
+      .includes(String(v || '').toLowerCase().replace(/_/g, ''));
   const projectManagers = (() => {
     const byId = new Map<string, any>();
     const add = (c: any) => { if (c && c.id != null) byId.set(String(c.id), { ...c, id: String(c.id) }); };
-    teamUsers.filter(u => PM_ROLES.has(String(u.role || '').toLowerCase())).forEach(add);
-    allContacts.filter(c => PM_ROLES.has(String(c.role || '').toLowerCase())).forEach(add);
+    teamUsers.filter(u => PM_ROLES(u.role)).forEach(add);
+    allContacts.filter(c => PM_ROLES(c.role) || PM_ROLES(c.type)).forEach(add);
     if ((me as any)?.firebaseUid) {
       const meId = String((me as any).firebaseUid);
       byId.set(meId, { id: meId, name: `${me?.name || 'Me'} (you)`, role: me?.role });

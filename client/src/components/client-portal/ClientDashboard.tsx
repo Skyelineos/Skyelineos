@@ -44,9 +44,46 @@ export default function ClientDashboard({ projectId, project, onNavigate }: Clie
     enabled: !!projectId,
   });
 
-  const pendingSelections = selections.filter((s: any) => s.status === 'pending_approval');
+  // ── Date helpers ──────────────────────────────────────────────────────────
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const toDate = (v: any): Date | null =>
+    v?.seconds ? new Date(v.seconds * 1000) : v ? new Date(v) : null;
+  const dayDiff = (d: Date | null): number | null =>
+    d ? Math.round((d.getTime() - today.getTime()) / 86400000) : null;
+  const fmtShort = (d: Date | null) =>
+    d ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—';
+
+  // A selection still needs the homeowner when it isn't Approved yet. The
+  // canonical field is `clientApprovalStatus` (enum); fall back to the legacy
+  // `status` for any older docs.
+  const isUnapproved = (s: any) => {
+    const st = s.clientApprovalStatus || s.status || 'Pending Options';
+    return st !== 'Approved' && st !== 'approved';
+  };
+  const pendingSelections = selections.filter(isUnapproved);
   const pendingChangeOrders = changeOrders.filter((c: any) => c.status === 'pending');
   const totalActions = pendingSelections.length + pendingChangeOrders.length;
+
+  // ── Decisions due (#3) — unapproved selections ordered by due date, with
+  //    overdue / due-soon urgency so the homeowner stays on schedule. ─────────
+  const decisionsDue = pendingSelections
+    .map((s: any) => ({ ...s, _due: toDate(s.dueDate) }))
+    .sort((a: any, b: any) => (a._due?.getTime() ?? Infinity) - (b._due?.getTime() ?? Infinity));
+  const overdueDecisions = decisionsDue.filter((s: any) => {
+    const dd = dayDiff(s._due);
+    return dd !== null && dd < 0;
+  });
+
+  // ── Up next on site (#2) — trades from the published estimate schedule that
+  //    are in progress or upcoming, soonest first. ─────────────────────────────
+  const allTrades = (project?.estimatedSchedule?.phases || []).flatMap((p: any) =>
+    (p.trades || []).map((t: any) => ({ ...t, phaseName: p.phase })),
+  );
+  const upcomingTrades = allTrades
+    .map((t: any) => ({ ...t, _start: toDate(t.startDate), _end: toDate(t.endDate) }))
+    .filter((t: any) => (t._end ? t._end >= today : !!t._start))
+    .sort((a: any, b: any) => (a._start?.getTime() ?? 0) - (b._start?.getTime() ?? 0))
+    .slice(0, 5);
 
   const progress = project?.progress ?? 0;
   const currentPhase = project?.currentPhase || 'Pre-Construction';
@@ -131,6 +168,117 @@ export default function ClientDashboard({ projectId, project, onNavigate }: Clie
           </div>
         </CardContent>
       </Card>
+
+      {/* Up Next + Decisions Due */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Up Next on Site (#2) */}
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#C9A96E22' }}>
+                <Wrench className="h-4 w-4" style={{ color: '#92713A' }} />
+              </div>
+              <h3 className="text-sm font-bold text-gray-900">Up Next on Site</h3>
+              {(() => {
+                const at = project?.estimatedSchedulePublishedAt;
+                const ms = at?.toMillis?.() ?? (at ? Date.parse(at) : NaN);
+                return Number.isFinite(ms) ? (
+                  <span className="text-[11px] text-gray-400 ml-auto">Updated {fmtShort(new Date(ms))}</span>
+                ) : null;
+              })()}
+            </div>
+            {upcomingTrades.length === 0 ? (
+              <p className="text-sm text-gray-400 py-4 text-center">
+                Your schedule will appear here once your timeline is published.
+              </p>
+            ) : (
+              <div className="space-y-2.5">
+                {upcomingTrades.map((t: any, i: number) => {
+                  const startIn = dayDiff(t._start);
+                  const inProgress = t._start && t._end && t._start <= today && t._end >= today;
+                  return (
+                    <div key={i} className="flex items-center gap-3">
+                      <div className={`w-2 h-2 rounded-full flex-shrink-0 ${inProgress ? 'bg-green-500' : 'bg-gray-300'}`} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">{t.trade}</p>
+                        <p className="text-xs text-gray-400">{t.phaseName}</p>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        {inProgress ? (
+                          <span className="text-xs font-semibold text-green-600">In progress</span>
+                        ) : startIn !== null && startIn >= 0 ? (
+                          <span className="text-xs text-gray-500">
+                            {startIn === 0 ? 'Starts today' : startIn === 1 ? 'Starts tomorrow' : `in ${startIn} days`}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-500">{fmtShort(t._start)}</span>
+                        )}
+                        <p className="text-[11px] text-gray-400">{fmtShort(t._start)} – {fmtShort(t._end)}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+                <Button variant="ghost" size="sm" className="w-full mt-1 text-gray-600" onClick={() => onNavigate('schedule')}>
+                  View full schedule <ChevronRight className="h-3 w-3 ml-1" />
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Decisions Due (#3) */}
+        <Card className={overdueDecisions.length > 0 ? 'border-amber-300' : ''}>
+          <CardContent className="p-5">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center">
+                <Palette className="h-4 w-4 text-amber-600" />
+              </div>
+              <h3 className="text-sm font-bold text-gray-900">Decisions Due</h3>
+              {overdueDecisions.length > 0 && (
+                <Badge className="bg-red-100 text-red-700 ml-auto">{overdueDecisions.length} overdue</Badge>
+              )}
+            </div>
+            {decisionsDue.length === 0 ? (
+              <p className="text-sm text-gray-400 py-4 text-center">
+                You're all caught up — no selections waiting on you. 🎉
+              </p>
+            ) : (
+              <div className="space-y-2.5">
+                {decisionsDue.slice(0, 5).map((s: any) => {
+                  const dd = dayDiff(s._due);
+                  const overdue = dd !== null && dd < 0;
+                  const dueSoon = dd !== null && dd >= 0 && dd <= 7;
+                  return (
+                    <div key={s.id} className="flex items-center gap-3">
+                      <div className={`w-2 h-2 rounded-full flex-shrink-0 ${overdue ? 'bg-red-500' : dueSoon ? 'bg-amber-500' : 'bg-gray-300'}`} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">
+                          {s.category || s.area || s.room || 'Selection'}
+                        </p>
+                        <p className="text-xs text-gray-400 truncate">
+                          {[s.room, s.area].filter(Boolean).join(' · ') || s.clientApprovalStatus}
+                        </p>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        {s._due ? (
+                          <span className={`text-xs font-medium ${overdue ? 'text-red-600' : dueSoon ? 'text-amber-600' : 'text-gray-500'}`}>
+                            {overdue ? `${Math.abs(dd!)}d overdue` : dd === 0 ? 'Due today' : `Due ${fmtShort(s._due)}`}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-400">No due date</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+                <Button variant="ghost" size="sm" className="w-full mt-1 text-amber-700" onClick={() => onNavigate('selections')}>
+                  Make selections <ChevronRight className="h-3 w-3 ml-1" />
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Stats Row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

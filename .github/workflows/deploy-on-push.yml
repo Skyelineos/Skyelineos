@@ -63,6 +63,6 @@ jobs:
         run: npm install -g firebase-tools@13
 
       - name: Deploy
-        run: firebase deploy --only hosting,functions,firestore:rules,firestore:indexes --project skyelineos --force --non-interactive --token "$FIREBASE_TOKEN"
+        run: firebase deploy --only hosting,functions,firestore:rules,firestore:indexes,storage --project skyelineos --force --non-interactive --token "$FIREBASE_TOKEN"
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}

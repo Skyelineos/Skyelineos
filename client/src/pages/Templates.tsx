@@ -17,15 +17,17 @@ import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import {
   Plus, ChevronRight, ChevronLeft, Star, Pencil, Trash2,
-  FileText, FolderOpen, CheckSquare, Briefcase, Calendar,
+  FileText, FolderOpen, CheckSquare, Briefcase, Calendar, Palette,
 } from 'lucide-react';
 import { JobTemplateEditor } from '@/components/templates/JobTemplateEditor';
 import { DocumentTemplateEditor } from '@/components/templates/DocumentTemplateEditor';
 import { ScheduleTemplateEditor } from '@/components/templates/ScheduleTemplateEditor';
+import { SelectionsTemplateEditor } from '@/components/templates/SelectionsTemplateEditor';
+import { EstimateTemplateEditor } from '@/components/templates/EstimateTemplateEditor';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type TemplateCategory = 'estimate' | 'document' | 'task' | 'job' | 'schedule';
+type TemplateCategory = 'estimate' | 'document' | 'task' | 'job' | 'schedule' | 'selections';
 
 interface Template {
   id: string;
@@ -98,9 +100,18 @@ const CATEGORIES: Record<TemplateCategory, CategoryMeta> = {
     border: '#fecaca',
     contentPlaceholder: 'Phase durations, sequencing, buffer days…',
   },
+  selections: {
+    label: 'Selections Templates',
+    description: 'The client “selections needed” list seeded into new projects.',
+    icon: Palette,
+    color: '#C9A96E',
+    bg: '#fdf8f0',
+    border: '#eaddc4',
+    contentPlaceholder: 'Floor / room / category / area decisions…',
+  },
 };
 
-const CATEGORY_ORDER: TemplateCategory[] = ['estimate', 'document', 'task', 'job', 'schedule'];
+const CATEGORY_ORDER: TemplateCategory[] = ['estimate', 'document', 'task', 'job', 'schedule', 'selections'];
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -266,6 +277,24 @@ function DetailView({
       }
       return;
     }
+    if (category === 'selections' || category === 'estimate') {
+      try {
+        const ref = await addDoc(collection(db, 'templates'), {
+          name: category === 'selections' ? 'New Selections List' : 'New Estimate',
+          category,
+          ...(category === 'selections' ? { items: [] } : { lineItems: [] }),
+          description: '',
+          isDefault: false,
+          createdBy: user?.id,
+          createdByName: user?.name,
+          createdAt: serverTimestamp(),
+        });
+        setEditingTemplate({ id: ref.id, name: 'New Template', category });
+      } catch {
+        toast({ title: 'Error creating template', variant: 'destructive' });
+      }
+      return;
+    }
     setEditTarget(null);
     setForm({ name: '', description: '', content: '' });
     setShowDialog(true);
@@ -324,6 +353,21 @@ function DetailView({
     }
   }
 
+  // "Publish" a template as the project default for its category. New projects
+  // seed from whatever is marked default here (schedule → Gantt, job → task
+  // list). Setting one clears the flag on the others in the same category.
+  async function setAsDefault(id: string) {
+    try {
+      const collectionName = category === 'schedule' ? 'scheduleTemplates' : 'templates';
+      await Promise.all(templates.map(t =>
+        updateDoc(doc(db, collectionName, t.id), { isDefault: t.id === id, updatedAt: serverTimestamp() })
+      ));
+      toast({ title: 'Set as default', description: 'New projects will seed from this template.' });
+    } catch (e: any) {
+      toast({ title: 'Could not set default', description: e?.message || '', variant: 'destructive' });
+    }
+  }
+
   if (category === 'document' && editingTemplate) {
     return (
       <DocumentTemplateEditor
@@ -362,6 +406,14 @@ function DetailView({
         onBack={() => setEditingTemplate(null)}
       />
     );
+  }
+
+  if (category === 'selections' && editingTemplate) {
+    return <SelectionsTemplateEditor templateId={editingTemplate.id} onBack={() => setEditingTemplate(null)} />;
+  }
+
+  if (category === 'estimate' && editingTemplate) {
+    return <EstimateTemplateEditor templateId={editingTemplate.id} onBack={() => setEditingTemplate(null)} />;
   }
 
   return (
@@ -412,6 +464,66 @@ function DetailView({
               className="gap-2"
             >
               <Plus className="w-4 h-4" /> Add Standard Templates
+            </Button>
+          )}
+          {category === 'job' && (
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={async () => {
+                try {
+                  const { seedStandardTaskList } = await import('@/lib/seedStandardTaskList');
+                  const { created, taskCount } = await seedStandardTaskList(user?.email || '');
+                  toast({
+                    title: created ? 'Standard task list added' : 'Already exists',
+                    description: created ? `${taskCount} tasks — open to edit, then ★ to set as default.` : 'A "Standard Task List" job template already exists.',
+                  });
+                } catch (e: any) {
+                  toast({ title: 'Seed failed', description: e?.message || '', variant: 'destructive' });
+                }
+              }}
+            >
+              <Plus className="w-4 h-4" /> Add Standard Task List
+            </Button>
+          )}
+          {category === 'selections' && (
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={async () => {
+                try {
+                  const { seedStandardSelectionsTemplate } = await import('@/lib/seedStandardSelectionsTemplate');
+                  const { created, count } = await seedStandardSelectionsTemplate(user?.email || '');
+                  toast({
+                    title: created ? 'Standard selections added' : 'Already exists',
+                    description: created ? `${count} client decisions — open to edit, then ★ to set as default.` : 'A "Standard Selections" template already exists.',
+                  });
+                } catch (e: any) {
+                  toast({ title: 'Seed failed', description: e?.message || '', variant: 'destructive' });
+                }
+              }}
+            >
+              <Plus className="w-4 h-4" /> Add Standard Selections
+            </Button>
+          )}
+          {category === 'estimate' && (
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={async () => {
+                try {
+                  const { seedStandardEstimateTemplate } = await import('@/lib/seedStandardEstimateTemplate');
+                  const { created, count, total } = await seedStandardEstimateTemplate(user?.email || '');
+                  toast({
+                    title: created ? 'Standard estimate added' : 'Already exists',
+                    description: created ? `${count} line items ($${total.toLocaleString()}) — open to edit, then ★ to set as default.` : 'A "Standard Estimate" template already exists.',
+                  });
+                } catch (e: any) {
+                  toast({ title: 'Seed failed', description: e?.message || '', variant: 'destructive' });
+                }
+              }}
+            >
+              <Plus className="w-4 h-4" /> Add Standard Estimate
             </Button>
           )}
           <Button
@@ -473,18 +585,30 @@ function DetailView({
                     style={{ backgroundColor: meta.bg, color: meta.color }}
                     variant="outline"
                     onClick={() => {
-                      if (category === 'job' || category === 'document' || category === 'schedule') setEditingTemplate(tmpl);
+                      if (category === 'job' || category === 'document' || category === 'schedule' || category === 'selections' || category === 'estimate') setEditingTemplate(tmpl);
                       else toast({ title: `Applied "${tmpl.name}"` });
                     }}
                   >
                     {category === 'schedule' ? 'Open' : 'Use Template'}
                   </Button>
+                  {(category === 'schedule' || category === 'job' || category === 'selections' || category === 'estimate') && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className={`px-2.5 ${tmpl.isDefault ? 'text-amber-600 border-amber-300' : ''}`}
+                      title={tmpl.isDefault ? 'This is the project default' : 'Set as project default (publish)'}
+                      disabled={tmpl.isDefault}
+                      onClick={() => setAsDefault(tmpl.id)}
+                    >
+                      <Star className={`w-3.5 h-3.5 ${tmpl.isDefault ? 'fill-amber-500 stroke-amber-500' : ''}`} />
+                    </Button>
+                  )}
                   <Button
                     size="sm"
                     variant="outline"
                     className="px-2.5"
                     onClick={() => {
-                      if (category === 'job' || category === 'document' || category === 'schedule') setEditingTemplate(tmpl);
+                      if (category === 'job' || category === 'document' || category === 'schedule' || category === 'selections' || category === 'estimate') setEditingTemplate(tmpl);
                       else openEdit(tmpl);
                     }}
                   >

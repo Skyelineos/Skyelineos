@@ -2,6 +2,7 @@ import { useLocation } from 'wouter';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useAuth } from '@/hooks/use-auth';
+import { useRoleAccess } from '@/hooks/useRoleAccess';
 import { FastScheduleCard, FastUrgentCard, FastProjectsCard } from '@/components/dashboard/FastDashboardCards';
 import { CashFlowForecastCard } from '@/components/dashboard/CashFlowForecastCard';
 import { FinancialPositionCard } from '@/components/dashboard/FinancialPositionCard';
@@ -18,6 +19,11 @@ export default function Dashboard() {
   const [, setLocation] = useLocation();
   const isMobile = useIsMobile();
   const { user } = useAuth();
+  // PMs are blocked from financial reads — hide Financial Position +
+  // Cash Flow Forecast cards. Firestore rules block underlying reads,
+  // but skipping render saves wasted queries + permission-denied noise.
+  const { canAccessFinancials } = useRoleAccess();
+  const showFinancials = canAccessFinancials();
 
   // Show branded welcome for non-admin portal users
   const isPortalUser = user?.role && ['client', 'sub', 'designer'].includes(user.role);
@@ -75,11 +81,11 @@ export default function Dashboard() {
           {/* 3. Active Projects - Fast Loading */}
           <FastProjectsCard />
 
-          {/* 4. Financial Position */}
-          <FinancialPositionCard />
+          {/* 4. Financial Position — GC/admin only. */}
+          {showFinancials && <FinancialPositionCard />}
 
-          {/* 5. Cash Flow Forecast */}
-          <CashFlowForecastCard />
+          {/* 5. Cash Flow Forecast — GC/admin only. */}
+          {showFinancials && <CashFlowForecastCard />}
 
           {/* Weather card removed pending real API wire-up (was hardcoded mock data) */}
 

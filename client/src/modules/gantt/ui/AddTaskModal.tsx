@@ -302,14 +302,17 @@ export function AddTaskModal({ open, onClose, selectedTaskIds = [] }: AddTaskMod
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Parent Task (Optional)</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <Select
+                      onValueChange={(v) => field.onChange(v === '__root__' ? '' : v)}
+                      value={field.value || '__root__'}
+                    >
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Select parent task..." />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="">No Parent (Root Level)</SelectItem>
+                        <SelectItem value="__root__">No Parent (Root Level)</SelectItem>
                         {allTasks.map((task) => (
                           <SelectItem key={task.id} value={task.id}>
                             {task.name}
