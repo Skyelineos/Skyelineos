@@ -18,7 +18,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { TradeTypeComboBox } from '@/components/contacts/TradeTypeComboBox';
-import { StarRating } from '@/components/common/StarRating';
 import { BidPackageTemplatePicker } from './BidPackageTemplatePicker';
 import {
   Send, X, Hammer, FileText, Paperclip, Plus, Trash2, AlertCircle, Save, Sparkles,
@@ -43,8 +42,6 @@ interface Sub {
   // Firebase Auth UID, if this contact has been linked to a portal user. Used
   // to address in-app notifications so they show up in the sub's bell.
   linkedUserId?: string;
-  // 1–5 manual quality rating (sorts highest-first in the picker).
-  rating?: number;
 }
 
 interface TradeSection {
@@ -126,7 +123,6 @@ export function SendBidPackageModal({ open, projectId, projectName, onClose }: P
               trades,
               phone: c.phone,
               linkedUserId: c.linkedUserId,
-              rating: typeof c.rating === 'number' ? c.rating : 0,
             };
           });
         setAllSubs(subs);
@@ -249,15 +245,12 @@ export function SendBidPackageModal({ open, projectId, projectName, onClose }: P
   const subsForTrade = (trade: string): Sub[] => {
     const t = trade.trim().toLowerCase();
     if (!t) return [];
-    return allSubs
-      .filter(s =>
-        s.trades.some(st => {
-          const lower = st.toLowerCase();
-          return lower.includes(t) || t.includes(lower);
-        }),
-      )
-      // Highest-rated subs first, then alphabetical.
-      .sort((a, b) => (b.rating || 0) - (a.rating || 0) || (a.name || '').localeCompare(b.name || ''));
+    return allSubs.filter(s =>
+      s.trades.some(st => {
+        const lower = st.toLowerCase();
+        return lower.includes(t) || t.includes(lower);
+      }),
+    );
   };
 
   const totalInvitedSubs = useMemo(() => {
@@ -785,7 +778,6 @@ export function SendBidPackageModal({ open, projectId, projectName, onClose }: P
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-2 flex-wrap">
                                     <span className="font-medium text-sm text-gray-900 truncate">{sub.name}</span>
-                                    {(sub.rating ?? 0) > 0 && <StarRating value={sub.rating || 0} size={12} />}
                                     {sub.trades.map(t => (
                                       <Badge key={t} variant="outline" className="text-[10px]">{t}</Badge>
                                     ))}

@@ -1,19 +1,9 @@
 import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { authFetch } from '@/lib/authFetch';
-import {
-  ensureSeedTemplates,
-  listTemplates,
-  type TemplateStage,
-} from '@/lib/emailTemplates';
 
-// Portal invite: writes a token doc to `portalInvites/{id}` and sends a real
-// SendGrid email (via the /api/send-portal-invite backend route) rendered from
-// a stored template. The old `mailto:` draft flow was removed — invites now go
-// out automatically from the app.
-
-const API_BASE =
-  (import.meta as any).env?.VITE_API_BASE_URL || 'https://api-mtph34upva-uc.a.run.app';
+// Portal invite: writes a token doc to `portalInvites/{id}` and opens the
+// user's mail client (`mailto:`) with a pre-filled message that includes a
+// sign-up link. No SendGrid required — the GC sends from their own email.
 
 function randomToken(): string {
   // ~22 chars of crypto-random URL-safe text.
@@ -48,42 +38,31 @@ export async function createPortalInvite(opts: CreateOpts): Promise<string> {
   return token;
 }
 
-interface SendOpts extends CreateOpts {
-  /** Explicit template to send. */
-  templateId?: string;
-  /** When no templateId is given, prefer the first template for this stage. */
-  preferStage?: TemplateStage;
+interface MailOpts {
+  email: string;
+  firstName?: string;
+  token: string;
 }
 
-// Creates an invite token and emails it via SendGrid using a stored template.
-// Resolves the template by explicit id, else the first one for `preferStage`,
-// else the first available. Returns the template name for the success toast.
-export async function sendPortalInviteEmail(opts: SendOpts): Promise<{ templateName: string }> {
-  await ensureSeedTemplates();
-  const templates = await listTemplates();
-  if (templates.length === 0) {
-    throw new Error('No invite templates available — add one from “Invite to portal → Manage templates”.');
-  }
-  let chosen =
-    (opts.templateId && templates.find(t => t.id === opts.templateId)) ||
-    (opts.preferStage && templates.find(t => t.stage === opts.preferStage)) ||
-    templates[0];
+function appBaseUrl(): string {
+  if (typeof window === 'undefined') return 'https://skyelineos.web.app';
+  return `${window.location.protocol}//${window.location.host}`;
+}
 
-  const token = await createPortalInvite(opts);
-  const res = await authFetch(`${API_BASE}/api/send-portal-invite`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      token,
-      email: opts.email,
-      firstName: opts.firstName,
-      templateId: chosen.id,
-      contactId: opts.contactId,
-    }),
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `Send failed (${res.status})`);
-  }
-  return { templateName: chosen.name };
+export function buildInviteLink(token: string): string {
+  return `${appBaseUrl()}/sign-in?invite=${encodeURIComponent(token)}`;
+}
+
+export function openInviteMail(opts: MailOpts) {
+  const link = buildInviteLink(opts.token);
+  const hi = opts.firstName ? `Hi ${opts.firstName},` : 'Hi,';
+  const subject = encodeURIComponent('Your Skyeline Homes portal invitation');
+  const body = encodeURIComponent(
+    `${hi}\n\n`
+    + `You're invited to join the Skyeline Homes portal — you'll be able to see your project status, plans, selections, and messages in one place.\n\n`
+    + `Tap to set up your account:\n${link}\n\n`
+    + `If the link doesn't open, copy and paste it into your browser. The invite is valid for 30 days.\n\n`
+    + `— Skyeline Homes`,
+  );
+  window.location.href = `mailto:${encodeURIComponent(opts.email)}?subject=${subject}&body=${body}`;
 }

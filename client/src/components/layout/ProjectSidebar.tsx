@@ -26,9 +26,6 @@ import {
   ClipboardCheck,
   Receipt,
   Ruler,
-  HelpCircle,
-  ChevronDown,
-  ChevronRight,
 } from 'lucide-react';
 
 interface ProjectSidebarProps {
@@ -38,57 +35,22 @@ interface ProjectSidebarProps {
   onToggle?: () => void;
 }
 
-// Single always-visible entry, then collapsible groups that follow the build
-// lifecycle (mind-map clusters). Groups keep the 16-item list from being a wall
-// of links — only the section you're working in stays expanded.
-const overviewItem = { id: 'overview', label: 'Overview', icon: ClipboardList };
-
-const navGroups = [
-  {
-    id: 'estimating',
-    label: 'Estimating & Bids',
-    items: [
-      { id: 'estimates', label: 'Estimates', icon: FileText },
-      { id: 'takeoff',   label: 'Takeoff',   icon: Ruler },
-      { id: 'bids',      label: 'Bids',      icon: Hammer },
-    ],
-  },
-  {
-    id: 'schedule',
-    label: 'Schedule',
-    items: [
-      { id: 'schedule', label: 'Schedule', icon: Calendar },
-      { id: 'tasks',    label: 'Tasks',    icon: CheckSquare },
-    ],
-  },
-  {
-    id: 'field',
-    label: 'Field',
-    items: [
-      { id: 'site-log',     label: 'Site Log',     icon: ClipboardCheck },
-      { id: 'photos',       label: 'Photos',       icon: Camera },
-      { id: 'rfis',         label: 'RFIs',         icon: HelpCircle },
-      { id: 'walkthroughs', label: 'Walkthroughs', icon: Users },
-    ],
-  },
-  {
-    id: 'money',
-    label: 'Money',
-    items: [
-      { id: 'budget',        label: 'Budget',        icon: DollarSign },
-      { id: 'bills',         label: 'Bills',         icon: Receipt },
-      { id: 'change-orders', label: 'Change Orders', icon: GitPullRequest },
-    ],
-  },
-  {
-    id: 'docs',
-    label: 'Design & Documents',
-    items: [
-      { id: 'design',         label: 'Design',         icon: Palette },
-      { id: 'documents',      label: 'Documents',      icon: FolderOpen },
-      { id: 'move-in-binder', label: 'Move-in Binder', icon: ClipboardCheck },
-    ],
-  },
+const sidebarItems = [
+  { id: 'overview',      label: 'Overview',      icon: ClipboardList },
+  { id: 'tasks',         label: 'Tasks',         icon: CheckSquare },
+  { id: 'schedule',      label: 'Schedule',      icon: Calendar },
+  { id: 'estimates',     label: 'Estimates',     icon: FileText },
+  { id: 'takeoff',       label: 'Takeoff',       icon: Ruler },
+  { id: 'bids',          label: 'Bids',          icon: Hammer },
+  { id: 'budget',        label: 'Budget',        icon: DollarSign },
+  { id: 'bills',         label: 'Bills',         icon: Receipt },
+  { id: 'change-orders', label: 'Change Orders', icon: GitPullRequest },
+  { id: 'site-log',      label: 'Site Log',      icon: ClipboardCheck },
+  { id: 'walkthroughs',  label: 'Walkthroughs',  icon: Users },
+  { id: 'move-in-binder', label: 'Move-in Binder', icon: ClipboardCheck },
+  { id: 'documents',     label: 'Documents',     icon: FolderOpen },
+  { id: 'photos',        label: 'Photos',        icon: Camera },
+  { id: 'design',        label: 'Design',        icon: Palette },
 ];
 
 export function ProjectSidebar({ projectId, projectName, isOpen = false, onToggle }: ProjectSidebarProps) {
@@ -96,19 +58,6 @@ export function ProjectSidebar({ projectId, projectName, isOpen = false, onToggl
 
   // Extract current tab from URL
   const currentTab = location.split('/')[3] || 'overview';
-
-  // Collapsible groups. A group is open if the user explicitly toggled it open,
-  // otherwise it defaults to open when it contains the active page — so the
-  // section you're in is always expanded without burying the others.
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const isGroupOpen = (group: typeof navGroups[number]) =>
-    expanded[group.id] ?? group.items.some(i => i.id === currentTab);
-  const toggleGroup = (group: typeof navGroups[number]) =>
-    setExpanded(prev => ({ ...prev, [group.id]: !isGroupOpen(group) }));
-
-  const closeMobile = () => {
-    if (window.innerWidth < 1024 && onToggle) onToggle();
-  };
 
   // Resolve the friendly project code (LastName + MMDDYYYY). Reads from cache
   // first thanks to persistent Firestore offline cache.
@@ -195,75 +144,36 @@ export function ProjectSidebar({ projectId, projectName, isOpen = false, onToggl
           </Button>
         </div>
 
-      {/* Navigation Menu — Overview, then collapsible lifecycle groups */}
-      <nav className="flex flex-col p-3 space-y-1 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 220px)' }}>
-        {/* Overview — always visible, no group */}
-        {(() => {
-          const Icon = overviewItem.icon;
-          const isActive = currentTab === overviewItem.id;
+      {/* Navigation Menu */}
+      <nav className="flex flex-col p-4 space-y-1">
+        {sidebarItems.map((item) => {
+          const Icon = item.icon;
+          const isActive = currentTab === item.id;
+          
           return (
             <Link
-              href={`/projects/${projectId}/${overviewItem.id}`}
+              key={item.id}
+              href={`/projects/${projectId}/${item.id}`}
               className={cn(
-                "flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg transition-colors",
+                "group flex items-center space-x-3 px-3 py-3 text-sm font-medium rounded-lg transition-colors",
                 isActive
                   ? "bg-accent text-accent-foreground font-semibold"
                   : "text-slate-300 hover:bg-slate-800 hover:text-white"
               )}
-              onClick={closeMobile}
+              onClick={() => {
+                // Close mobile sidebar when navigating
+                if (window.innerWidth < 1024 && onToggle) {
+                  onToggle();
+                }
+              }}
             >
               <Icon className="h-5 w-5 flex-shrink-0" />
-              <span className="flex-1 min-w-0 truncate">{overviewItem.label}</span>
-            </Link>
-          );
-        })()}
-
-        {navGroups.map((group) => {
-          const open = isGroupOpen(group);
-          const hasActive = group.items.some(i => i.id === currentTab);
-          return (
-            <div key={group.id} className="pt-1">
-              {/* Group header — click to expand/collapse */}
-              <button
-                type="button"
-                onClick={() => toggleGroup(group)}
-                className={cn(
-                  "w-full flex items-center justify-between px-3 py-2 text-[11px] font-semibold uppercase tracking-wide rounded-md transition-colors",
-                  hasActive ? "text-[#C9A96E]" : "text-slate-400 hover:text-slate-200"
-                )}
-              >
-                <span>{group.label}</span>
-                {open
-                  ? <ChevronDown className="w-3.5 h-3.5 flex-shrink-0" />
-                  : <ChevronRight className="w-3.5 h-3.5 flex-shrink-0" />}
-              </button>
-
-              {/* Group items */}
-              {open && (
-                <div className="mt-0.5 space-y-0.5">
-                  {group.items.map((item) => {
-                    const Icon = item.icon;
-                    const isActive = currentTab === item.id;
-                    return (
-                      <Link
-                        key={item.id}
-                        href={`/projects/${projectId}/${item.id}`}
-                        className={cn(
-                          "flex items-center gap-3 pl-5 pr-3 py-2 text-sm rounded-lg transition-colors",
-                          isActive
-                            ? "bg-accent text-accent-foreground font-semibold"
-                            : "text-slate-300 hover:bg-slate-800 hover:text-white"
-                        )}
-                        onClick={closeMobile}
-                      >
-                        <Icon className="h-4 w-4 flex-shrink-0" />
-                        <span className="flex-1 min-w-0 truncate">{item.label}</span>
-                      </Link>
-                    );
-                  })}
+              <div className="flex-1 min-w-0">
+                <div className="font-medium">
+                  {item.label}
                 </div>
-              )}
-            </div>
+              </div>
+            </Link>
           );
         })}
       </nav>

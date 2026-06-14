@@ -358,7 +358,7 @@ export default function BidRespond() {
           <Button
             size="lg"
             className="w-full"
-            onClick={() => setLocation(`/subcontractor-portal/bid-requests`)}
+            onClick={() => setLocation(`/subcontractor-portal/bids`)}
           >
             Open my portal & submit bid
           </Button>

@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { contactsWithEmail, confirmDuplicateEmail } from '@/lib/contacts/duplicateEmail';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -11,7 +10,6 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
 import { Users, Search, Download, Upload, Plus, TrendingUp, Building, UserCheck, Wrench, Edit, Trash2, Mail, Phone, MoreVertical, User, Star } from 'lucide-react';
-import { StarRating } from '@/components/common/StarRating';
 import PreferredCategoriesEditor from '@/components/contacts/PreferredCategoriesEditor';
 import { MultiTradeSelector } from '@/components/contacts/MultiTradeSelector';
 import { EditContactModal } from '@/components/contacts/EditContactModal';
@@ -177,16 +175,6 @@ export default function Contacts() {
     setShowContactDetail(true);
   };
 
-  // Manual 1–5 sub quality rating. Used to sort subs highest-first when picking
-  // them for bid packages.
-  const updateRating = async (id: string, rating: number) => {
-    try {
-      await updateDoc(doc(db, 'contacts', id), { rating });
-    } catch (e: any) {
-      toast({ title: 'Could not update rating', description: e?.message, variant: 'destructive' });
-    }
-  };
-
   const handleEditContact = (contact: Contact) => {
     setEditingContact(contact);
   };
@@ -228,15 +216,6 @@ export default function Contacts() {
         variant: 'destructive',
       });
       return;
-    }
-
-    // Soft duplicate-email warning — contacts that share an email can't each
-    // get their own portal login (Firebase Auth is one account per email).
-    if (newContactFormData.email.trim()) {
-      const dupes = await contactsWithEmail(newContactFormData.email);
-      if (dupes.length > 0 && !confirmDuplicateEmail(newContactFormData.email.trim(), dupes)) {
-        return;
-      }
     }
 
     // Optimistic UX: close the modal immediately so the user isn't stuck
@@ -306,19 +285,17 @@ export default function Contacts() {
         });
         toast({ title: 'Contact added', description: `${fullName} added to contacts.` });
         if (formSnapshot.sendInvite && formSnapshot.email) {
-          // Send a real portal-invite email (SendGrid) using the default
-          // template for a new contact. No mail client involved.
-          const { sendPortalInviteEmail } = await import('@/lib/portalInvite');
+          // Fire-and-forget invite — opens the user's mail client.
+          const { createPortalInvite, openInviteMail } = await import('@/lib/portalInvite');
           try {
-            const { templateName } = await sendPortalInviteEmail({
+            const token = await createPortalInvite({
               contactId: newRef.id,
               email: formSnapshot.email,
               role: validRole,
               firstName: formSnapshot.firstName,
               invitedBy: user?.email || '',
-              preferStage: 'lead',
             });
-            toast({ title: 'Portal invite sent', description: `Emailed “${templateName}” to ${formSnapshot.email}.` });
+            openInviteMail({ email: formSnapshot.email, firstName: formSnapshot.firstName, token });
           } catch (e: any) {
             toast({ title: 'Invite not sent', description: e?.message || '', variant: 'destructive' });
           }
@@ -418,10 +395,6 @@ export default function Contacts() {
     return matchesSearch;
   });
 
-  // Internal Skyeline staff roles — grouped under the "Team Members" tile/filter.
-  const TEAM_ROLES = ['team', 'employee', 'gc', 'admin', 'project_manager', 'projectmanager', 'staff'];
-  const isTeamRole = (role?: string) => TEAM_ROLES.includes((role || '').toLowerCase());
-
   const filteredContacts = contacts.filter((contact) => {
     const matchesSearch = searchTerm === '' ||
       contact.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -432,11 +405,7 @@ export default function Contacts() {
       (Array.isArray((contact as any).trades) && (contact as any).trades.some((t: string) =>
         typeof t === 'string' && t.toLowerCase().includes(searchTerm.toLowerCase())
       ));
-    const matchesRole = roleFilter === 'all'
-      ? true
-      : roleFilter === 'team'
-        ? isTeamRole(contact.role)
-        : contact.role?.toLowerCase() === roleFilter.toLowerCase();
+    const matchesRole = roleFilter === 'all' || contact.role?.toLowerCase() === roleFilter.toLowerCase();
     const matchesCompany = companyFilter === 'all' || contact.company === companyFilter;
     return matchesSearch && matchesRole && matchesCompany;
   }).sort((a, b) => {
@@ -454,7 +423,6 @@ export default function Contacts() {
     clients: contacts.filter((c) => c.role.toLowerCase() === 'client').length,
     subcontractors: contacts.filter((c) => c.role.toLowerCase() === 'subcontractor').length,
     suppliers: contacts.filter((c) => c.role.toLowerCase() === 'supplier').length,
-    team: contacts.filter((c) => isTeamRole(c.role)).length,
     active: contacts.filter((c) => c.isActive).length
   };
 
@@ -588,11 +556,8 @@ export default function Contacts() {
             </div>
 
             {/* Summary Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-              <Card
-                onClick={() => setRoleFilter('all')}
-                className={`cursor-pointer transition-shadow hover:shadow-md ${roleFilter === 'all' ? 'ring-2 ring-[#C9A96E]' : ''}`}
-              >
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+              <Card>
                 <CardContent className="p-4">
                   <div className="flex items-center space-x-2">
                     <TrendingUp className="h-4 w-4 text-blue-600" />
@@ -603,10 +568,7 @@ export default function Contacts() {
                   </div>
                 </CardContent>
               </Card>
-              <Card
-                onClick={() => setRoleFilter('client')}
-                className={`cursor-pointer transition-shadow hover:shadow-md ${roleFilter === 'client' ? 'ring-2 ring-[#C9A96E]' : ''}`}
-              >
+              <Card>
                 <CardContent className="p-4">
                   <div className="flex items-center space-x-2">
                     <UserCheck className="h-4 w-4 text-green-600" />
@@ -617,10 +579,7 @@ export default function Contacts() {
                   </div>
                 </CardContent>
               </Card>
-              <Card
-                onClick={() => setRoleFilter('subcontractor')}
-                className={`cursor-pointer transition-shadow hover:shadow-md ${roleFilter === 'subcontractor' ? 'ring-2 ring-[#C9A96E]' : ''}`}
-              >
+              <Card>
                 <CardContent className="p-4">
                   <div className="flex items-center space-x-2">
                     <Wrench className="h-4 w-4 text-orange-600" />
@@ -631,10 +590,7 @@ export default function Contacts() {
                   </div>
                 </CardContent>
               </Card>
-              <Card
-                onClick={() => setRoleFilter('supplier')}
-                className={`cursor-pointer transition-shadow hover:shadow-md ${roleFilter === 'supplier' ? 'ring-2 ring-[#C9A96E]' : ''}`}
-              >
+              <Card>
                 <CardContent className="p-4">
                   <div className="flex items-center space-x-2">
                     <Building className="h-4 w-4 text-purple-600" />
@@ -645,24 +601,7 @@ export default function Contacts() {
                   </div>
                 </CardContent>
               </Card>
-              <Card
-                onClick={() => setRoleFilter('team')}
-                className={`cursor-pointer transition-shadow hover:shadow-md ${roleFilter === 'team' ? 'ring-2 ring-[#C9A96E]' : ''}`}
-              >
-                <CardContent className="p-4">
-                  <div className="flex items-center space-x-2">
-                    <User className="h-4 w-4 text-slate-600" />
-                    <div>
-                      <p className="text-sm text-gray-600">Team Members</p>
-                      <p className="text-xl font-semibold">{summaryStats.team}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card
-                onClick={() => setRoleFilter('all')}
-                className="cursor-pointer transition-shadow hover:shadow-md"
-              >
+              <Card>
                 <CardContent className="p-4">
                   <div className="flex items-center space-x-2">
                     <Users className="h-4 w-4 text-indigo-600" />
@@ -776,19 +715,6 @@ export default function Contacts() {
                           </div>
                         </div>
                         <div className="flex items-center space-x-1">
-                          {(() => {
-                            const role = String(contact.role || '').toLowerCase();
-                            if (role !== 'subcontractor' && role !== 'sub' && role !== 'vendor') return null;
-                            return (
-                              <div onClick={(e) => e.stopPropagation()} className="mr-2" title="Sub rating">
-                                <StarRating
-                                  value={(contact as any).rating || 0}
-                                  size={16}
-                                  onChange={(v) => updateRating(contact.id, v)}
-                                />
-                              </div>
-                            );
-                          })()}
                           <Button
                             variant="ghost"
                             size="sm"

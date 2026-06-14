@@ -1,11 +1,16 @@
 import { useAuth } from '@/hooks/use-auth';
 import { useAdminView } from '@/contexts/AdminViewContext';
 
-export type UserRole = 'client' | 'subcontractor' | 'designer' | 'projectManager' | 'admin';
+export type UserRole = 'client' | 'subcontractor' | 'designer' | 'projectManager' | 'gc' | 'admin';
 
 /**
  * Hook for checking role-based access permissions
  * Includes admin view override functionality
+ *
+ * BUGFIX 2026-06: `gc` was being collapsed into `projectManager` during
+ * normalization, which meant every PM had GC-equivalent access (financials,
+ * settings, all writes). The two roles are now distinct so RoleGuards can
+ * gate financial / admin paths separately.
  */
 export function useRoleAccess() {
   const { user, isAuthenticated } = useAuth();
@@ -13,16 +18,18 @@ export function useRoleAccess() {
 
   const getUserRole = (userRole: string): UserRole => {
     // Normalize role names for consistent handling across frontend/backend
-    const normalizedRole = userRole.toLowerCase().replace('_', '');
-    
+    const normalizedRole = (userRole || '').toLowerCase().replace(/_/g, '');
+
     switch (normalizedRole) {
       case 'admin':
         return 'admin';
-      case 'gc':                  // Skyeline Team
-      case 'projectmanager':
-      case 'project_manager':
+      case 'gc':                  // Skyeline Team — full GC access (Tyler)
+        return 'gc';
+      case 'projectmanager':      // PM — operational delegate, NO financials
+      case 'pm':
         return 'projectManager';
       case 'client':
+      case 'homeowner':
         return 'client';
       case 'sub':                 // Subcontractor short form
       case 'subcontractor':
@@ -51,35 +58,39 @@ export function useRoleAccess() {
   };
 
   const canAccessDashboard = (): boolean => {
-    return hasRole(['admin']);
+    return hasRole(['admin', 'gc', 'projectManager']);
   };
 
   const canAccessProjects = (): boolean => {
-    return hasRole(['admin', 'projectManager']);
+    return hasRole(['admin', 'gc', 'projectManager']);
   };
 
   const canAccessContacts = (): boolean => {
-    return hasRole(['admin', 'projectManager']);
+    return hasRole(['admin', 'gc', 'projectManager']);
   };
 
+  // Financials — GC + admin only. PMs are explicitly excluded per Tyler's
+  // direction ("shouldn't have the financials"). Read-block, not just write.
   const canAccessFinancials = (): boolean => {
-    return hasRole(['admin', 'projectManager']);
+    return hasRole(['admin', 'gc']);
   };
 
+  // Settings — GC + admin only. Includes role changes, integrations,
+  // subscription mgmt, branding.
   const canAccessSettings = (): boolean => {
-    return hasRole(['admin', 'projectManager']);
+    return hasRole(['admin', 'gc']);
   };
 
   const canAccessAccounting = (): boolean => {
-    return hasRole(['admin']);
+    return hasRole(['admin', 'gc']);
   };
 
   const canAccessMessages = (): boolean => {
-    return hasRole(['admin', 'projectManager']);
+    return hasRole(['admin', 'gc', 'projectManager']);
   };
 
   const canAccessSchedule = (): boolean => {
-    return hasRole(['admin', 'projectManager']);
+    return hasRole(['admin', 'gc', 'projectManager']);
   };
 
   const canAccessClientPortal = (clientId?: string): boolean => {
@@ -129,6 +140,8 @@ export function useRoleAccess() {
     
     switch (currentRole) {
       case 'admin':
+        return '/dashboard';
+      case 'gc':
         return '/dashboard';
       case 'projectManager':
         return '/projects';

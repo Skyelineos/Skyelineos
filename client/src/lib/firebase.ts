@@ -1,6 +1,6 @@
 import { initializeApp, getApps } from "firebase/app";
 import { getAuth, connectAuthEmulator } from "firebase/auth";
-import { getFirestore, initializeFirestore, connectFirestoreEmulator } from "firebase/firestore";
+import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
 import { getFunctions, connectFunctionsEmulator } from "firebase/functions";
 import { getStorage, connectStorageEmulator } from "firebase/storage";
 
@@ -23,21 +23,7 @@ export const auth = getAuth(app);
 // tried but iPad Safari + multi-tab manager misbehaves in some configs and
 // can leave the app stuck on first load. Performance gains from onSnapshot
 // + React Query are already substantial without persistent local cache.
-//
-// `ignoreUndefinedProperties: true` — many forms build write payloads with
-// `field || undefined` for empty optionals. Without this flag Firestore
-// REJECTS the whole write ("Unsupported field value: undefined"), which e.g.
-// left the estimate editor stuck on "Saving…" and silently dropped edits.
-// Ignoring undefined fields makes those writes succeed (the field is simply
-// omitted). Wrapped so HMR re-runs fall back to the already-initialized store.
-function initDb() {
-  try {
-    return initializeFirestore(app, { ignoreUndefinedProperties: true });
-  } catch {
-    return getFirestore(app);
-  }
-}
-export const db = initDb();
+export const db = getFirestore(app);
 export const functions = getFunctions(app, 'us-central1');
 export const storage = getStorage(app);
 

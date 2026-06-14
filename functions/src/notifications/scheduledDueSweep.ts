@@ -4,7 +4,6 @@
 
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import * as admin from 'firebase-admin';
-import { fireTrigger } from './fireTrigger';
 
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore();
@@ -32,7 +31,8 @@ export const dueSweep = onSchedule(
 
     console.log(`[dueSweep] ${tasksDueSoon.length} tasks due in next 24h`);
 
-    const today = now.toISOString().slice(0, 10);
+    const notifBatch = db.batch();
+    const notifCol = db.collection('notifications');
     let queuedCount = 0;
 
     for (const taskDoc of tasksDueSoon) {
@@ -46,30 +46,38 @@ export const dueSweep = onSchedule(
                        || task.assignedToContactId;
       if (!assigneeId) continue;
 
-      // Idempotent — don't fire twice for the same task in the same day.
-      if (task.lastDueNotifiedOn === today) continue;
+      // Idempotent — don't fire twice for the same task in the same day
+      const dedupeKey = `due-${taskDoc.id}-${now.toISOString().slice(0, 10)}`;
+      const existing = await notifCol.where('dedupeKey', '==', dedupeKey).limit(1).get();
+      if (!existing.empty) continue;
 
-      // Route through the configurable engine. fireTrigger resolves the
-      // assignee's audience (sub/pm/client/designer/team) and applies the
-      // admin's 'task_due' channels + templates.
-      await fireTrigger({
-        db,
-        triggerKey: 'task_due',
-        recipientUserId: assigneeId,
+      const ref = notifCol.doc();
+      notifBatch.set(ref, {
+        userId: assigneeId,
+        kind: 'task_due',
+        title: `Due today: ${task.name}`,
+        body: task.description || `This task is due ${new Date(task.dueDate).toLocaleDateString()}.`,
+        link: task.projectId ? `/projects/${task.projectId}/overview` : '/tasks',
         projectId: task.projectId,
+        refType: 'task',
+        refId: taskDoc.id,
         fromUserName: 'Skyeline OS',
-        variables: {
-          taskName: task.name || 'A task',
-          dueDate: new Date(task.dueDate).toLocaleDateString(),
-          projectName: task.projectName || '',
-          link: task.projectId ? `/projects/${task.projectId}/overview` : '/tasks',
-        },
+        dedupeKey,
+        read: false,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
       });
-      // Mark so a retry / second run today doesn't double-fire.
-      await taskDoc.ref.update({ lastDueNotifiedOn: today });
       queuedCount++;
+
+      // Firestore batch limit is 500 — flush if we get close
+      if (queuedCount % 400 === 0) {
+        await notifBatch.commit();
+      }
     }
 
-    console.log(`[dueSweep] fired ${queuedCount} due-soon notifications via fireTrigger`);
+    if (queuedCount % 400 !== 0) {
+      await notifBatch.commit();
+    }
+
+    console.log(`[dueSweep] queued ${queuedCount} due-soon notifications`);
   },
 );

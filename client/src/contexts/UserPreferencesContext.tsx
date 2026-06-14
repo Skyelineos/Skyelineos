@@ -1,16 +1,4 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
-import { useAuth } from '@/auth/AuthContext';
-
-// Notification prefs that the backend dispatcher (functions/src/notifications/
-// dispatch.ts) actually reads live on `users/{uid}.notificationPrefs`. The two
-// global switches below map UI toggles → those backend fields so the toggle is
-// real, not localStorage-only. Per-kind overrides aren't surfaced here yet.
-const NOTIFICATION_PREF_FIELD: Partial<Record<keyof UserPreferences, 'email' | 'sms'>> = {
-  emailNotifications: 'email',
-  smsNotifications: 'sms',
-};
 
 export interface UserPreferences {
   // Display preferences
@@ -92,7 +80,6 @@ const UserPreferencesContext = createContext<UserPreferencesContextType | undefi
 export function UserPreferencesProvider({ children }: { children: React.ReactNode }) {
   const [preferences, setPreferences] = useState<UserPreferences>(defaultPreferences);
   const [isLoading, setIsLoading] = useState(true);
-  const { firebaseUser } = useAuth();
 
   // Load preferences on mount
   useEffect(() => {
@@ -113,32 +100,6 @@ export function UserPreferencesProvider({ children }: { children: React.ReactNod
     loadPreferences();
   }, []);
 
-  // Once authenticated, let Firestore be the source of truth for the two
-  // notification toggles the backend actually honors. This keeps the switch
-  // in sync across devices (localStorage is per-browser) and reflects values
-  // set by other flows (e.g. the push opt-in button).
-  useEffect(() => {
-    if (!firebaseUser?.uid) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const snap = await getDoc(doc(db, 'users', firebaseUser.uid));
-        const prefs = snap.data()?.notificationPrefs as
-          | { email?: boolean; sms?: boolean }
-          | undefined;
-        if (cancelled || !prefs) return;
-        setPreferences(prev => ({
-          ...prev,
-          ...(typeof prefs.email === 'boolean' ? { emailNotifications: prefs.email } : {}),
-          ...(typeof prefs.sms === 'boolean' ? { smsNotifications: prefs.sms } : {}),
-        }));
-      } catch (e) {
-        console.warn('[prefs] failed to load notificationPrefs from Firestore', e);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [firebaseUser?.uid]);
-
   // Save preferences when they change
   useEffect(() => {
     if (!isLoading) {
@@ -154,27 +115,6 @@ export function UserPreferencesProvider({ children }: { children: React.ReactNod
       ...prev,
       [key]: value,
     }));
-
-    // Mirror the backend-relevant notification toggles to Firestore so the
-    // dispatcher (which reads users/{uid}.notificationPrefs) honors them.
-    // Fire-and-forget — the local state update above is the UX; the sync is
-    // best-effort and never blocks the toggle.
-    const field = NOTIFICATION_PREF_FIELD[key];
-    if (field && firebaseUser?.uid && typeof value === 'boolean') {
-      const payload: Record<string, any> = { [field]: value };
-      // Stamp a consent record when the user turns SMS ON themselves. This is
-      // the auditable proof-of-opt-in carriers / TCPA expect for the account
-      // owner; subs consent separately at onboarding.
-      if (field === 'sms' && value === true) {
-        payload.smsConsentAt = serverTimestamp();
-        payload.smsConsentSource = 'self_settings';
-      }
-      setDoc(
-        doc(db, 'users', firebaseUser.uid),
-        { notificationPrefs: payload },
-        { merge: true },
-      ).catch(e => console.warn('[prefs] failed to sync notificationPref to Firestore', e));
-    }
   };
 
   const resetPreferences = () => {

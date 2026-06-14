@@ -82,15 +82,15 @@ export function shouldRedirectUser(currentPath: string, userRole: UserRole, user
 
   // Admin-only routes — also accessible by gc/projectManager
   if (isAdminOnlyRoute(currentPath)) {
-    if (userRole !== 'admin' && userRole !== 'projectManager') {
+    if (userRole !== 'admin' && userRole !== 'gc' && userRole !== 'projectManager') {
       return getDefaultRouteForRole(userRole, userId);
     }
     return null;
   }
 
-  // Project management routes - admin and project managers
+  // Project management routes - admin, GC, and project managers
   if (isProjectManagementRoute(currentPath)) {
-    if (userRole !== 'admin' && userRole !== 'projectManager') {
+    if (userRole !== 'admin' && userRole !== 'gc' && userRole !== 'projectManager') {
       return getDefaultRouteForRole(userRole, userId);
     }
     return null;

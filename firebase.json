@@ -19,30 +19,14 @@
         "source": "**",
         "destination": "/index.html"
       }
-    ],
-    "headers": [
-      {
-        "//": "Default: never cache the HTML shell or anything unhashed, so a deploy is always picked up immediately (prevents the stale-shell hang after a deploy).",
-        "source": "**",
-        "headers": [
-          { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
-        ]
-      },
-      {
-        "//": "Vite emits content-hashed assets under /assets/ — these are immutable, so cache them hard. Listed AFTER the catch-all so this wins for matching paths.",
-        "source": "/assets/**",
-        "headers": [
-          { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
-        ]
-      }
     ]
   },
   "functions": {
     "source": "functions",
     "predeploy": [
-      "npm --prefix functions run build"
+      "npm run build"
     ],
-    "runtime": "nodejs22"
+    "runtime": "nodejs20"
   },
   "storage": {
     "rules": "storage.rules"

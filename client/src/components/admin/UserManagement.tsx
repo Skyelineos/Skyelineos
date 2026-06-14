@@ -59,7 +59,6 @@ interface User {
 const ROLES = [
   { value: 'admin', label: 'Administrator', color: 'bg-red-100 text-red-800' },
   { value: 'gc', label: 'Skyeline Team', color: 'bg-blue-100 text-blue-800' },
-  { value: 'projectManager', label: 'Project Manager', color: 'bg-sky-100 text-sky-800' },
   { value: 'client', label: 'Home Owner', color: 'bg-purple-100 text-purple-800' },
   { value: 'sub', label: 'Subcontractor', color: 'bg-orange-100 text-orange-800' },
   { value: 'designer', label: 'Designer', color: 'bg-pink-100 text-pink-800' },

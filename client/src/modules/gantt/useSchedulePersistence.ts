@@ -6,7 +6,6 @@ export interface ScheduleTemplate {
   id: string;
   name: string;
   description?: string;
-  projectType?: string;
   tasks: WbsTask[];
   links: Link[];
   createdAt: any;
@@ -33,16 +32,13 @@ export async function saveAsTemplate(
   description: string,
   tasks: WbsTask[],
   links: Link[],
-  createdBy?: string,
-  projectType?: string
+  createdBy?: string
 ): Promise<string> {
   const ref = await addDoc(collection(db, 'scheduleTemplates'), {
     name,
     description,
-    projectType: projectType ?? 'Other',
     tasks,
     links,
-    taskCount: tasks.length,
     createdBy: createdBy ?? null,
     createdAt: serverTimestamp(),
   });

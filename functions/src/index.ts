@@ -7,7 +7,6 @@ import { registerGmailIngester } from './ingestionLab/gmailIngester';
 import { registerDriveIngester } from './ingestionLab/driveIngester';
 import { registerUploadEndpoint } from './ingestionLab/uploadEndpoint';
 import { registerBrainPass } from './ingestionLab/brainPass';
-import { registerPlacesRoutes } from './places/placesRoutes';
 
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -17,8 +16,6 @@ const app = express();
 
 app.use(cors({ origin: true }));
 app.use(express.json());
-// Twilio inbound webhooks (STOP/HELP) post application/x-www-form-urlencoded.
-app.use(express.urlencoded({ extended: false }));
 
 // Ingestion Lab — registered early so the routes sit alongside other /api/**
 // routes and resolve before the catch-all 404 below.
@@ -27,10 +24,6 @@ registerGmailIngester(app, db);      // POST /api/ingestionLab/ingest/gmail
 registerDriveIngester(app, db);      // POST /api/ingestionLab/ingest/drive
 registerUploadEndpoint(app, db);     // POST /api/ingestionLab/upload
 registerBrainPass(app, db);          // POST /api/ingestionLab/brain/process
-
-// Google Places proxy — address autocomplete for the jobsite "Set pin" flow.
-// Key stays server-side (Secret Manager); see places/placesRoutes.ts.
-registerPlacesRoutes(app);           // GET /api/places/{autocomplete,details}
 
 // Real Firestore API endpoints
 app.get('/api/projects', async (req: any, res: any) => {
@@ -1118,15 +1111,9 @@ app.patch('/api/admin/users/:uid/role', async (req: any, res: any) => {
     }
     const { uid } = req.params;
     const { role } = req.body;
-    const allowed = ['admin', 'gc', 'projectManager', 'client', 'sub', 'designer', 'pending_gc'];
+    const allowed = ['admin', 'gc', 'client', 'sub', 'designer', 'pending_gc'];
     if (!allowed.includes(role)) return res.status(400).json({ error: 'Invalid role' });
-    // PM is GC's project-operational delegate (docs/decisions.md §D-001). It gets
-    // read+write like gc; the billing/settings/contract carve-outs are enforced
-    // at the data layer by isGCOnly() in firestore.rules, not by this string.
-    const permissions = role === 'admin'
-      ? ['all']
-      : (role === 'gc' || role === 'projectManager') ? ['read', 'write']
-      : ['read'];
+    const permissions = role === 'admin' ? ['all'] : role === 'gc' ? ['read', 'write'] : ['read'];
     await db.collection('users').doc(uid).update({
       role,
       permissions,
@@ -1373,21 +1360,20 @@ app.post('/api/contacts/list-mine', authMiddleware, async (req: any, res: any) =
 // List every sub-type contact with no linkedUserId yet (claim candidates).
 app.post('/api/contacts/list-unclaimed-subs', authMiddleware, async (_req: any, res: any) => {
   try {
-    // Match any sub-like contact case-insensitively across both role and type
-    // (the old exact where('role','==','subcontractor') queries missed
-    // 'Subcontractor', 'vendor', and type-only records). Single-tenant, so a
-    // full scan + in-memory filter is cheap and far more reliable.
-    const SUB_ROLES = new Set(['sub', 'subcontractor', 'vendor']);
-    const snap = await db.collection('contacts').limit(2000).get();
-    const out: any[] = [];
-    snap.docs.forEach((d: any) => {
-      const data = d.data();
-      if (data.linkedUserId) return; // already claimed/linked
-      const role = String(data.role || '').toLowerCase().trim();
-      const type = String(data.type || '').toLowerCase().trim();
-      if (SUB_ROLES.has(role) || SUB_ROLES.has(type)) out.push({ id: d.id, ...data });
-    });
-    res.json({ contacts: out });
+    const out = new Map<string, any>();
+    const queries = [
+      db.collection('contacts').where('type', '==', 'sub'),
+      db.collection('contacts').where('role', '==', 'sub'),
+      db.collection('contacts').where('role', '==', 'subcontractor'),
+    ];
+    for (const q of queries) {
+      const snap = await q.limit(200).get();
+      snap.docs.forEach((d: any) => {
+        const data = d.data();
+        if (!data.linkedUserId) out.set(d.id, { id: d.id, ...data });
+      });
+    }
+    res.json({ contacts: Array.from(out.values()) });
   } catch (e: any) {
     console.error('[contacts/list-unclaimed-subs]', e);
     res.status(500).json({ error: e.message || String(e) });
@@ -2052,32 +2038,6 @@ registerDeleteBidRequestRoute(app, admin.firestore());
 import { registerAwardBidRoute } from './bids/awardBidRoute';
 registerAwardBidRoute(app, admin.firestore());
 
-// Route: POST /api/contracts/:id/commencement
-import { registerCommenceRoute } from './contracts/commenceRoute';
-registerCommenceRoute(app, admin.firestore());
-
-// Public lead intake for the Crestview Solace QR / model-home Google Form.
-// Gated by the LEAD_INTAKE_SECRET shared secret (not Firebase auth).
-// Route: POST /api/leads/intake
-import { registerLeadIntakeRoute } from './leads/intakeRoute';
-registerLeadIntakeRoute(app, admin.firestore());
-
-// Twilio inbound SMS webhook — STOP/START/HELP keyword handling + opt-out
-// ledger. Route: POST /api/sms/inbound (public; Twilio-signed, no Firebase auth)
-import { registerSmsInboundRoute } from './notifications/smsInboundRoute';
-registerSmsInboundRoute(app, admin.firestore());
-
-// Portal-invite email — sends a stage-specific template (emailTemplates/{id})
-// to a client's documented address via SendGrid. Route: POST /api/send-portal-invite
-import { registerSendPortalInviteRoute } from './email/sendPortalInviteRoute';
-registerSendPortalInviteRoute(app, admin.firestore());
-
-// Configurable notification engine — catalog + seed defaults + live test send.
-// Routes: GET /api/notifications/catalog, POST /api/notifications/rules/init,
-// POST /api/notifications/test
-import { registerNotificationRulesRoutes } from './notifications/rulesRoutes';
-registerNotificationRulesRoutes(app, admin.firestore());
-
 // Catch-all 404 — must come AFTER all route registrations (QBO routes above included)
 app.use('*', (req: any, res: any) => {
   console.log(`❌ 404 - API endpoint not found: ${req.method} ${req.originalUrl}`);
@@ -2106,8 +2066,6 @@ exports.api = onRequest(
       // Ingestion Lab OAuth — Gmail + Drive use one Google OAuth client.
       'GOOGLE_CLIENT_ID',
       'GOOGLE_CLIENT_SECRET',
-      // Google Places (New) autocomplete proxy for jobsite address entry.
-      'GOOGLE_MAPS_API_KEY',
       // Bid request route (/api/bid-requests/send) reads these via process.env.
       // Same secret names as the standalone dispatchNotification function uses.
       'SENDGRID_API_KEY',
@@ -2116,8 +2074,6 @@ exports.api = onRequest(
       'TWILIO_AUTH_TOKEN',
       'TWILIO_FROM_NUMBER',
       'APP_BASE_URL',
-      // Crestview Solace lead-intake form (/api/leads/intake) shared secret.
-      'LEAD_INTAKE_SECRET',
     ],
     memory: '512MiB',
     timeoutSeconds: 540, // Reels can take 30-90s to process
@@ -2128,14 +2084,6 @@ exports.api = onRequest(
 
 // ── Phase 3: Notification dispatch (email + SMS) ─────────────────────────────
 export { dispatchNotification } from './notifications/dispatch';
-
-// ── Delayed-step executor for the configurable notification engine. Runs every
-//    5 min; fires due notificationJobs (multi-step / delayed automation steps).
-export { notificationJobSweep } from './notifications/notificationJobs';
-
-// ── New-lead alert: on every clients/{id} create (any avenue), notify admins
-//    in-app + push + forced SMS. dispatchNotification does the actual sending.
-export { newLeadAlert } from './leads/newLeadAlert';
 
 // (The /api/bid-requests/send, /api/bid-requests/by-token/:token,
 //  /api/sub/post-signup-link, and /api/sub/link-queue/:id/resolve routes
@@ -2159,11 +2107,6 @@ export { oneShotContactAuthBackfill } from './auth/contactAuthBackfill';
 // ── Warranty reminders: when a project gets a moveInDate, auto-create
 //    reminders at 3 / 6 / 11 / 12 months from that date.
 export { createWarrantyReminders } from './projects/warrantyReminders';
-
-// ── One-shot: remap legacy project phases to the new client milestones.
-//    Runs on a 5-min schedule, writes a marker after a clean run, exits early
-//    thereafter. Idempotent.
-export { oneShotPhaseMigration } from './projects/phaseMigration';
 
 
 // (qboOAuth standalone removed — routes folded into the api Express app

@@ -1,0 +1,273 @@
+/* DHTMLX Gantt Schedule Section Styles */
+
+/* Prevent page-level horizontal scrolling */
+html, body {
+  overflow-x: hidden !important;
+}
+
+.dhtmlx-schedule-container {
+  @apply w-full bg-white border border-gray-200 rounded-lg shadow-sm;
+  overflow: hidden; /* Let gantt handle its own scrolling */
+  max-width: 100%; /* Never exceed parent width */
+  width: 100%;
+}
+
+.dhtmlx-schedule-toolbar {
+  @apply flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50;
+}
+
+.dhtmlx-schedule-toolbar .toolbar-right {
+  @apply flex items-center gap-2;
+}
+
+.toolbar-left {
+  @apply flex flex-col;
+}
+
+.toolbar-right {
+  @apply flex items-center gap-2;
+}
+
+.dhtmlx-gantt-container {
+  @apply relative;
+  min-height: 600px;
+  width: 100%;
+  max-width: 100%; /* Respect container width */
+  overflow: auto !important; /* Enable scrolling within container */
+  -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+}
+
+/* Custom gantt task styles */
+.gantt-task {
+  @apply rounded-sm;
+}
+
+.gantt-task-completed {
+  background: #10b981 !important;
+  border-color: #059669 !important;
+}
+
+.gantt-task-active {
+  background: #3b82f6 !important;
+  border-color: #2563eb !important;
+}
+
+.gantt-task-planned {
+  background: #f59e0b !important;
+  border-color: #d97706 !important;
+}
+
+.gantt-task-delayed {
+  background: #ef4444 !important;
+  border-color: #dc2626 !important;
+}
+
+/* DHTMLX Gantt overrides for better integration */
+.gantt_container {
+  font-family: inherit !important;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 8px !important;
+  overflow-x: auto !important; /* Enable horizontal scrolling */
+  overflow-y: auto !important;
+  width: 100% !important;
+  max-width: none !important; /* Allow gantt to expand for full timeline */
+  min-width: 1400px !important; /* Ensure minimum width for day-based timeline visibility */
+  height: 100% !important;
+}
+
+/* Enable side scrolling for the timeline area */
+.gantt_layout_content,
+.gantt_task_area {
+  overflow-x: scroll !important;
+  overflow-y: auto !important;
+}
+
+/* Fix for CSP font issues - override DHTMLX fonts with system fonts */
+.gantt_container * {
+  font-family: inherit !important;
+}
+
+/* Task content vertical centering */
+.gantt_task_content {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  height: 100% !important;
+  padding: 0 8px !important;
+  line-height: normal !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+/* Ensure all gantt elements use system fonts instead of base64 fonts */
+.gantt_scale_line,
+.gantt_scale_cell,
+.gantt_grid_head_cell,
+.gantt_grid_data,
+.gantt_cell,
+.gantt_task_line,
+.gantt_tooltip {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+}
+
+/* Ensure gantt task area allows horizontal scrolling */
+.gantt_task_area {
+  overflow-x: scroll !important;
+}
+
+.gantt_layout_content {
+  overflow-x: scroll !important;
+}
+
+.gantt_grid_head_cell,
+.gantt_grid_data .gantt_cell {
+  border-color: #e5e7eb !important;
+}
+
+.gantt_grid_head_cell {
+  background: #f9fafb !important;
+  color: #374151 !important;
+  font-weight: 500 !important;
+}
+
+.gantt_task_line {
+  border-radius: 4px !important;
+  height: 28px !important;
+  margin-top: 11px !important; /* Center the task bar within the row */
+}
+
+.gantt_task_progress {
+  border-radius: 4px !important;
+  height: 28px !important;
+  margin-top: 0px !important; /* Reset margin for progress bar */
+}
+
+.gantt_link_arrow {
+  border-color: #3b82f6 !important;
+}
+
+.gantt_link_line_wrapper .gantt_link_line {
+  background: #3b82f6 !important;
+}
+
+.gantt_tooltip {
+  border-radius: 6px !important;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05) !important;
+  font-size: 12px !important;
+  z-index: 1000 !important;
+}
+
+/* Task bar styling */
+.gantt_task_line.gantt-task-completed {
+  background: linear-gradient(90deg, #10b981 0%, #059669 100%) !important;
+  border: 1px solid #059669 !important;
+}
+
+.gantt_task_line.gantt-task-active {
+  background: linear-gradient(90deg, #3b82f6 0%, #2563eb 100%) !important;
+  border: 1px solid #2563eb !important;
+}
+
+.gantt_task_line.gantt-task-planned {
+  background: linear-gradient(90deg, #f59e0b 0%, #d97706 100%) !important;
+  border: 1px solid #d97706 !important;
+}
+
+.gantt_task_line.gantt-task-delayed {
+  background: linear-gradient(90deg, #ef4444 0%, #dc2626 100%) !important;
+  border: 1px solid #dc2626 !important;
+}
+
+/* Progress bar styling */
+.gantt_task_progress {
+  background: rgba(255, 255, 255, 0.3) !important;
+}
+
+/* Link/dependency arrows */
+.gantt_link_line {
+  border-radius: 2px !important;
+}
+
+.gantt_link_line:hover {
+  box-shadow: 0 0 5px rgba(59, 130, 246, 0.5) !important;
+}
+
+/* Scale/header styling */
+.gantt_scale_line {
+  border-bottom: 1px solid #e5e7eb !important;
+}
+
+.gantt_scale_cell {
+  border-right: 1px solid #e5e7eb !important;
+}
+
+/* Grid styling */
+.gantt_row:nth-child(odd) {
+  background: #f9fafb !important;
+}
+
+.gantt_row:nth-child(even) {
+  background: #ffffff !important;
+}
+
+.gantt_row:hover {
+  background: #f3f4f6 !important;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .dhtmlx-schedule-toolbar {
+    @apply flex-col items-start gap-3;
+  }
+  
+  .toolbar-right {
+    @apply w-full justify-end;
+  }
+  
+  .dhtmlx-gantt-container {
+    min-height: 400px;
+  }
+  
+  .gantt_container {
+    font-size: 12px !important;
+  }
+}
+
+/* Print styles for PDF export */
+@media print {
+  .dhtmlx-schedule-toolbar {
+    @apply hidden;
+  }
+  
+  .dhtmlx-schedule-container {
+    @apply border-0 shadow-none;
+  }
+}
+
+/* Loading overlay */
+.dhtmlx-schedule-loading {
+  @apply absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-50;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .dhtmlx-schedule-container {
+    @apply bg-gray-900 border-gray-700;
+  }
+  
+  .dhtmlx-schedule-toolbar {
+    @apply bg-gray-800 border-gray-700;
+  }
+  
+  .gantt_grid_head_cell {
+    background: #1f2937 !important;
+    color: #f9fafb !important;
+  }
+  
+  .gantt_grid_data .gantt_cell {
+    background: #111827 !important;
+    color: #f9fafb !important;
+    border-color: #374151 !important;
+  }
+}

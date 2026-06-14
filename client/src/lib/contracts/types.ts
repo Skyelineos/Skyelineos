@@ -116,9 +116,6 @@ export interface Contract {
   // Scope binding
   projectId?: string;          // Required for client_build, sub, designer
   projectName?: string;        // Denormalized for display
-  sourceEstimateId?: string;   // The estimate this contract was generated from
-                               // (set by the Estimate → Contract flow). Links the
-                               // legal/payment spine back to the cost breakdown.
 
   // Parties
   gc: ContractParty;           // Always Skyeline Homes

@@ -28,7 +28,7 @@ import { User, Calendar, Mail, Shield, RefreshCw } from 'lucide-react';
 // Role configuration
 const ROLES = [
   { value: 'admin', label: 'Administrator', description: 'Full system access', color: 'bg-red-100 text-red-800' },
-  { value: 'projectManager', label: 'Project Manager', description: 'Runs projects end-to-end; no billing/settings access', color: 'bg-blue-100 text-blue-800' },
+  { value: 'project_manager', label: 'Project Manager', description: 'Manage projects and users', color: 'bg-blue-100 text-blue-800' },
   { value: 'accountant', label: 'Accountant', description: 'Financial management access', color: 'bg-green-100 text-green-800' },
   { value: 'client', label: 'Client', description: 'View project progress', color: 'bg-purple-100 text-purple-800' },
   { value: 'subcontractor', label: 'Subcontractor', description: 'Bid on projects and manage tasks', color: 'bg-orange-100 text-orange-800' },

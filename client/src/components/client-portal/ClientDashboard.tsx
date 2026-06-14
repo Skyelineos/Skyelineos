@@ -10,7 +10,10 @@ import {
   Calendar, DollarSign, Home, Wrench, Palette
 } from 'lucide-react';
 
-import { CLIENT_PHASES as PHASES } from '@/lib/clientPhases';
+const PHASES = [
+  'Pre-Construction', 'Site Prep', 'Foundation', 'Framing',
+  'Rough MEP', 'Insulation', 'Drywall', 'Finish Work', 'Punch List', 'Complete'
+];
 
 interface ClientDashboardProps {
   projectId: string;
@@ -35,9 +38,8 @@ export default function ClientDashboard({ projectId, project, onNavigate }: Clie
   const { data: changeOrders = [] } = useQuery({
     queryKey: ['changeOrders', projectId],
     queryFn: async () => {
-      // Top-level `changeOrders` keyed by projectId (canonical location).
       const snap = await getDocs(
-        query(collection(db, 'changeOrders'), where('projectId', '==', projectId))
+        query(collection(db, 'projects', projectId, 'changeOrders'), orderBy('createdAt', 'desc'))
       );
       return snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
     },

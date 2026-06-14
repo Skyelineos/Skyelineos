@@ -28,15 +28,12 @@ import {
 import { ChatThread } from '@/components/ui/ChatThread';
 import { WalkthroughCapture } from '@/components/walkthrough/WalkthroughCapture';
 import { WalkthroughList } from '@/components/walkthrough/WalkthroughList';
-import { Activity } from 'lucide-react';
-import { PortalActivityPanel } from '@/components/portal/PortalActivityPanel';
-import { InviteToPortalButton } from '@/components/portal/InviteToPortalButton';
 import { ProjectFinancialsCard } from '@/components/projects/ProjectFinancialsCard';
 import { ProjectStageTracker, deriveStageFromProject } from '@/components/projects/ProjectStageTracker';
 import { SoftBudgetBadge } from '@/components/projects/SoftBudgetBadge';
 import { ContractProfitCard } from '@/components/projects/ContractProfitCard';
 import { SelectionsProgressCard } from '@/components/projects/SelectionsProgressCard';
-import { ProjectJobsiteCard } from '@/components/projects/ProjectJobsiteCard';
+import { useRoleAccess } from '@/hooks/useRoleAccess';
 
 
 
@@ -45,8 +42,13 @@ export default function ProjectOverview() {
   const projectId = params?.id;
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [advancing, setAdvancing] = useState(false);
-  const [activityOpen, setActivityOpen] = useState(false);
   const { toast } = useToast();
+  // PMs are blocked from financial reads — hide profit + financials cards
+  // (and the spend numbers on the progress card). Project status, schedule,
+  // selections, and walkthroughs remain visible. Firestore rules enforce
+  // the same boundary on the read path.
+  const { canAccessFinancials } = useRoleAccess();
+  const showFinancials = canAccessFinancials();
 
   const { project: transformedProject, rawProject: project, isLoading, error } = useOptimizedProject(projectId);
 
@@ -266,16 +268,17 @@ export default function ProjectOverview() {
           </CardContent>
         </Card>
 
-        {/* Profit vs. contracts — revenue from client contracts, costs from
-            sub + designer contracts, cash on hand from paid milestones. */}
-        <ContractProfitCard projectId={projectId!} />
+        {/* Profit vs. contracts — GC/admin only. */}
+        {showFinancials && <ContractProfitCard projectId={projectId!} />}
 
-        {/* Estimate-side financials — pre-contract estimating + COs. */}
-        <ProjectFinancialsCard
-          projectId={projectId!}
-          projectName={transformedProject.name}
-          spent={transformedProject.spent || 0}
-        />
+        {/* Estimate-side financials — GC/admin only. */}
+        {showFinancials && (
+          <ProjectFinancialsCard
+            projectId={projectId!}
+            projectName={transformedProject.name}
+            spent={transformedProject.spent || 0}
+          />
+        )}
 
         {/* Live selections-progress bar — same scale + tones as the
             homeowner's client-portal bar, so a glance tells the GC
@@ -377,30 +380,32 @@ export default function ProjectOverview() {
                 )}
               </div>
 
-              {/* Live Budget Utilization */}
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-sm font-medium">Budget Utilization</span>
-                  <span className="text-sm text-gray-600">
-                    {progressLoading ? '...' : `${liveProgress?.budgetUtilization || 0}%`}
-                  </span>
-                </div>
-                <Progress 
-                  value={progressLoading ? 0 : (liveProgress?.budgetUtilization || 0)} 
-                  className={`h-3 mb-2 ${
-                    liveProgress && liveProgress.budgetUtilization > 100 ? '[&>div]:bg-red-500' :
-                    liveProgress && liveProgress.budgetUtilization > 85 ? '[&>div]:bg-yellow-500' : ''
-                  }`}
-                />
-                <p className="text-xs text-gray-500">
-                  ${transformedProject.spent.toLocaleString()} spent of ${transformedProject.budget.toLocaleString()} budget
-                </p>
-                {liveProgress && liveProgress.budgetUtilization > 90 && (
-                  <p className="text-xs text-yellow-600 mt-1">
-                    Approaching budget limit
+              {/* Live Budget Utilization — GC/admin only. */}
+              {showFinancials && (
+                <div>
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-sm font-medium">Budget Utilization</span>
+                    <span className="text-sm text-gray-600">
+                      {progressLoading ? '...' : `${liveProgress?.budgetUtilization || 0}%`}
+                    </span>
+                  </div>
+                  <Progress
+                    value={progressLoading ? 0 : (liveProgress?.budgetUtilization || 0)}
+                    className={`h-3 mb-2 ${
+                      liveProgress && liveProgress.budgetUtilization > 100 ? '[&>div]:bg-red-500' :
+                      liveProgress && liveProgress.budgetUtilization > 85 ? '[&>div]:bg-yellow-500' : ''
+                    }`}
+                  />
+                  <p className="text-xs text-gray-500">
+                    ${transformedProject.spent.toLocaleString()} spent of ${transformedProject.budget.toLocaleString()} budget
                   </p>
-                )}
-              </div>
+                  {liveProgress && liveProgress.budgetUtilization > 90 && (
+                    <p className="text-xs text-yellow-600 mt-1">
+                      Approaching budget limit
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Progress Breakdown */}
@@ -481,26 +486,15 @@ export default function ProjectOverview() {
               <Card className="bg-gray-50">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0">
                   <CardTitle>Client Information</CardTitle>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setActivityOpen(true)}
-                      className="gap-1.5"
-                    >
-                      <Activity className="w-3.5 h-3.5" />
-                      Portal Activity
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setEditDialogOpen(true)}
-                      className="gap-1.5"
-                    >
-                      <Edit className="w-3.5 h-3.5" />
-                      Edit
-                    </Button>
-                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setEditDialogOpen(true)}
+                    className="gap-1.5"
+                  >
+                    <Edit className="w-3.5 h-3.5" />
+                    Edit
+                  </Button>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div>
@@ -558,24 +552,11 @@ export default function ProjectOverview() {
                       <p className="text-sm text-gray-400 italic">Not set</p>
                     )}
                   </div>
-                  {email && (
-                    <div className="pt-1">
-                      <InviteToPortalButton
-                        email={email}
-                        firstName={(transformedProject.client || '').split(' ')[0]}
-                        contactId={Array.isArray(raw?.clientIds) && raw.clientIds[0] ? String(raw.clientIds[0]) : ''}
-                        className="w-full justify-center"
-                      />
-                    </div>
-                  )}
                 </CardContent>
               </Card>
             );
           })()}
         </div>
-
-        {/* Jobsite location — map + one-tap directions to the build. */}
-        {projectId && <ProjectJobsiteCard project={project} projectId={projectId} />}
 
         {/* Milestones */}
         <Card className="bg-gray-50">
@@ -644,17 +625,6 @@ export default function ProjectOverview() {
             onOpenChange={setEditDialogOpen}
           />
         )}
-
-        {/* Client portal activity (internal) */}
-        <PortalActivityPanel
-          open={activityOpen}
-          onClose={() => setActivityOpen(false)}
-          projectId={projectId!}
-          contactId={Array.isArray((project as any)?.clientIds) && (project as any).clientIds[0]
-            ? String((project as any).clientIds[0]) : undefined}
-          clientName={transformedProject?.client}
-          clientEmail={transformedProject?.clientEmail || linkedClient?.email}
-        />
         </div>
 
         {/* Floating capture button (mobile-friendly, persists across scroll) */}

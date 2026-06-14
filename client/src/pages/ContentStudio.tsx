@@ -9,7 +9,6 @@ import { db, storage } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { AppLayout } from '@/components/layout/AppLayout';
-import { GiveawayPageManager } from '@/components/content-studio/GiveawayPageManager';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -140,16 +139,13 @@ export default function ContentStudio() {
               Upload site photos → Claude reads them, suggests captions + hashtags, you approve, post to Instagram.
             </p>
           </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <GiveawayPageManager />
-            <Button
-              onClick={() => setCreatingDraft({ type: 'photo', media: [], caption: '', hashtags: [], status: 'draft' })}
-              className="gap-2 text-white"
-              style={{ backgroundColor: '#C9A96E' }}
-            >
-              <Camera className="w-4 h-4" /> New Post
-            </Button>
-          </div>
+          <Button
+            onClick={() => setCreatingDraft({ type: 'photo', media: [], caption: '', hashtags: [], status: 'draft' })}
+            className="gap-2 text-white"
+            style={{ backgroundColor: '#C9A96E' }}
+          >
+            <Camera className="w-4 h-4" /> New Post
+          </Button>
         </div>
 
         <InstagramStatusBanner />

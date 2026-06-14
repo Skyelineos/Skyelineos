@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { collection, getDocs, where, query as fsQuery } from 'firebase/firestore';
+import { collection, getDocs, orderBy, query as fsQuery } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -32,13 +32,8 @@ export default function ChangeOrdersTab({ projectId, clientId, projectBudget = 0
   const { data: changeOrders = [], isLoading } = useQuery({
     queryKey: ['changeOrders', projectId],
     queryFn: async () => {
-      // Change orders live in the top-level `changeOrders` collection (keyed by
-      // projectId) — the GC pages + selections-overage flow all write there.
-      // Sort client-side to avoid a composite (projectId + createdAt) index.
-      const snap = await getDocs(fsQuery(collection(db, 'changeOrders'), where('projectId', '==', projectId)));
-      return snap.docs
-        .map(d => ({ id: d.id, ...d.data(), createdAt: d.data().createdAt?.toDate?.()?.toISOString() || null }))
-        .sort((a: any, b: any) => (b.createdAt || '').localeCompare(a.createdAt || '')) as any[];
+      const snap = await getDocs(fsQuery(collection(db, 'projects', projectId, 'changeOrders'), orderBy('createdAt', 'desc')));
+      return snap.docs.map(d => ({ id: d.id, ...d.data(), createdAt: d.data().createdAt?.toDate?.()?.toISOString() || null })) as any[];
     },
     enabled: !!projectId,
   });

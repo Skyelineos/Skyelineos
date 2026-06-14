@@ -6,7 +6,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { SubcontractorComboBox } from '@/components/ui/subcontractor-combobox';
-import { AddressSearchInput } from '@/components/common/AddressSearchInput';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, FileText, User, Mail, Phone, MapPin, Calendar, DollarSign, Users, Palette } from 'lucide-react';
 
@@ -311,11 +310,12 @@ export function WorkingEditProjectForm({ project, open, onOpenChange }: EditProj
                   <MapPin className="h-4 w-4" />
                   Project Address
                 </label>
-                <AddressSearchInput
+                <input
+                  type="text"
                   value={address}
-                  onChange={setAddress}
-                  onSelect={(r) => setAddress(r.label || r.address?.line1 || '')}
-                  placeholder="Start typing an address — suggestions appear"
+                  onChange={(e) => setAddress(e.target.value)}
+                  className="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-theme-primary focus:outline-none"
+                  placeholder="Enter project address"
                 />
               </div>
 

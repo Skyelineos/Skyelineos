@@ -12,7 +12,6 @@ import {
   FileSignature,
   MessageSquare,
   Camera,
-  HelpCircle,
   X,
   Menu,
   LogOut,
@@ -72,12 +71,6 @@ const sidebarItems = [
     label: 'Progress Photos',
     icon: Camera,
     path: 'progress-photos'
-  },
-  {
-    id: 'rfis',
-    label: 'RFIs',
-    icon: HelpCircle,
-    path: 'rfis'
   },
   {
     id: 'messages',

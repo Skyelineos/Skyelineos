@@ -64,9 +64,6 @@ export default function SignIn() {
 
   // Registration modal state
   const [registerOpen, setRegisterOpen] = useState(false);
-  // Set when arriving via ?invite=<token>; lets us mark the invite consumed
-  // once the visitor finishes signing up.
-  const [inviteDocId, setInviteDocId] = useState<string | null>(null);
   const [resetOpen, setResetOpen] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
   const [resetSending, setResetSending] = useState(false);
@@ -126,7 +123,6 @@ export default function SignIn() {
         if (snap.empty) return;
         const data = snap.docs[0].data() as any;
         if (data.status !== 'pending') return;
-        setInviteDocId(snap.docs[0].id);
         setRegEmail(String(data.email || ''));
         setRegName(String(data.firstName || ''));
         // Open the registration drawer automatically.
@@ -424,20 +420,6 @@ export default function SignIn() {
               company: regCompany,
             }),
           }).catch(() => { /* best-effort; portal still works without linkage */ });
-        } catch { /* best-effort */ }
-      }
-
-      // If they arrived via a portal invite link, mark that invite consumed so
-      // the one-time token can't be reused and staff can see it was claimed.
-      // Best-effort — a narrow Firestore rule lets the just-registered user
-      // flip only their own invite (matched by email) to 'used'.
-      if (inviteDocId) {
-        try {
-          await setDoc(doc(db, 'portalInvites', inviteDocId), {
-            status: 'used',
-            claimedAt: serverTimestamp(),
-            claimedByUid: uid,
-          }, { merge: true });
         } catch { /* best-effort */ }
       }
 

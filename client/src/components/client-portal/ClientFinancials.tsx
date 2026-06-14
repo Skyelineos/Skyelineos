@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react';
 import {
-  collection, doc, onSnapshot, query, orderBy, where, addDoc, updateDoc,
+  collection, doc, onSnapshot, query, orderBy, addDoc, updateDoc,
   serverTimestamp,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { CLIENT_PHASES as PHASES } from '@/lib/clientPhases';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
@@ -57,6 +56,11 @@ interface ProjectFinancials {
   actualCompletion?: string;
   name?: string;
 }
+
+const PHASES = [
+  'Pre-Construction', 'Site Prep', 'Foundation', 'Framing',
+  'Rough MEP', 'Insulation', 'Drywall', 'Finish Work', 'Punch List', 'Complete',
+];
 
 const DRAW_STATUS: Record<Draw['status'], { label: string; color: string; bg: string; icon: any }> = {
   scheduled: { label: 'Scheduled',         color: '#6b7280', bg: '#f3f4f6',       icon: Clock },
@@ -284,18 +288,12 @@ export default function ClientFinancials({ projectId, userRole }: ClientFinancia
     return unsub;
   }, [projectId]);
 
-  // Change orders — top-level `changeOrders` keyed by projectId (canonical
-  // location; the project subcollection was never written to). Sorted
-  // client-side to avoid a composite index.
+  // Change orders
   useEffect(() => {
     if (!projectId) return;
     const unsub = onSnapshot(
-      query(collection(db, 'changeOrders'), where('projectId', '==', projectId)),
-      snap => setChangeOrders(
-        snap.docs
-          .map(d => ({ id: d.id, ...d.data() } as ChangeOrder))
-          .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
-      )
+      query(collection(db, 'projects', projectId, 'changeOrders'), orderBy('createdAt', 'desc')),
+      snap => setChangeOrders(snap.docs.map(d => ({ id: d.id, ...d.data() } as ChangeOrder)))
     );
     return unsub;
   }, [projectId]);
