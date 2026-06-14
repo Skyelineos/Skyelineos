@@ -12,6 +12,293 @@ Things a future Claude session should know before diving in. Specific file paths
 
 The errors look like a brace/paren mismatch around line 815, with the parser cascading the rest of the file as a single broken expression. The file imports cleanly (it's only used in a few timeline experiments) and `vite build` succeeds because esbuild is more permissive than `tsc`. **Production builds and ships fine** — but `npm run check` will always exit non-zero until these are fixed. Don't gate CI on `tsc` without addressing this first.
 
+## Shipping workflow (every session)
+
+**Push everything through GitHub; go live through Firebase.** Two distinct steps:
+commit + push code to the GitHub repo (the canonical history — work on a branch / PR),
+then run `npm run deploy*` to deploy to the `skyelineos` Firebase project so the change
+actually reaches users. A GitHub push alone does **not** update the live site. See the
+"How work ships" section in `CLAUDE.md`.
+
+## Session 15 — Portal access without admin approval + sub bid-link fix
+
+Subs (and clients/designers) were getting walled behind the "Access Pending Approval"
+screen, and subs arriving via a bid magic-link couldn't reach the bid in their portal.
+
+### Root cause
+`client/src/auth/AuthContext.tsx` stamped **every** first-time sign-in with no `users`
+doc as `role: 'pending_gc'`. The email/password registration form (`SignIn.tsx`) already
+assigns `client` / `sub` / `designer` correctly, but any cold sign-in that skipped it —
+most importantly a sub who clicks the bid magic-link and signs in with Google — hit the
+`pending_gc` default and was blocked by `ProtectedRoute` (line ~87) before ever reaching
+the portal where their bid would surface. The sub portal is also role-gated to `sub`/`admin`
+(`App.tsx` ~600), so even a non-blocked cold sub stamped `client` couldn't see bids.
+
+### What changed
+- **`AuthContext.tsx`** — on first sign-in with no profile, resolve the portal role from a
+  matching **contact card** by email (new `derivePortalRole()`, mirrors
+  `functions/src/auth/ensureContactAuth.ts` `deriveUserRole()`): subcontractor/vendor → `sub`,
+  client/homeowner → `client`, designer → `designer`, team/employee → `pending_gc`
+  (internal staff still gated), unknown → `client`. Profile is written `active: true`,
+  `status: 'active'`, and the matched contact gets `linkedUserId` stamped so bid queries
+  resolve it by contact ID next load. **Clients, subs, and designers now get their portal
+  with no admin-approval step.** Only internal team/employee sign-ups remain gated.
+- **`SubBidRequestsTab.tsx`** — `array-contains-any` / `in` queries cap at 10 values; added
+  `prioritize()` so uid + contact IDs (no `@`) sort ahead of email variants before the
+  `.slice(0, 10)`, ensuring the primary invite keys never get truncated away.
+
+### Notes for future sessions
+- `RequestBidsModal.tsx` and `StartBidModal.tsx` are **orphaned** (not imported/rendered
+  anywhere). The live GC send path is `SendBidPackageModal` → `/api/bid-requests/send`
+  (`functions/src/bids/sendBidRequestRoute.ts`), which writes `invitedSubIds` =
+  contactId + linkedUserId + lowercased email. Don't invest in the orphaned modals; delete
+  them in a future cleanup if desired.
+- The `firestore.rules` bidRequests read rule only matches on `request.auth.uid` or
+  `request.auth.token.email.lower()` in `invitedSubIds` (not contactId), so the backend
+  *must* keep including the lowercased email — it does.
+
+## Session 15 — Jobsite map: Google Places autocomplete + portal view access
+
+The jobsite "map section" had two real bugs and one missing capability.
+
+**Bug 1 — phantom auto-filled pin.** `BuildLocation.tsx` (edit mode) always
+dropped a marker on the default center (Mapleton, UT) even when the location was
+empty, so a brand-new project looked like it already had a pin the user never
+placed. Fixed: the marker is now created on-demand (only when a real pin exists
+or the user clicks the map), mirroring `MapPinPicker`. Also fixed a stale-closure
+bug where the map click/drag handlers (bound once at mount) merged onto a
+mount-time snapshot of `value`, reverting any address fields typed afterward —
+now they read `valueRef.current`.
+
+**Bug 2 — broken DB suggestions for non-GC users.** `loadKnownAddresses()`
+(`AddressAutocomplete.tsx`) listed **all** `clients` + `projects` in one
+`Promise.all`. firestore.rules reject a list-all of `projects` for
+subs/designers/clients (per-doc assignment only), and that single rejection wiped
+out the clients suggestions too. Now uses `Promise.allSettled` so each collection
+is independent.
+
+**New — Google Places autocomplete.** Replaced the weak/rate-limited OSM
+Nominatim geocoding with Google Places (New), proxied server-side so the Maps key
+never ships to the browser:
+- `functions/src/places/placesRoutes.ts` → `GET /api/places/autocomplete` +
+  `GET /api/places/details` (signed-in only; session tokens for cheap billing).
+  Registered on the shared `api` Express app (index.ts) — no new Cloud Run
+  service. Reads `GOOGLE_MAPS_API_KEY` from Secret Manager (added to the `api`
+  secrets array).
+- `client/src/lib/places.ts` → client helpers (`placesAutocomplete`,
+  `placeDetails`, `newSessionToken`).
+- `AddressSearchInput.tsx` rewritten to use the proxy + saved-address rows.
+  `MapPinPicker`'s "Find address" geocoder now also uses it. **Graceful
+  fallback:** if `GOOGLE_MAPS_API_KEY` is unset the proxy returns 503 and the UI
+  silently falls back to saved-address suggestions (manual pin-drop always works).
+
+**New — view access for everyone assigned.** Subs and designers previously had NO
+way to see the jobsite. Added `client/src/components/common/JobsiteLocationCard.tsx`
+(read-only: address + one-tap "Open Directions" deep-link to Apple/Google Maps +
+lazy on-demand map). Wired into `SubcontractorPortal` (per assigned project on the
+dashboard) and `DesignerPortal` (selected project's Dashboard tab). Data access
+already existed in firestore.rules (`assignedUserIds`); this is the UI.
+
+**OPERATOR PREREQUISITES (Places won't work until these are done):**
+1. In Google Cloud project `skyelineos`, enable the **Places API (New)**.
+2. Create an **API key** restricted to the Places API (and, ideally, restricted
+   by IP to the Cloud Functions egress — it's only used server-side).
+3. Store it: `firebase functions:secrets:set GOOGLE_MAPS_API_KEY` (or add to
+   Secret Manager as `GOOGLE_MAPS_API_KEY`), then `npm run deploy:functions`.
+   Until then the address field degrades to saved-address suggestions only.
+
+## Session 14 — SMS text alerts (operator + subs)
+
+Made the SMS pipeline actually fire end-to-end and brought it into carrier
+compliance. The dispatcher already supported Twilio; the gaps were phone
+formatting, a dead opt-in toggle, no STOP handling, and subs never being texted.
+
+### What shipped (code)
+- **Shared SMS util** — `functions/src/notifications/sms.ts`. `toE164()` coerces
+  free-form phones (`(801) 555-1234`, `801-555-1234`, `8015551234`, `1-801…`) to
+  the `+18015551234` Twilio requires; defaults to +1. Returns null on ambiguous
+  input so callers skip + log instead of letting Twilio throw. Plus an opt-out
+  ledger helper (`isSmsOptedOut`) and keyword classifier (`classifySmsKeyword` /
+  `applySmsKeyword`).
+- **Every outbound SMS path now normalizes + checks opt-out**: the notification
+  dispatcher (`dispatch.ts`), per-trade bid sends (`sendBidRequestRoute.ts`), and
+  the consolidated bid-package dispatch (`bidPackageDispatchRoute.ts`). Before
+  this, un-normalized phones silently failed at Twilio.
+- **STOP/START/HELP webhook** — `functions/src/notifications/smsInboundRoute.ts`,
+  `POST /api/sms/inbound`. Writes a phone-keyed ledger at `sms_opt_outs/{e164}`.
+  Every sender skips opted-out numbers, *including* `forceSms` alerts. Twilio's
+  carrier-level STOP is a backstop; this mirrors it so we don't waste sends and
+  so START re-enables. Added `express.urlencoded` (Twilio posts form-encoded).
+- **Opt-in toggle is now real** — `UserPreferencesContext.tsx` syncs the
+  Email/SMS toggles to `users/{uid}.notificationPrefs.{email,sms}` (the fields
+  the dispatcher reads) and seeds them from Firestore on login. Previously the
+  toggle wrote localStorage only — the dispatcher never saw it. Turning SMS on
+  also stamps `smsConsentAt` / `smsConsentSource: 'self_settings'`.
+- **Subs get texted on award** — `awardBidRoute.ts` notification now carries
+  `forceSms: true` (transactional, high-signal). Bid invitations already texted
+  subs via the bid routes; those now normalize + honor STOP too.
+- **Consent capture (opt-in record)** — `EditContactModal.tsx` shows an "agreed
+  to receive SMS text alerts" checkbox once a contact has a phone. Checking it
+  flips `notificationPrefs.sms` on (dot-path write, doesn't clobber email/push)
+  and stamps `smsConsentAt` / `smsConsentSource: 'gc_contact_form'` on the rising
+  edge; unchecking stamps `smsConsentRevokedAt`. This is the auditable opt-in
+  proof for texting subs/contacts. STOP still overrides at send time.
+- **Firestore rule** — explicit Cloud-Function-only rule for `sms_opt_outs`
+  (sensitive raw phone numbers; was already covered by default-deny).
+
+### Operator prerequisites (REQUIRED before subs get reliable texts)
+1. **Set your phone, E.164** — `users/{your-uid}.phone = +1801…`. Lead alerts
+   (`forceSms`) start texting you immediately once this is set. Twilio secrets
+   are already configured; no new secrets.
+2. **A2P 10DLC registration (Twilio)** — register a Brand + Campaign in the
+   Twilio console. **Without this, carriers filter/block messages to subs** at
+   any volume. Texting yourself often slips through; a fleet of subs will not.
+   Allow ~1–3 business days for approval. This is the single biggest gate.
+3. **Wire the inbound webhook** — in Twilio, set the messaging number's
+   "A MESSAGE COMES IN" webhook to
+   `https://skyelineos.web.app/api/sms/inbound` (HTTP POST). Without it STOP is
+   still honored by Twilio at the carrier level, but our ledger won't record it.
+4. **Capture sub consent** — texting subs requires prior express consent. The
+   opt-in checkbox is now in the contact editor (`EditContactModal`); check it
+   when you collect a sub's phone so there's an auditable record. STOP/opt-out
+   is honored automatically regardless.
+5. **Deploy** — `npm run deploy:functions` (dispatcher + webhook + bid routes),
+   `npm run deploy:rules` (sms_opt_outs), `npm run deploy:hosting` (toggle).
+
+### Deliberately NOT built this session
+- Consent capture on the sub *portal* self-onboarding (`SubcontractorPortalAccess`)
+  — the GC-side capture (EditContactModal checkbox) is built; a sub self-opting-in
+  during their own signup is the remaining surface.
+- Per-kind SMS toggles in the UI (the dispatcher already supports
+  `notificationPrefs.kinds.{kind}.sms`; the dialog only surfaces the two global
+  switches).
+- A sub-facing notification-prefs screen — subs have no SMS toggle yet; award/
+  invite texts are `forceSms`/transactional, STOP-respecting.
+
+## Session 13 — Client portal: real-client project access
+
+The client portal couldn't load a real homeowner's project — two layered bugs:
+1. **Identity:** it queried `projects` by `user.firebaseUid`, but projects key
+   the client by their **contact-doc id** (`contacts.linkedUserId = auth.uid`),
+   not the uid. (Admin impersonation "worked" only because the admin passes
+   `isGC()` and can read everything.)
+2. **Rules:** `firestore.rules` gated clients with `clientId == request.auth.uid`
+   everywhere — same uid-vs-contactId mismatch — so reads were denied even if the
+   query matched.
+
+Fixes:
+- `SkyelineClientPortal.tsx` now uses `resolveClientIdentity()` (same helper
+  `ClientTodayFeed` uses) to resolve the uid+email→contact-id union, and queries
+  `clientIds array-contains-any` + `clientId in` that union (dropped the
+  `assignedUserIds` query — that's team uids, not the client). `primaryClientId`
+  (the resolved contact id, or impersonated id) is what's passed to child tabs.
+- `firestore.rules`: new helpers `clientOwns(data)` / `clientOwnsProject(pid)`
+  match a client by uid **or** `users/{uid}.linkedContactId` against
+  `clientId`/`clientIds`. Applied to the projects read, the buildLocation
+  client-confirm update, and every project-subcollection client read
+  (selections, schedules, rooms, draws, budgetItems, moveInBinder,
+  locationEvents, walkthroughs, rfis…). Rules compile clean (validated via the
+  Firestore emulator).
+- `Sales.tsx` lead→project conversion now writes `clientId`/`clientIds` (the
+  lead's `contactId`) + `clientEmail`. Previously it wrote **no** client link at
+  all, so converted projects were invisible to the homeowner.
+
+Known follow-ups (not regressions — these were already broken for clients):
+- **Estimates** rule (`firestore.rules` ~line 200) still keys
+  `estimates/{id}.clientId == uid`, but the Sales path writes the estimate's
+  `clientId` as the **sales `clients`-doc id** (neither uid nor contactId). The
+  client Financials tab may not read estimates until that's reconciled.
+- The portal still reads the logged-in user via the legacy `@/hooks/use-auth`
+  (drops `firebaseUid`; `user.id` is `0`). We now resolve identity via
+  `auth.currentUser` instead, so it's moot here — but other client components
+  using that hook for identity may have the same latent bug.
+
+## Session 13 — Lead intake: alerts + source tracking
+
+Hardened the lead-intake path end to end and added new-lead alerting + lead-gen
+source documentation across every avenue.
+
+### What shipped
+- **New-lead alert (Cloud Function).** `functions/src/leads/newLeadAlert.ts` —
+  `onDocumentCreated('clients/{clientId}')`. Because **every** avenue (manual
+  Sales entry, public web form, Crestview QR/Google Form, future event QR + ad
+  landing pages) writes to `clients`, this one trigger guarantees an alert no
+  matter how the lead arrived. Writes a `notifications/{id}` doc per admin
+  (`role == 'admin'`) with `kind: 'lead_created'` + `forceSms: true`; the
+  existing `dispatchNotification` then fans out to in-app + web push + SMS.
+  Bulk imports (`importedAt` / `imported-vcf` tag) are skipped so a big vCard
+  import doesn't fire one text per contact. Exported from `index.ts`.
+- **`forceSms` on notifications.** `dispatch.ts` now sends the SMS regardless of
+  the recipient's opt-in pref when `notif.forceSms === true` (a phone number is
+  still required). SMS is otherwise opt-in-only and stays that way.
+- **Dashboard alert.** `GCTodayFeed.tsx` gained a **"New leads (last 7 days)"**
+  section above Hot Leads — every new lead, any priority, any avenue, each row
+  labeled with its source. Reads `clients` ordered by `createdAt` (single-field,
+  no composite index).
+- **Lead-gen source documentation.** Source taxonomy extended to
+  `website · event · ad_campaign · referral · instagram · parade_of_homes ·
+  email · phone · other`. Each lead now stores `source` + a free-text
+  `sourceDetail` (the specific event/campaign/referrer). Three places kept in
+  sync: `LEAD_SOURCES` (`Sales.tsx`), `ALLOWED_SOURCES` (`intakeRoute.ts`),
+  `SOURCE_LABELS` (`newLeadAlert.ts` + `GCTodayFeed.tsx`).
+  - **Manual form** (`Sales.tsx`): source picker + a contextual "Source detail"
+    input (Campaign Name / Referred By / Event Name) for event/ad/referral/parade.
+  - **Public form** (`LearnMore.tsx`): reads `?source=` + `?campaign=` query
+    params so the **same** branded form backs many documented entry points
+    (model-home QR → event, ad link → ad_campaign, etc.). Defaults to
+    `event` / "Crestview Solace · Build #27".
+  - **Intake routes** (`intakeRoute.ts`): both `/api/leads/intake` and
+    `/api/leads/public-intake` whitelist `source`, store `sourceDetail`, and tag
+    the lead with the detail string for filtering. No longer hardcodes
+    `source: 'website'` or the Crestview tags.
+
+### Operator prerequisite for the SMS
+The text only sends if the **admin user doc has a `phone`** (E.164, e.g.
+`+18015551234`). Set it on `users/{tyler-uid}.phone`. No SMS opt-in needed —
+`lead_created` forces it. Twilio secrets are already configured (shared with the
+notification dispatcher). No new secrets required.
+
+### Verification
+- `functions` `tsc --noEmit` → clean. Client `vite build` → green.
+- Pre-existing `tsc` errors remain (ModernTimelineBuilder, App.tsx `'gc'` role
+  taxonomy, two in `Sales.tsx` at the legacy `getDocs`/`Set` spots) — none
+  introduced by this work; production build (esbuild) ships fine.
+
+## Session 13 — Jobsite mapping + QR-form counties
+
+Wired the existing `BuildLocation` map/pin system into the two places it was
+missing, added a lightweight reusable pin picker, and tightened the QR lead form.
+
+- **Reusable pin picker** — `client/src/components/common/MapPinPicker.tsx`. A
+  lean map (no address-field clutter) you click/drag to set lat/lng. Dynamic
+  `import('maplibre-gl')` like `BuildLocation` so it stays out of the startup
+  bundle. Best-effort OSM Nominatim "Find address on map" + manual drop. Use it
+  anywhere an address is captured.
+- **Lead form** (`Sales.tsx`) — the lead dialog now has a collapsible "Pin
+  job-site on map" section storing `latitude`/`longitude` on the `clients` doc.
+  When a lead converts to a project (`CreateProjectFromLead`), the pin carries
+  into the project's `buildLocation` so directions work immediately.
+- **GC project widget** — `client/src/components/projects/ProjectJobsiteCard.tsx`,
+  added to `ProjectOverview.tsx` below the details grid. View mode shows the map
+  + an "Open Directions" button; "Set/Edit pin" flips to edit mode (keyed
+  remount so the map rebinds handlers) and saves via `saveBuildLocation`. Lets
+  the GC pin legacy projects that only had a text address.
+- **Directions = default app** — `buildLocation.ts` `directionsUrl` now detects
+  iOS (incl. iPadOS-as-Mac) and returns an Apple Maps link there, Google Maps
+  elsewhere — so it opens the user's actual default maps app.
+- **QR lead form counties** (`LearnMore.tsx`) — the "City/Area" dropdown is now
+  "County You Plan to Build In" → Utah County · Wasatch County · Salt Lake
+  County · Other (reveals a "please specify" text box). Stored as both `city`
+  (back-compat) and a new `county` field on the lead; `intakeRoute.ts` persists
+  `county`.
+
+Reference: `docs/mind-map.md` logs Tyler's four-portal product mind map.
+
+Still plain-text address (not yet pin-enabled): `NewProjectForm`,
+`CreateProjectModal`, `WorkingEditProjectForm`. They write the flat `address`
+field; the project overview pin picker covers them after creation. Migrate to
+`MapPinPicker`/`BuildLocation` when convenient.
+
 ## Session 12 — Ingestion Lab
 
 Built the admin-only AI ingestion pipeline at `/admin/ingestion-lab`. Full reference: `docs/ingestion-lab-schema.md`. Code under `functions/src/ingestionLab/` (backend) and `client/src/components/ingestionLab/` + `client/src/pages/IngestionLab.tsx` (UI).

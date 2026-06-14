@@ -55,6 +55,11 @@ export function AwardBidModal({ open, bid, onClose }: Props) {
   const { user } = useAuth();
   const { toast } = useToast();
 
+  // Project Managers can't finalize an award (financials/pricing are admin-only
+  // per D-001). Their "Award" submits an approval request instead; an admin
+  // approves it and the bid award executes server-side.
+  const isPM = ['projectmanager', 'project_manager'].includes((user?.role || '').toLowerCase());
+
   const [estimates, setEstimates] = useState<EstimateDoc[]>([]);
   const [estimateId, setEstimateId] = useState<string>('');
   const [lineId, setLineId] = useState<string>('');
@@ -127,18 +132,32 @@ export function AwardBidModal({ open, bid, onClose }: Props) {
 
   const handleAward = async () => {
     if (!user) return;
-    if (!estimateId) { toast({ title: 'Pick an estimate', variant: 'destructive' }); return; }
-    if (!lineId) { toast({ title: 'Pick a line — or add as a new line', variant: 'destructive' }); return; }
+    // A PM only needs to submit the request — pricing/estimate selection is the
+    // admin's job and happens after approval.
+    if (!isPM) {
+      if (!estimateId) { toast({ title: 'Pick an estimate', variant: 'destructive' }); return; }
+      if (!lineId) { toast({ title: 'Pick a line — or add as a new line', variant: 'destructive' }); return; }
+    }
     setWorking(true);
     try {
+      // Award (server-side) first. The endpoint enforces the D-016 compliance
+      // gate and, for a Project Manager, returns { pendingApproval: true } after
+      // queuing an approval request instead of awarding.
+      const result = await submitAward();
+      if (result.pendingApproval) {
+        toast({
+          title: 'Sent for approval',
+          description: 'An admin must approve this sub assignment before it’s final.',
+        });
+        onClose();
+        return;
+      }
+      // Admin / GC: the bid is now awarded — apply the client-facing pricing.
       if (estimateId === NEW_ESTIMATE) {
-        // Fallback path — create a fresh estimate seeded from the bid lines.
         await createEstimateFromBid();
-      } else {
-        // Primary path — patch one line of an existing estimate.
+      } else if (estimateId) {
         await applyToEstimateLine();
       }
-      await markBidAwarded();
       toast({
         title: 'Bid awarded',
         description: estimateId === NEW_ESTIMATE
@@ -147,18 +166,18 @@ export function AwardBidModal({ open, bid, onClose }: Props) {
       });
       onClose();
     } catch (e: any) {
-      toast({ title: 'Award failed', description: e?.message || String(e), variant: 'destructive' });
+      toast({ title: isPM ? 'Request failed' : 'Award failed', description: e?.message || String(e), variant: 'destructive' });
     } finally {
       setWorking(false);
     }
   };
 
-  const markBidAwarded = async () => {
-    // Award goes through the server-side endpoint which enforces the D-016
-    // compliance gate (W-9, COI, Subcontractor Agreement, contractor license)
-    // before the bid status can flip to 'awarded'. If any item is missing,
-    // the endpoint returns 400 with { error, missingItems }; we surface that
-    // to the GC as a destructive toast and abort.
+  // Calls the server-side award endpoint. It enforces the D-016 compliance gate
+  // (W-9, COI, Subcontractor Agreement, contractor license) before a bid can
+  // flip to 'awarded'. For a PM caller it instead queues a pending approval and
+  // returns { pendingApproval: true }. Missing compliance items come back as a
+  // 400 with { error, missingItems } which we surface verbatim.
+  const submitAward = async (): Promise<{ ok?: boolean; pendingApproval?: boolean }> => {
     const idToken = await auth.currentUser?.getIdToken();
     if (!idToken) throw new Error('Not signed in');
     const res = await fetch('/api/bids/award', {
@@ -174,12 +193,10 @@ export function AwardBidModal({ open, bid, onClose }: Props) {
       }),
     });
     const data = await res.json().catch(() => ({} as any));
-    if (!res.ok || !data.ok) {
-      // Pass the server's error string through verbatim — it lists the
-      // exact missing compliance items (e.g. "Can't award — Acme Plumbing
-      // is missing: Contractor license number, Signed Subcontractor Agreement.")
+    if (!res.ok || (!data.ok && !data.pendingApproval)) {
       throw new Error(data?.error || `Award failed (status ${res.status})`);
     }
+    return data;
   };
 
   const applyToEstimateLine = async () => {
@@ -289,6 +306,17 @@ export function AwardBidModal({ open, bid, onClose }: Props) {
             </div>
           </div>
 
+          {isPM && (
+            <div className="flex items-start gap-2 p-3 rounded border border-sky-200 bg-sky-50 text-sky-900 text-xs">
+              <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+              <span>
+                Awards require admin approval. Submitting sends a request to an
+                administrator, who finalizes the award and the client-facing pricing.
+              </span>
+            </div>
+          )}
+
+          {!isPM && (<>
           {/* Estimate picker */}
           <div className="space-y-1.5">
             <Label className="text-xs uppercase tracking-wide text-gray-500">Which estimate?</Label>
@@ -422,18 +450,19 @@ export function AwardBidModal({ open, bid, onClose }: Props) {
               )}
             </div>
           )}
+          </>)}
         </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={working}>Cancel</Button>
           <Button
             onClick={handleAward}
-            disabled={working || (!estimateId && estimates.length > 0) || Boolean(estimateId && estimateId !== NEW_ESTIMATE && !lineId)}
+            disabled={working || (!isPM && ((!estimateId && estimates.length > 0) || Boolean(estimateId && estimateId !== NEW_ESTIMATE && !lineId)))}
             className="gap-2 text-white"
             style={{ backgroundColor: '#C9A96E' }}
           >
             <Award className="w-4 h-4" />
-            {working ? 'Awarding…' : 'Award bid'}
+            {isPM ? (working ? 'Sending…' : 'Request approval') : (working ? 'Awarding…' : 'Award bid')}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -16,11 +16,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { Building2, Mail, Lock, Loader2, CheckCircle2, User, HardHat, UserCheck, Users, Palette, ChevronRight, ArrowLeft, MapPin, Wrench, Phone } from 'lucide-react';
+import { Building2, Mail, Lock, Loader2, CheckCircle2, User, HardHat, UserCheck, Users, Palette, ChevronRight, ArrowLeft, MapPin, Wrench, Phone, Compass } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
-type AccountType = 'client' | 'sub' | 'team' | 'designer' | null;
+type AccountType = 'client' | 'sub' | 'team' | 'designer' | 'prospect' | null;
 
 const TEAM_PERMISSIONS = [
   { id: 'view_projects', label: 'View Projects' },
@@ -64,6 +64,9 @@ export default function SignIn() {
 
   // Registration modal state
   const [registerOpen, setRegisterOpen] = useState(false);
+  // Set when arriving via ?invite=<token>; lets us mark the invite consumed
+  // once the visitor finishes signing up.
+  const [inviteDocId, setInviteDocId] = useState<string | null>(null);
   const [resetOpen, setResetOpen] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
   const [resetSending, setResetSending] = useState(false);
@@ -123,6 +126,7 @@ export default function SignIn() {
         if (snap.empty) return;
         const data = snap.docs[0].data() as any;
         if (data.status !== 'pending') return;
+        setInviteDocId(snap.docs[0].id);
         setRegEmail(String(data.email || ''));
         setRegName(String(data.firstName || ''));
         // Open the registration drawer automatically.
@@ -227,6 +231,11 @@ export default function SignIn() {
 
   const roleLabel = (type: AccountType) => {
     if (type === 'client') return 'client';
+    // A prospect "exploring Skyeline as their builder" is a future homeowner —
+    // give them the homeowner (client) role + portal, which already shows a
+    // warm welcome/preview when there's no project yet. They also enter the
+    // Sales pipeline as a New Lead (see handleRegisterSubmit).
+    if (type === 'prospect') return 'client';
     if (type === 'sub') return 'sub';
     if (type === 'designer') return 'designer';
     // Team members start pending — an admin (Tyler) approves them from
@@ -282,7 +291,7 @@ export default function SignIn() {
       // name (any one matches). If none match, create a new contact tagged
       // with the role they chose. Either way the user record gets linked.
       const contactRoleFor = (t: AccountType): string => (
-        t === 'client' ? 'client'
+        (t === 'client' || t === 'prospect') ? 'client'
         : t === 'sub' ? 'subcontractor'
         : t === 'designer' ? 'designer'
         : 'employee'
@@ -381,6 +390,45 @@ export default function SignIn() {
         console.error('Contact linking failed:', e?.message || e);
       }
 
+      // Exploring prospects enter the Sales pipeline as a New Lead so the GC
+      // can nurture them — without one they'd sign in to an orphan portal the
+      // team never sees. Create a CRM client row and cross-link it to the
+      // contact + user. (Home Owners who already matched an existing client
+      // record above are skipped — they're already in the pipeline.)
+      if (accountType === 'prospect' && !linkedClientId) {
+        try {
+          const leadRef = await addDoc(collection(db, 'clients'), {
+            name: regName,
+            email: regEmail,
+            phone: regPhone.trim() || '',
+            stage: 'new_lead',
+            projectType: 'custom_home',
+            source: 'portal_signup',
+            sourceDetail: 'Self-signup — exploring Skyeline as their builder',
+            priority: 'medium',
+            tags: ['Exploring'],
+            jobAddress: regProjectAddress.trim() || '',
+            city: regProjectCity.trim() || '',
+            contactId: linkedContactId,
+            linkedUserId: uid,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+          linkedClientId = leadRef.id;
+          if (linkedContactId) {
+            await setDoc(doc(db, 'contacts', linkedContactId), {
+              salesClientId: leadRef.id,
+              salesStage: 'new_lead',
+              updatedAt: serverTimestamp(),
+            }, { merge: true });
+          }
+        } catch (e: any) {
+          // Don't block signup — the portal still works; admin can add them later.
+          // eslint-disable-next-line no-console
+          console.error('Prospect lead creation failed:', e?.message || e);
+        }
+      }
+
       // Write user profile to Firestore
       await setDoc(doc(db, 'users', uid), {
         email: regEmail,
@@ -393,6 +441,11 @@ export default function SignIn() {
           projectAddress: regProjectAddress.trim(),
           projectCity: regProjectCity.trim() || null,
           linkedClientId,
+        } : {}),
+        ...(accountType === 'prospect' ? {
+          isProspect: true,
+          ...(linkedClientId ? { linkedClientId } : {}),
+          ...(regProjectAddress.trim() ? { projectAddress: regProjectAddress.trim(), projectCity: regProjectCity.trim() || null } : {}),
         } : {}),
         active: accountType !== 'team',
         status: accountType === 'team' ? 'pending_approval' : 'active',
@@ -423,9 +476,23 @@ export default function SignIn() {
         } catch { /* best-effort */ }
       }
 
+      // If they arrived via a portal invite link, mark that invite consumed so
+      // the one-time token can't be reused and staff can see it was claimed.
+      // Best-effort — a narrow Firestore rule lets the just-registered user
+      // flip only their own invite (matched by email) to 'used'.
+      if (inviteDocId) {
+        try {
+          await setDoc(doc(db, 'portalInvites', inviteDocId), {
+            status: 'used',
+            claimedAt: serverTimestamp(),
+            claimedByUid: uid,
+          }, { merge: true });
+        } catch { /* best-effort */ }
+      }
+
       setRegisterOpen(false);
 
-      const typeLabel = accountType === 'client' ? 'Home Owner' : accountType === 'sub' ? 'Subcontractor' : accountType === 'designer' ? 'Interior Designer' : 'Skyeline Homes Team Member';
+      const typeLabel = accountType === 'client' ? 'Home Owner' : accountType === 'prospect' ? 'Future Home Owner' : accountType === 'sub' ? 'Subcontractor' : accountType === 'designer' ? 'Interior Designer' : 'Skyeline Homes Team Member';
 
       // Team members must wait for admin approval before they can access
       // anything, so we sign them out and show a clear waiting message.
@@ -445,9 +512,11 @@ export default function SignIn() {
       } else {
         const extraMsg = isOtherTrade
           ? ' Your trade has been submitted for review.'
-          : linkedClientId
-            ? ' Your project address was matched to an existing record.'
-            : '';
+          : accountType === 'prospect'
+            ? " We're excited you're exploring building with us."
+            : (accountType === 'client' && linkedClientId)
+              ? ' Your project address was matched to an existing record.'
+              : '';
         toast({
           title: `Welcome, ${regName.split(' ')[0] || typeLabel}!`,
           description: `Account created.${extraMsg} Taking you to your portal…`,
@@ -476,10 +545,16 @@ export default function SignIn() {
 
   const accountTypes = [
     {
+      type: 'prospect' as AccountType,
+      icon: Compass,
+      title: 'Exploring Skyeline Homes as my builder',
+      description: 'Thinking about building with us? Create an account to explore the process, save inspiration, and share your vision — no project required yet.',
+    },
+    {
       type: 'client' as AccountType,
       icon: UserCheck,
       title: 'Home Owner',
-      description: 'Access your project status, selections, documents, and communicate with your build team.',
+      description: 'I have a project with Skyeline. Access your project status, selections, documents, and communicate with your build team.',
     },
     {
       type: 'sub' as AccountType,
@@ -613,7 +688,7 @@ export default function SignIn() {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>
-              {regStep === 1 ? 'Create Your Account' : `${accountType === 'client' ? 'Home Owner' : accountType === 'sub' ? 'Subcontractor' : accountType === 'designer' ? 'Interior Designer' : 'Skyeline Homes Team Member'} Account`}
+              {regStep === 1 ? 'Create Your Account' : `${accountType === 'client' ? 'Home Owner' : accountType === 'prospect' ? 'Future Home Owner' : accountType === 'sub' ? 'Subcontractor' : accountType === 'designer' ? 'Interior Designer' : 'Skyeline Homes Team Member'} Account`}
             </DialogTitle>
             <DialogDescription>
               {regStep === 1 ? 'Select your account type to get started.' : 'Fill in your details to complete registration.'}
@@ -704,15 +779,19 @@ export default function SignIn() {
                 </div>
               )}
 
-              {/* Home Owner — project address */}
-              {accountType === 'client' && (
+              {/* Home Owner / Prospect — project (or dream) address */}
+              {(accountType === 'client' || accountType === 'prospect') && (
                 <div className="space-y-3">
                   <div className="space-y-2">
-                    <Label>Project / Lot Address</Label>
+                    <Label>
+                      {accountType === 'prospect'
+                        ? <>Where are you thinking of building? <span className="text-gray-400 font-normal text-xs">(optional)</span></>
+                        : 'Project / Lot Address'}
+                    </Label>
                     <div className="relative">
                       <MapPin className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                       <Input
-                        placeholder="123 Main St or Lot 4"
+                        placeholder={accountType === 'prospect' ? 'City, lot, or general area' : '123 Main St or Lot 4'}
                         value={regProjectAddress}
                         onChange={e => setRegProjectAddress(e.target.value)}
                         className="pl-10"
@@ -727,7 +806,11 @@ export default function SignIn() {
                       onChange={e => setRegProjectCity(e.target.value)}
                     />
                   </div>
-                  <p className="text-xs text-gray-400">We'll use this to connect you with your project data in our system.</p>
+                  <p className="text-xs text-gray-400">
+                    {accountType === 'prospect'
+                      ? "Optional — helps your Skyeline team prep for your first conversation."
+                      : "We'll use this to connect you with your project data in our system."}
+                  </p>
                 </div>
               )}
 

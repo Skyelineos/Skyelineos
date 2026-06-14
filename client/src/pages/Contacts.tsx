@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { findDuplicateContacts, computeMergeUpdates, type DuplicateMatch } from '@/lib/contacts/duplicateDetection';
+import { DuplicateContactDialog, type DuplicateResolution } from '@/components/contacts/DuplicateContactDialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -10,6 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
 import { Users, Search, Download, Upload, Plus, TrendingUp, Building, UserCheck, Wrench, Edit, Trash2, Mail, Phone, MoreVertical, User, Star } from 'lucide-react';
+import { StarRating } from '@/components/common/StarRating';
 import PreferredCategoriesEditor from '@/components/contacts/PreferredCategoriesEditor';
 import { MultiTradeSelector } from '@/components/contacts/MultiTradeSelector';
 import { EditContactModal } from '@/components/contacts/EditContactModal';
@@ -123,6 +126,15 @@ export default function Contacts() {
   const { toast } = useToast();
   const { user } = useAuth();
 
+  // Duplicate-detection flow. When a new contact looks like an existing one,
+  // we surface DuplicateContactDialog and pause handleAddContact on a promise
+  // until the operator chooses merge / create-anyway / cancel.
+  const [dupState, setDupState] = useState<{
+    candidate: Parameters<typeof findDuplicateContacts>[0];
+    matches: DuplicateMatch[];
+    resolve: (r: DuplicateResolution) => void;
+  } | null>(null);
+
   // Subscribe to contacts
   useEffect(() => {
     const q = query(collection(db, 'contacts'), orderBy('createdAt', 'desc'));
@@ -175,6 +187,16 @@ export default function Contacts() {
     setShowContactDetail(true);
   };
 
+  // Manual 1–5 sub quality rating. Used to sort subs highest-first when picking
+  // them for bid packages.
+  const updateRating = async (id: string, rating: number) => {
+    try {
+      await updateDoc(doc(db, 'contacts', id), { rating });
+    } catch (e: any) {
+      toast({ title: 'Could not update rating', description: e?.message, variant: 'destructive' });
+    }
+  };
+
   const handleEditContact = (contact: Contact) => {
     setEditingContact(contact);
   };
@@ -218,6 +240,47 @@ export default function Contacts() {
       return;
     }
 
+    // Duplicate detection — surface existing contacts that share a name, email,
+    // phone, or address. The operator decides: merge into the existing record,
+    // create a new one anyway (optionally noting what's different), or cancel.
+    const candidate = {
+      firstName: newContactFormData.firstName,
+      lastName: newContactFormData.lastName,
+      email: newContactFormData.email,
+      phone: newContactFormData.phone,
+      company: newContactFormData.company,
+    };
+    let differenceNote: string | undefined;
+    const matches = await findDuplicateContacts(candidate);
+    if (matches.length > 0) {
+      const resolution = await new Promise<DuplicateResolution>((resolve) => {
+        setDupState({ candidate, matches, resolve });
+      });
+      setDupState(null);
+      if (resolution.action === 'cancel') return; // keep the form open to edit
+      if (resolution.action === 'merge') {
+        const updates = computeMergeUpdates(resolution.match.data, candidate);
+        try {
+          await updateDoc(doc(db, 'contacts', resolution.match.id), {
+            ...updates,
+            updatedAt: serverTimestamp(),
+          });
+          toast({
+            title: 'Merged into existing contact',
+            description: Object.keys(updates).length
+              ? `Filled in missing details on “${resolution.match.name}”.`
+              : `“${resolution.match.name}” already had everything — nothing to change.`,
+          });
+        } catch (e: any) {
+          toast({ title: 'Merge failed', description: e?.message || '', variant: 'destructive' });
+        }
+        resetContactForm();
+        setShowAddModal(false);
+        return;
+      }
+      differenceNote = resolution.differenceNote;
+    }
+
     // Optimistic UX: close the modal immediately so the user isn't stuck
     // watching a spinner. The write keeps running in the background and we
     // toast either success or failure once it resolves.
@@ -244,7 +307,11 @@ export default function Contacts() {
           trade: '',
           trades: [],
           isActive: true,
+          notes: differenceNote || '',
           salesClientId: clientRef.id,
+          // Record the portal-invite choice. Clients are NOT auto-invited by
+          // the backend — the invite is opt-in (sent below when checked).
+          portalInviteOptIn: formSnapshot.sendInvite,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         });
@@ -267,6 +334,25 @@ export default function Contacts() {
           title: 'Contact added',
           description: `Client created — also placed in Sales at "${stageLabel}".`,
         });
+
+        // Portal invite is opt-in for clients: only send when the box is
+        // checked. Unready leads just sit in the pipeline for nurture.
+        if (formSnapshot.sendInvite && formSnapshot.email) {
+          try {
+            const { sendPortalInviteEmail } = await import('@/lib/portalInvite');
+            const { templateName } = await sendPortalInviteEmail({
+              contactId: contactRef.id,
+              email: formSnapshot.email,
+              role: 'client',
+              firstName: formSnapshot.firstName,
+              invitedBy: user?.email || '',
+              preferStage: 'lead',
+            });
+            toast({ title: 'Portal invite sent', description: `Emailed “${templateName}” to ${formSnapshot.email}.` });
+          } catch (e: any) {
+            toast({ title: 'Invite not sent', description: e?.message || '', variant: 'destructive' });
+          }
+        }
       } else {
         const fullName = `${formSnapshot.firstName} ${formSnapshot.lastName}`.trim();
         const newRef = await addDoc(collection(db, 'contacts'), {
@@ -280,22 +366,25 @@ export default function Contacts() {
           trade: formSnapshot.trades[0] || '',
           trades: formSnapshot.trades,
           isActive: true,
+          notes: differenceNote || '',
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         });
         toast({ title: 'Contact added', description: `${fullName} added to contacts.` });
         if (formSnapshot.sendInvite && formSnapshot.email) {
-          // Fire-and-forget invite — opens the user's mail client.
-          const { createPortalInvite, openInviteMail } = await import('@/lib/portalInvite');
+          // Send a real portal-invite email (SendGrid) using the default
+          // template for a new contact. No mail client involved.
+          const { sendPortalInviteEmail } = await import('@/lib/portalInvite');
           try {
-            const token = await createPortalInvite({
+            const { templateName } = await sendPortalInviteEmail({
               contactId: newRef.id,
               email: formSnapshot.email,
               role: validRole,
               firstName: formSnapshot.firstName,
               invitedBy: user?.email || '',
+              preferStage: 'lead',
             });
-            openInviteMail({ email: formSnapshot.email, firstName: formSnapshot.firstName, token });
+            toast({ title: 'Portal invite sent', description: `Emailed “${templateName}” to ${formSnapshot.email}.` });
           } catch (e: any) {
             toast({ title: 'Invite not sent', description: e?.message || '', variant: 'destructive' });
           }
@@ -395,6 +484,10 @@ export default function Contacts() {
     return matchesSearch;
   });
 
+  // Internal Skyeline staff roles — grouped under the "Team Members" tile/filter.
+  const TEAM_ROLES = ['team', 'employee', 'gc', 'admin', 'project_manager', 'projectmanager', 'staff'];
+  const isTeamRole = (role?: string) => TEAM_ROLES.includes((role || '').toLowerCase());
+
   const filteredContacts = contacts.filter((contact) => {
     const matchesSearch = searchTerm === '' ||
       contact.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -405,7 +498,11 @@ export default function Contacts() {
       (Array.isArray((contact as any).trades) && (contact as any).trades.some((t: string) =>
         typeof t === 'string' && t.toLowerCase().includes(searchTerm.toLowerCase())
       ));
-    const matchesRole = roleFilter === 'all' || contact.role?.toLowerCase() === roleFilter.toLowerCase();
+    const matchesRole = roleFilter === 'all'
+      ? true
+      : roleFilter === 'team'
+        ? isTeamRole(contact.role)
+        : contact.role?.toLowerCase() === roleFilter.toLowerCase();
     const matchesCompany = companyFilter === 'all' || contact.company === companyFilter;
     return matchesSearch && matchesRole && matchesCompany;
   }).sort((a, b) => {
@@ -423,6 +520,7 @@ export default function Contacts() {
     clients: contacts.filter((c) => c.role.toLowerCase() === 'client').length,
     subcontractors: contacts.filter((c) => c.role.toLowerCase() === 'subcontractor').length,
     suppliers: contacts.filter((c) => c.role.toLowerCase() === 'supplier').length,
+    team: contacts.filter((c) => isTeamRole(c.role)).length,
     active: contacts.filter((c) => c.isActive).length
   };
 
@@ -556,8 +654,11 @@ export default function Contacts() {
             </div>
 
             {/* Summary Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-              <Card>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+              <Card
+                onClick={() => setRoleFilter('all')}
+                className={`cursor-pointer transition-shadow hover:shadow-md ${roleFilter === 'all' ? 'ring-2 ring-[#C9A96E]' : ''}`}
+              >
                 <CardContent className="p-4">
                   <div className="flex items-center space-x-2">
                     <TrendingUp className="h-4 w-4 text-blue-600" />
@@ -568,7 +669,10 @@ export default function Contacts() {
                   </div>
                 </CardContent>
               </Card>
-              <Card>
+              <Card
+                onClick={() => setRoleFilter('client')}
+                className={`cursor-pointer transition-shadow hover:shadow-md ${roleFilter === 'client' ? 'ring-2 ring-[#C9A96E]' : ''}`}
+              >
                 <CardContent className="p-4">
                   <div className="flex items-center space-x-2">
                     <UserCheck className="h-4 w-4 text-green-600" />
@@ -579,7 +683,10 @@ export default function Contacts() {
                   </div>
                 </CardContent>
               </Card>
-              <Card>
+              <Card
+                onClick={() => setRoleFilter('subcontractor')}
+                className={`cursor-pointer transition-shadow hover:shadow-md ${roleFilter === 'subcontractor' ? 'ring-2 ring-[#C9A96E]' : ''}`}
+              >
                 <CardContent className="p-4">
                   <div className="flex items-center space-x-2">
                     <Wrench className="h-4 w-4 text-orange-600" />
@@ -590,7 +697,10 @@ export default function Contacts() {
                   </div>
                 </CardContent>
               </Card>
-              <Card>
+              <Card
+                onClick={() => setRoleFilter('supplier')}
+                className={`cursor-pointer transition-shadow hover:shadow-md ${roleFilter === 'supplier' ? 'ring-2 ring-[#C9A96E]' : ''}`}
+              >
                 <CardContent className="p-4">
                   <div className="flex items-center space-x-2">
                     <Building className="h-4 w-4 text-purple-600" />
@@ -601,7 +711,24 @@ export default function Contacts() {
                   </div>
                 </CardContent>
               </Card>
-              <Card>
+              <Card
+                onClick={() => setRoleFilter('team')}
+                className={`cursor-pointer transition-shadow hover:shadow-md ${roleFilter === 'team' ? 'ring-2 ring-[#C9A96E]' : ''}`}
+              >
+                <CardContent className="p-4">
+                  <div className="flex items-center space-x-2">
+                    <User className="h-4 w-4 text-slate-600" />
+                    <div>
+                      <p className="text-sm text-gray-600">Team Members</p>
+                      <p className="text-xl font-semibold">{summaryStats.team}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card
+                onClick={() => setRoleFilter('all')}
+                className="cursor-pointer transition-shadow hover:shadow-md"
+              >
                 <CardContent className="p-4">
                   <div className="flex items-center space-x-2">
                     <Users className="h-4 w-4 text-indigo-600" />
@@ -715,6 +842,19 @@ export default function Contacts() {
                           </div>
                         </div>
                         <div className="flex items-center space-x-1">
+                          {(() => {
+                            const role = String(contact.role || '').toLowerCase();
+                            if (role !== 'subcontractor' && role !== 'sub' && role !== 'vendor') return null;
+                            return (
+                              <div onClick={(e) => e.stopPropagation()} className="mr-2" title="Sub rating">
+                                <StarRating
+                                  value={(contact as any).rating || 0}
+                                  size={16}
+                                  onChange={(v) => updateRating(contact.id, v)}
+                                />
+                              </div>
+                            );
+                          })()}
                           <Button
                             variant="ghost"
                             size="sm"
@@ -944,9 +1084,9 @@ export default function Contacts() {
                       className="mt-1"
                     />
                     <div className="text-sm">
-                      <p className="font-medium text-amber-900">Send portal invite after saving</p>
+                      <p className="font-medium text-amber-900">Send portal login invite now</p>
                       <p className="text-xs text-amber-700/80">
-                        Opens your email with a pre-filled sign-up link. When they register, their account auto-links to this contact.
+                        Emails them a sign-up link to create their portal account. Leave unchecked for leads you're still nurturing — you can invite them later from the contact or project.
                       </p>
                     </div>
                   </label>
@@ -1141,6 +1281,16 @@ export default function Contacts() {
           open={!!editingContact}
           onClose={() => setEditingContact(null)}
         />
+
+        {dupState && (
+          <DuplicateContactDialog
+            open={true}
+            candidate={dupState.candidate}
+            matches={dupState.matches}
+            entityLabel="contact"
+            onResolve={dupState.resolve}
+          />
+        )}
 
         {preferredFor && (
           <PreferredCategoriesEditor

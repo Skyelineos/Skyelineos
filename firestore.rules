@@ -58,6 +58,25 @@ service cloud.firestore {
       return isGC();
     }
 
+    // ── Project Manager scoping ──────────────────────────────────────────────
+    // A PM is limited to the jobs they're assigned to (projects.assignedUserIds).
+    // pmInList() checks a project doc already in hand (e.g. resource.data on the
+    // projects collection). Admin/GC bypass scoping via isGCOnly().
+    //
+    // NOTE (intentional, documented): right now this scoping is applied only to
+    // the projects/{projectId} document itself — the "gateway" the app loads
+    // before showing any project. Project SUBcollections (rooms, selections,
+    // rfis, draws, takeoffs, walkthroughs, …) are NOT yet PM-scoped because
+    // their rules admit staff through isDesigner()/isSub(), which fall back to
+    // isStaff()→isGC()→includes PM. Closing those requires reworking the shared
+    // role predicates + per-collection client query changes, validated with the
+    // Firestore rules emulator. See docs/pm-project-isolation-plan.md.
+    function pmInList(projectData) {
+      return isProjectManager()
+        && 'assignedUserIds' in projectData
+        && request.auth.uid in projectData.assignedUserIds;
+    }
+
     function isClient() {
       return isSignedIn() && getUserRole() == 'client';
     }
@@ -70,20 +89,75 @@ service cloud.firestore {
       return isSignedIn() && (getUserRole() == 'sub' || isStaff());
     }
 
+    // ── Client ↔ project ownership ───────────────────────────────────────────
+    // Projects key the homeowner by their CONTACT-doc id (contacts.linkedUserId
+    // = auth.uid), NOT their Firebase uid — so the old `clientId == auth.uid`
+    // check denied every real client. A client "owns" a record when its
+    // clientId / clientIds matches their uid (legacy) OR the contact id linked
+    // to their user profile (users/{uid}.linkedContactId). get()/exists() calls
+    // on the same path are cached per evaluation, so this stays well under the
+    // access-call limit.
+    function clientLinkedContactId() {
+      return isClient()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && 'linkedContactId' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.linkedContactId
+        : null;
+    }
+    function clientOwns(data) {
+      return isClient() && (
+        data.clientId == request.auth.uid
+        || (clientLinkedContactId() != null && (
+              data.clientId == clientLinkedContactId()
+              || ('clientIds' in data && data.clientIds is list && clientLinkedContactId() in data.clientIds)
+            ))
+      );
+    }
+    function clientOwnsProject(pid) {
+      return clientOwns(get(/databases/$(database)/documents/projects/$(pid)).data);
+    }
+
     // Users — each user reads/writes their own profile; admins can write any profile
     match /users/{userId} {
       allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
       allow write: if isAdmin() || request.auth.uid == userId;
     }
 
-    // Projects — GC can do everything; clients see only their project; designers/subs see assigned
+    // Projects — admin/GC do everything; a PM is scoped to assigned jobs;
+    // clients see only their project; designers/subs see assigned.
     match /projects/{projectId} {
-      allow read: if isGC()
-        || (isClient() && resource.data.clientId == request.auth.uid)
+      // A PM only reads a project they're in (assignedUserIds); the designer/sub
+      // clauses already require assignment, so there's no unscoped PM backdoor here.
+      allow read: if isGCOnly()
+        || pmInList(resource.data)
+        || (clientOwns(resource.data))
         || (isDesigner() && request.auth.uid in resource.data.assignedUserIds)
         || (isSub() && request.auth.uid in resource.data.assignedUserIds);
-      allow create, update: if isGC();
+      // Only admin/GC create new projects (D-001: PMs can't create/delete).
+      allow create: if isGCOnly();
+      // A PM may edit only a project they're assigned to; admin/GC any.
+      allow update: if isGCOnly() || pmInList(resource.data);
+      // The homeowner may confirm or request a correction on their build
+      // location — only the buildLocation key, and only the status/notes/
+      // confirmation fields. They cannot move the pin or change the address.
+      allow update: if clientOwns(resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['buildLocation'])
+        && request.resource.data.buildLocation.latitude == resource.data.buildLocation.latitude
+        && request.resource.data.buildLocation.longitude == resource.data.buildLocation.longitude
+        && request.resource.data.buildLocation.addressLine1 == resource.data.buildLocation.addressLine1
+        && request.resource.data.buildLocation.status in ['confirmed', 'correction_requested'];
       allow delete: if isAdmin();
+
+      // Build-location audit trail. Any project participant can append events;
+      // GC + the project's client/designer/subs can read the history.
+      match /locationEvents/{eventId} {
+        allow read: if isGC()
+          || (isSignedIn() && (
+                clientOwnsProject(projectId)
+                || request.auth.uid in get(/databases/$(database)/documents/projects/$(projectId)).data.assignedUserIds));
+        allow create: if isSignedIn();
+        allow update, delete: if isGC();
+      }
     }
 
     // Contacts (subs, employees, vendors)
@@ -120,6 +194,21 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // Public site content (e.g. the giveaway page image). World-readable so the
+    // public /giveaway page renders with no auth; only GC/admin can change it.
+    match /public_content/{docId} {
+      allow read: if true;
+      allow write: if isGC();
+    }
+
+    // Sales-pitch one-pagers shown in the client portal before a project exists.
+    // Any signed-in user (prospective clients included) can read; only staff
+    // (admin/gc/pm) can curate the content from the portal.
+    match /salesPitchSections/{sectionId} {
+      allow read: if isSignedIn();
+      allow write: if isGC();
+    }
+
     // Pending trade requests (submitted during sub registration)
     match /pendingTrades/{tradeId} {
       allow read: if isAdmin();
@@ -133,27 +222,48 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // Estimates — linked to clients and jobs
+    // Estimates — linked to clients and jobs.
+    // Financial. Read-blocked for PM per D-001 ("shouldn't have the
+    // financials" — Tyler 2026-06): isGCOnly() excludes projectManager.
+    // Clients still see their own estimate (price visibility on contract).
     match /estimates/{estimateId} {
-      allow read: if isGC()
-        || (isClient() && resource.data.clientId == request.auth.uid);
+      // Estimates key clientId as the sales clients-doc id (a third id shape),
+      // so match by the project the estimate belongs to instead.
+      allow read: if isGCOnly()
+        || clientOwns(resource.data)
+        || (isClient() && 'projectId' in resource.data && clientOwnsProject(resource.data.projectId));
       allow write: if isGCOnly();
       allow delete: if isAdmin();
 
       match /lineItems/{lineItemId} {
-        allow read: if isGC()
+        allow read: if isGCOnly()
           || (isClient() && get(/databases/$(database)/documents/estimates/$(estimateId)).data.clientId == request.auth.uid);
         allow write: if isGCOnly();
         allow delete: if isAdmin();
       }
     }
 
-    // Invoices
+    // Invoices — financial. Read-blocked for PM (isGCOnly). Clients see their own.
     match /invoices/{invoiceId} {
-      allow read: if isGC()
-        || (isClient() && resource.data.clientId == request.auth.uid);
+      allow read: if isGCOnly()
+        || (clientOwns(resource.data));
       allow write: if isGCOnly();
       allow delete: if isAdmin();
+    }
+
+    // Client inspiration board — pre-project photos + notes a homeowner shares
+    // for their designer to review (before a project exists). Owner reads their
+    // own (by uid or linked contact id); GC + designers read all. The homeowner
+    // creates their own items; owner or GC can remove.
+    match /inspiration/{itemId} {
+      allow read: if isGC() || isDesigner()
+        || (isClient() && (
+              resource.data.clientUid == request.auth.uid
+              || (clientLinkedContactId() != null && resource.data.clientContactId == clientLinkedContactId())
+            ));
+      allow create: if isSignedIn() && request.resource.data.clientUid == request.auth.uid;
+      allow update, delete: if isGC()
+        || (isSignedIn() && resource.data.clientUid == request.auth.uid);
     }
 
     // Bids — GC full access; subs can read+write their own portal-submitted bids;
@@ -165,10 +275,25 @@ service cloud.firestore {
       // which allowed unauthenticated writes to the bids collection.)
       allow create: if isSignedIn()
         && request.resource.data.status != 'awarded';
-      allow update: if isGC()
+      // Only admin/GC may set a bid to 'awarded'. A projectManager passes
+      // isGC(), so without this carve-out they could self-award via a direct
+      // Firestore write and bypass the approval queue. PMs may still update
+      // bids (notes, etc.) as long as they don't flip status to 'awarded';
+      // their awards go through /api/bids/award → pendingSubAssignments.
+      allow update: if isGCOnly()
+        || (isProjectManager() && request.resource.data.status != 'awarded')
         || (isSub() && resource.data.subContactId == request.auth.uid
             && request.resource.data.status != 'awarded'); // sub can revise but not self-award
       allow delete: if isGC();
+    }
+
+    // Pending sub assignments — a Project Manager's bid-award request awaiting
+    // admin approval. Cloud Functions (admin SDK) create + resolve these via
+    // /api/bids/award and /api/pending-sub-assignments/*; staff read the queue.
+    // No direct client writes.
+    match /pendingSubAssignments/{id} {
+      allow read: if isGC();
+      allow write: if false;
     }
 
     // Schedule tasks
@@ -177,6 +302,38 @@ service cloud.firestore {
         || (isClient() && resource.data.visibleToClient == true)
         || (isSub() && resource.data.assignedSubId == request.auth.uid);
       allow write: if isGC();
+    }
+
+    // ── Master Task Library & Project Task Template system ────────────────────
+    // masterTasks — the editable company library (TEMPLATES). Staff read for the
+    // library board; only admins write. Heavy mutations (seed/create/edit/
+    // archive/reorder) actually run through the api Cloud Function, whose Admin
+    // SDK bypasses these rules; this gate covers any direct client access.
+    match /masterTasks/{taskId} {
+      allow read: if isGC();
+      allow write: if isAdmin();
+    }
+
+    // projectTasks — INDEPENDENT per-project copies. Editing one never touches
+    // the master. Staff read/write; clients see only client-visible tasks (clean
+    // simplified portal view); subs see only subcontractor-visible tasks. Most
+    // writes go through the api (server-side validation: skip-reason required,
+    // quality-gate acceptance), but direct staff writes are allowed for liveness.
+    match /projectTasks/{taskId} {
+      allow read: if isGC()
+        || (isClient() && resource.data.clientVisible == true)
+        || (isSub() && resource.data.subcontractorVisible == true)
+        || (isDesigner() && resource.data.designerVisible == true);
+      allow create, update: if isGC();
+      allow delete: if isGCOnly();
+    }
+
+    // taskImprovements — closeout lessons-learned suggestions awaiting admin
+    // approval. Admin-only read; written exclusively by the api Cloud Function
+    // (Admin SDK). Improvements are NEVER auto-applied to the master.
+    match /taskImprovements/{impId} {
+      allow read: if isAdmin();
+      allow write: if false;
     }
 
     // Messages and threads
@@ -198,9 +355,9 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // Financial data
+    // Financial data (bills, financial transactions). Read-blocked for PM.
     match /financials/{docId} {
-      allow read: if isGC();
+      allow read: if isGCOnly();
       allow write: if isGCOnly();
       allow delete: if isAdmin();
     }
@@ -216,7 +373,8 @@ service cloud.firestore {
     // Change orders
     match /changeOrders/{orderId} {
       allow read: if isGC()
-        || (isClient() && resource.data.clientId == request.auth.uid);
+        || clientOwns(resource.data)
+        || (isClient() && 'projectId' in resource.data && clientOwnsProject(resource.data.projectId));
       allow create: if isGCOnly() || isClient(); // clients create COs when approving overages
       allow update, delete: if isGCOnly();
     }
@@ -239,7 +397,7 @@ service cloud.firestore {
     match /projects/{projectId}/rooms/{roomId} {
       allow read: if isGC()
         || isDesigner()
-        || (isClient() && get(/databases/$(database)/documents/projects/$(projectId)).data.clientId == request.auth.uid);
+        || (isClient() && clientOwnsProject(projectId));
       allow create, update: if isGC() || isDesigner();
       allow delete: if isAdmin() || isGC();
     }
@@ -275,10 +433,10 @@ service cloud.firestore {
     match /projects/{projectId}/selections/{selectionId} {
       allow read: if isGC()
         || isDesigner()
-        || (isClient() && get(/databases/$(database)/documents/projects/$(projectId)).data.clientId == request.auth.uid);
+        || (isClient() && clientOwnsProject(projectId));
       // Client can approve their own project's selections when not locked
       allow update: if isClient()
-        && get(/databases/$(database)/documents/projects/$(projectId)).data.clientId == request.auth.uid
+        && clientOwnsProject(projectId)
         && resource.data.get('locked', false) == false
         && request.resource.data.clientApprovalStatus == 'Approved';
       // GC can always write (lock/unlock, order status, finalize)
@@ -288,11 +446,57 @@ service cloud.firestore {
       allow delete: if isAdmin() || isGC();
     }
 
+    // Style quiz answers — the homeowner's guided style preferences. The client
+    // (project owner) reads/writes their own; GC + designer read to guide the
+    // selections.
+    match /projects/{projectId}/stylePreferences/{docId} {
+      allow read: if isGC() || isDesigner() || (isClient() && clientOwnsProject(projectId));
+      allow write: if isGC() || (isClient() && clientOwnsProject(projectId));
+    }
+
+    // Design Style Discovery — pairwise comparison results. Client (owner)
+    // creates/reads their own; GC + designer read.
+    match /projects/{projectId}/styleComparisons/{docId} {
+      allow read: if isGC() || isDesigner() || (isClient() && clientOwnsProject(projectId));
+      allow create, update: if isGC() || (isClient() && clientOwnsProject(projectId));
+      allow delete: if isGC();
+    }
+
+    // Design Style Discovery — Other / Upload Inspiration submissions. Client
+    // (owner) creates/reads their own; GC + designer read (+ mark reviewed).
+    match /projects/{projectId}/styleInspiration/{docId} {
+      allow read: if isGC() || isDesigner() || (isClient() && clientOwnsProject(projectId));
+      allow create, update: if isGC() || isDesigner() || (isClient() && clientOwnsProject(projectId));
+      allow delete: if isGC();
+    }
+
     match /projects/{projectId}/schedules/{scheduleId} {
       allow read: if isGC() || isDesigner()
-        || (isClient() && get(/databases/$(database)/documents/projects/$(projectId)).data.clientId == request.auth.uid);
+        || (isClient() && clientOwnsProject(projectId));
       allow write: if isGC();
       allow delete: if isAdmin() || isGC();
+    }
+
+    // Project messaging (Slack-like). Visibility is by channel membership:
+    // a signed-in user sees a channel + its messages only if their uid is in
+    // the channel's memberUids (GC/admin see everything). This keeps the
+    // client's channels centralized and subs limited to channels they're in.
+    match /projects/{projectId}/channels/{channelId} {
+      allow read:   if isGC() || (isSignedIn() && request.auth.uid in resource.data.memberUids);
+      allow create: if isGC() || (isSignedIn() && request.auth.uid in request.resource.data.memberUids);
+      allow update: if isGC() || (isSignedIn() && request.auth.uid in resource.data.memberUids);
+      allow delete: if isGC();
+
+      match /messages/{messageId} {
+        function channelMembers() {
+          return get(/databases/$(database)/documents/projects/$(projectId)/channels/$(channelId)).data.memberUids;
+        }
+        allow read:   if isGC() || (isSignedIn() && request.auth.uid in channelMembers());
+        allow create: if isGC() || (isSignedIn()
+                          && request.auth.uid == request.resource.data.authorUid
+                          && request.auth.uid in channelMembers());
+        allow update, delete: if isGC() || (isSignedIn() && resource.data.authorUid == request.auth.uid);
+      }
     }
 
     // RFIs (Requests for Information) — cross-portal field questions/clarifications.
@@ -309,17 +513,19 @@ service cloud.firestore {
     }
 
     // Draws (payment milestones) — clients can read their project's draws; GC manages.
+    // Draws — financial. Read-blocked for PM (isGCOnly). Designer + the
+    // project's client keep read access.
     match /projects/{projectId}/draws/{drawId} {
-      allow read: if isGC() || isDesigner()
-        || (isClient() && get(/databases/$(database)/documents/projects/$(projectId)).data.clientId == request.auth.uid);
+      allow read: if isGCOnly() || isDesigner()
+        || (isClient() && clientOwnsProject(projectId));
       allow create, update: if isGC();
       allow delete: if isAdmin() || isGC();
     }
 
-    // Budget vs Actual items per project
+    // Budget vs Actual items per project — financial. Read-blocked for PM.
     match /projects/{projectId}/budgetItems/{itemId} {
-      allow read: if isGC()
-        || (isClient() && get(/databases/$(database)/documents/projects/$(projectId)).data.clientId == request.auth.uid);
+      allow read: if isGCOnly()
+        || (isClient() && clientOwnsProject(projectId));
       allow create, update: if isGC();
       allow delete: if isAdmin() || isGC();
     }
@@ -454,7 +660,37 @@ service cloud.firestore {
     // capability); write is GC-only.
     match /portalInvites/{inviteId} {
       allow read: if true;
-      allow write: if isGC();
+      allow create, delete: if isGC();
+      // GC can edit freely. Otherwise, the just-registered invitee may flip
+      // ONLY their own invite (matched by email) to 'used' — nothing else —
+      // so the one-time token is consumed at signup.
+      allow update: if isGC() || (
+        isSignedIn()
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['status', 'claimedAt', 'claimedByUid'])
+        && request.resource.data.status == 'used'
+        && resource.data.email == request.auth.token.email
+      );
+    }
+
+    // Portal-invite email templates — staff-managed library of selectable
+    // templates (built-in seeds + GC uploads). Read/write is GC-only; the
+    // backend send route reads them with admin privileges.
+    match /emailTemplates/{templateId} {
+      allow read, write: if isGC();
+    }
+    match /emailTemplates_meta/{docId} {
+      allow read, write: if isGC();
+    }
+
+    // Client portal engagement log — append-only. Any signed-in portal user
+    // records their own events (the event's uid must equal their own); only
+    // staff read them (internal engagement view on the project overview).
+    // No edits/deletes except admin cleanup.
+    match /clientActivity/{eventId} {
+      allow read: if isGC();
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if isAdmin();
     }
 
     // Walkthroughs — site media (photos/videos) captured on-site by GC, assigned to subs.
@@ -530,7 +766,7 @@ service cloud.firestore {
     match /designSelections/{selectionId} {
       allow read: if isGC()
         || isDesigner()
-        || (isClient() && resource.data.clientId == request.auth.uid);
+        || (clientOwns(resource.data));
       allow write: if isGC() || isDesigner();
       allow delete: if isAdmin();
     }
@@ -547,6 +783,14 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create, update: if isGC();
       allow delete: if isAdmin() || isGC();
+
+      // Template subcollections (e.g. job templates' `jobTasks`). The catch-all
+      // denies these otherwise, which would break applyJobTemplate + the
+      // standard-task-list seeder.
+      match /{sub=**} {
+        allow read: if isSignedIn();
+        allow write: if isGC();
+      }
     }
 
     // Automations
@@ -581,8 +825,10 @@ service cloud.firestore {
     // Contracts — legal/financial spine. Each party can read their own.
     // GC reads/writes everything; client/sub/designer/employee read only
     // contracts where they are the `other` party (matched by uid).
+    // Contracts — financial. Read-blocked for PM (isGCOnly). The counterparty
+    // (sub/designer/client on the contract) keeps read access via userId.
     match /contracts/{contractId} {
-      allow read: if isGC()
+      allow read: if isGCOnly()
         || (isSignedIn() && resource.data.other.userId == request.auth.uid);
       allow create, update: if isGCOnly();
       allow delete: if isAdmin();
@@ -591,7 +837,7 @@ service cloud.firestore {
     // Move-in binder docs — owned by the project.
     match /projects/{projectId}/moveInBinder/{itemId} {
       allow read: if isGC()
-        || (isClient() && get(/databases/$(database)/documents/projects/$(projectId)).data.clientId == request.auth.uid);
+        || (isClient() && clientOwnsProject(projectId));
       allow create, update: if isGC();
       allow delete: if isAdmin() || isGC();
     }
@@ -639,6 +885,21 @@ service cloud.firestore {
                'correction',
                'clarificationAnswer'
              ]);
+    }
+
+    // Notification automation job queue — delayed/multi-step notification steps
+    // enqueued by fireTrigger and executed by the scheduled sweeper. Written and
+    // read exclusively by Cloud Functions (Admin SDK bypasses these rules).
+    match /notificationJobs/{jobId} {
+      allow read, write: if false; // Cloud Function only
+    }
+
+    // SMS opt-out ledger — phone-keyed STOP/START state. Sensitive (raw phone
+    // numbers); written exclusively by the api Cloud Function (Twilio inbound
+    // webhook) and read by the notification dispatcher, both via Admin SDK
+    // which bypasses these rules. No client access.
+    match /sms_opt_outs/{phone} {
+      allow read, write: if false; // Cloud Function only
     }
 
     // Deny everything else

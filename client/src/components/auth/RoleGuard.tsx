@@ -4,20 +4,25 @@ import { useAdminView } from '@/contexts/AdminViewContext';
 import { Redirect } from 'wouter';
 import { getDefaultRouteForRole } from '@/utils/roleRedirects';
 
-export type UserRole = 'admin' | 'projectManager' | 'client' | 'subcontractor' | 'designer';
+export type UserRole = 'admin' | 'gc' | 'projectManager' | 'client' | 'subcontractor' | 'designer';
 
-// Role normalization function - same logic as useRoleAccess
+// Role normalization function - same logic as useRoleAccess.
+// BUGFIX 2026-06: `gc` was being collapsed into `projectManager`, which
+// meant every PM had full GC access at the route-guard level. Keep them
+// distinct so financial routes can gate on ['admin', 'gc'] only.
 function getUserRole(userRole: string): UserRole {
-  const normalizedRole = userRole.toLowerCase().replace('_', '');
-  
+  const normalizedRole = (userRole || '').toLowerCase().replace(/_/g, '');
+
   switch (normalizedRole) {
     case 'admin':
       return 'admin';
-    case 'gc':                  // Skyeline Team — same access level as projectManager
-    case 'projectmanager':
-    case 'project_manager':
+    case 'gc':                  // Skyeline Team — full GC access (Tyler)
+      return 'gc';
+    case 'projectmanager':      // PM — operational delegate, NO financials
+    case 'pm':
       return 'projectManager';
     case 'client':
+    case 'homeowner':
       return 'client';
     case 'sub':                 // Subcontractor short form
     case 'subcontractor':

@@ -13,6 +13,17 @@ Skyeline OS is a **single-tenant construction management app** built for Skyelin
 3. Read **SESSION_NOTES.md** — known oddities, pre-existing errors, anything a fresh session should beware of
 4. Check `CHECKPOINT.md` only if it exists for a mid-session resume
 
+## How work ships (read this first)
+**Source of truth is GitHub. Production is Firebase. These are two separate steps.**
+1. **Push everything through GitHub.** All code changes are committed and pushed to the
+   GitHub repo (`https://github.com/Skyelineos/Skyelineos.git`) — work on a branch and
+   open a PR; nothing lives only on a local machine. GitHub is the canonical history.
+2. **Go live through Firebase.** Merged code only reaches users when it is deployed to the
+   `skyelineos` Firebase project (Hosting for the SPA, Cloud Functions for the backend,
+   Firestore for rules/indexes). Pushing to GitHub does **not** by itself update the live
+   site — a Firebase deploy does. Use the `npm run deploy*` commands below.
+So the flow is: **edit → commit + push to GitHub → (review/merge) → `npm run deploy` to Firebase to go live.**
+
 ## Recent sessions
 - **Session 12 (Ingestion Lab spike):** Built the admin-only AI ingestion pipeline at `/admin/ingestion-lab`. Gmail (label-filtered) + Google Drive (two hardcoded folders) + a generic upload endpoint (future iMessage / iCloud scripts) → Claude Sonnet 4.6 extraction via tool_use → three-lane review (Auto-Filed / Review Queue / Ask Queue). Entirely isolated under the `ingestion_lab/` Firestore namespace; production collections untouched. See `docs/ingestion-lab-schema.md` for the durable reference and `SESSION_NOTES.md` Session 12 entry for operator prerequisites + deliberate deferrals.
 - **Session 10 (cleanup):** Removed dead `server/` directory (102 files, ~37k lines) and 11 stale bid components (~8k lines). Total ~45k lines deleted. `PortalBidsPanel` confirmed as canonical bid system. CLAUDE.md corrected. Three pre-existing TypeScript errors in `ModernTimelineBuilder.tsx` (lines 815, 816, 1342) remain — out of scope for this session.
@@ -71,6 +82,8 @@ If you find code calling `/api/bid-processes/*`, `/api/bid-responses/*`, or `/ap
 
 There are 20 historical role-string variants scattered across the codebase plus 4 separate `UserRole` types. The refactor to a clean 7-role taxonomy is planned but not executed. See `ROLE_AUDIT.md` for the full audit and 6-phase rollout. Don't touch role strings without reading that doc first.
 
+**No admin approval for portal users.** Clients, subs, and designers self-create their portal and get in immediately — `pending_gc` (the "Access Pending Approval" wall in `ProtectedRoute.tsx`) applies **only** to internal team/employee sign-ups. First-time cold sign-ins resolve their role from a matching contact card in `AuthContext.tsx` (`derivePortalRole()`), so an invited sub arriving via a bid magic-link lands straight in the sub portal. See SESSION_NOTES Session 15.
+
 ## Architecture map
 - `client/src/` — React frontend
 - `client/src/pages/` — ~70 routes (Wouter)
@@ -91,6 +104,13 @@ There are 20 historical role-string variants scattered across the codebase plus 
 4. After completing each major feature, update `CHECKPOINT.md`.
 5. If responses slow or repeat, run `/compact` immediately.
 6. End every session by updating `CHECKPOINT.md` (or removing it if work is fully committed).
+
+## API keys & secrets (READ THIS before adding any integration)
+- **Every external API key/secret lives in Google Secret Manager** (bound to the `api` Cloud Function via the `secrets:` array in `functions/src/index.ts`). Keys are **never** committed to the repo and **never** shipped to the browser.
+- **Whenever a new API key/integration is created, add a catalog entry to the in-app API Storage page** (`client/src/pages/ApiStorage.tsx`, route `/api-storage`). That page is the human-facing index of every integration: what it is, what it does for the app, which features touch it, and the **Secret Manager variable name** to look up for rotation.
+- **Store the variable NAME only — never the secret value.** The page intentionally shows no values; the value stays in Secret Manager.
+- The API Storage page is **admin-only** (`RoleGuard allowedRoles={['admin']}`) and is gated behind **re-entering the account password** to view — treat it as the sensitive page it is.
+- When you add/remove a secret in `functions/src/index.ts`, update `ApiStorage.tsx` in the same change so the two stay in sync.
 
 ## Conventions
 - **Test before shipping.** Smoke-test the page in a headless browser before deploy — `tsc` + `vite build` miss runtime errors. Pattern: write a quick Playwright probe in `scripts/probe-*.mjs`.

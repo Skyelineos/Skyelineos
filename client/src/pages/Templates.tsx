@@ -17,15 +17,18 @@ import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import {
   Plus, ChevronRight, ChevronLeft, Star, Pencil, Trash2,
-  FileText, FolderOpen, CheckSquare, Briefcase, Calendar,
+  FileText, FolderOpen, CheckSquare, Briefcase, Calendar, Palette, Sparkles,
 } from 'lucide-react';
 import { JobTemplateEditor } from '@/components/templates/JobTemplateEditor';
 import { DocumentTemplateEditor } from '@/components/templates/DocumentTemplateEditor';
 import { ScheduleTemplateEditor } from '@/components/templates/ScheduleTemplateEditor';
+import { SelectionsTemplateEditor } from '@/components/templates/SelectionsTemplateEditor';
+import { EstimateTemplateEditor } from '@/components/templates/EstimateTemplateEditor';
+import { StyleQuizTemplateEditor } from '@/components/templates/StyleQuizTemplateEditor';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type TemplateCategory = 'estimate' | 'document' | 'task' | 'job' | 'schedule';
+type TemplateCategory = 'estimate' | 'document' | 'task' | 'job' | 'schedule' | 'selections' | 'styleQuiz';
 
 interface Template {
   id: string;
@@ -98,9 +101,27 @@ const CATEGORIES: Record<TemplateCategory, CategoryMeta> = {
     border: '#fecaca',
     contentPlaceholder: 'Phase durations, sequencing, buffer days…',
   },
+  selections: {
+    label: 'Selections Templates',
+    description: 'The client “selections needed” list seeded into new projects.',
+    icon: Palette,
+    color: '#C9A96E',
+    bg: '#fdf8f0',
+    border: '#eaddc4',
+    contentPlaceholder: 'Floor / room / category / area decisions…',
+  },
+  styleQuiz: {
+    label: 'Style Quiz',
+    description: 'The guided, image-based style quiz clients click through in the portal.',
+    icon: Sparkles,
+    color: '#8b5cf6',
+    bg: '#f5f3ff',
+    border: '#ddd6fe',
+    contentPlaceholder: 'Questions + image options per area…',
+  },
 };
 
-const CATEGORY_ORDER: TemplateCategory[] = ['estimate', 'document', 'task', 'job', 'schedule'];
+const CATEGORY_ORDER: TemplateCategory[] = ['estimate', 'document', 'task', 'job', 'schedule', 'selections', 'styleQuiz'];
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -245,6 +266,48 @@ function DetailView({
       }
       return;
     }
+    if (category === 'schedule') {
+      // Schedule templates live in `scheduleTemplates` and open straight into the
+      // Gantt editor (the shared dialog wrote to the wrong collection before).
+      try {
+        const ref = await addDoc(collection(db, 'scheduleTemplates'), {
+          name: 'New Schedule',
+          description: '',
+          tasks: [],
+          links: [],
+          taskCount: 0,
+          isStarter: false,
+          createdBy: user?.id,
+          createdByName: user?.name,
+          createdAt: serverTimestamp(),
+        });
+        setEditingTemplate({ id: ref.id, name: 'New Schedule', category: 'schedule' });
+      } catch {
+        toast({ title: 'Error creating template', variant: 'destructive' });
+      }
+      return;
+    }
+    if (category === 'selections' || category === 'estimate' || category === 'styleQuiz') {
+      try {
+        const seed = category === 'selections' ? { items: [] }
+          : category === 'estimate' ? { lineItems: [] }
+          : { questions: [] };
+        const ref = await addDoc(collection(db, 'templates'), {
+          name: category === 'selections' ? 'New Selections List' : category === 'estimate' ? 'New Estimate' : 'New Style Quiz',
+          category,
+          ...seed,
+          description: '',
+          isDefault: false,
+          createdBy: user?.id,
+          createdByName: user?.name,
+          createdAt: serverTimestamp(),
+        });
+        setEditingTemplate({ id: ref.id, name: 'New Template', category });
+      } catch {
+        toast({ title: 'Error creating template', variant: 'destructive' });
+      }
+      return;
+    }
     setEditTarget(null);
     setForm({ name: '', description: '', content: '' });
     setShowDialog(true);
@@ -303,6 +366,21 @@ function DetailView({
     }
   }
 
+  // "Publish" a template as the project default for its category. New projects
+  // seed from whatever is marked default here (schedule → Gantt, job → task
+  // list). Setting one clears the flag on the others in the same category.
+  async function setAsDefault(id: string) {
+    try {
+      const collectionName = category === 'schedule' ? 'scheduleTemplates' : 'templates';
+      await Promise.all(templates.map(t =>
+        updateDoc(doc(db, collectionName, t.id), { isDefault: t.id === id, updatedAt: serverTimestamp() })
+      ));
+      toast({ title: 'Set as default', description: 'New projects will seed from this template.' });
+    } catch (e: any) {
+      toast({ title: 'Could not set default', description: e?.message || '', variant: 'destructive' });
+    }
+  }
+
   if (category === 'document' && editingTemplate) {
     return (
       <DocumentTemplateEditor
@@ -343,6 +421,18 @@ function DetailView({
     );
   }
 
+  if (category === 'selections' && editingTemplate) {
+    return <SelectionsTemplateEditor templateId={editingTemplate.id} onBack={() => setEditingTemplate(null)} />;
+  }
+
+  if (category === 'estimate' && editingTemplate) {
+    return <EstimateTemplateEditor templateId={editingTemplate.id} onBack={() => setEditingTemplate(null)} />;
+  }
+
+  if (category === 'styleQuiz' && editingTemplate) {
+    return <StyleQuizTemplateEditor templateId={editingTemplate.id} onBack={() => setEditingTemplate(null)} />;
+  }
+
   return (
     <div className="space-y-6">
       {/* Back + header */}
@@ -365,66 +455,112 @@ function DetailView({
           <h1 className="text-xl font-bold text-gray-900 truncate">{meta.label}</h1>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          {category === 'job' && (
-            <Button
-              variant="outline"
-              onClick={async () => {
-                try {
-                  const { seedStarterJobTemplates } = await import('@/lib/starterJobTemplates');
-                  const { created, skipped, totalTasks } = await seedStarterJobTemplates();
-                  if (created === 0) {
-                    toast({
-                      title: 'Already seeded',
-                      description: `All ${skipped} starter templates already exist. You can edit them above.`,
-                    });
-                  } else {
-                    toast({
-                      title: 'Starter templates added',
-                      description: `${created} template${created === 1 ? '' : 's'} created with ${totalTasks} tasks total. Edit any to customize for your business.`,
-                    });
-                  }
-                } catch (e: any) {
-                  toast({
-                    title: 'Seed failed',
-                    description: e?.message || 'Could not create starter templates.',
-                    variant: 'destructive',
-                  });
-                }
-              }}
-              className="gap-2"
-            >
-              <Plus className="w-4 h-4" /> Add Starter Templates
-            </Button>
-          )}
           {category === 'schedule' && (
             <Button
               variant="outline"
               onClick={async () => {
                 try {
-                  const { seedMasterCustomHomeScheduleTemplate } = await import('@/lib/skyelineMasterSchedule');
-                  const { created, taskCount } = await seedMasterCustomHomeScheduleTemplate(user?.email || '');
-                  if (!created) {
-                    toast({
-                      title: 'Already seeded',
-                      description: 'Skyeline Custom Home Build — Master Schedule already exists.',
-                    });
-                  } else {
-                    toast({
-                      title: 'Master schedule added',
-                      description: `${taskCount} tasks loaded. Open any project's Schedule tab → Load Template to apply it.`,
-                    });
-                  }
+                  const { seedStarterScheduleTemplates } = await import('@/lib/seedStarterScheduleTemplates');
+                  const { created, refreshed, skipped } = await seedStarterScheduleTemplates(user?.email || '');
+                  const parts: string[] = [];
+                  if (created) parts.push(`${created} added`);
+                  if (refreshed) parts.push(`${refreshed} refreshed`);
+                  if (skipped) parts.push(`${skipped} left as-is`);
+                  toast({
+                    title: created || refreshed ? 'Standard templates updated' : 'No changes',
+                    description: `${parts.join(' · ') || 'Nothing to do'} — open any to edit in the Gantt.`,
+                  });
                 } catch (e: any) {
                   toast({
                     title: 'Seed failed',
-                    description: e?.message || 'Could not create master schedule.',
+                    description: e?.message || 'Could not create standard templates.',
                     variant: 'destructive',
                   });
                 }
               }}
               className="gap-2"
             >
-              <Plus className="w-4 h-4" /> Add Skyeline Master Schedule
+              <Plus className="w-4 h-4" /> Add Standard Templates
+            </Button>
+          )}
+          {category === 'job' && (
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={async () => {
+                try {
+                  const { seedStandardTaskList } = await import('@/lib/seedStandardTaskList');
+                  const { created, taskCount } = await seedStandardTaskList(user?.email || '');
+                  toast({
+                    title: created ? 'Standard task list added' : 'Already exists',
+                    description: created ? `${taskCount} tasks — open to edit, then ★ to set as default.` : 'A "Standard Task List" job template already exists.',
+                  });
+                } catch (e: any) {
+                  toast({ title: 'Seed failed', description: e?.message || '', variant: 'destructive' });
+                }
+              }}
+            >
+              <Plus className="w-4 h-4" /> Add Standard Task List
+            </Button>
+          )}
+          {category === 'selections' && (
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={async () => {
+                try {
+                  const { seedStandardSelectionsTemplate } = await import('@/lib/seedStandardSelectionsTemplate');
+                  const { created, count } = await seedStandardSelectionsTemplate(user?.email || '');
+                  toast({
+                    title: created ? 'Standard selections added' : 'Already exists',
+                    description: created ? `${count} client decisions — open to edit, then ★ to set as default.` : 'A "Standard Selections" template already exists.',
+                  });
+                } catch (e: any) {
+                  toast({ title: 'Seed failed', description: e?.message || '', variant: 'destructive' });
+                }
+              }}
+            >
+              <Plus className="w-4 h-4" /> Add Standard Selections
+            </Button>
+          )}
+          {category === 'estimate' && (
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={async () => {
+                try {
+                  const { seedStandardEstimateTemplate } = await import('@/lib/seedStandardEstimateTemplate');
+                  const { created, count, total } = await seedStandardEstimateTemplate(user?.email || '');
+                  toast({
+                    title: created ? 'Standard estimate added' : 'Already exists',
+                    description: created ? `${count} line items ($${total.toLocaleString()}) — open to edit, then ★ to set as default.` : 'A "Standard Estimate" template already exists.',
+                  });
+                } catch (e: any) {
+                  toast({ title: 'Seed failed', description: e?.message || '', variant: 'destructive' });
+                }
+              }}
+            >
+              <Plus className="w-4 h-4" /> Add Standard Estimate
+            </Button>
+          )}
+          {category === 'styleQuiz' && (
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={async () => {
+                try {
+                  const { seedStandardStyleQuiz } = await import('@/lib/seedStandardStyleQuiz');
+                  const { created, count } = await seedStandardStyleQuiz(user?.email || '');
+                  toast({
+                    title: created ? 'Standard style quiz added' : 'Already exists',
+                    description: created ? `${count} questions — open to add photos, then ★ to set as default.` : 'A "Standard Style Quiz" already exists.',
+                  });
+                } catch (e: any) {
+                  toast({ title: 'Seed failed', description: e?.message || '', variant: 'destructive' });
+                }
+              }}
+            >
+              <Plus className="w-4 h-4" /> Add Standard Style Quiz
             </Button>
           )}
           <Button
@@ -486,18 +622,30 @@ function DetailView({
                     style={{ backgroundColor: meta.bg, color: meta.color }}
                     variant="outline"
                     onClick={() => {
-                      if (category === 'job' || category === 'document' || category === 'schedule') setEditingTemplate(tmpl);
+                      if (category === 'job' || category === 'document' || category === 'schedule' || category === 'selections' || category === 'estimate' || category === 'styleQuiz') setEditingTemplate(tmpl);
                       else toast({ title: `Applied "${tmpl.name}"` });
                     }}
                   >
                     {category === 'schedule' ? 'Open' : 'Use Template'}
                   </Button>
+                  {(category === 'schedule' || category === 'job' || category === 'selections' || category === 'estimate' || category === 'styleQuiz') && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className={`px-2.5 ${tmpl.isDefault ? 'text-amber-600 border-amber-300' : ''}`}
+                      title={tmpl.isDefault ? 'This is the project default' : 'Set as project default (publish)'}
+                      disabled={tmpl.isDefault}
+                      onClick={() => setAsDefault(tmpl.id)}
+                    >
+                      <Star className={`w-3.5 h-3.5 ${tmpl.isDefault ? 'fill-amber-500 stroke-amber-500' : ''}`} />
+                    </Button>
+                  )}
                   <Button
                     size="sm"
                     variant="outline"
                     className="px-2.5"
                     onClick={() => {
-                      if (category === 'job' || category === 'document' || category === 'schedule') setEditingTemplate(tmpl);
+                      if (category === 'job' || category === 'document' || category === 'schedule' || category === 'selections' || category === 'estimate' || category === 'styleQuiz') setEditingTemplate(tmpl);
                       else openEdit(tmpl);
                     }}
                   >

@@ -38,6 +38,7 @@ import {
   Sparkles,
   FileSignature,
   Beaker,
+  KeyRound,
 } from 'lucide-react';
 
 interface NavItem {
@@ -128,18 +129,20 @@ const TEAM_NAV: NavGroup[] = [
     label: 'Management',
     items: [
       { label: 'Users',          href: '/users',          icon: UserCog },
+      { label: 'Master Tasks',   href: '/master-tasks',   icon: ClipboardList },
       { label: 'Templates',      href: '/templates',      icon: Hammer },
       { label: 'Playbook',       href: '/playbook',       icon: Lightbulb },
       { label: 'Import Center',  href: '/import-center',  icon: FileSpreadsheet },
       { label: 'Automations',    href: '/automations',    icon: Zap },
       { label: 'Subscriptions',  href: '/subscriptions',  icon: Wallet },
+      { label: 'API Storage',    href: '/api-storage',    icon: KeyRound },
       { label: 'Ingestion Lab',  href: '/admin/ingestion-lab', icon: Beaker },
     ],
   },
 ];
 
 // Management section only for admins
-const MANAGEMENT_HREFS = ['/users', '/templates', '/playbook', '/automations', '/import-center', '/subscriptions', '/admin/ingestion-lab'];
+const MANAGEMENT_HREFS = ['/users', '/master-tasks', '/templates', '/playbook', '/automations', '/import-center', '/subscriptions', '/api-storage', '/admin/ingestion-lab'];
 
 // Designer sidebar — focused on their work
 const DESIGNER_NAV: NavGroup[] = [

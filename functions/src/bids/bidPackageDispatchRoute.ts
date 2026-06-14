@@ -24,6 +24,9 @@ import type { Express } from 'express';
 import * as admin from 'firebase-admin';
 import sgMail from '@sendgrid/mail';
 import twilio from 'twilio';
+import { randomBytes } from 'crypto';
+import { toE164, isSmsOptedOut } from '../notifications/sms';
+import { loadFlowFor, renderTemplate } from '../notifications/fireTrigger';
 
 interface DispatchPayload {
   projectId: string;
@@ -51,6 +54,21 @@ interface VendorBundle {
 }
 
 const STAFF_ROLES = new Set(['gc', 'admin', 'projectManager']);
+
+// base64url token (no +, /, =), matching sendBidRequestRoute.
+function generateInviteToken(): string {
+  return randomBytes(18).toString('base64url');
+}
+
+// Guarantee an absolute https:// URL with no trailing slash. A scheme-less or
+// empty base URL produces a relative href that email clients won't open — one
+// cause of a "dead" View-in-Skyeline-OS button.
+function normalizeBaseUrl(raw?: string): string {
+  let u = (raw || '').trim();
+  if (!u) u = 'https://skyelineos.web.app';
+  if (!/^https?:\/\//i.test(u)) u = `https://${u}`;
+  return u.replace(/\/+$/, '');
+}
 
 function escapeHtml(s: string): string {
   return s
@@ -176,14 +194,40 @@ export function registerBidPackageDispatchRoute(
       }
 
       // Group vendors across trades. Dedup by contactId (preferred) or email.
+      // The package's bidRequests are written client-side and don't always
+      // carry an inviteToken — without one the magic link is dead. Mint and
+      // persist a token (+ its public lookup doc) whenever it's missing.
+      const tokenExpiresAt = admin.firestore.Timestamp.fromDate(new Date(Date.now() + 90 * 86_400_000));
+      const tokenWrites: Promise<any>[] = [];
       const bundles = new Map<string, VendorBundle>();
       for (const doc of reqSnap.docs) {
         const br = doc.data() as any;
         const trade = String(br.trade || '').trim();
         if (!trade) continue;
         const vendors = (br.vendors as VendorEntry[]) || [];
-        for (const v of vendors) {
-          const key = v.contactId || (v.email ? v.email.toLowerCase().trim() : `${v.vendorName}|${v.inviteToken}`);
+        let vendorsMutated = false;
+        for (let i = 0; i < vendors.length; i++) {
+          const v = vendors[i];
+          let token = String(v.inviteToken || '').trim();
+          if (!token) {
+            token = generateInviteToken();
+            v.inviteToken = token;
+            vendorsMutated = true;
+            tokenWrites.push(
+              db.collection('bidInviteTokens').doc(token).set({
+                token,
+                projectId: data.projectId,
+                bidRequestId: doc.id,
+                vendorIndex: i,
+                vendorName: v.vendorName,
+                contactId: v.contactId || null,
+                vendorEmail: v.email || null,
+                expiresAt: tokenExpiresAt,
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+              }),
+            );
+          }
+          const key = v.contactId || (v.email ? v.email.toLowerCase().trim() : `${v.vendorName}|${token}`);
           let bundle = bundles.get(key);
           if (!bundle) {
             bundle = {
@@ -192,15 +236,24 @@ export function registerBidPackageDispatchRoute(
               email: v.email,
               phone: v.phone,
               trades: [],
-              primaryToken: v.inviteToken,
+              primaryToken: token,
               bidRequestIds: [],
             };
             bundles.set(key, bundle);
           }
+          if (!bundle.primaryToken) bundle.primaryToken = token;
           if (!bundle.trades.includes(trade)) bundle.trades.push(trade);
           if (!bundle.bidRequestIds.includes(doc.id)) bundle.bidRequestIds.push(doc.id);
-          // Prefer keeping whichever token came first; no need to swap.
-          // (Any token resolves the sub into their portal.)
+        }
+        // Persist newly-minted tokens back onto the bidRequest's vendors array.
+        if (vendorsMutated) tokenWrites.push(doc.ref.update({ vendors }));
+      }
+      // Tokens must be resolvable before we email their links.
+      if (tokenWrites.length) {
+        try {
+          await Promise.all(tokenWrites);
+        } catch (e: any) {
+          console.error('[bidPackageDispatch] token persistence failed:', e?.message || e);
         }
       }
 
@@ -210,7 +263,7 @@ export function registerBidPackageDispatchRoute(
 
       // SendGrid + Twilio init (same pattern as sendBidRequestRoute — isolate
       // Twilio init so a bad SID doesn't kill email).
-      const appBaseUrl = (process.env.APP_BASE_URL || 'https://skyelineos.web.app').replace(/\/$/, '');
+      const appBaseUrl = normalizeBaseUrl(process.env.APP_BASE_URL);
       const sendgridKey = process.env.SENDGRID_API_KEY;
       const sendgridFrom = process.env.SENDGRID_FROM_EMAIL;
       const sendgridReady = !!(sendgridKey && sendgridFrom);
@@ -234,6 +287,14 @@ export function registerBidPackageDispatchRoute(
       const droppedNoContact: string[] = [];
       const perVendorResults: Array<any> = [];
 
+      // Channel governance: honor the admin's 'bid_invitation' (audience: sub)
+      // config — whether email/SMS are enabled and the SMS template. The branded
+      // magic-link email HTML is preserved; config only gates it on/off.
+      const inviteFlow = await loadFlowFor(db, 'bid_invitation', 'sub');
+      const inviteStep = inviteFlow.steps?.[0];
+      const allowInviteEmail = inviteFlow.enabled !== false && inviteStep?.channels?.email !== false;
+      const allowInviteSms = inviteFlow.enabled !== false && inviteStep?.channels?.sms === true;
+
       for (const bundle of bundles.values()) {
         const link = `${appBaseUrl}/bid/respond/${bundle.primaryToken}`;
         const result: any = { vendorName: bundle.vendorName, trades: bundle.trades };
@@ -245,7 +306,7 @@ export function registerBidPackageDispatchRoute(
           continue;
         }
 
-        if (bundle.email && sendgridReady) {
+        if (bundle.email && sendgridReady && allowInviteEmail) {
           try {
             await sgMail.send({
               to: bundle.email,
@@ -276,23 +337,34 @@ export function registerBidPackageDispatchRoute(
           result.email = { sent: false, error: 'SendGrid not configured' };
         }
 
-        if (bundle.phone && twilioClient) {
-          try {
-            await twilioClient.messages.create({
-              from: twilioFrom!,
-              to: bundle.phone,
-              body: buildPackageSms({
-                vendorName: bundle.vendorName,
-                projectName,
-                trades: bundle.trades,
-                link,
-              }),
-            });
-            result.sms = { sent: true };
-            sentSms += 1;
-          } catch (e: any) {
-            result.sms = { sent: false, error: e?.message || String(e) };
+        if (bundle.phone && twilioClient && allowInviteSms) {
+          const toNumber = toE164(bundle.phone);
+          if (!toNumber) {
+            result.sms = { sent: false, error: `Invalid phone "${bundle.phone}" (not E.164)` };
+          } else if (await isSmsOptedOut(db, toNumber)) {
+            result.sms = { sent: false, error: 'Recipient opted out (STOP)' };
+          } else {
+            try {
+              // Use the admin's SMS template when set, else the built-in copy.
+              const tpl = inviteStep?.smsBody?.trim();
+              const body = tpl
+                ? renderTemplate(tpl, {
+                    vendorName: bundle.vendorName,
+                    projectName,
+                    trade: bundle.trades.join(', '),
+                    magicLink: link,
+                    link,
+                  })
+                : buildPackageSms({ vendorName: bundle.vendorName, projectName, trades: bundle.trades, link });
+              await twilioClient.messages.create({ from: twilioFrom!, to: toNumber, body });
+              result.sms = { sent: true };
+              sentSms += 1;
+            } catch (e: any) {
+              result.sms = { sent: false, error: e?.message || String(e) };
+            }
           }
+        } else if (bundle.phone && twilioClient && !allowInviteSms) {
+          result.sms = { sent: false, error: 'Bid-invite SMS disabled in Settings → Triggers' };
         }
         perVendorResults.push(result);
       }

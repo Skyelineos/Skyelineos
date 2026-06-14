@@ -30,6 +30,10 @@ interface SubcontractorComboBoxProps {
   placeholder?: string
   className?: string
   showTrade?: boolean
+  /** Text inside the search box. Default "Search subcontractors..." */
+  searchPlaceholder?: string
+  /** Text shown when no results match. Default "No subcontractor found." */
+  emptyMessage?: string
 }
 
 export function SubcontractorComboBox({
@@ -39,6 +43,8 @@ export function SubcontractorComboBox({
   placeholder = "Select subcontractor...",
   className,
   showTrade = true,
+  searchPlaceholder = "Search subcontractors...",
+  emptyMessage = "No subcontractor found.",
 }: SubcontractorComboBoxProps) {
   const [open, setOpen] = React.useState(false)
   
@@ -85,8 +91,8 @@ export function SubcontractorComboBox({
       </PopoverTrigger>
       <PopoverContent className="w-full p-0" style={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))' }}>
         <Command>
-          <CommandInput placeholder="Search subcontractors..." />
-          <CommandEmpty>No subcontractor found.</CommandEmpty>
+          <CommandInput placeholder={searchPlaceholder} />
+          <CommandEmpty>{emptyMessage}</CommandEmpty>
           <CommandGroup>
             {subcontractors?.map((sub) => (
               <CommandItem

@@ -35,14 +35,30 @@ service firebase.storage {
       allow read, write: if request.auth != null;
     }
 
+    // Style Quiz renderings (Templates → Style Quiz). Readable by anyone
+    // (shown in the client portal); written by authed staff via the editor.
+    match /styleQuiz/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
     // Public files - readable by anyone, writable by authenticated users
     match /public/{allPaths=**} {
       allow read: if true;
       allow write: if request.auth != null;
     }
-    
+
     // Company branding/assets - readable by all, writable by admins only
     match /branding/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
+    // Sales-pitch documents/videos shown in the client portal one-pagers.
+    // Readable by anyone (downloaded straight from the portal); the UI only
+    // exposes the upload/delete affordances to staff. Firestore rules gate who
+    // can reference these on a section doc.
+    match /salesPitch/{allPaths=**} {
       allow read: if true;
       allow write: if request.auth != null;
     }
