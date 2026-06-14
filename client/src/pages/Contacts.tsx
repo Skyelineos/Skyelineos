@@ -266,6 +266,9 @@ export default function Contacts() {
           trades: [],
           isActive: true,
           salesClientId: clientRef.id,
+          // Record the portal-invite choice. Clients are NOT auto-invited by
+          // the backend — the invite is opt-in (sent below when checked).
+          portalInviteOptIn: formSnapshot.sendInvite,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         });
@@ -288,6 +291,25 @@ export default function Contacts() {
           title: 'Contact added',
           description: `Client created — also placed in Sales at "${stageLabel}".`,
         });
+
+        // Portal invite is opt-in for clients: only send when the box is
+        // checked. Unready leads just sit in the pipeline for nurture.
+        if (formSnapshot.sendInvite && formSnapshot.email) {
+          try {
+            const { sendPortalInviteEmail } = await import('@/lib/portalInvite');
+            const { templateName } = await sendPortalInviteEmail({
+              contactId: contactRef.id,
+              email: formSnapshot.email,
+              role: 'client',
+              firstName: formSnapshot.firstName,
+              invitedBy: user?.email || '',
+              preferStage: 'lead',
+            });
+            toast({ title: 'Portal invite sent', description: `Emailed “${templateName}” to ${formSnapshot.email}.` });
+          } catch (e: any) {
+            toast({ title: 'Invite not sent', description: e?.message || '', variant: 'destructive' });
+          }
+        }
       } else {
         const fullName = `${formSnapshot.firstName} ${formSnapshot.lastName}`.trim();
         const newRef = await addDoc(collection(db, 'contacts'), {
@@ -1018,9 +1040,9 @@ export default function Contacts() {
                       className="mt-1"
                     />
                     <div className="text-sm">
-                      <p className="font-medium text-amber-900">Send portal invite after saving</p>
+                      <p className="font-medium text-amber-900">Send portal login invite now</p>
                       <p className="text-xs text-amber-700/80">
-                        Opens your email with a pre-filled sign-up link. When they register, their account auto-links to this contact.
+                        Emails them a sign-up link to create their portal account. Leave unchecked for leads you're still nurturing — you can invite them later from the contact or project.
                       </p>
                     </div>
                   </label>
