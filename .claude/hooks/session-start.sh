@@ -8,7 +8,7 @@
 #
 # Synchronous (no async) so the status is in context before the agent acts.
 # ─────────────────────────────────────────────────────────────────────────────
-set -uo pipefail
+set -u
 
 cd "${CLAUDE_PROJECT_DIR:-.}" 2>/dev/null || exit 0
 

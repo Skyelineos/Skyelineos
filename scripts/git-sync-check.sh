@@ -13,9 +13,9 @@
 #   scripts/git-sync-check.sh --strict    # exits 1 if BEHIND or DIVERGED (gating)
 #   scripts/git-sync-check.sh --no-fetch   # skip the network fetch (use cached refs)
 #
-# POSIX-compatible (runs in Git Bash on Windows, macOS, and Linux).
+# POSIX-compatible (runs under bash or sh — Git Bash on Windows, macOS, Linux).
 # ─────────────────────────────────────────────────────────────────────────────
-set -uo pipefail
+set -u
 
 STRICT=0
 DO_FETCH=1
