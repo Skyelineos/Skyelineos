@@ -429,7 +429,12 @@ export function registerBidRequestRoute(app: Express, db: admin.firestore.Firest
       const tokenExpiresAt = new Date(replyByDate.getTime() + 14 * 86400000);
 
       // Magic link base
-      const appBaseUrl = (process.env.APP_BASE_URL || 'https://skyelineos.web.app').replace(/\/$/, '');
+      // .trim() is load-bearing: the APP_BASE_URL secret has carried a trailing
+      // newline, which otherwise lands literally inside the magic link
+      // ("https://host\n/bid/respond/…") and breaks the email CTA. Strip
+      // surrounding whitespace + any trailing slashes. (The /api/bid-packages
+      // dispatch route already normalizes via normalizeBaseUrl().)
+      const appBaseUrl = (process.env.APP_BASE_URL || 'https://skyelineos.web.app').trim().replace(/\/+$/, '');
 
       // Augment vendor entries with invite tokens + status
       const augmentedVendors: VendorRecipientStored[] = data.vendors.map(v => ({
