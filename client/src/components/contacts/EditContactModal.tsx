@@ -402,9 +402,10 @@ export function EditContactModal({ contact, open, onClose }: Props) {
         </div>
 
         <DialogFooter className="border-t pt-4 mt-2 flex-col sm:flex-row gap-2">
-          {!contact?.linkedUserId && contact?.email && (
+          {!contact?.linkedUserId && (contact?.email || contact?.phone) && (
             <InviteToPortalButton
               email={email.trim()}
+              phone={phone.trim()}
               firstName={firstName.trim()}
               contactId={contact.id}
               role={role}

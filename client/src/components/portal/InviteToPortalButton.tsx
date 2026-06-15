@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
-import { createPortalInvite } from '@/lib/portalInvite';
+import { createPortalInvite, sendPortalInviteSms } from '@/lib/portalInvite';
 import { authFetch } from '@/lib/authFetch';
 import {
   type EmailTemplate,
@@ -25,13 +25,14 @@ import {
   listTemplates,
 } from '@/lib/emailTemplates';
 import { EmailTemplateManagerDialog } from '@/components/portal/EmailTemplateManagerDialog';
-import { UserPlus, Send, Settings2, ChevronDown } from 'lucide-react';
+import { UserPlus, Send, Settings2, ChevronDown, MessageSquare } from 'lucide-react';
 
 const API_BASE =
   (import.meta as any).env?.VITE_API_BASE_URL || 'https://api-mtph34upva-uc.a.run.app';
 
 interface Props {
   email?: string;
+  phone?: string;
   firstName?: string;
   contactId?: string;
   role?: string;
@@ -46,6 +47,7 @@ interface Props {
 
 export function InviteToPortalButton({
   email,
+  phone,
   firstName,
   contactId,
   role = 'client',
@@ -112,6 +114,33 @@ export function InviteToPortalButton({
     }
   };
 
+  const handleSms = async () => {
+    const ph = (phone || '').trim();
+    if (!ph) {
+      toast({ title: 'No phone on file', description: 'Add a mobile number before texting an invite.', variant: 'destructive' });
+      return;
+    }
+    setBusy(true);
+    try {
+      const token = await sendPortalInviteSms({
+        contactId: contactId || '',
+        phone: ph,
+        role,
+        firstName,
+        invitedBy: user?.email,
+      });
+      toast({
+        title: resend ? 'Invite re-sent' : 'Portal invite texted',
+        description: `Sent a sign-up link to ${ph}.`,
+      });
+      onInvited?.(token);
+    } catch (e: any) {
+      toast({ title: 'Text failed', description: e?.message || 'Unknown error', variant: 'destructive' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <>
       <DropdownMenu onOpenChange={open => { if (open && templates === null) loadTemplates(); }}>
@@ -123,10 +152,11 @@ export function InviteToPortalButton({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-64">
-          {templates === null && (
+          {/* Email templates — only when we have an email on file. */}
+          {email && templates === null && (
             <DropdownMenuItem disabled>Loading templates…</DropdownMenuItem>
           )}
-          {templates !== null && STAGES.map(stage => {
+          {email && templates !== null && STAGES.map(stage => {
             const inStage = templates.filter(t => t.stage === stage.value);
             if (inStage.length === 0) return null;
             return (
@@ -142,6 +172,24 @@ export function InviteToPortalButton({
               </div>
             );
           })}
+
+          {/* Text invite — when we have a phone. */}
+          {phone && (
+            <>
+              {email && <DropdownMenuSeparator />}
+              <DropdownMenuLabel className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                Text message
+              </DropdownMenuLabel>
+              <DropdownMenuItem onSelect={handleSms}>
+                <MessageSquare className="mr-2 h-3.5 w-3.5" /> Text the invite
+              </DropdownMenuItem>
+            </>
+          )}
+
+          {!email && !phone && (
+            <DropdownMenuItem disabled>No email or phone on file</DropdownMenuItem>
+          )}
+
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => setManageOpen(true)}>
             <Settings2 className="mr-2 h-3.5 w-3.5" /> Upload / manage templates…

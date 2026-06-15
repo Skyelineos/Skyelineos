@@ -129,6 +129,9 @@ export default function SignIn() {
         setInviteDocId(snap.docs[0].id);
         setRegEmail(String(data.email || ''));
         setRegName(String(data.firstName || ''));
+        // Phone-only invites (texted): prefill the phone so the contact links
+        // by phone even though they'll type their own email to sign up.
+        if (data.phone) setRegPhone(String(data.phone));
         // Open the registration drawer automatically.
         setRegisterOpen(true);
       } catch {/* best-effort */}
