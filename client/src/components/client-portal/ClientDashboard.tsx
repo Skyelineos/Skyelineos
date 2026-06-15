@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
+import { collection, query, where, getDocs, getDoc, doc, orderBy, limit } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import {
   CheckCircle2, Clock, AlertTriangle, ChevronRight,
-  Calendar, DollarSign, Home, Wrench, Palette
+  Calendar, DollarSign, Home, Wrench, Palette, Sparkles
 } from 'lucide-react';
 
 import { CLIENT_PHASES as PHASES } from '@/lib/clientPhases';
@@ -43,6 +43,29 @@ export default function ClientDashboard({ projectId, project, onNavigate }: Clie
     },
     enabled: !!projectId,
   });
+
+  // Design Discovery / Style Quiz progress — drives the dashboard card's CTA.
+  // Stored at projects/{id}/stylePreferences/quiz: a `completedAt` means the
+  // homeowner finished the guided flow, saved `answers` without completion means
+  // they're mid-flow, and a missing doc means they haven't started. A read
+  // failure falls back to 'not_started' so the card still invites them in.
+  const { data: designState = 'not_started' } = useQuery<'not_started' | 'in_progress' | 'completed'>({
+    queryKey: ['styleQuiz', projectId],
+    queryFn: async () => {
+      const snap = await getDoc(doc(db, 'projects', projectId, 'stylePreferences', 'quiz'));
+      if (!snap.exists()) return 'not_started';
+      const d = snap.data() as any;
+      if (d.completedAt) return 'completed';
+      if (d.answers && Object.keys(d.answers).length > 0) return 'in_progress';
+      return 'not_started';
+    },
+    enabled: !!projectId,
+  });
+
+  const designCta =
+    designState === 'completed' ? 'View My Design Profile'
+    : designState === 'in_progress' ? 'Continue Design Discovery'
+    : 'Start Design Discovery';
 
   // ── Date helpers ──────────────────────────────────────────────────────────
   const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -278,6 +301,63 @@ export default function ClientDashboard({ projectId, project, onNavigate }: Clie
             )}
           </CardContent>
         </Card>
+      </div>
+
+      {/* Design Discovery — a premium, client-facing on-ramp into the guided
+          Style Discovery flow. Sits right after the timeline / next-steps area
+          so it reads as part of the build journey. The CTA adapts to where the
+          homeowner is: start → continue → view profile. */}
+      <div className="relative overflow-hidden rounded-2xl border border-[#C9A96E55] bg-gradient-to-br from-[#FBF7F0] to-[#F1E7D6] p-6 sm:p-7">
+        {/* Soft decorative glow — kept subtle so it feels designed, not busy. */}
+        <div
+          className="pointer-events-none absolute -top-12 -right-12 h-40 w-40 rounded-full opacity-40 blur-3xl"
+          style={{ backgroundColor: '#C9A96E' }}
+        />
+        <div className="relative flex flex-col sm:flex-row sm:items-center gap-5">
+          <div className="flex items-start gap-4 flex-1 min-w-0">
+            <div
+              className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-sm"
+              style={{ backgroundColor: '#C9A96E' }}
+            >
+              <Sparkles className="h-6 w-6" style={{ color: '#141414' }} />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-base sm:text-lg font-bold text-gray-900">Design Discovery</h3>
+                {designState === 'completed' && (
+                  <Badge style={{ backgroundColor: '#C9A96E22', color: '#92713A', border: '1px solid #C9A96E55' }}>
+                    Profile ready
+                  </Badge>
+                )}
+                {designState === 'in_progress' && (
+                  <Badge className="bg-amber-100 text-amber-700">In progress</Badge>
+                )}
+              </div>
+              <p className="text-sm text-gray-600 mt-1 max-w-xl">
+                Explore inspiring homes, materials, and finishes to help us understand your vision
+                and personalize your building experience.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-col items-stretch sm:items-end gap-2 flex-shrink-0">
+            <Button
+              onClick={() => onNavigate('design')}
+              className="font-semibold shadow-sm"
+              style={{ backgroundColor: '#C9A96E', color: '#141414' }}
+            >
+              {designCta}
+              <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+            {designState === 'completed' && (
+              <button
+                onClick={() => onNavigate('design')}
+                className="text-xs font-medium text-[#8a6a3a] hover:underline self-center sm:self-end"
+              >
+                Update Design Preferences
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Stats Row */}
