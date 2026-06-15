@@ -1,6 +1,8 @@
 import type { Express } from 'express';
 import * as admin from 'firebase-admin';
 import sgMail from '@sendgrid/mail';
+import twilio from 'twilio';
+import { toE164, isSmsOptedOut } from '../notifications/sms';
 
 // POST /api/send-portal-invite
 // Sends a portal-invitation email to a client's documented address via SendGrid,
@@ -136,6 +138,86 @@ export function registerSendPortalInviteRoute(
       return res
         .status(500)
         .json({ error: err?.message || 'Failed to send invitation email' });
+    }
+  });
+
+  // POST /api/send-portal-invite-sms
+  // Texts the same portal-invite link via Twilio — for clients we only have a
+  // phone number for. The link is identical (/sign-in?invite=<token>); signup
+  // links the contact by phone. Honors the SMS opt-out (STOP) ledger.
+  app.post('/api/send-portal-invite-sms', async (req: any, res: any) => {
+    try {
+      // 1. Auth — staff only.
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'No token provided' });
+      }
+      const decoded = await admin.auth().verifyIdToken(authHeader.substring(7));
+      const profile = await db.collection('users').doc(decoded.uid).get();
+      const role = profile.exists ? (profile.data() || {}).role : null;
+      if (!ALLOWED_ROLES.has(role)) {
+        return res.status(403).json({ error: 'Not authorized to send invites' });
+      }
+
+      // 2. Validate input.
+      const { token, phone, firstName, contactId } = req.body || {};
+      if (!token || typeof token !== 'string') {
+        return res.status(400).json({ error: 'Missing invite token' });
+      }
+      const toNumber = toE164(phone);
+      if (!toNumber) {
+        return res.status(400).json({ error: 'A valid mobile number is required' });
+      }
+      if (await isSmsOptedOut(db, toNumber)) {
+        return res.status(409).json({ error: 'This number has opted out of texts (replied STOP)' });
+      }
+
+      // 3. Twilio config.
+      const sid = process.env.TWILIO_ACCOUNT_SID;
+      const authToken = process.env.TWILIO_AUTH_TOKEN;
+      const from = process.env.TWILIO_FROM_NUMBER;
+      if (!sid || !authToken || !from) {
+        return res.status(503).json({ error: 'Text messaging is not configured' });
+      }
+
+      // 4. Build link + message.
+      const base = process.env.APP_BASE_URL || 'https://skyelineos.web.app';
+      const inviteLink = `${base}/sign-in?invite=${encodeURIComponent(token)}`;
+      const hi = String(firstName || '').trim();
+      const body =
+        `${hi ? hi + ', you' : 'You'}'re invited to the Skyeline Homes portal. ` +
+        `Create your account here: ${inviteLink}\n\nReply STOP to opt out.`;
+
+      // 5. Send.
+      const client = twilio(sid, authToken);
+      await client.messages.create({ to: toNumber, from, body });
+
+      // 6. Best-effort audit on the invite token doc.
+      try {
+        const q = await db
+          .collection('portalInvites')
+          .where('token', '==', token)
+          .limit(1)
+          .get();
+        if (!q.empty) {
+          await q.docs[0].ref.set(
+            {
+              smsSentAt: admin.firestore.FieldValue.serverTimestamp(),
+              smsSentBy: decoded.email || decoded.uid,
+            },
+            { merge: true },
+          );
+        }
+      } catch (auditErr) {
+        console.warn('[send-portal-invite-sms] audit write failed', auditErr);
+      }
+
+      return res.json({ ok: true, sent: true, to: toNumber, contactId: contactId || null });
+    } catch (err: any) {
+      console.error('[send-portal-invite-sms] failed', err?.message || err);
+      return res
+        .status(500)
+        .json({ error: err?.message || 'Failed to send invitation text' });
     }
   });
 }

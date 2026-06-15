@@ -558,10 +558,11 @@ export default function ProjectOverview() {
                       <p className="text-sm text-gray-400 italic">Not set</p>
                     )}
                   </div>
-                  {email && (
+                  {(email || phone) && (
                     <div className="pt-1">
                       <InviteToPortalButton
                         email={email}
+                        phone={phone}
                         firstName={(transformedProject.client || '').split(' ')[0]}
                         contactId={Array.isArray(raw?.clientIds) && raw.clientIds[0] ? String(raw.clientIds[0]) : ''}
                         className="w-full justify-center"

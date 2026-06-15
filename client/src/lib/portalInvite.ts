@@ -28,6 +28,7 @@ interface CreateOpts {
   role: string;
   firstName?: string;
   invitedBy?: string;
+  phone?: string;
 }
 
 export async function createPortalInvite(opts: CreateOpts): Promise<string> {
@@ -38,6 +39,7 @@ export async function createPortalInvite(opts: CreateOpts): Promise<string> {
     token,
     contactId: opts.contactId,
     email: String(opts.email || '').trim().toLowerCase(),
+    phone: String(opts.phone || '').trim(),
     role: opts.role,
     firstName: opts.firstName || '',
     invitedBy: opts.invitedBy || '',
@@ -86,4 +88,38 @@ export async function sendPortalInviteEmail(opts: SendOpts): Promise<{ templateN
     throw new Error(data.error || `Send failed (${res.status})`);
   }
   return { templateName: chosen.name };
+}
+
+// Texts the portal-invite link via Twilio — for clients we only have a phone
+// number for. Same token/link as the email invite; signup links by phone.
+export async function sendPortalInviteSms(opts: {
+  contactId: string;
+  phone: string;
+  role: string;
+  firstName?: string;
+  invitedBy?: string;
+}): Promise<string> {
+  const token = await createPortalInvite({
+    contactId: opts.contactId,
+    email: '',
+    phone: opts.phone,
+    role: opts.role,
+    firstName: opts.firstName,
+    invitedBy: opts.invitedBy,
+  });
+  const res = await authFetch(`${API_BASE}/api/send-portal-invite-sms`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      token,
+      phone: opts.phone,
+      firstName: opts.firstName,
+      contactId: opts.contactId,
+    }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `Text failed (${res.status})`);
+  }
+  return token;
 }

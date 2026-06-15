@@ -293,19 +293,31 @@ export default function Contacts() {
         });
 
         // Portal invite is opt-in for clients: only send when the box is
-        // checked. Unready leads just sit in the pipeline for nurture.
-        if (formSnapshot.sendInvite && formSnapshot.email) {
+        // checked. Unready leads just sit in the pipeline for nurture. Email
+        // when we have one; otherwise text the invite to their phone.
+        if (formSnapshot.sendInvite && (formSnapshot.email || formSnapshot.phone)) {
           try {
-            const { sendPortalInviteEmail } = await import('@/lib/portalInvite');
-            const { templateName } = await sendPortalInviteEmail({
-              contactId: contactRef.id,
-              email: formSnapshot.email,
-              role: 'client',
-              firstName: formSnapshot.firstName,
-              invitedBy: user?.email || '',
-              preferStage: 'lead',
-            });
-            toast({ title: 'Portal invite sent', description: `Emailed “${templateName}” to ${formSnapshot.email}.` });
+            const { sendPortalInviteEmail, sendPortalInviteSms } = await import('@/lib/portalInvite');
+            if (formSnapshot.email) {
+              const { templateName } = await sendPortalInviteEmail({
+                contactId: contactRef.id,
+                email: formSnapshot.email,
+                role: 'client',
+                firstName: formSnapshot.firstName,
+                invitedBy: user?.email || '',
+                preferStage: 'lead',
+              });
+              toast({ title: 'Portal invite sent', description: `Emailed “${templateName}” to ${formSnapshot.email}.` });
+            } else {
+              await sendPortalInviteSms({
+                contactId: contactRef.id,
+                phone: formSnapshot.phone,
+                role: 'client',
+                firstName: formSnapshot.firstName,
+                invitedBy: user?.email || '',
+              });
+              toast({ title: 'Portal invite texted', description: `Sent a sign-up link to ${formSnapshot.phone}.` });
+            }
           } catch (e: any) {
             toast({ title: 'Invite not sent', description: e?.message || '', variant: 'destructive' });
           }
