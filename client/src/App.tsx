@@ -737,7 +737,7 @@ function Router() {
       <Route path="/messages">
         <ProtectedRoute>
           <RoleGuard
-            allowedRoles={['admin', 'gc', 'projectManager']}
+            allowedRoles={['admin', 'gc', 'projectManager', 'designer', 'subcontractor', 'client']}
             showNotAuthorized
           >
             <Suspense fallback={<MinimalSpinner title="Loading Messages" />}>
@@ -863,6 +863,20 @@ function Router() {
         </ProtectedRoute>
       </Route>
 
+      {/* Bare /designer-portal — mirrors the explicit bare routes used
+          by /client-portal and /subcontractor-portal. Without this, wouter's
+          `:tab*` doesn't match the empty path and "My Projects" 404s. */}
+      <Route path="/designer-portal">
+        <ProtectedRoute>
+          <RoleGuard allowedRoles={['admin', 'designer']} showNotAuthorized>
+            <Suspense
+              fallback={<MinimalSpinner title="Loading Designer Portal" />}
+            >
+              <DesignerPortal />
+            </Suspense>
+          </RoleGuard>
+        </ProtectedRoute>
+      </Route>
       <Route path="/designer-portal/:tab*">
         <ProtectedRoute>
           <RoleGuard allowedRoles={['admin', 'designer']} showNotAuthorized>
@@ -962,7 +976,7 @@ function Router() {
       <Route path="/documents">
         <ProtectedRoute>
           <RoleGuard
-            allowedRoles={['admin', 'gc', 'projectManager']}
+            allowedRoles={['admin', 'gc', 'projectManager', 'designer', 'subcontractor', 'client']}
             showNotAuthorized
           >
             <Suspense fallback={<MinimalSpinner title="Loading Documents" />}>
