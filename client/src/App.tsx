@@ -84,6 +84,7 @@ const Playbook = lazy(() => import("@/pages/Playbook"));
 const SocialMedia = lazy(() => import("@/pages/SocialMedia"));
 const Automations = lazy(() => import("@/pages/Automations"));
 const MasterTaskLibrary = lazy(() => import("@/pages/MasterTaskLibrary"));
+const TaskListLibrary = lazy(() => import("@/pages/TaskListLibrary"));
 const ProjectBuildPlan = lazy(() => import("@/pages/ProjectBuildPlan"));
 const ProjectCloseout = lazy(() => import("@/pages/ProjectCloseout"));
 const ImportCenter = lazy(() => import("@/pages/ImportCenter"));
@@ -325,6 +326,16 @@ function Router() {
           <RoleGuard allowedRoles={['admin']} showNotAuthorized>
             <Suspense fallback={<MinimalSpinner title="Loading Master Task Library" />}>
               <MasterTaskLibrary />
+            </Suspense>
+          </RoleGuard>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/task-library">
+        <ProtectedRoute>
+          <RoleGuard allowedRoles={['admin']} showNotAuthorized>
+            <Suspense fallback={<MinimalSpinner title="Loading Task List Library" />}>
+              <TaskListLibrary />
             </Suspense>
           </RoleGuard>
         </ProtectedRoute>

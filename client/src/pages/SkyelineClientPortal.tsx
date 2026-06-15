@@ -183,6 +183,17 @@ export default function SkyelineClientPortal() {
     return () => { u1(); u2(); };
   }, [identifiers, identityResolved]);
 
+  // Safety net: never leave the homeowner staring at an indefinite spinner. On a
+  // cold Firestore connection or flaky network the snapshot listeners can take a
+  // while to first fire; if loading hasn't resolved within a few seconds, drop
+  // the spinner and render the portal anyway. The listeners stay attached, so
+  // projects still fill in the moment they arrive.
+  useEffect(() => {
+    if (!projectsLoading) return;
+    const t = setTimeout(() => setProjectsLoading(false), 6000);
+    return () => clearTimeout(t);
+  }, [projectsLoading]);
+
   const selectedProject = projects.find(p => p.id === selectedProjectId);
   const handleNavigate = (tab: string) => navigate(`/client-portal/${tab}`);
 
