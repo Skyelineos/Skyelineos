@@ -36,6 +36,7 @@ import {
   EyeOff,
   Images,
   CheckCircle2,
+  X,
 } from 'lucide-react';
 
 const GOLD = '#C9A96E';
@@ -53,11 +54,13 @@ export default function StyleLibraryAdmin() {
     total: 0,
   });
   const [roomFilter, setRoomFilter] = useState<string>('all');
+  const [dragOver, setDragOver] = useState(false);
 
   useEffect(() => subscribeStyleLibrary(setImages, () => {}), []);
 
-  const pickFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const list = Array.from(e.target.files || []);
+  // Add images to the pending batch (append, so you can keep dropping more
+  // variations before uploading). Skips non-images / oversized files.
+  const acceptFiles = (list: File[]) => {
     const imgs = list.filter(
       (f) => f.type.startsWith('image/') && f.size <= 15 * 1024 * 1024
     );
@@ -68,8 +71,23 @@ export default function StyleLibraryAdmin() {
         variant: 'destructive',
       });
     }
-    setFiles(imgs);
+    if (imgs.length) setFiles((prev) => [...prev, ...imgs]);
   };
+
+  const pickFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
+    acceptFiles(Array.from(e.target.files || []));
+    // Reset so picking the same files again (or more) still fires onChange.
+    if (fileRef.current) fileRef.current.value = '';
+  };
+
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    acceptFiles(Array.from(e.dataTransfer.files || []));
+  };
+
+  const removeFile = (i: number) =>
+    setFiles((prev) => prev.filter((_, n) => n !== i));
 
   const uploadOne = (file: File): Promise<{ url: string; path: string }> => {
     const path = `styleLibrary/${styleId}/${room}/${Date.now()}-${file.name.replace(/[^\w.-]/g, '_')}`;
@@ -232,7 +250,17 @@ export default function StyleLibraryAdmin() {
 
         <div
           onClick={() => fileRef.current?.click()}
-          className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:border-[#C9A96E]/60 transition-colors"
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragOver(true);
+          }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={onDrop}
+          className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
+            dragOver
+              ? 'border-[#C9A96E] bg-[#C9A96E]/5'
+              : 'border-gray-300 hover:border-[#C9A96E]/60'
+          }`}
         >
           <input
             ref={fileRef}
@@ -245,8 +273,8 @@ export default function StyleLibraryAdmin() {
           <ImagePlus className="h-7 w-7 text-gray-400 mx-auto mb-1.5" />
           <p className="text-sm text-gray-600">
             {files.length
-              ? `${files.length} image${files.length > 1 ? 's' : ''} ready`
-              : 'Tap to add renderings (multiple OK)'}
+              ? `${files.length} image${files.length > 1 ? 's' : ''} ready — drop or tap to add more`
+              : 'Drag renderings here, or tap to choose (multiple OK)'}
           </p>
           <p className="text-[11px] text-gray-400 mt-0.5">
             JPG / PNG up to 15MB each · all tagged as {styleLabel(styleId)} ·{' '}
@@ -257,13 +285,27 @@ export default function StyleLibraryAdmin() {
         {files.length > 0 && (
           <div className="flex flex-wrap gap-2">
             {files.map((f, i) => (
-              <img
-                key={i}
-                src={URL.createObjectURL(f)}
-                alt=""
-                className="h-16 w-16 rounded-md object-cover border border-gray-200"
-              />
+              <div key={i} className="relative group">
+                <img
+                  src={URL.createObjectURL(f)}
+                  alt=""
+                  className="h-16 w-16 rounded-md object-cover border border-gray-200"
+                />
+                <button
+                  onClick={() => removeFile(i)}
+                  className="absolute -top-1.5 -right-1.5 rounded-full border border-gray-200 bg-white p-0.5 text-gray-500 shadow-sm hover:text-red-600"
+                  title="Remove"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
             ))}
+            <button
+              onClick={() => setFiles([])}
+              className="self-center text-xs text-gray-400 hover:text-gray-600 ml-1"
+            >
+              Clear all
+            </button>
           </div>
         )}
 

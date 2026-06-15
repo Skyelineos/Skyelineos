@@ -68,6 +68,7 @@ const navGroups = [
     id: 'field',
     label: 'Field',
     items: [
+      { id: 'communications', label: 'Communication', icon: MessageCircle },
       { id: 'site-log',     label: 'Site Log',     icon: ClipboardCheck },
       { id: 'photos',       label: 'Photos',       icon: Camera },
       { id: 'rfis',         label: 'RFIs',         icon: HelpCircle },

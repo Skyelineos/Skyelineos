@@ -24,8 +24,9 @@ import { DuplicateContactDialog, type DuplicateResolution } from '@/components/c
 import {
   Plus, Search, MoreVertical, Filter, X, ChevronUp, ChevronDown,
   ExternalLink, FolderOpen, List, LayoutGrid, Settings2, Trash2,
-  ArrowRight, Edit2, User, MapPin,
+  ArrowRight, Edit2, User, MapPin, MessageSquare,
 } from 'lucide-react';
+import { CommunicationDrawer } from '@/components/communications/CommunicationDrawer';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -1220,6 +1221,7 @@ function PipelineCard({ client, stages, onEdit, onDelete, onAdvance }: {
   const [, setLocation] = useLocation();
   const [linkOpen, setLinkOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [commsOpen, setCommsOpen] = useState(false);
   const stageIdx = stages.findIndex(s => s.key === client.stage);
   const canAdvance = stageIdx >= 0 && stageIdx < stages.length - 1;
 
@@ -1261,6 +1263,10 @@ function PipelineCard({ client, stages, onEdit, onDelete, onAdvance }: {
                 <button onClick={() => { setMenuOpen(false); onEdit(); }}
                   className="w-full text-left flex items-center gap-2 px-3 py-2 hover:bg-gray-50">
                   <Edit2 className="w-4 h-4" />Edit
+                </button>
+                <button onClick={() => { setMenuOpen(false); setCommsOpen(true); }}
+                  className="w-full text-left flex items-center gap-2 px-3 py-2 hover:bg-gray-50">
+                  <MessageSquare className="w-4 h-4" />Messages
                 </button>
                 {canAdvance && (
                   <button onClick={() => { setMenuOpen(false); onAdvance(); }}
@@ -1330,6 +1336,13 @@ function PipelineCard({ client, stages, onEdit, onDelete, onAdvance }: {
       {linkOpen && (
         <LinkProjectDialog client={client} open={linkOpen} onClose={() => setLinkOpen(false)}
           onLinked={id => { setLinkOpen(false); setLocation(`/projects/${id}`); }} />
+      )}
+      {commsOpen && (
+        <CommunicationDrawer
+          subjectRef={{ type: 'lead', id: client.id }}
+          subjectLabel={client.name}
+          onClose={() => setCommsOpen(false)}
+        />
       )}
     </>
   );

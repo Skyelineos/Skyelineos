@@ -38,6 +38,7 @@ const GlobalSchedule = lazy(() => import('@/pages/GlobalSchedule'));
 const FullscreenTimeline = lazy(() => import('@/pages/FullscreenTimeline'));
 const Financials = lazy(() => import('@/pages/Financials'));
 const Messages = lazy(() => import('@/pages/Messages'));
+const CommunicationCenter = lazy(() => import('@/pages/CommunicationCenter'));
 const Settings = lazy(() => import('@/pages/Settings'));
 const Contacts = lazy(() => import('@/pages/Contacts'));
 const Contracts = lazy(() => import('@/pages/Contracts'));
@@ -90,6 +91,7 @@ const ImportCenter = lazy(() => import('@/pages/ImportCenter'));
 const ProjectTasks = lazy(() => import('@/pages/ProjectTasks'));
 const ProjectChangeOrders = lazy(() => import('@/pages/ProjectChangeOrders'));
 const ProjectRFIs = lazy(() => import('@/pages/ProjectRFIs'));
+const ProjectCommunications = lazy(() => import('@/pages/ProjectCommunications'));
 const ProjectSiteLog = lazy(() => import('@/pages/ProjectSiteLog'));
 const ProjectBills = lazy(() => import('@/pages/ProjectBills'));
 const ProjectWalkthroughs = lazy(() => import('@/pages/ProjectWalkthroughs'));
@@ -595,6 +597,19 @@ function Router() {
         </ProtectedRoute>
       </Route>
 
+      <Route path="/projects/:id/communications">
+        <ProtectedRoute>
+          <RoleGuard
+            allowedRoles={['admin', 'gc', 'projectManager']}
+            showNotAuthorized
+          >
+            <Suspense fallback={<MinimalSpinner title="Loading Communication" />}>
+              <ProjectCommunications />
+            </Suspense>
+          </RoleGuard>
+        </ProtectedRoute>
+      </Route>
+
       <Route path="/projects/:id/site-log">
         <ProtectedRoute>
           <RoleGuard
@@ -727,6 +742,19 @@ function Router() {
           >
             <Suspense fallback={<MinimalSpinner title="Loading Messages" />}>
               <Messages />
+            </Suspense>
+          </RoleGuard>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/communications">
+        <ProtectedRoute>
+          <RoleGuard
+            allowedRoles={['admin', 'gc', 'projectManager']}
+            showNotAuthorized
+          >
+            <Suspense fallback={<MinimalSpinner title="Loading Communication Center" />}>
+              <CommunicationCenter />
             </Suspense>
           </RoleGuard>
         </ProtectedRoute>
