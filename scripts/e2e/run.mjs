@@ -88,6 +88,7 @@ async function confirm() {
   await report('running', { status: 'running' });
 
   let hadError = false;
+  let fatalError = null;
   try {
     await h.signIn();
     if (runData) {
@@ -100,7 +101,8 @@ async function confirm() {
     }
   } catch (e) {
     hadError = true;
-    console.error('\n💥 Fatal error during run:', e.message);
+    fatalError = e?.message || String(e);
+    console.error('\n💥 Fatal error during run:', fatalError);
   } finally {
     await h.teardown({ keep });
     const { passed, failed } = h.summary();
@@ -109,12 +111,13 @@ async function confirm() {
     const reportDoc = {
       runId: REPORT_RUN_ID || RUN_ID,
       status,
+      error: fatalError || null,
       summary: { total: checks.length, passed, failed, errored: hadError ? 1 : 0 },
       checks,
     };
     try { writeFileSync('qa-report.json', JSON.stringify(reportDoc, null, 2)); } catch { /* ignore */ }
     // Final report clears the deploy lock (the /api/qa/report handler does it).
-    await report('final', { status, summary: reportDoc.summary, checks });
+    await report('final', { status, error: fatalError || null, summary: reportDoc.summary, checks });
     try {
       await h.signOut();
     } catch {
