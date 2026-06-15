@@ -37,6 +37,7 @@ interface Props {
   open: boolean;
   onClose: () => void;
   task?: MasterTask | null; // present = edit mode
+  defaultPhase?: string;    // preselect a phase for a NEW task
 }
 
 const blankForm = {
@@ -64,7 +65,7 @@ const blankForm = {
   qualityGate: false,
 };
 
-export function MasterTaskModal({ open, onClose, task }: Props) {
+export function MasterTaskModal({ open, onClose, task, defaultPhase }: Props) {
   const { toast } = useToast();
   const [form, setForm] = useState({ ...blankForm });
   const [saving, setSaving] = useState(false);
@@ -100,9 +101,9 @@ export function MasterTaskModal({ open, onClose, task }: Props) {
         qualityGate: !!task.qualityGate,
       });
     } else {
-      setForm({ ...blankForm });
+      setForm({ ...blankForm, ...(defaultPhase ? { phase: defaultPhase } : {}) });
     }
-  }, [task, open]);
+  }, [task, open, defaultPhase]);
 
   const set = (k: string, v: any) => setForm((f) => ({ ...f, [k]: v }));
 
