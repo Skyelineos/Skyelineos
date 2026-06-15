@@ -187,6 +187,9 @@ export interface StyleTally {
   styleId: string;
   label: string;
   likes: number;
+  seen: number;
+  /** Laplace-smoothed like-rate (likes per times-shown), 0..1. Ranks styles. */
+  score: number;
 }
 
 export interface StyleProfile {
@@ -206,29 +209,42 @@ export function computeProfile(reactions: StyleReaction[]): {
   totalLikes: number;
   totalSeen: number;
 } {
-  const likes = reactions.filter((r) => r.reaction === 'like');
+  // Rank by a Laplace-smoothed LIKE RATE — likes per times-shown for a style —
+  // so loading uneven numbers of variations per style can't bias the result.
+  // The +1/+2 smoothing keeps a lone 1/1 (→0.67) from beating a well-sampled
+  // 8/10 (→0.75). Only styles they actually liked describe what they lean toward.
   const tally = (rs: StyleReaction[]): StyleTally[] => {
-    const counts: Record<string, number> = {};
+    const likeCounts: Record<string, number> = {};
+    const seenCounts: Record<string, number> = {};
     rs.forEach((r) => {
-      counts[r.styleId] = (counts[r.styleId] || 0) + 1;
+      seenCounts[r.styleId] = (seenCounts[r.styleId] || 0) + 1;
+      if (r.reaction === 'like')
+        likeCounts[r.styleId] = (likeCounts[r.styleId] || 0) + 1;
     });
-    return Object.entries(counts)
-      .map(([styleId, n]) => ({
-        styleId,
-        label: styleLabel(styleId),
-        likes: n,
-      }))
-      .sort((a, b) => b.likes - a.likes);
+    return Object.keys(seenCounts)
+      .map((styleId) => {
+        const likes = likeCounts[styleId] || 0;
+        const seen = seenCounts[styleId];
+        return {
+          styleId,
+          label: styleLabel(styleId),
+          likes,
+          seen,
+          score: (likes + 1) / (seen + 2),
+        };
+      })
+      .filter((t) => t.likes > 0)
+      .sort((a, b) => b.score - a.score || b.likes - a.likes);
   };
   const byRoom: Record<string, StyleTally[]> = {};
   for (const room of DISCOVERY_ROOMS.map((r) => r.id)) {
-    const roomLikes = likes.filter((r) => r.room === room);
-    if (roomLikes.length) byRoom[room] = tally(roomLikes);
+    const roomReactions = reactions.filter((r) => r.room === room);
+    if (roomReactions.length) byRoom[room] = tally(roomReactions);
   }
   return {
-    top: tally(likes),
+    top: tally(reactions),
     byRoom,
-    totalLikes: likes.length,
+    totalLikes: reactions.filter((r) => r.reaction === 'like').length,
     totalSeen: reactions.length,
   };
 }

@@ -157,7 +157,7 @@ export function StyleProfileCard({ projectId, clientContactId }: Props) {
                   color: i === 0 ? '#141414' : '#8a6a3a',
                 }}
               >
-                {t.label} · {t.likes}
+                {t.label} · {Math.round(t.score * 100)}%
               </span>
             ))}
           </div>
