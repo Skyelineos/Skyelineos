@@ -1,102 +1,101 @@
-import { Switch, Route, Redirect } from "wouter";
-import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider } from "@tanstack/react-query";
-import { Toaster } from "@/components/ui/toaster";
+import { Switch, Route, Redirect } from 'wouter';
+import { queryClient } from './lib/queryClient';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { Toaster } from '@/components/ui/toaster';
 // import { TooltipProvider } from "@/components/ui/tooltip"; // Temporarily disabled due to React hook error
-import { useAuth } from "@/auth/AuthContext";
-import { ThemeProvider } from "@/contexts/ThemeContext";
-import { UserPreferencesProvider } from "@/contexts/UserPreferencesContext";
-import { AdminViewProvider } from "@/contexts/AdminViewContext";
-import { ConfirmProvider } from "@/hooks/use-confirm";
-import { BrandingProvider } from "@/contexts/BrandingContext";
+import { useAuth } from '@/auth/AuthContext';
+import { ThemeProvider } from '@/contexts/ThemeContext';
+import { UserPreferencesProvider } from '@/contexts/UserPreferencesContext';
+import { AdminViewProvider } from '@/contexts/AdminViewContext';
+import { ConfirmProvider } from '@/hooks/use-confirm';
+import { BrandingProvider } from '@/contexts/BrandingContext';
 // Firebase sign-in page imported below
-import { NotificationCenter } from "@/components/notifications/NotificationCenter";
-import ProtectedRoute from "@/auth/ProtectedRoute";
-import { RoleGuard } from "@/components/auth/RoleGuard";
-import { RoleBasedRedirect } from "@/components/auth/RoleBasedRedirect";
-import { NavigationHandler } from "@/components/navigation/NavigationHandler";
-import { MinimalSpinner } from "@/components/layout/MinimalSpinner";
-import { ErrorBoundary } from "@/components/common/ErrorBoundary";
-import { AppLayout } from "@/components/layout/AppLayout";
-import { useState, Suspense, useEffect, lazy } from "react";
-import { usePerformanceOptimizations } from "@/hooks/usePerformanceOptimizations";
+import { NotificationCenter } from '@/components/notifications/NotificationCenter';
+import ProtectedRoute from '@/auth/ProtectedRoute';
+import { RoleGuard } from '@/components/auth/RoleGuard';
+import { RoleBasedRedirect } from '@/components/auth/RoleBasedRedirect';
+import { NavigationHandler } from '@/components/navigation/NavigationHandler';
+import { MinimalSpinner } from '@/components/layout/MinimalSpinner';
+import { ErrorBoundary } from '@/components/common/ErrorBoundary';
+import { useState, Suspense, useEffect, lazy } from 'react';
+import { usePerformanceOptimizations } from '@/hooks/usePerformanceOptimizations';
 
 // Lazy imports for optimal bundle splitting
-const Dashboard = lazy(() => import("@/pages/Dashboard"));
-const Projects = lazy(() => import("@/pages/Projects"));
-const ProjectDetail = lazy(() => import("@/pages/ProjectDetail"));
-const ProjectOverview = lazy(() => import("@/pages/ProjectOverview"));
-const ProjectSetup = lazy(() => import("@/pages/ProjectSetup"));
-const ProjectEstimates = lazy(() => import("@/pages/ProjectEstimates"));
-const ProjectBids = lazy(() => import("@/pages/ProjectBids"));
-const ProjectSchedule = lazy(() => import("@/pages/ProjectSchedule"));
-const ProjectBudget = lazy(() => import("@/pages/ProjectBudget"));
-const ProjectDocuments = lazy(() => import("@/pages/ProjectDocuments"));
-const ProjectPhotos = lazy(() => import("@/pages/ProjectPhotos"));
-const Schedule = lazy(() => import("@/pages/Schedule"));
-const GlobalSchedule = lazy(() => import("@/pages/GlobalSchedule"));
-const FullscreenTimeline = lazy(() => import("@/pages/FullscreenTimeline"));
-const Financials = lazy(() => import("@/pages/Financials"));
-const Messages = lazy(() => import("@/pages/Messages"));
-const Settings = lazy(() => import("@/pages/Settings"));
-const Contacts = lazy(() => import("@/pages/Contacts"));
-const Contracts = lazy(() => import("@/pages/Contracts"));
-const AdminPortal = lazy(() => import("@/pages/AdminPortal"));
-const SkyelineClientPortal = lazy(() => import("@/pages/SkyelineClientPortal"));
-const SubcontractorPortal = lazy(() => import("@/pages/SubcontractorPortal"));
-const DesignerPortal = lazy(() => import("@/pages/DesignerPortal"));
-const PortalLogin = lazy(() => import("@/pages/PortalLogin"));
-const SignIn = lazy(() => import("@/pages/SignIn"));
-const BidRespond = lazy(() => import("@/pages/BidRespond"));
-const AdminLinkQueue = lazy(() => import("@/pages/AdminLinkQueue"));
-const NotFound = lazy(() => import("@/pages/not-found"));
-const NotAuthorized = lazy(() => import("@/pages/NotAuthorized"));
-const Unauthorized = lazy(() => import("@/pages/Unauthorized"));
-const AuthTestPage = lazy(() => import("@/tests/AuthTestPage"));
-const QuickAuthTests = lazy(() => import("@/tests/QuickAuthTests"));
-const Sales = lazy(() => import("@/pages/Sales"));
-const EstimateBuilder = lazy(() => import("@/pages/EstimateBuilder"));
-const UserManagement = lazy(() => import("@/pages/UserManagement"));
-const ProjectDesign = lazy(() => import("@/pages/ProjectDesign"));
-const ProjectTakeoff = lazy(() => import("@/pages/ProjectTakeoff"));
-const Subscriptions = lazy(() => import("@/pages/Subscriptions"));
-const ApiStorage = lazy(() => import("@/pages/ApiStorage"));
-const LearnMore = lazy(() => import("@/pages/LearnMore"));
-const Giveaway = lazy(() => import("@/pages/Giveaway"));
-const SmsPrivacy = lazy(() => import("@/pages/SmsPrivacy"));
-const SmsTerms = lazy(() => import("@/pages/SmsTerms"));
-const Bills = lazy(() => import("@/pages/Bills"));
-const ContentStudio = lazy(() => import("@/pages/ContentStudio"));
-const SiteLog = lazy(() => import("@/pages/SiteLog"));
-const Tasks = lazy(() => import("@/pages/Tasks"));
-const ChangeOrders = lazy(() => import("@/pages/ChangeOrders"));
-const Timesheet = lazy(() => import("@/pages/Timesheet"));
-const Safety = lazy(() => import("@/pages/Safety"));
-const GlobalDocuments = lazy(() => import("@/pages/GlobalDocuments"));
-const Catalogs = lazy(() => import("@/pages/Catalogs"));
-const Finance = lazy(() => import("@/pages/Finance"));
-const Reports = lazy(() => import("@/pages/Reports"));
-const CommsLog = lazy(() => import("@/pages/CommsLog"));
-const DesignBoard = lazy(() => import("@/pages/DesignBoard"));
-const Templates = lazy(() => import("@/pages/Templates"));
-const Playbook = lazy(() => import("@/pages/Playbook"));
-const SocialMedia = lazy(() => import("@/pages/SocialMedia"));
-const Automations = lazy(() => import("@/pages/Automations"));
-const MasterTaskLibrary = lazy(() => import("@/pages/MasterTaskLibrary"));
-const TaskListLibrary = lazy(() => import("@/pages/TaskListLibrary"));
-const ProjectBuildPlan = lazy(() => import("@/pages/ProjectBuildPlan"));
-const ProjectCloseout = lazy(() => import("@/pages/ProjectCloseout"));
-const ImportCenter = lazy(() => import("@/pages/ImportCenter"));
-const ProjectTasks = lazy(() => import("@/pages/ProjectTasks"));
-const ProjectChangeOrders = lazy(() => import("@/pages/ProjectChangeOrders"));
-const ProjectRFIs = lazy(() => import("@/pages/ProjectRFIs"));
-const ProjectSiteLog = lazy(() => import("@/pages/ProjectSiteLog"));
-const ProjectBills = lazy(() => import("@/pages/ProjectBills"));
-const ProjectWalkthroughs = lazy(() => import("@/pages/ProjectWalkthroughs"));
-const ProjectMoveInBinder = lazy(() => import("@/pages/ProjectMoveInBinder"));
-const Tools = lazy(() => import("@/pages/Tools"));
-const LumberTakeoff = lazy(() => import("@/pages/LumberTakeoff"));
-const IngestionLab = lazy(() => import("@/pages/IngestionLab"));
+const Dashboard = lazy(() => import('@/pages/Dashboard'));
+const Projects = lazy(() => import('@/pages/Projects'));
+const ProjectDetail = lazy(() => import('@/pages/ProjectDetail'));
+const ProjectOverview = lazy(() => import('@/pages/ProjectOverview'));
+const ProjectSetup = lazy(() => import('@/pages/ProjectSetup'));
+const ProjectEstimates = lazy(() => import('@/pages/ProjectEstimates'));
+const ProjectBids = lazy(() => import('@/pages/ProjectBids'));
+const ProjectSchedule = lazy(() => import('@/pages/ProjectSchedule'));
+const ProjectBudget = lazy(() => import('@/pages/ProjectBudget'));
+const ProjectDocuments = lazy(() => import('@/pages/ProjectDocuments'));
+const ProjectPhotos = lazy(() => import('@/pages/ProjectPhotos'));
+const Schedule = lazy(() => import('@/pages/Schedule'));
+const GlobalSchedule = lazy(() => import('@/pages/GlobalSchedule'));
+const FullscreenTimeline = lazy(() => import('@/pages/FullscreenTimeline'));
+const Financials = lazy(() => import('@/pages/Financials'));
+const Messages = lazy(() => import('@/pages/Messages'));
+const Settings = lazy(() => import('@/pages/Settings'));
+const Contacts = lazy(() => import('@/pages/Contacts'));
+const Contracts = lazy(() => import('@/pages/Contracts'));
+const AdminPortal = lazy(() => import('@/pages/AdminPortal'));
+const SkyelineClientPortal = lazy(() => import('@/pages/SkyelineClientPortal'));
+const SubcontractorPortal = lazy(() => import('@/pages/SubcontractorPortal'));
+const DesignerPortal = lazy(() => import('@/pages/DesignerPortal'));
+const PortalLogin = lazy(() => import('@/pages/PortalLogin'));
+const SignIn = lazy(() => import('@/pages/SignIn'));
+const BidRespond = lazy(() => import('@/pages/BidRespond'));
+const AdminLinkQueue = lazy(() => import('@/pages/AdminLinkQueue'));
+const NotFound = lazy(() => import('@/pages/not-found'));
+const NotAuthorized = lazy(() => import('@/pages/NotAuthorized'));
+const Unauthorized = lazy(() => import('@/pages/Unauthorized'));
+const AuthTestPage = lazy(() => import('@/tests/AuthTestPage'));
+const QuickAuthTests = lazy(() => import('@/tests/QuickAuthTests'));
+const Sales = lazy(() => import('@/pages/Sales'));
+const EstimateBuilder = lazy(() => import('@/pages/EstimateBuilder'));
+const UserManagement = lazy(() => import('@/pages/UserManagement'));
+const ProjectDesign = lazy(() => import('@/pages/ProjectDesign'));
+const ProjectTakeoff = lazy(() => import('@/pages/ProjectTakeoff'));
+const Subscriptions = lazy(() => import('@/pages/Subscriptions'));
+const ApiStorage = lazy(() => import('@/pages/ApiStorage'));
+const StyleLibraryAdmin = lazy(() => import('@/pages/StyleLibraryAdmin'));
+const LearnMore = lazy(() => import('@/pages/LearnMore'));
+const Giveaway = lazy(() => import('@/pages/Giveaway'));
+const SmsPrivacy = lazy(() => import('@/pages/SmsPrivacy'));
+const SmsTerms = lazy(() => import('@/pages/SmsTerms'));
+const Bills = lazy(() => import('@/pages/Bills'));
+const ContentStudio = lazy(() => import('@/pages/ContentStudio'));
+const SiteLog = lazy(() => import('@/pages/SiteLog'));
+const Tasks = lazy(() => import('@/pages/Tasks'));
+const ChangeOrders = lazy(() => import('@/pages/ChangeOrders'));
+const Timesheet = lazy(() => import('@/pages/Timesheet'));
+const Safety = lazy(() => import('@/pages/Safety'));
+const GlobalDocuments = lazy(() => import('@/pages/GlobalDocuments'));
+const Catalogs = lazy(() => import('@/pages/Catalogs'));
+const Reports = lazy(() => import('@/pages/Reports'));
+const CommsLog = lazy(() => import('@/pages/CommsLog'));
+const DesignBoard = lazy(() => import('@/pages/DesignBoard'));
+const Templates = lazy(() => import('@/pages/Templates'));
+const Playbook = lazy(() => import('@/pages/Playbook'));
+const SocialMedia = lazy(() => import('@/pages/SocialMedia'));
+const Automations = lazy(() => import('@/pages/Automations'));
+const MasterTaskLibrary = lazy(() => import('@/pages/MasterTaskLibrary'));
+const TaskListLibrary = lazy(() => import('@/pages/TaskListLibrary'));
+const ProjectBuildPlan = lazy(() => import('@/pages/ProjectBuildPlan'));
+const ProjectCloseout = lazy(() => import('@/pages/ProjectCloseout'));
+const ImportCenter = lazy(() => import('@/pages/ImportCenter'));
+const ProjectTasks = lazy(() => import('@/pages/ProjectTasks'));
+const ProjectChangeOrders = lazy(() => import('@/pages/ProjectChangeOrders'));
+const ProjectRFIs = lazy(() => import('@/pages/ProjectRFIs'));
+const ProjectSiteLog = lazy(() => import('@/pages/ProjectSiteLog'));
+const ProjectBills = lazy(() => import('@/pages/ProjectBills'));
+const ProjectWalkthroughs = lazy(() => import('@/pages/ProjectWalkthroughs'));
+const ProjectMoveInBinder = lazy(() => import('@/pages/ProjectMoveInBinder'));
+const Tools = lazy(() => import('@/pages/Tools'));
+const LumberTakeoff = lazy(() => import('@/pages/LumberTakeoff'));
+const IngestionLab = lazy(() => import('@/pages/IngestionLab'));
 
 function Router() {
   // Initialize performance optimizations for faster loading
@@ -109,7 +108,7 @@ function Router() {
           <RoleBasedRedirect />
         </ProtectedRoute>
       </Route>
-      
+
       <Route path="/sign-in">
         <Suspense fallback={<MinimalSpinner title="Loading Sign In" />}>
           <SignIn />
@@ -158,7 +157,10 @@ function Router() {
       {/* Staff link review queue — sub-to-contact link resolution. D-012-h. */}
       <Route path="/admin/link-queue">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+          <RoleGuard
+            allowedRoles={['admin', 'gc', 'projectManager']}
+            showNotAuthorized
+          >
             <Suspense fallback={<MinimalSpinner title="Loading link queue" />}>
               <AdminLinkQueue />
             </Suspense>
@@ -168,17 +170,23 @@ function Router() {
 
       <Route path="/dashboard">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+          <RoleGuard
+            allowedRoles={['admin', 'gc', 'projectManager']}
+            showNotAuthorized
+          >
             <Suspense fallback={<MinimalSpinner title="Loading Dashboard" />}>
               <Dashboard />
             </Suspense>
           </RoleGuard>
         </ProtectedRoute>
       </Route>
-      
+
       <Route path="/projects">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+          <RoleGuard
+            allowedRoles={['admin', 'gc', 'projectManager']}
+            showNotAuthorized
+          >
             <Suspense fallback={<MinimalSpinner title="Loading Projects" />}>
               <Projects />
             </Suspense>
@@ -191,8 +199,13 @@ function Router() {
           `:draftId` variant resumes an in-progress draft. */}
       <Route path="/projects/setup">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
-            <Suspense fallback={<MinimalSpinner title="Loading Project Setup" />}>
+          <RoleGuard
+            allowedRoles={['admin', 'gc', 'projectManager']}
+            showNotAuthorized
+          >
+            <Suspense
+              fallback={<MinimalSpinner title="Loading Project Setup" />}
+            >
               <ProjectSetup />
             </Suspense>
           </RoleGuard>
@@ -200,8 +213,13 @@ function Router() {
       </Route>
       <Route path="/projects/setup/:draftId">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
-            <Suspense fallback={<MinimalSpinner title="Loading Project Setup" />}>
+          <RoleGuard
+            allowedRoles={['admin', 'gc', 'projectManager']}
+            showNotAuthorized
+          >
+            <Suspense
+              fallback={<MinimalSpinner title="Loading Project Setup" />}
+            >
               <ProjectSetup />
             </Suspense>
           </RoleGuard>
@@ -210,17 +228,23 @@ function Router() {
 
       <Route path="/projects/:id">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+          <RoleGuard
+            allowedRoles={['admin', 'gc', 'projectManager']}
+            showNotAuthorized
+          >
             <Suspense fallback={<MinimalSpinner title="Loading Project" />}>
               <ProjectDetail />
             </Suspense>
           </RoleGuard>
         </ProtectedRoute>
       </Route>
-      
+
       <Route path="/projects/:id/overview">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+          <RoleGuard
+            allowedRoles={['admin', 'gc', 'projectManager']}
+            showNotAuthorized
+          >
             <Suspense fallback={<MinimalSpinner title="Loading Overview" />}>
               <ErrorBoundary>
                 <ProjectOverview />
@@ -229,7 +253,7 @@ function Router() {
           </RoleGuard>
         </ProtectedRoute>
       </Route>
-      
+
       <Route path="/projects/:id/estimates">
         <ProtectedRoute>
           <RoleGuard allowedRoles={['admin', 'gc']} showNotAuthorized>
@@ -242,7 +266,10 @@ function Router() {
 
       <Route path="/projects/:id/takeoff">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager', 'designer']} showNotAuthorized>
+          <RoleGuard
+            allowedRoles={['admin', 'gc', 'projectManager', 'designer']}
+            showNotAuthorized
+          >
             <Suspense fallback={<MinimalSpinner title="Loading Takeoff" />}>
               <ProjectTakeoff />
             </Suspense>
@@ -252,7 +279,10 @@ function Router() {
 
       <Route path="/tools">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+          <RoleGuard
+            allowedRoles={['admin', 'gc', 'projectManager']}
+            showNotAuthorized
+          >
             <Suspense fallback={<MinimalSpinner title="Loading Tools" />}>
               <Tools />
             </Suspense>
@@ -262,8 +292,13 @@ function Router() {
 
       <Route path="/tools/lumber">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
-            <Suspense fallback={<MinimalSpinner title="Loading Lumber Takeoff" />}>
+          <RoleGuard
+            allowedRoles={['admin', 'gc', 'projectManager']}
+            showNotAuthorized
+          >
+            <Suspense
+              fallback={<MinimalSpinner title="Loading Lumber Takeoff" />}
+            >
               <LumberTakeoff />
             </Suspense>
           </RoleGuard>
@@ -272,8 +307,13 @@ function Router() {
 
       <Route path="/tools/lumber/:projectId">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
-            <Suspense fallback={<MinimalSpinner title="Loading Lumber Takeoff" />}>
+          <RoleGuard
+            allowedRoles={['admin', 'gc', 'projectManager']}
+            showNotAuthorized
+          >
+            <Suspense
+              fallback={<MinimalSpinner title="Loading Lumber Takeoff" />}
+            >
               <LumberTakeoff />
             </Suspense>
           </RoleGuard>
@@ -282,8 +322,13 @@ function Router() {
 
       <Route path="/tools/lumber/:projectId/:takeoffId">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
-            <Suspense fallback={<MinimalSpinner title="Loading Lumber Takeoff" />}>
+          <RoleGuard
+            allowedRoles={['admin', 'gc', 'projectManager']}
+            showNotAuthorized
+          >
+            <Suspense
+              fallback={<MinimalSpinner title="Loading Lumber Takeoff" />}
+            >
               <LumberTakeoff />
             </Suspense>
           </RoleGuard>
@@ -293,7 +338,9 @@ function Router() {
       <Route path="/subscriptions">
         <ProtectedRoute>
           <RoleGuard allowedRoles={['admin']} showNotAuthorized>
-            <Suspense fallback={<MinimalSpinner title="Loading Subscriptions" />}>
+            <Suspense
+              fallback={<MinimalSpinner title="Loading Subscriptions" />}
+            >
               <Subscriptions />
             </Suspense>
           </RoleGuard>
@@ -313,8 +360,22 @@ function Router() {
       <Route path="/admin/ingestion-lab">
         <ProtectedRoute>
           <RoleGuard allowedRoles={['admin']} showNotAuthorized>
-            <Suspense fallback={<MinimalSpinner title="Loading Ingestion Lab" />}>
+            <Suspense
+              fallback={<MinimalSpinner title="Loading Ingestion Lab" />}
+            >
               <IngestionLab />
+            </Suspense>
+          </RoleGuard>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/admin/style-library">
+        <ProtectedRoute>
+          <RoleGuard allowedRoles={['admin']} showNotAuthorized>
+            <Suspense
+              fallback={<MinimalSpinner title="Loading Style Library" />}
+            >
+              <StyleLibraryAdmin />
             </Suspense>
           </RoleGuard>
         </ProtectedRoute>
@@ -323,7 +384,9 @@ function Router() {
       <Route path="/master-tasks">
         <ProtectedRoute>
           <RoleGuard allowedRoles={['admin']} showNotAuthorized>
-            <Suspense fallback={<MinimalSpinner title="Loading Master Task Library" />}>
+            <Suspense
+              fallback={<MinimalSpinner title="Loading Master Task Library" />}
+            >
               <MasterTaskLibrary />
             </Suspense>
           </RoleGuard>
@@ -333,7 +396,9 @@ function Router() {
       <Route path="/task-library">
         <ProtectedRoute>
           <RoleGuard allowedRoles={['admin']} showNotAuthorized>
-            <Suspense fallback={<MinimalSpinner title="Loading Task List Library" />}>
+            <Suspense
+              fallback={<MinimalSpinner title="Loading Task List Library" />}
+            >
               <TaskListLibrary />
             </Suspense>
           </RoleGuard>
@@ -352,34 +417,45 @@ function Router() {
 
       <Route path="/content-studio">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
-            <Suspense fallback={<MinimalSpinner title="Loading Content Studio" />}>
+          <RoleGuard
+            allowedRoles={['admin', 'gc', 'projectManager']}
+            showNotAuthorized
+          >
+            <Suspense
+              fallback={<MinimalSpinner title="Loading Content Studio" />}
+            >
               <ContentStudio />
             </Suspense>
           </RoleGuard>
         </ProtectedRoute>
       </Route>
-      
+
       <Route path="/projects/:id/bids">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+          <RoleGuard
+            allowedRoles={['admin', 'gc', 'projectManager']}
+            showNotAuthorized
+          >
             <Suspense fallback={<MinimalSpinner title="Loading Bids" />}>
               <ProjectBids />
             </Suspense>
           </RoleGuard>
         </ProtectedRoute>
       </Route>
-      
+
       <Route path="/projects/:id/schedule">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+          <RoleGuard
+            allowedRoles={['admin', 'gc', 'projectManager']}
+            showNotAuthorized
+          >
             <Suspense fallback={<MinimalSpinner title="Loading Schedule" />}>
               <ProjectSchedule />
             </Suspense>
           </RoleGuard>
         </ProtectedRoute>
       </Route>
-      
+
       <Route path="/projects/:id/budget">
         <ProtectedRoute>
           <RoleGuard allowedRoles={['admin', 'gc']} showNotAuthorized>
@@ -389,20 +465,26 @@ function Router() {
           </RoleGuard>
         </ProtectedRoute>
       </Route>
-      
+
       <Route path="/projects/:id/documents">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+          <RoleGuard
+            allowedRoles={['admin', 'gc', 'projectManager']}
+            showNotAuthorized
+          >
             <Suspense fallback={<MinimalSpinner title="Loading Documents" />}>
               <ProjectDocuments />
             </Suspense>
           </RoleGuard>
         </ProtectedRoute>
       </Route>
-      
+
       <Route path="/projects/:id/photos">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+          <RoleGuard
+            allowedRoles={['admin', 'gc', 'projectManager']}
+            showNotAuthorized
+          >
             <Suspense fallback={<MinimalSpinner title="Loading Photos" />}>
               <ProjectPhotos />
             </Suspense>
@@ -412,8 +494,13 @@ function Router() {
 
       <Route path="/projects/:id/design">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
-            <Suspense fallback={<MinimalSpinner title="Loading Design Snapshot" />}>
+          <RoleGuard
+            allowedRoles={['admin', 'gc', 'projectManager']}
+            showNotAuthorized
+          >
+            <Suspense
+              fallback={<MinimalSpinner title="Loading Design Snapshot" />}
+            >
               <ProjectDesign />
             </Suspense>
           </RoleGuard>
@@ -422,7 +509,10 @@ function Router() {
 
       <Route path="/projects/:id/tasks">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+          <RoleGuard
+            allowedRoles={['admin', 'gc', 'projectManager']}
+            showNotAuthorized
+          >
             <Suspense fallback={<MinimalSpinner title="Loading Tasks" />}>
               <ProjectTasks />
             </Suspense>
@@ -432,7 +522,10 @@ function Router() {
 
       <Route path="/projects/:id/build-plan">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+          <RoleGuard
+            allowedRoles={['admin', 'gc', 'projectManager']}
+            showNotAuthorized
+          >
             <Suspense fallback={<MinimalSpinner title="Loading Build Plan" />}>
               <ProjectBuildPlan />
             </Suspense>
@@ -452,8 +545,13 @@ function Router() {
 
       <Route path="/projects/:id/change-orders">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
-            <Suspense fallback={<MinimalSpinner title="Loading Change Orders" />}>
+          <RoleGuard
+            allowedRoles={['admin', 'gc', 'projectManager']}
+            showNotAuthorized
+          >
+            <Suspense
+              fallback={<MinimalSpinner title="Loading Change Orders" />}
+            >
               <ProjectChangeOrders />
             </Suspense>
           </RoleGuard>
@@ -462,7 +560,10 @@ function Router() {
 
       <Route path="/projects/:id/rfis">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager', 'designer']} showNotAuthorized>
+          <RoleGuard
+            allowedRoles={['admin', 'gc', 'projectManager', 'designer']}
+            showNotAuthorized
+          >
             <Suspense fallback={<MinimalSpinner title="Loading RFIs" />}>
               <ProjectRFIs />
             </Suspense>
@@ -472,7 +573,10 @@ function Router() {
 
       <Route path="/projects/:id/site-log">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+          <RoleGuard
+            allowedRoles={['admin', 'gc', 'projectManager']}
+            showNotAuthorized
+          >
             <Suspense fallback={<MinimalSpinner title="Loading Site Log" />}>
               <ProjectSiteLog />
             </Suspense>
@@ -492,8 +596,13 @@ function Router() {
 
       <Route path="/projects/:id/walkthroughs">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
-            <Suspense fallback={<MinimalSpinner title="Loading Walkthroughs" />}>
+          <RoleGuard
+            allowedRoles={['admin', 'gc', 'projectManager']}
+            showNotAuthorized
+          >
+            <Suspense
+              fallback={<MinimalSpinner title="Loading Walkthroughs" />}
+            >
               <ProjectWalkthroughs />
             </Suspense>
           </RoleGuard>
@@ -502,8 +611,13 @@ function Router() {
 
       <Route path="/projects/:id/move-in-binder">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
-            <Suspense fallback={<MinimalSpinner title="Loading Move-in Binder" />}>
+          <RoleGuard
+            allowedRoles={['admin', 'gc', 'projectManager']}
+            showNotAuthorized
+          >
+            <Suspense
+              fallback={<MinimalSpinner title="Loading Move-in Binder" />}
+            >
               <ProjectMoveInBinder />
             </Suspense>
           </RoleGuard>
@@ -512,34 +626,45 @@ function Router() {
 
       <Route path="/schedule">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+          <RoleGuard
+            allowedRoles={['admin', 'gc', 'projectManager']}
+            showNotAuthorized
+          >
             <Suspense fallback={<MinimalSpinner title="Loading Schedule" />}>
               <Schedule />
             </Suspense>
           </RoleGuard>
         </ProtectedRoute>
       </Route>
-      
+
       <Route path="/global-schedule">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
-            <Suspense fallback={<MinimalSpinner title="Loading Global Schedule" />}>
+          <RoleGuard
+            allowedRoles={['admin', 'gc', 'projectManager']}
+            showNotAuthorized
+          >
+            <Suspense
+              fallback={<MinimalSpinner title="Loading Global Schedule" />}
+            >
               <GlobalSchedule />
             </Suspense>
           </RoleGuard>
         </ProtectedRoute>
       </Route>
-      
+
       <Route path="/timeline">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+          <RoleGuard
+            allowedRoles={['admin', 'gc', 'projectManager']}
+            showNotAuthorized
+          >
             <Suspense fallback={<MinimalSpinner title="Loading Timeline" />}>
               <FullscreenTimeline />
             </Suspense>
           </RoleGuard>
         </ProtectedRoute>
       </Route>
-      
+
       <Route path="/financials/:tab?">
         <ProtectedRoute>
           <RoleGuard allowedRoles={['admin', 'gc']} showNotAuthorized>
@@ -559,7 +684,7 @@ function Router() {
           </RoleGuard>
         </ProtectedRoute>
       </Route>
-      
+
       <Route path="/users">
         <ProtectedRoute>
           <RoleGuard allowedRoles={['admin']} showNotAuthorized>
@@ -572,27 +697,36 @@ function Router() {
 
       <Route path="/messages">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+          <RoleGuard
+            allowedRoles={['admin', 'gc', 'projectManager']}
+            showNotAuthorized
+          >
             <Suspense fallback={<MinimalSpinner title="Loading Messages" />}>
               <Messages />
             </Suspense>
           </RoleGuard>
         </ProtectedRoute>
       </Route>
-      
+
       <Route path="/settings">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+          <RoleGuard
+            allowedRoles={['admin', 'gc', 'projectManager']}
+            showNotAuthorized
+          >
             <Suspense fallback={<MinimalSpinner title="Loading Settings" />}>
               <Settings />
             </Suspense>
           </RoleGuard>
         </ProtectedRoute>
       </Route>
-      
+
       <Route path="/contacts">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+          <RoleGuard
+            allowedRoles={['admin', 'gc', 'projectManager']}
+            showNotAuthorized
+          >
             <Suspense fallback={<MinimalSpinner title="Loading Contacts" />}>
               <Contacts />
             </Suspense>
@@ -602,28 +736,35 @@ function Router() {
 
       <Route path="/contracts">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+          <RoleGuard
+            allowedRoles={['admin', 'gc', 'projectManager']}
+            showNotAuthorized
+          >
             <Suspense fallback={<MinimalSpinner title="Loading Contracts" />}>
               <Contracts />
             </Suspense>
           </RoleGuard>
         </ProtectedRoute>
       </Route>
-      
+
       <Route path="/admin-portal">
         <ProtectedRoute>
           <RoleGuard allowedRoles={['admin']} showNotAuthorized>
-            <Suspense fallback={<MinimalSpinner title="Loading Admin Portal" />}>
+            <Suspense
+              fallback={<MinimalSpinner title="Loading Admin Portal" />}
+            >
               <AdminPortal />
             </Suspense>
           </RoleGuard>
         </ProtectedRoute>
       </Route>
-      
+
       <Route path="/client-portal">
         <ProtectedRoute>
           <RoleGuard allowedRoles={['admin', 'client']} showNotAuthorized>
-            <Suspense fallback={<MinimalSpinner title="Loading Client Portal" />}>
+            <Suspense
+              fallback={<MinimalSpinner title="Loading Client Portal" />}
+            >
               <SkyelineClientPortal />
             </Suspense>
           </RoleGuard>
@@ -632,7 +773,9 @@ function Router() {
       <Route path="/client-portal/:tab*">
         <ProtectedRoute>
           <RoleGuard allowedRoles={['admin', 'client']} showNotAuthorized>
-            <Suspense fallback={<MinimalSpinner title="Loading Client Portal" />}>
+            <Suspense
+              fallback={<MinimalSpinner title="Loading Client Portal" />}
+            >
               <SkyelineClientPortal />
             </Suspense>
           </RoleGuard>
@@ -641,8 +784,13 @@ function Router() {
 
       <Route path="/subcontractor-portal">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'sub', 'subcontractor']} showNotAuthorized>
-            <Suspense fallback={<MinimalSpinner title="Loading Subcontractor Portal" />}>
+          <RoleGuard
+            allowedRoles={['admin', 'sub', 'subcontractor']}
+            showNotAuthorized
+          >
+            <Suspense
+              fallback={<MinimalSpinner title="Loading Subcontractor Portal" />}
+            >
               <SubcontractorPortal />
             </Suspense>
           </RoleGuard>
@@ -650,8 +798,13 @@ function Router() {
       </Route>
       <Route path="/subcontractor-portal/:tab*">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'sub', 'subcontractor']} showNotAuthorized>
-            <Suspense fallback={<MinimalSpinner title="Loading Subcontractor Portal" />}>
+          <RoleGuard
+            allowedRoles={['admin', 'sub', 'subcontractor']}
+            showNotAuthorized
+          >
+            <Suspense
+              fallback={<MinimalSpinner title="Loading Subcontractor Portal" />}
+            >
               <SubcontractorPortal />
             </Suspense>
           </RoleGuard>
@@ -661,32 +814,33 @@ function Router() {
       <Route path="/designer-portal/:tab*">
         <ProtectedRoute>
           <RoleGuard allowedRoles={['admin', 'designer']} showNotAuthorized>
-            <Suspense fallback={<MinimalSpinner title="Loading Designer Portal" />}>
+            <Suspense
+              fallback={<MinimalSpinner title="Loading Designer Portal" />}
+            >
               <DesignerPortal />
             </Suspense>
           </RoleGuard>
         </ProtectedRoute>
       </Route>
-      
+
       <Route path="/portal-login">
         <Suspense fallback={<MinimalSpinner title="Loading Portal Login" />}>
           <PortalLogin />
         </Suspense>
       </Route>
-      
+
       <Route path="/auth-test">
         <Suspense fallback={<MinimalSpinner title="Loading Auth Tests" />}>
           <AuthTestPage />
         </Suspense>
       </Route>
-      
+
       <Route path="/quick-tests">
         <Suspense fallback={<MinimalSpinner title="Loading Quick Tests" />}>
           <QuickAuthTests />
         </Suspense>
       </Route>
-      
-      
+
       <Route path="/unauthorized">
         <Suspense fallback={<MinimalSpinner title="Loading" />}>
           <Unauthorized />
@@ -701,7 +855,10 @@ function Router() {
 
       <Route path="/sales">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+          <RoleGuard
+            allowedRoles={['admin', 'gc', 'projectManager']}
+            showNotAuthorized
+          >
             <Suspense fallback={<MinimalSpinner title="Loading Sales" />}>
               <Sales />
             </Suspense>
@@ -711,7 +868,10 @@ function Router() {
 
       <Route path="/site-log">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+          <RoleGuard
+            allowedRoles={['admin', 'gc', 'projectManager']}
+            showNotAuthorized
+          >
             <Suspense fallback={<MinimalSpinner title="Loading Site Log" />}>
               <SiteLog />
             </Suspense>
@@ -721,7 +881,10 @@ function Router() {
 
       <Route path="/tasks">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+          <RoleGuard
+            allowedRoles={['admin', 'gc', 'projectManager']}
+            showNotAuthorized
+          >
             <Suspense fallback={<MinimalSpinner title="Loading Tasks" />}>
               <Tasks />
             </Suspense>
@@ -731,8 +894,13 @@ function Router() {
 
       <Route path="/change-orders">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
-            <Suspense fallback={<MinimalSpinner title="Loading Change Orders" />}>
+          <RoleGuard
+            allowedRoles={['admin', 'gc', 'projectManager']}
+            showNotAuthorized
+          >
+            <Suspense
+              fallback={<MinimalSpinner title="Loading Change Orders" />}
+            >
               <ChangeOrders />
             </Suspense>
           </RoleGuard>
@@ -741,7 +909,10 @@ function Router() {
 
       <Route path="/documents">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+          <RoleGuard
+            allowedRoles={['admin', 'gc', 'projectManager']}
+            showNotAuthorized
+          >
             <Suspense fallback={<MinimalSpinner title="Loading Documents" />}>
               <GlobalDocuments />
             </Suspense>
@@ -751,7 +922,10 @@ function Router() {
 
       <Route path="/timesheet">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+          <RoleGuard
+            allowedRoles={['admin', 'gc', 'projectManager']}
+            showNotAuthorized
+          >
             <Suspense fallback={<MinimalSpinner title="Loading Timesheet" />}>
               <Timesheet />
             </Suspense>
@@ -761,7 +935,10 @@ function Router() {
 
       <Route path="/safety">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+          <RoleGuard
+            allowedRoles={['admin', 'gc', 'projectManager']}
+            showNotAuthorized
+          >
             <Suspense fallback={<MinimalSpinner title="Loading Safety" />}>
               <Safety />
             </Suspense>
@@ -771,7 +948,10 @@ function Router() {
 
       <Route path="/catalogs">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager', 'designer']} showNotAuthorized>
+          <RoleGuard
+            allowedRoles={['admin', 'gc', 'projectManager', 'designer']}
+            showNotAuthorized
+          >
             <Suspense fallback={<MinimalSpinner title="Loading Catalogs" />}>
               <Catalogs />
             </Suspense>
@@ -796,7 +976,10 @@ function Router() {
 
       <Route path="/comms-log">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+          <RoleGuard
+            allowedRoles={['admin', 'gc', 'projectManager']}
+            showNotAuthorized
+          >
             <Suspense fallback={<MinimalSpinner title="Loading Comms Log" />}>
               <CommsLog />
             </Suspense>
@@ -806,8 +989,13 @@ function Router() {
 
       <Route path="/design-board">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc', 'designer']} showNotAuthorized>
-            <Suspense fallback={<MinimalSpinner title="Loading Design Board" />}>
+          <RoleGuard
+            allowedRoles={['admin', 'gc', 'designer']}
+            showNotAuthorized
+          >
+            <Suspense
+              fallback={<MinimalSpinner title="Loading Design Board" />}
+            >
               <DesignBoard />
             </Suspense>
           </RoleGuard>
@@ -827,7 +1015,9 @@ function Router() {
       <Route path="/social-media">
         <ProtectedRoute>
           <RoleGuard allowedRoles={['admin', 'gc']} showNotAuthorized>
-            <Suspense fallback={<MinimalSpinner title="Loading Social Media" />}>
+            <Suspense
+              fallback={<MinimalSpinner title="Loading Social Media" />}
+            >
               <SocialMedia />
             </Suspense>
           </RoleGuard>
@@ -857,7 +1047,9 @@ function Router() {
       <Route path="/import-center">
         <ProtectedRoute>
           <RoleGuard allowedRoles={['admin', 'gc']} showNotAuthorized>
-            <Suspense fallback={<MinimalSpinner title="Loading Import Center" />}>
+            <Suspense
+              fallback={<MinimalSpinner title="Loading Import Center" />}
+            >
               <ImportCenter />
             </Suspense>
           </RoleGuard>
@@ -874,7 +1066,7 @@ function Router() {
 }
 
 function AppContent() {
-  const { user, loading } = useAuth();
+  const { loading } = useAuth();
 
   // Top-level boot gate: the whole app waits here until Firebase auth resolves.
   // This gate sits ABOVE the Router, so ProtectedRoute's own 8s stuck-escape is
@@ -883,7 +1075,10 @@ function AppContent() {
   // of continuous loading, offer reload / hard-reset instead of an infinite spin.
   const [stuck, setStuck] = useState(false);
   useEffect(() => {
-    if (!loading) { setStuck(false); return; }
+    if (!loading) {
+      setStuck(false);
+      return;
+    }
     const t = setTimeout(() => setStuck(true), 10000);
     return () => clearTimeout(t);
   }, [loading]);
@@ -923,7 +1118,9 @@ function AppContent() {
                   for (const d of dbs) {
                     if (d?.name) indexedDB.deleteDatabase(d.name);
                   }
-                } catch {}
+                } catch {
+                  /* best-effort cleanup */
+                }
                 window.location.href = '/sign-in';
               }}
             >
