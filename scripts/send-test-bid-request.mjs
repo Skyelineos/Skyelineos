@@ -10,7 +10,7 @@ const TARGET_EMAIL = 'tyjorho@gmail.com';
 const FS = 'https://firestore.googleapis.com/v1/projects/skyelineos/databases/(default)/documents';
 
 const browser = await chromium.launch({ headless: true });
-const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 } });
+const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 }, ignoreHTTPSErrors: true });
 const page = await ctx.newPage();
 
 console.log('→ Signing in as', EMAIL);
