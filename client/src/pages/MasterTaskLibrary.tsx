@@ -74,6 +74,7 @@ export default function MasterTaskLibrary() {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<MasterTask | null>(null);
+  const [addPhase, setAddPhase] = useState<string | null>(null);
 
   useEffect(() => {
     const q = query(collection(db, 'masterTasks'), orderBy('order', 'asc'));
@@ -216,6 +217,7 @@ export default function MasterTaskLibrary() {
               className="bg-[#C9A96E] hover:bg-[#b8975c]"
               onClick={() => {
                 setEditing(null);
+                setAddPhase(null);
                 setModalOpen(true);
               }}
             >
@@ -262,7 +264,7 @@ export default function MasterTaskLibrary() {
             <Loader2 className="h-6 w-6 animate-spin mr-2" /> Loading library…
           </div>
         ) : activeCount === 0 && !showArchived ? (
-          <EmptyState onSeed={handleSeed} seeding={seeding} onAdd={() => { setEditing(null); setModalOpen(true); }} />
+          <EmptyState onSeed={handleSeed} seeding={seeding} onAdd={() => { setEditing(null); setAddPhase(null); setModalOpen(true); }} />
         ) : grouped.length === 0 ? (
           <div className="text-center py-16 text-gray-500">No tasks match your filters.</div>
         ) : (
@@ -273,7 +275,16 @@ export default function MasterTaskLibrary() {
                 <div key={phase} className="bg-white border rounded-lg overflow-hidden">
                   <div className="px-4 py-2.5 bg-[#141414] text-white flex items-center justify-between">
                     <h2 className="font-semibold">{phase}</h2>
-                    <span className="text-xs text-slate-300">{phaseTasks.length} task{phaseTasks.length === 1 ? '' : 's'}</span>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => { setEditing(null); setAddPhase(phase); setModalOpen(true); }}
+                        className="inline-flex items-center gap-1 rounded-md border border-white/25 px-2 py-1 text-xs font-medium text-white hover:bg-white/10"
+                        title={`Add a task to ${phase}`}
+                      >
+                        <Plus className="h-3.5 w-3.5" /> Add Task
+                      </button>
+                      <span className="text-xs text-slate-300">{phaseTasks.length} task{phaseTasks.length === 1 ? '' : 's'}</span>
+                    </div>
                   </div>
                   <Droppable droppableId={phase}>
                     {(dropProvided) => (
@@ -354,7 +365,12 @@ export default function MasterTaskLibrary() {
         )}
       </div>
 
-      <MasterTaskModal open={modalOpen} onClose={() => setModalOpen(false)} task={editing} />
+      <MasterTaskModal
+        open={modalOpen}
+        onClose={() => { setModalOpen(false); setAddPhase(null); }}
+        task={editing}
+        defaultPhase={addPhase ?? undefined}
+      />
     </AppLayout>
   );
 }

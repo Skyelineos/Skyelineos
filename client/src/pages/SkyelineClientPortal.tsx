@@ -1,11 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
-import { collection, query, where, onSnapshot, doc, updateDoc } from 'firebase/firestore';
+import {
+  collection,
+  query,
+  where,
+  onSnapshot,
+  doc,
+  updateDoc,
+} from 'firebase/firestore';
 import { db, auth } from '@/lib/firebase';
 import { resolveClientIdentity } from '@/lib/clientIdentity';
-import { logClientActivity, type ClientActivityType } from '@/lib/clientActivity';
+import {
+  logClientActivity,
+  type ClientActivityType,
+} from '@/lib/clientActivity';
 import { BuildLocation } from '@/components/common/BuildLocation';
-import { locationFromProject, logLocationEvent, type BuildLocation as BLType } from '@/lib/buildLocation';
+import {
+  locationFromProject,
+  logLocationEvent,
+  type BuildLocation as BLType,
+} from '@/lib/buildLocation';
 import { useAuth } from '@/hooks/use-auth';
 import { AdminPortalControls } from '@/components/admin/AdminPortalControls';
 import { useAdminView } from '@/contexts/AdminViewContext';
@@ -23,6 +37,7 @@ import { SalesPitchSection } from '@/components/client-portal/SalesPitchSection'
 import { InspirationBoard } from '@/components/client-portal/InspirationBoard';
 import SelectionsBoard from '@/components/client-portal/SelectionsBoard';
 import DesignStudio from '@/components/client-portal/DesignStudio';
+import StyleDiscovery from '@/components/client-portal/StyleDiscovery';
 import ClientSelectionsTimeline from '@/components/client/ClientSelectionsTimeline';
 import ChangeOrdersTab from '@/components/client-portal/ChangeOrdersTab';
 import ClientFinancials from '@/components/client-portal/ClientFinancials';
@@ -32,8 +47,17 @@ import { ScheduleTimeline } from '@/components/schedule/ScheduleTimeline';
 import type { GeneratedSchedule } from '@/lib/schedule/types';
 
 import {
-  LayoutDashboard, Palette, DollarSign, FileText, MessageSquare,
-  Image, ClipboardList, ChevronDown, ClipboardCheck, CalendarClock, Sparkles,
+  LayoutDashboard,
+  Palette,
+  DollarSign,
+  FileText,
+  MessageSquare,
+  Image,
+  ClipboardList,
+  ChevronDown,
+  ClipboardCheck,
+  CalendarClock,
+  Sparkles,
 } from 'lucide-react';
 
 interface FirestoreProject {
@@ -51,22 +75,22 @@ interface FirestoreProject {
   startDate?: string;
   estimatedCompletion?: string;
   actualCompletion?: string;
-  estimatedSchedule?: GeneratedSchedule;       // published estimated timeline
+  estimatedSchedule?: GeneratedSchedule; // published estimated timeline
   estimatedSchedulePublishedAt?: any;
   buildLocation?: BLType | null;
 }
 
 const TABS = [
-  { key: 'dashboard',     label: 'Dashboard',      icon: LayoutDashboard },
-  { key: 'schedule',      label: 'Schedule',        icon: CalendarClock },
-  { key: 'financials',    label: 'Financials',      icon: DollarSign },
-  { key: 'design',        label: 'Design Studio',   icon: Sparkles },
-  { key: 'selections',    label: 'Selections',      icon: Palette },
-  { key: 'change-orders', label: 'Change Orders',   icon: ClipboardList },
-  { key: 'site-log',      label: 'Site Log',        icon: ClipboardCheck },
-  { key: 'documents',     label: 'Documents',       icon: FileText },
-  { key: 'messages',      label: 'Messages',        icon: MessageSquare },
-  { key: 'photos',        label: 'Photos',          icon: Image },
+  { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { key: 'schedule', label: 'Schedule', icon: CalendarClock },
+  { key: 'financials', label: 'Financials', icon: DollarSign },
+  { key: 'design', label: 'Design Studio', icon: Sparkles },
+  { key: 'selections', label: 'Selections', icon: Palette },
+  { key: 'change-orders', label: 'Change Orders', icon: ClipboardList },
+  { key: 'site-log', label: 'Site Log', icon: ClipboardCheck },
+  { key: 'documents', label: 'Documents', icon: FileText },
+  { key: 'messages', label: 'Messages', icon: MessageSquare },
+  { key: 'photos', label: 'Photos', icon: Image },
 ];
 
 export default function SkyelineClientPortal() {
@@ -94,7 +118,8 @@ export default function SkyelineClientPortal() {
     let cancelled = false;
     (async () => {
       const authUser = auth.currentUser;
-      const impersonatedContactId = isAdminView && viewedUser ? viewedUser.id : undefined;
+      const impersonatedContactId =
+        isAdminView && viewedUser ? viewedUser.id : undefined;
       const id = await resolveClientIdentity({
         uid: authUser?.uid || '',
         email: authUser?.email || user?.email || '',
@@ -103,10 +128,14 @@ export default function SkyelineClientPortal() {
       });
       if (cancelled) return;
       setIdentifiers(id.arrayContainsAny);
-      setPrimaryClientId(impersonatedContactId || id.contactIds[0] || id.uid || '');
+      setPrimaryClientId(
+        impersonatedContactId || id.contactIds[0] || id.uid || ''
+      );
       setIdentityResolved(true);
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [user?.id, user?.email, isAdminView, viewedUser?.id]);
 
   // Kept as `effectiveUid` so the rest of the component (location confirm +
@@ -131,9 +160,11 @@ export default function SkyelineClientPortal() {
     if (!uid || isAdminView || !selectedProjectId) return;
     const tab = TABS.find((t) => t.key === currentTab);
     const type: ClientActivityType =
-      currentTab === 'selections' ? 'view_selections'
-      : currentTab === 'financials' ? 'view_invoice'
-      : 'view_tab';
+      currentTab === 'selections'
+        ? 'view_selections'
+        : currentTab === 'financials'
+          ? 'view_invoice'
+          : 'view_tab';
     logClientActivity({
       uid,
       type,
@@ -152,7 +183,11 @@ export default function SkyelineClientPortal() {
   // indexes (array-contains-any/in + orderBy would need one).
   useEffect(() => {
     if (!identityResolved) return;
-    if (identifiers.length === 0) { setProjects([]); setProjectsLoading(false); return; }
+    if (identifiers.length === 0) {
+      setProjects([]);
+      setProjectsLoading(false);
+      return;
+    }
     const ids = identifiers.slice(0, 10);
 
     let rArr: FirestoreProject[] = [];
@@ -162,25 +197,49 @@ export default function SkyelineClientPortal() {
       const seen = new Set<string>();
       const combined: FirestoreProject[] = [];
       for (const p of [...rArr, ...rLeg]) {
-        if (!seen.has(p.id)) { seen.add(p.id); combined.push(p); }
+        if (!seen.has(p.id)) {
+          seen.add(p.id);
+          combined.push(p);
+        }
       }
       combined.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
       setProjects(combined);
-      setSelectedProjectId(prev => prev || (combined[0]?.id || ''));
+      setSelectedProjectId((prev) => prev || combined[0]?.id || '');
       setProjectsLoading(false);
     };
 
-    const map = (snap: any): FirestoreProject[] => snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as FirestoreProject));
+    const map = (snap: any): FirestoreProject[] =>
+      snap.docs.map(
+        (d: any) => ({ id: d.id, ...d.data() }) as FirestoreProject
+      );
     const onErr = () => setProjectsLoading(false);
 
     // Two shapes: canonical `clientIds[]` and legacy `clientId`. (assignedUserIds
     // holds team/designer/sub uids, never the homeowner, so it's not queried.)
-    const u1 = onSnapshot(query(collection(db, 'projects'), where('clientIds', 'array-contains-any', ids)),
-      snap => { rArr = map(snap); merge(); }, onErr);
-    const u2 = onSnapshot(query(collection(db, 'projects'), where('clientId', 'in', ids)),
-      snap => { rLeg = map(snap); merge(); }, onErr);
+    const u1 = onSnapshot(
+      query(
+        collection(db, 'projects'),
+        where('clientIds', 'array-contains-any', ids)
+      ),
+      (snap) => {
+        rArr = map(snap);
+        merge();
+      },
+      onErr
+    );
+    const u2 = onSnapshot(
+      query(collection(db, 'projects'), where('clientId', 'in', ids)),
+      (snap) => {
+        rLeg = map(snap);
+        merge();
+      },
+      onErr
+    );
 
-    return () => { u1(); u2(); };
+    return () => {
+      u1();
+      u2();
+    };
   }, [identifiers, identityResolved]);
 
   // Safety net: never leave the homeowner staring at an indefinite spinner. On a
@@ -194,19 +253,19 @@ export default function SkyelineClientPortal() {
     return () => clearTimeout(t);
   }, [projectsLoading]);
 
-  const selectedProject = projects.find(p => p.id === selectedProjectId);
+  const selectedProject = projects.find((p) => p.id === selectedProjectId);
   const handleNavigate = (tab: string) => navigate(`/client-portal/${tab}`);
 
   // A project is "set up" once there's something real for the client to track:
   // a published schedule, started progress, or scheduled dates. Until then the
   // dashboard would be a wall of zeros, so we show the welcome/preview instead.
   const projectIsSetUp = !!(
-    selectedProject && (
-      selectedProject.estimatedSchedule ||
-      (typeof selectedProject.progress === 'number' && selectedProject.progress > 0) ||
+    selectedProject &&
+    (selectedProject.estimatedSchedule ||
+      (typeof selectedProject.progress === 'number' &&
+        selectedProject.progress > 0) ||
       selectedProject.startDate ||
-      selectedProject.estimatedCompletion
-    )
+      selectedProject.estimatedCompletion)
   );
   // The portal is "the client's" — so the welcome should greet the client, not
   // whoever is logged in. When an admin is impersonating, that's `viewedUser`;
@@ -228,10 +287,20 @@ export default function SkyelineClientPortal() {
         'buildLocation.locationConfirmedAt': new Date().toISOString(),
         'buildLocation.locationConfirmedByUserId': effectiveUid,
       });
-      await logLocationEvent(selectedProjectId, { type: 'client_confirmed', byUserId: effectiveUid });
-      toast({ title: 'Location confirmed', description: 'Thanks — the team has your verified build location.' });
+      await logLocationEvent(selectedProjectId, {
+        type: 'client_confirmed',
+        byUserId: effectiveUid,
+      });
+      toast({
+        title: 'Location confirmed',
+        description: 'Thanks — the team has your verified build location.',
+      });
     } catch (e: any) {
-      toast({ title: 'Could not confirm', description: e?.message, variant: 'destructive' });
+      toast({
+        title: 'Could not confirm',
+        description: e?.message,
+        variant: 'destructive',
+      });
     }
   };
 
@@ -242,10 +311,21 @@ export default function SkyelineClientPortal() {
         'buildLocation.status': 'correction_requested',
         'buildLocation.correctionNotes': notes || '',
       });
-      await logLocationEvent(selectedProjectId, { type: 'client_requested_correction', byUserId: effectiveUid, details: notes });
-      toast({ title: 'Correction sent', description: "We let the team know — they'll update the location." });
+      await logLocationEvent(selectedProjectId, {
+        type: 'client_requested_correction',
+        byUserId: effectiveUid,
+        details: notes,
+      });
+      toast({
+        title: 'Correction sent',
+        description: "We let the team know — they'll update the location.",
+      });
     } catch (e: any) {
-      toast({ title: 'Could not send correction', description: e?.message, variant: 'destructive' });
+      toast({
+        title: 'Could not send correction',
+        description: e?.message,
+        variant: 'destructive',
+      });
     }
   };
 
@@ -256,17 +336,43 @@ export default function SkyelineClientPortal() {
     if (!selectedProjectId) {
       const goInspiration = () => handleNavigate('selections');
       switch (currentTab) {
-        case 'selections':
         case 'design':
+          // Design Discovery works before a project exists — it's contact-scoped.
+          // Lead with the blind style-preference flow, then the inspiration board.
+          return (
+            <div className="p-4 sm:p-6 space-y-8">
+              <StyleDiscovery
+                clientContactId={primaryClientId}
+                clientName={clientFullName}
+              />
+              <div className="border-t border-gray-100 pt-6">
+                <InspirationBoard
+                  clientContactId={primaryClientId}
+                  clientName={clientFullName}
+                />
+              </div>
+            </div>
+          );
+        case 'selections':
         case 'photos':
-          return <InspirationBoard clientContactId={primaryClientId} clientName={clientFullName} />;
+          return (
+            <InspirationBoard
+              clientContactId={primaryClientId}
+              clientName={clientFullName}
+            />
+          );
         case 'schedule':
         case 'financials':
         case 'change-orders':
         case 'site-log':
         case 'documents':
         case 'messages':
-          return <ClientTabPreview tab={currentTab as any} onStartInspiration={goInspiration} />;
+          return (
+            <ClientTabPreview
+              tab={currentTab as any}
+              onStartInspiration={goInspiration}
+            />
+          );
         case 'dashboard':
         default:
           return (
@@ -290,8 +396,12 @@ export default function SkyelineClientPortal() {
         // for both the welcome preview and the full dashboard.
         const buildLocationCard = selectedProject?.buildLocation ? (
           <div className="rounded-xl border border-gray-200 bg-white p-5 mx-4 sm:mx-6">
-            <h3 className="font-semibold text-gray-900 mb-1">Your build location</h3>
-            <p className="text-sm text-gray-500 mb-3">Please confirm this is the correct build location.</p>
+            <h3 className="font-semibold text-gray-900 mb-1">
+              Your build location
+            </h3>
+            <p className="text-sm text-gray-500 mb-3">
+              Please confirm this is the correct build location.
+            </p>
             <BuildLocation
               mode="confirm"
               value={locationFromProject(selectedProject)}
@@ -340,23 +450,34 @@ export default function SkyelineClientPortal() {
             {selectedProject?.estimatedSchedule ? (
               <div className="rounded-xl border border-gray-200 bg-white p-5 max-w-3xl">
                 {(() => {
-                  const at = (selectedProject as any).estimatedSchedulePublishedAt;
+                  const at = (selectedProject as any)
+                    .estimatedSchedulePublishedAt;
                   const ms = at?.toMillis?.() ?? (at ? Date.parse(at) : NaN);
                   return Number.isFinite(ms) ? (
                     <p className="text-xs text-gray-400 mb-3">
-                      Updated {new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      Updated{' '}
+                      {new Date(ms).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                      })}
                     </p>
                   ) : null;
                 })()}
-                <ScheduleTimeline schedule={selectedProject.estimatedSchedule} />
+                <ScheduleTimeline
+                  schedule={selectedProject.estimatedSchedule}
+                />
               </div>
             ) : (
               <div className="flex items-center justify-center h-64 text-center">
                 <div>
                   <CalendarClock className="h-8 w-8 text-gray-300 mx-auto mb-3" />
-                  <p className="text-gray-500 font-medium">Your schedule isn't ready yet</p>
+                  <p className="text-gray-500 font-medium">
+                    Your schedule isn't ready yet
+                  </p>
                   <p className="text-sm text-gray-400 mt-1">
-                    Your estimated build timeline will appear here once your estimate is finalized.
+                    Your estimated build timeline will appear here once your
+                    estimate is finalized.
                   </p>
                 </div>
               </div>
@@ -396,7 +517,9 @@ export default function SkyelineClientPortal() {
                   which read like an internal tool; the component itself
                   is client-facing (header "Finish Selections", Approve
                   buttons gated to the 'Checking w/ Client' state). */}
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">All your selections (detailed view)</h3>
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">
+                All your selections (detailed view)
+              </h3>
               <SelectionsBoard
                 projectId={selectedProjectId}
                 clientId={effectiveUid}
@@ -410,14 +533,19 @@ export default function SkyelineClientPortal() {
           <ChangeOrdersTab
             projectId={selectedProjectId}
             clientId={effectiveUid}
-            projectBudget={selectedProject?.contractAmount ?? selectedProject?.budget ?? 0}
+            projectBudget={
+              selectedProject?.contractAmount ?? selectedProject?.budget ?? 0
+            }
           />
         );
 
       case 'site-log':
         return (
           <div className="p-6">
-            <ClientSiteLog projectId={selectedProjectId} clientId={effectiveUid} />
+            <ClientSiteLog
+              projectId={selectedProjectId}
+              clientId={effectiveUid}
+            />
           </div>
         );
 
@@ -463,9 +591,13 @@ export default function SkyelineClientPortal() {
         <AdminPortalControls />
         <div className="min-h-screen bg-gray-50 flex items-center justify-center">
           <div className="text-center space-y-3">
-            <div className="animate-spin rounded-full h-12 w-12 border-4 border-t-transparent mx-auto"
-              style={{ borderColor: '#C9A96E', borderTopColor: 'transparent' }} />
-            <p className="text-gray-600 font-medium">Loading your project portal…</p>
+            <div
+              className="animate-spin rounded-full h-12 w-12 border-4 border-t-transparent mx-auto"
+              style={{ borderColor: '#C9A96E', borderTopColor: 'transparent' }}
+            />
+            <p className="text-gray-600 font-medium">
+              Loading your project portal…
+            </p>
           </div>
         </div>
       </>
@@ -476,11 +608,9 @@ export default function SkyelineClientPortal() {
     <>
       <AdminPortalControls />
       <div className="min-h-screen bg-gray-50">
-
         {/* Portal header */}
         <div className="bg-white border-b border-gray-200 sticky top-0 z-20">
           <div className="max-w-7xl mx-auto px-4 sm:px-6">
-
             {/* Project selector + title */}
             <div className="flex items-center justify-between py-4 border-b border-gray-100">
               <div>
@@ -488,19 +618,25 @@ export default function SkyelineClientPortal() {
                   {selectedProject?.name || 'My Project'}
                 </h1>
                 {selectedProject?.address && (
-                  <p className="text-xs text-gray-500 mt-0.5">{selectedProject.address}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {selectedProject.address}
+                  </p>
                 )}
               </div>
               {projects.length > 1 && (
                 <div className="relative">
                   <select
                     value={selectedProjectId}
-                    onChange={e => setSelectedProjectId(e.target.value)}
+                    onChange={(e) => setSelectedProjectId(e.target.value)}
                     className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 pr-8 appearance-none bg-white text-gray-700 focus:outline-none focus:ring-2"
-                    style={{ '--tw-ring-color': '#C9A96E' } as React.CSSProperties}
+                    style={
+                      { '--tw-ring-color': '#C9A96E' } as React.CSSProperties
+                    }
                   >
-                    {projects.map(p => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
+                    {projects.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
                     ))}
                   </select>
                   <ChevronDown className="w-4 h-4 absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
@@ -510,7 +646,7 @@ export default function SkyelineClientPortal() {
 
             {/* Tab bar */}
             <nav className="-mb-px flex gap-0 overflow-x-auto">
-              {TABS.map(tab => {
+              {TABS.map((tab) => {
                 const Icon = tab.icon;
                 const active = currentTab === tab.key;
                 return (
@@ -537,9 +673,7 @@ export default function SkyelineClientPortal() {
             outside the boundary so the homeowner can navigate to another
             tab even if the current one breaks. */}
         <div className="max-w-7xl mx-auto">
-          <ErrorBoundary>
-            {renderContent()}
-          </ErrorBoundary>
+          <ErrorBoundary>{renderContent()}</ErrorBoundary>
         </div>
       </div>
     </>

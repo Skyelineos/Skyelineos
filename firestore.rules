@@ -266,6 +266,39 @@ service cloud.firestore {
         || (isSignedIn() && resource.data.clientUid == request.auth.uid);
     }
 
+    // ── Style Discovery ──────────────────────────────────────────────────────
+    // Curated global image library for the blind style-preference flow. Any
+    // signed-in user can read (clients see the images; the style NAME is hidden
+    // in the UI, not the data). Only admins curate the pool.
+    match /styleLibrary/{imageId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Per-contact like/pass reactions. Contact-scoped so leads can run Design
+    // Discovery before a project exists. Mirrors /inspiration ownership.
+    match /styleReactions/{reactionId} {
+      allow read: if isGC() || isDesigner()
+        || (isClient() && resource != null && (
+              resource.data.clientUid == request.auth.uid
+              || (clientLinkedContactId() != null && resource.data.clientContactId == clientLinkedContactId())
+            ));
+      allow create, update: if isSignedIn() && request.resource.data.clientUid == request.auth.uid;
+      allow delete: if isGC() || (isSignedIn() && resource.data.clientUid == request.auth.uid);
+    }
+
+    // Computed style profile per contact (top styles + per-room lean). The
+    // client writes their own; GC + designers read to know what to recommend.
+    // Path-based ownership clause first so reading a not-yet-created profile
+    // doesn't touch a null `resource`.
+    match /styleProfiles/{contactId} {
+      allow read: if isGC() || isDesigner()
+        || (isClient() && clientLinkedContactId() != null && contactId == clientLinkedContactId())
+        || (isClient() && resource != null && resource.data.clientUid == request.auth.uid);
+      allow create, update: if isSignedIn() && request.resource.data.clientUid == request.auth.uid;
+      allow delete: if isAdmin();
+    }
+
     // Bids — GC full access; subs can read+write their own portal-submitted bids;
     // public token bids still allowed for legacy flow
     match /bids/{bidId} {
