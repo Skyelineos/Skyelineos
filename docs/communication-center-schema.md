@@ -124,14 +124,51 @@ Phase 1 = client-side filter over the most-recently-active threads + previews
 (Typesense/Meilisearch or embeddings) is deferred — flagged so the model doesn't
 paint into a corner.
 
+## Phase 2 additions (done)
+
+**Surfaces.** One reusable `CommunicationPanel` (list + thread view + new/call/
+meeting) powers four places: the global hub (`/communications`), the per-project
+page (`/projects/:id/communications`, sidebar → Field → Communication), the
+contact detail view (Communication button → drawer), and Sales lead cards (kebab
+→ Messages → drawer). MobileNav gets a Communication Center entry.
+
+**Client messenger (priority).** `ClientMessenger` replaces the client portal
+Messages tab — an iMessage-style mobile-first composer (photo / camera / video /
+file + Send) that get-or-creates the project's General `client`-visible thread via
+`ensureSubjectThread`. No categories, no dropdowns; the project is known from
+context. Uses the Firebase **auth uid** for membership so rules pass.
+
+**Phone calls & meetings.** Logged as typed threads (`kind: 'phone_call' |
+'meeting'`) so they're searchable in the Center. Structured facts (participants,
+occurredAt, summary, followUp) live on the thread; notes become the first
+message. Meetings accept audio/video uploads; `transcriptStatus` + `aiSummary`
+are reserved Phase-3 placeholders.
+
+**Action Items** — `actionItems` collection (title, description, assignee,
+dueDate, projectId/clientId, sourceThreadId/sourceMessageId, status). Staff-only.
+`linkedTaskId` + `createdViaAi` are reserved hooks (no Schedule/Tasks/AI wiring).
+
+**Client Decision Log** — `decisions` collection (title, summary, decidedOn,
+project/client, relatedRoom/Selection/Trade, source*). Staff-only, traceable to
+source thread.
+
+**Trade tagging** — `tradeIds` on threads (vendor contact ids), edited via the
+staff `ThreadToolsBar`, filterable; vendors come from the contacts directory.
+
+New rules: `actionItems`, `decisions` (staff CRUD, admin delete); thread `create`
+relaxed so portal members can start a client/trade-visible thread (powers the
+client messenger). New indexes: `actionItems` + `decisions` by project/client/
+sourceThread. Messages gained `senderType` + `sourceType`.
+
 ## Phase status
 - **Phase 1 (done):** cleanup of dead messaging stack · lifecycle thread model ·
   hub + nav + route · messages + attachments · @mention notifications · rules +
   indexes + storage · search foundation · extraction/decision schema reserved.
-- **Phase 2:** phone-call / meeting / voice-memo capture UI · auto re-point Cloud
-  Function on lead→project conversion · trade tagging UI + vendor linking ·
-  action-item→task linkage · Decision Log UI.
+- **Phase 2 (done):** client messenger · per-project / per-client / per-lead
+  surfaces · phone-call + meeting records · action items + decision log · trade
+  tagging · search over threads/calls/meetings · visibility enforcement.
 - **Phase 3:** generalize Ingestion-Lab brain → communications extractor; AI
-  summaries / extraction / search.
-- **Phase 4:** client mobile-style messaging · trade workflows · approval
-  requests · project-memory AI.
+  summaries / extraction / search; meeting transcription; auto re-point Cloud
+  Function on lead→project conversion; action-item→task / decision deep-links.
+- **Phase 4:** trade notification workflows · approval requests · project-memory
+  AI · SMS/email inbound into threads.

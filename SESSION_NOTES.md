@@ -20,6 +20,54 @@ then run `npm run deploy*` to deploy to the `skyelineos` Firebase project so the
 actually reaches users. A GitHub push alone does **not** update the live site. See the
 "How work ships" section in `CLAUDE.md`.
 
+## Session 17 — Communication Center Phase 2
+
+Built the communication backbone on top of Phase 1 (extend, not rebuild). See
+`docs/communication-center-schema.md` "Phase 2 additions".
+
+### Highlights
+- **Client messenger (priority):** `ClientMessenger` replaced the client portal
+  Messages tab (`SkyelineClientPortal.tsx`) — iMessage-style, mobile-first, one
+  thread (project General, `client`-visible) auto-created via `ensureSubjectThread`.
+  Uses the Firebase **auth uid** (not the contact id `effectiveUid`) for thread
+  membership so the Firestore rules pass. `ProjectChat` is retained for /messages
+  + sub/designer portals; only the CLIENT portal tab changed.
+- **One reusable panel:** `CommunicationPanel` powers the hub, the project page
+  (`/projects/:id/communications`, ProjectSidebar → Field), the contact detail
+  drawer, and Sales lead cards (kebab → Messages). `CommunicationCenter` is now a
+  thin wrapper around it.
+- **Phone/meeting records** as typed threads (`kind` phone_call/meeting) — search-
+  able in the Center; meeting audio/video upload; transcript/AI-summary reserved.
+- **Action Items** (`actionItems`) + **Client Decision Log** (`decisions`): new
+  staff-only collections, created from a thread via `ThreadToolsBar`, traceable to
+  source. Reserved hooks: `linkedTaskId`, `createdViaAi` (no Tasks/Schedule/AI
+  wiring — that's Phase 3).
+- **Trade tagging:** `tradeIds` on threads, edited in `ThreadToolsBar`, vendors
+  from contacts directory.
+
+### Rules / data
+- `firestore.rules`: added `actionItems` + `decisions` (staff CRUD, admin delete);
+  **relaxed `communications` thread create** so a portal member can start a
+  client/trade-visible thread (required for the client messenger). Internal/
+  restricted threads remain staff-only; client still can't see internal/AI.
+- New indexes for actionItems/decisions (project/client/sourceThread + createdAt).
+- Messages gained `senderType` + `sourceType`.
+
+### Caveats / assumptions
+- **Subject-id spaces:** project subjects → `projects` ids; lead/client subjects →
+  `clients` (CRM) ids from the hub, BUT the contact-detail drawer scopes by the
+  `contacts` doc id (type 'client'). Contacts vs CRM-clients are separate id
+  spaces — unifying contact↔client identity is deferred. Threads created from the
+  contact drawer key on the contact id; from the hub/Sales they key on the clients
+  doc id. Single-tenant, low impact, but note before relying on cross-surface
+  identity.
+- **Not deployed.** Branch only. Deploy needs `deploy:rules` (rules + new
+  indexes), `deploy:hosting`, storage rules. Indexes must build before subject/
+  trade queries scale.
+- Pre-existing tsc errors remain (App.tsx 'sub' UserRole, ContactDetailView,
+  Sidebar navDisabled, Sales getDocs/Set-iteration, ModernTimelineBuilder) —
+  verified present in HEAD before these edits; `vite build` passes.
+
 ## Session 16 — Communication Center (audit + Phase 1)
 
 Full audit of the comms ecosystem, then Phase 1 of the **Communication Center** —

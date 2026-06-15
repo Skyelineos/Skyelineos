@@ -2,7 +2,7 @@
 // Adapted from the project-channels ProjectChat composer (@mention tagging +
 // notifications fan-out), extended with attachment upload and a visibility badge.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import {
   listenMessages, postMessage, notifyThreadMentions, loadSubjectMembers,
@@ -10,8 +10,9 @@ import {
   type CommThread, type CommMessage, type CommMember, type CommAttachment,
 } from '@/lib/communications/firestore';
 import { uploadCommAttachment } from '@/lib/communications/upload';
+import { ThreadToolsBar } from './ThreadToolsBar';
 import {
-  Send, Loader2, AtSign, Paperclip, X, FileText, Lock, Users, Hammer, Eye,
+  Send, Loader2, AtSign, Paperclip, X, FileText, Lock, Users, Hammer, Eye, Phone, Video,
 } from 'lucide-react';
 
 function fmtTime(ts: any): string {
@@ -112,7 +113,7 @@ export function CommThreadView({ thread }: { thread: CommThread }) {
     const isImg = (a.contentType || '').startsWith('image/');
     const isVid = (a.contentType || '').startsWith('video/');
     if (isImg) return <a key={key} href={a.url} target="_blank" rel="noreferrer"><img src={a.url} alt={a.name} className="max-h-44 rounded-md border border-gray-200" /></a>;
-    if (isVid) return <video key={key} src={a.url} controls className="max-h-44 rounded-md border border-gray-200" />;
+    if (isVid) return <video key={key} src={a.url} controls className="max-h-44 rounded-md border border-gray-200"><track kind="captions" /></video>;
     return (
       <a key={key} href={a.url} target="_blank" rel="noreferrer"
          className="inline-flex items-center gap-2 px-3 py-2 rounded-md border border-gray-200 bg-gray-50 text-sm text-gray-700 hover:bg-gray-100">
@@ -132,12 +133,17 @@ export function CommThreadView({ thread }: { thread: CommThread }) {
               <VisIcon className="h-3 w-3" /> {vis.label}
             </span>
           </div>
-          <p className="text-xs text-gray-400 truncate">
+          <p className="text-xs text-gray-400 truncate flex items-center gap-1">
+            {thread.kind === 'phone_call' && <Phone className="h-3 w-3" />}
+            {thread.kind === 'meeting' && <Video className="h-3 w-3" />}
             {CATEGORY_LABELS[thread.category]} · {thread.subjectLabel || `${thread.subjectRef.type} ${thread.subjectRef.id.slice(0, 6)}`}
             {thread.kind !== 'thread' ? ` · ${thread.kind.replace('_', ' ')}` : ''}
+            {thread.participants?.length ? ` · ${thread.participants.join(', ')}` : ''}
           </p>
         </div>
       </div>
+
+      <ThreadToolsBar thread={thread} />
 
       {/* Stream */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">

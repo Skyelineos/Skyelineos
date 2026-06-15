@@ -58,6 +58,7 @@ import {
 
 // Use shared Contact type from shared/types.ts
 import { Contact } from '@shared/types';
+import { CommunicationDrawer } from '@/components/communications/CommunicationDrawer';
 
 interface ContactDetailViewProps {
   contact: Contact;
@@ -77,6 +78,7 @@ export default function ContactDetailView({
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showComms, setShowComms] = useState(false);
 
   // Contact is passed as prop, no need to fetch
   const isLoading = false;
@@ -601,10 +603,18 @@ export default function ContactDetailView({
                     </div>
                   </div>
                   <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowComms(true)}
+                    >
+                      <MessageSquare className="h-4 w-4 mr-2" />
+                      Communication
+                    </Button>
                     {canEdit && (
                       <>
-                        <Button 
-                          variant="outline" 
+                        <Button
+                          variant="outline"
                           size="sm"
                           onClick={() => onEdit && onEdit(contact)}
                         >
@@ -846,6 +856,13 @@ export default function ContactDetailView({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {showComms && (
+        <CommunicationDrawer
+          subjectRef={{ type: 'client', id: contact.id }}
+          subjectLabel={contact.name}
+          onClose={() => setShowComms(false)}
+        />
+      )}
     </Dialog>
   );
 }

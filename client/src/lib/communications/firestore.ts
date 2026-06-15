@@ -18,7 +18,7 @@
 
 import {
   addDoc, collection, doc, onSnapshot, orderBy, query, where, limit as qlimit,
-  serverTimestamp, updateDoc, getDoc, arrayUnion, type Unsubscribe,
+  serverTimestamp, updateDoc, getDoc, getDocs, arrayUnion, type Unsubscribe,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
@@ -82,9 +82,27 @@ export interface CommThread {
   lastMessageAt?: any;
   lastMessageText?: string;
   createdAt?: any;
+  updatedAt?: any;
   createdBy?: string;
   createdByName?: string;
+  // Structured metadata for phone_call / meeting threads. The narrative notes
+  // live as the thread's first message; these are the record's facts.
+  participants?: string[];      // free-text names of who was on the call/meeting
+  occurredAt?: any;             // when the call/meeting happened (vs createdAt)
+  summary?: string;            // human summary (NOT an AI summary — see aiSummary)
+  followUp?: string;           // follow-up note for phone calls
+  // Phase-3 AI placeholders (reserved; never written by Phase 2 UI). Kept on the
+  // thread so meeting records have a home for transcription output later.
+  transcriptStatus?: 'none' | 'pending' | 'ready';
+  aiSummary?: string | null;
 }
+
+/** Who sent a message — drives display + (future) AI provenance. */
+export type SenderType = 'internal' | 'client' | 'trade' | 'system' | 'ai';
+
+/** Where a message originated. Mirrors the Phase 2 spec's sourceType list. */
+export type SourceType =
+  | 'message' | 'phone_call' | 'meeting_note' | 'uploaded_file' | 'ai_summary';
 
 export interface CommMessage {
   id: string;
@@ -93,13 +111,25 @@ export interface CommMessage {
   authorUid: string;
   authorName: string;
   authorRole?: string;
+  senderType?: SenderType;
+  sourceType?: SourceType;
   mentions?: string[];          // uids @-tagged → notified
   tradeIds?: string[];
   attachments?: CommAttachment[];
   parentId?: string;            // threaded replies
   visibility?: Visibility;      // inherits the thread's unless overridden
   source?: 'app' | 'phone' | 'meeting' | 'ingestion' | 'ai';
+  editedAt?: any;
   createdAt?: any;
+}
+
+/** Map an app role to a Communication Center sender type. */
+export function senderTypeForRole(role?: string): SenderType {
+  const r = (role || '').toLowerCase();
+  if (/admin|gc|projectmanager|designer|estimator|staff/.test(r)) return 'internal';
+  if (/client|owner|home/.test(r)) return 'client';
+  if (/sub|trade|vendor/.test(r)) return 'trade';
+  return 'internal';
 }
 
 // ── Collection refs ──────────────────────────────────────────────────────────
@@ -216,6 +246,8 @@ export async function postMessage(threadId: string, msg: {
   authorUid: string;
   authorName: string;
   authorRole?: string;
+  senderType?: SenderType;
+  sourceType?: SourceType;
   type?: CommMessageType;
   mentions?: string[];
   tradeIds?: string[];
@@ -226,12 +258,15 @@ export async function postMessage(threadId: string, msg: {
   const text = (msg.text || '').trim();
   const attachments = msg.attachments ?? [];
   if (!text && attachments.length === 0) return;
+  const senderType = msg.senderType ?? senderTypeForRole(msg.authorRole);
   await addDoc(messagesCol(threadId), {
     type: msg.type ?? (attachments.length && !text ? 'file' : 'text'),
     text,
     authorUid: msg.authorUid,
     authorName: msg.authorName,
     ...(msg.authorRole ? { authorRole: msg.authorRole } : {}),
+    senderType,
+    sourceType: msg.sourceType ?? (attachments.length && !text ? 'uploaded_file' : 'message'),
     ...(msg.mentions?.length ? { mentions: msg.mentions } : {}),
     ...(msg.tradeIds?.length ? { tradeIds: msg.tradeIds } : {}),
     ...(attachments.length ? { attachments } : {}),
@@ -243,6 +278,7 @@ export async function postMessage(threadId: string, msg: {
   await updateDoc(doc(db, 'communications', threadId), {
     lastMessageAt: serverTimestamp(),
     lastMessageText: (text || `📎 ${attachments[0]?.name ?? 'attachment'}`).slice(0, 140),
+    updatedAt: serverTimestamp(),
   }).catch(() => {});
 }
 
@@ -312,4 +348,198 @@ export async function loadSubjectMembers(ref: SubjectRef): Promise<CommMember[]>
 
   members.sort((a, b) => a.name.localeCompare(b.name));
   return members;
+}
+
+// ── Get-or-create the default thread (powers the simple client messenger) ─────
+
+/**
+ * Find — or create — the General conversation for a subject. This is what makes
+ * the client messaging experience one-tap: the homeowner never picks a thread,
+ * they just type and send into their project's General thread, which is created
+ * on first use if it doesn't exist yet.
+ *
+ * `seedMemberUids` are added to the thread; `visibility` defaults to
+ * 'client' so the homeowner can see it. Returns the thread id.
+ */
+export async function ensureSubjectThread(opts: {
+  subjectRef: SubjectRef;
+  subjectLabel?: string;
+  category?: CommCategory;
+  visibility?: Visibility;
+  seedMemberUids: string[];
+  createdBy: string;
+  createdByName?: string;
+}): Promise<string> {
+  const category = opts.category ?? 'general';
+  // Look for an existing matching thread on this subject.
+  try {
+    const q = query(
+      threadsCol(),
+      where('subjectRef.type', '==', opts.subjectRef.type),
+      where('subjectRef.id', '==', opts.subjectRef.id),
+      where('category', '==', category),
+      where('kind', '==', 'thread'),
+    );
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      const existing = snap.docs[0];
+      // Make sure the caller is a member so they can read their own thread.
+      await addThreadMembers(existing.id, opts.seedMemberUids).catch(() => {});
+      return existing.id;
+    }
+  } catch { /* fall through to create */ }
+  return createThread({
+    subjectRef: opts.subjectRef,
+    subjectLabel: opts.subjectLabel,
+    title: category === 'general' ? 'General' : CATEGORY_LABELS[category],
+    category,
+    kind: 'thread',
+    memberUids: opts.seedMemberUids,
+    visibility: opts.visibility ?? 'client',
+    createdBy: opts.createdBy,
+    createdByName: opts.createdByName,
+  });
+}
+
+// ── Phone call + meeting records (live in the Center as typed threads) ────────
+
+/**
+ * Log a phone call as a thread (kind 'phone_call'). The structured facts live on
+ * the thread; the narrative notes become its first message so the call is fully
+ * searchable alongside every other conversation. Internal-only by default.
+ */
+export async function createPhoneCallThread(input: {
+  subjectRef: SubjectRef; subjectLabel?: string;
+  title: string; participants?: string[]; occurredAt?: Date;
+  notes?: string; summary?: string; followUp?: string;
+  visibility?: Visibility; createdBy: string; createdByName?: string;
+}): Promise<string> {
+  const id = await addDoc(threadsCol(), {
+    subjectRef: input.subjectRef,
+    subjectChain: [subjectKey(input.subjectRef)],
+    ...(input.subjectLabel ? { subjectLabel: input.subjectLabel } : {}),
+    title: input.title.trim() || 'Phone call',
+    category: 'general' as CommCategory,
+    kind: 'phone_call' as CommThreadKind,
+    memberUids: [input.createdBy],
+    visibility: input.visibility ?? 'internal',
+    tradeIds: [],
+    status: 'open' as CommStatus,
+    ...(input.participants?.length ? { participants: input.participants } : {}),
+    occurredAt: input.occurredAt ?? serverTimestamp(),
+    ...(input.summary ? { summary: input.summary } : {}),
+    ...(input.followUp ? { followUp: input.followUp } : {}),
+    lastMessageAt: serverTimestamp(),
+    lastMessageText: (input.notes || input.summary || 'Phone call logged').slice(0, 140),
+    createdAt: serverTimestamp(),
+    createdBy: input.createdBy,
+    ...(input.createdByName ? { createdByName: input.createdByName } : {}),
+  });
+  if (input.notes?.trim()) {
+    await postMessage(id.id, {
+      text: input.notes, authorUid: input.createdBy, authorName: input.createdByName ?? 'Staff',
+      type: 'call_log', sourceType: 'phone_call', source: 'phone', senderType: 'internal',
+    }).catch(() => {});
+  }
+  return id.id;
+}
+
+/**
+ * Create a meeting record (kind 'meeting'). Audio/video are attached to the
+ * first message; transcript / AI-summary / decisions / action-items are left as
+ * reserved placeholders for Phase 3 — the architecture is here, not the AI.
+ */
+export async function createMeetingThread(input: {
+  subjectRef: SubjectRef; subjectLabel?: string;
+  title: string; participants?: string[]; occurredAt?: Date;
+  notes?: string; attachments?: CommAttachment[];
+  visibility?: Visibility; createdBy: string; createdByName?: string;
+}): Promise<string> {
+  const id = await addDoc(threadsCol(), {
+    subjectRef: input.subjectRef,
+    subjectChain: [subjectKey(input.subjectRef)],
+    ...(input.subjectLabel ? { subjectLabel: input.subjectLabel } : {}),
+    title: input.title.trim() || 'Meeting',
+    category: 'general' as CommCategory,
+    kind: 'meeting' as CommThreadKind,
+    memberUids: [input.createdBy],
+    visibility: input.visibility ?? 'internal',
+    tradeIds: [],
+    status: 'open' as CommStatus,
+    ...(input.participants?.length ? { participants: input.participants } : {}),
+    occurredAt: input.occurredAt ?? serverTimestamp(),
+    transcriptStatus: 'none' as const,   // Phase 3 placeholder
+    aiSummary: null,                      // Phase 3 placeholder
+    lastMessageAt: serverTimestamp(),
+    lastMessageText: (input.notes || 'Meeting record').slice(0, 140),
+    createdAt: serverTimestamp(),
+    createdBy: input.createdBy,
+    ...(input.createdByName ? { createdByName: input.createdByName } : {}),
+  });
+  if (input.notes?.trim() || input.attachments?.length) {
+    await postMessage(id.id, {
+      text: input.notes ?? '', authorUid: input.createdBy, authorName: input.createdByName ?? 'Staff',
+      type: 'meeting_record', sourceType: 'meeting_note', source: 'meeting', senderType: 'internal',
+      ...(input.attachments?.length ? { attachments: input.attachments } : {}),
+    }).catch(() => {});
+  }
+  return id.id;
+}
+
+// ── Trade tagging ─────────────────────────────────────────────────────────────
+
+/** Set the trade/vendor tags on a thread (contact ids of subs/vendors). */
+export async function setThreadTrades(threadId: string, tradeIds: string[]): Promise<void> {
+  await updateDoc(doc(db, 'communications', threadId), {
+    tradeIds: Array.from(new Set(tradeIds.filter(Boolean))),
+    updatedAt: serverTimestamp(),
+  });
+}
+
+// ── Subject options (shared by the create/log modals) ────────────────────────
+
+export interface SubjectOption { key: string; type: SubjectType; id: string; label: string }
+
+/** Load all leads/clients/projects as pickable subjects for the modals. */
+export async function loadSubjectOptions(): Promise<SubjectOption[]> {
+  const opts: SubjectOption[] = [];
+  try {
+    const projs = await getDocs(collection(db, 'projects'));
+    projs.forEach(d => {
+      const p = d.data() as any;
+      opts.push({ key: `project:${d.id}`, type: 'project', id: d.id, label: `📁 ${p.name || p.clientName || 'Untitled project'}` });
+    });
+  } catch { /* ignore */ }
+  try {
+    // Leads + clients both live in the `clients` collection (lead intake → clients).
+    const clients = await getDocs(collection(db, 'clients'));
+    clients.forEach(d => {
+      const c = d.data() as any;
+      const isLead = (c.status || c.stage || '').toString().toLowerCase().includes('lead') || c.isLead;
+      const t: SubjectType = isLead ? 'lead' : 'client';
+      const name = c.name || [c.firstName, c.lastName].filter(Boolean).join(' ') || c.email || 'Contact';
+      opts.push({ key: `${t}:${d.id}`, type: t, id: d.id, label: `${isLead ? '🌱' : '👤'} ${name}` });
+    });
+  } catch { /* ignore */ }
+  return opts;
+}
+
+export interface VendorOption { id: string; name: string; trade?: string; company?: string }
+
+/** Load taggable vendors/subs/designers from the contacts directory. */
+export async function loadTaggableVendors(): Promise<VendorOption[]> {
+  const out: VendorOption[] = [];
+  try {
+    const contacts = await getDocs(collection(db, 'contacts'));
+    contacts.forEach(d => {
+      const c = d.data() as any;
+      const role = (c.role || c.type || '').toLowerCase();
+      if (/sub|trade|vendor|designer/.test(role)) {
+        const trade = c.trade || c.tradeCategory || (Array.isArray(c.trades) ? c.trades[0] : undefined);
+        out.push({ id: d.id, name: c.name || c.displayName || c.company || 'Vendor', trade, company: c.company });
+      }
+    });
+  } catch { /* ignore */ }
+  out.sort((a, b) => a.name.localeCompare(b.name));
+  return out;
 }

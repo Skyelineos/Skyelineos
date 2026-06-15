@@ -15,7 +15,7 @@ import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 
 import DocumentsTab from '@/components/documents/DocumentsTab';
 import PhotosTab from '@/components/photos/PhotosTab';
-import { ProjectChat } from '@/components/messaging/ProjectChat';
+import { ClientMessenger } from '@/components/communications/ClientMessenger';
 import ClientDashboard from '@/components/client-portal/ClientDashboard';
 import { ClientWelcomePreview } from '@/components/client-portal/ClientWelcomePreview';
 import { ClientTabPreview } from '@/components/client-portal/ClientTabPreview';
@@ -431,10 +431,9 @@ export default function SkyelineClientPortal() {
 
       case 'messages':
         return (
-          <div className="p-6">
-            <h1 className="text-xl font-bold text-gray-900 mb-4">Messages</h1>
+          <div className="p-3 sm:p-6">
             {selectedProjectId
-              ? <ProjectChat projectId={selectedProjectId} />
+              ? <ClientMessenger projectId={selectedProjectId} projectName={selectedProject?.name} />
               : <p className="text-sm text-gray-500">Select a project to see its messages.</p>}
           </div>
         );

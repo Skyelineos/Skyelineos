@@ -61,6 +61,7 @@ const getNavigationItems = () => [
   { label: 'Finance',               href: '/financials',           icon: DollarSign,      roles: ['Admin'] as const },
   { label: 'Reports',               href: '/reports',              icon: BarChart2,       roles: ['Admin'] as const },
   { label: 'Templates',             href: '/templates',            icon: Hammer,          roles: ['Admin'] as const },
+  { label: 'Communication Center',  href: '/communications',       icon: MessageSquare,   roles: ['Admin', 'ProjectManager'] as const },
   { label: 'Messaging',             href: '/messages',             icon: MessageSquare,   roles: ['Admin', 'ProjectManager'] as const },
   { label: 'Comms Log',             href: '/comms-log',            icon: Radio,           roles: ['Admin', 'ProjectManager'] as const },
   { label: 'Automations',           href: '/automations',          icon: Zap,             roles: ['Admin'] as const },

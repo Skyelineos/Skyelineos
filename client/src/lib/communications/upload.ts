@@ -20,7 +20,7 @@ export async function uploadCommAttachment(
   file: File,
   onProgress?: (pct: number) => void,
 ): Promise<CommAttachment> {
-  const safeName = file.name.replace(/[^\w.\-]+/g, '_');
+  const safeName = file.name.replace(/[^\w.-]+/g, '_');
   const path = `communications/${threadId}/${Date.now()}-${Math.random().toString(36).slice(2, 7)}-${safeName}`;
   const sref = storageRef(storage, path);
   const task = uploadBytesResumable(sref, file);

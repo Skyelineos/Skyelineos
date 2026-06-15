@@ -4,17 +4,13 @@
 // list so the right people see it immediately.
 
 import { useEffect, useMemo, useState } from 'react';
-import { collection, getDocs } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import {
-  createThread, loadSubjectMembers,
+  createThread, loadSubjectMembers, loadSubjectOptions,
   COMM_CATEGORIES, CATEGORY_LABELS,
-  type CommCategory, type Visibility, type SubjectRef, type SubjectType,
+  type CommCategory, type Visibility, type SubjectRef, type SubjectOption,
 } from '@/lib/communications/firestore';
 import { X, Loader2 } from 'lucide-react';
-
-interface SubjectOption { key: string; type: SubjectType; id: string; label: string }
 
 const VIS_OPTIONS: { value: Visibility; label: string }[] = [
   { value: 'internal', label: 'Internal only' },
@@ -40,30 +36,11 @@ export function NewThreadModal({ onClose, onCreated, defaultSubject }: {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    (async () => {
-      const opts: SubjectOption[] = [];
-      try {
-        const projs = await getDocs(collection(db, 'projects'));
-        projs.forEach(d => {
-          const p = d.data() as any;
-          opts.push({ key: `project:${d.id}`, type: 'project', id: d.id, label: `📁 ${p.name || p.clientName || 'Untitled project'}` });
-        });
-      } catch { /* ignore */ }
-      try {
-        // Leads + clients both live in the `clients` collection (lead intake → clients).
-        const clients = await getDocs(collection(db, 'clients'));
-        clients.forEach(d => {
-          const c = d.data() as any;
-          const isLead = (c.status || c.stage || '').toString().toLowerCase().includes('lead') || c.isLead;
-          const t: SubjectType = isLead ? 'lead' : 'client';
-          const name = c.name || [c.firstName, c.lastName].filter(Boolean).join(' ') || c.email || 'Contact';
-          opts.push({ key: `${t}:${d.id}`, type: t, id: d.id, label: `${isLead ? '🌱' : '👤'} ${name}` });
-        });
-      } catch { /* ignore */ }
+    loadSubjectOptions().then(opts => {
       setSubjects(opts);
       if (defaultSubject) setSubjectKeySel(`${defaultSubject.type}:${defaultSubject.id}`);
       else setSubjectKeySel(prev => prev || opts[0]?.key || '');
-    })();
+    });
   }, [defaultSubject]);
 
   const selected = useMemo(() => subjects.find(s => s.key === subjectKeySel), [subjects, subjectKeySel]);
@@ -97,7 +74,7 @@ export function NewThreadModal({ onClose, onCreated, defaultSubject }: {
         </div>
         <div className="p-5 space-y-4">
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Subject (lead / client / project)</label>
+            <span className="block text-xs font-medium text-gray-500 mb-1">Subject (lead / client / project)</span>
             <select value={subjectKeySel} onChange={e => setSubjectKeySel(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white">
               {subjects.length === 0 && <option value="">No subjects found</option>}
@@ -105,20 +82,20 @@ export function NewThreadModal({ onClose, onCreated, defaultSubject }: {
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Title</label>
+            <span className="block text-xs font-medium text-gray-500 mb-1">Title</span>
             <input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Kitchen cabinet selection"
                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-[#C9A96E]" />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Category</label>
+              <span className="block text-xs font-medium text-gray-500 mb-1">Category</span>
               <select value={category} onChange={e => setCategory(e.target.value as CommCategory)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white">
                 {COMM_CATEGORIES.map(c => <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Visibility</label>
+              <span className="block text-xs font-medium text-gray-500 mb-1">Visibility</span>
               <select value={visibility} onChange={e => setVisibility(e.target.value as Visibility)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white">
                 {VIS_OPTIONS.map(v => <option key={v.value} value={v.value}>{v.label}</option>)}
