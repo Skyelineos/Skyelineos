@@ -4,10 +4,11 @@
 // every feature they'll be able to track once the build is rolling — so the
 // portal feels alive and valuable from day one instead of empty.
 
+import { useState } from 'react';
 import {
   LayoutDashboard, CalendarClock, DollarSign, Palette, ClipboardList,
   ClipboardCheck, FileText, MessageSquare, Image, Sparkles, ArrowRight,
-  MapPin, PenTool, HardHat, type LucideIcon,
+  MapPin, PenTool, HardHat, ChevronDown, type LucideIcon,
 } from 'lucide-react';
 
 const GOLD = '#C9A96E';
@@ -49,6 +50,10 @@ interface Props {
 
 export function ClientWelcomePreview({ clientFirstName, projectName, projectAddress, hasProject, onNavigate }: Props) {
   const name = clientFirstName?.trim();
+  // Feature preview is collapsed by default so the page stays short and the
+  // "Explore Skyeline" content below sits within reach instead of being buried
+  // under nine full-height tiles.
+  const [showFeatures, setShowFeatures] = useState(false);
 
   return (
     <div className="p-4 sm:p-6 space-y-6">
@@ -122,39 +127,113 @@ export function ClientWelcomePreview({ clientFirstName, projectName, projectAddr
         })}
       </div>
 
-      {/* ── Feature preview tiles ────────────────────────────────────────── */}
-      <div>
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-700">
-            What you'll be able to track
-          </h2>
-          <span className="text-xs text-gray-400">Tap to explore</span>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {FEATURES.map(feat => {
-            const Icon = feat.icon;
-            return (
-              <button
-                key={feat.key}
-                onClick={() => onNavigate(feat.key)}
-                className="group flex flex-col items-start rounded-xl border border-gray-200 bg-white p-5 text-left transition-all hover:-translate-y-0.5 hover:border-[#C9A96E]/50 hover:shadow-md"
+      {/* ── Design Discovery — the one meaningful thing the homeowner can do
+          right now, while we get the project set up. Routes straight into the
+          guided Style Discovery flow (Design Studio tab). ─────────────────── */}
+      <div className="relative overflow-hidden rounded-2xl border border-[#C9A96E]/40 bg-gradient-to-br from-[#FBF7F0] to-[#F1E7D6] p-6 sm:p-7">
+        <div
+          className="pointer-events-none absolute -top-12 -right-12 h-40 w-40 rounded-full opacity-40 blur-3xl"
+          style={{ backgroundColor: GOLD }}
+        />
+        <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center">
+          <div className="flex flex-1 items-start gap-4 min-w-0">
+            <div
+              className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl shadow-sm"
+              style={{ backgroundColor: GOLD }}
+            >
+              <Sparkles className="h-6 w-6" style={{ color: BLACK }} />
+            </div>
+            <div className="min-w-0">
+              <span
+                className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-widest"
+                style={{ backgroundColor: 'rgba(201,169,110,0.18)', color: '#8a6a3a' }}
               >
-                <div
-                  className="flex h-11 w-11 items-center justify-center rounded-xl transition-colors"
-                  style={{ backgroundColor: 'rgba(201,169,110,0.12)' }}
-                >
-                  <Icon className="h-5 w-5" style={{ color: GOLD }} />
-                </div>
-                <p className="mt-4 text-sm font-semibold text-gray-900">{feat.title}</p>
-                <p className="mt-1 flex-1 text-xs text-gray-500 leading-relaxed">{feat.description}</p>
-                <span className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-gray-400 group-hover:text-[#8a6a3a]">
-                  Open <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
-                </span>
-              </button>
-            );
-          })}
+                In the meantime
+              </span>
+              <h3 className="mt-2 text-lg font-bold text-gray-900">Let's start your Design Discovery</h3>
+              <p className="mt-1 max-w-xl text-sm leading-relaxed text-gray-600">
+                While we get your project set up, explore inspiring homes, materials, and finishes.
+                It helps us understand your vision and personalize your build from day one.
+              </p>
+            </div>
+          </div>
+          <div className="flex-shrink-0">
+            <button
+              onClick={() => onNavigate('design')}
+              className="inline-flex items-center gap-1.5 rounded-lg px-5 py-2.5 text-sm font-semibold shadow-sm transition-transform hover:-translate-y-0.5"
+              style={{ backgroundColor: GOLD, color: BLACK }}
+            >
+              Start Design Discovery
+              <ArrowRight className="h-4 w-4" />
+            </button>
+          </div>
         </div>
+      </div>
+
+      {/* ── Feature preview tiles ────────────────────────────────────────────
+          Collapsed by default: a row of compact, still-tappable chips keeps the
+          page short so "Explore Skyeline" stays in view. Tapping the header
+          expands the full descriptive tiles for homeowners who want detail. */}
+      <div className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5">
+        <button
+          onClick={() => setShowFeatures(v => !v)}
+          className="flex w-full items-center justify-between gap-3 text-left"
+        >
+          <div>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-700">
+              What you'll be able to track
+            </h2>
+            <p className="mt-0.5 text-xs text-gray-400">
+              {FEATURES.length} things you'll follow once your build is live — tap to {showFeatures ? 'collapse' : 'explore'}
+            </p>
+          </div>
+          <ChevronDown
+            className={`h-5 w-5 flex-shrink-0 text-gray-400 transition-transform ${showFeatures ? 'rotate-180' : ''}`}
+          />
+        </button>
+
+        {showFeatures ? (
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {FEATURES.map(feat => {
+              const Icon = feat.icon;
+              return (
+                <button
+                  key={feat.key}
+                  onClick={() => onNavigate(feat.key)}
+                  className="group flex flex-col items-start rounded-xl border border-gray-200 bg-white p-5 text-left transition-all hover:-translate-y-0.5 hover:border-[#C9A96E]/50 hover:shadow-md"
+                >
+                  <div
+                    className="flex h-11 w-11 items-center justify-center rounded-xl transition-colors"
+                    style={{ backgroundColor: 'rgba(201,169,110,0.12)' }}
+                  >
+                    <Icon className="h-5 w-5" style={{ color: GOLD }} />
+                  </div>
+                  <p className="mt-4 text-sm font-semibold text-gray-900">{feat.title}</p>
+                  <p className="mt-1 flex-1 text-xs text-gray-500 leading-relaxed">{feat.description}</p>
+                  <span className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-gray-400 group-hover:text-[#8a6a3a]">
+                    Open <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="mt-4 flex flex-wrap gap-2">
+            {FEATURES.map(feat => {
+              const Icon = feat.icon;
+              return (
+                <button
+                  key={feat.key}
+                  onClick={() => onNavigate(feat.key)}
+                  className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:border-[#C9A96E]/50 hover:text-[#8a6a3a]"
+                >
+                  <Icon className="h-3.5 w-3.5" style={{ color: GOLD }} />
+                  {feat.title}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <p className="text-center text-xs text-gray-400 pt-2">
