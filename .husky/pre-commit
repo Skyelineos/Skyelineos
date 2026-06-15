@@ -1,63 +1,62 @@
 #!/usr/bin/env sh
-. "$(dirname -- "$0")/_/husky.sh"
-
 # BuildFlow Pre-commit Security Check
+# Note: husky runs this via `sh -e`, so it must be POSIX sh (no bash arrays).
 echo "🔍 Running pre-commit security checks..."
 
-# Check for environment variable leaks using dotenv-linter
-echo "🛡️ Checking for exposed environment variables..."
-npx dotenv-linter
+# Lint only the .env files that are actually staged. Running dotenv-linter with
+# no path makes it crawl the whole repo (including node_modules' binary files),
+# which spews garbage and fails every commit. Scope it to staged env files and
+# skip entirely when none are staged.
+STAGED_ENV_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E "(^|/)\.env([.][^/]*)?$" || true)
+if [ -n "$STAGED_ENV_FILES" ]; then
+  echo "🛡️ Checking staged .env files for problems..."
+  npx dotenv-linter $STAGED_ENV_FILES
+fi
 
-# Check for common secrets patterns in staged files
+# Check for common secrets patterns in staged source files
 STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E "\.(ts|tsx|js|jsx|json|env|yaml|yml|md)$" || true)
 
-if [ ! -z "$STAGED_FILES" ]; then
+if [ -n "$STAGED_FILES" ]; then
   echo "🔐 Scanning staged files for secrets..."
-  
-  # Check for common secret patterns
-  SECRET_PATTERNS=(
-    # API Keys and Tokens
-    "[aA][pP][iI][_-]?[kK][eE][yY].*[=:].*['\"][a-zA-Z0-9]{20,}['\"]"
-    "[sS][eE][cC][rR][eE][tT].*[=:].*['\"][a-zA-Z0-9]{20,}['\"]"
-    "[tT][oO][kK][eE][nN].*[=:].*['\"][a-zA-Z0-9]{20,}['\"]"
-    "[pP][aA][sS][sS][wW][oO][rR][dD].*[=:].*['\"].{8,}['\"]"
-    
-    # Database URLs
-    "postgresql://.*:.*@.*"
-    "mysql://.*:.*@.*"
-    "mongodb://.*:.*@.*"
-    
-    # JWT Secrets
-    "[jJ][wW][tT][_-]?[sS][eE][cC][rR][eE][tT].*[=:].*['\"].{20,}['\"]"
-    
-    # AWS Keys
-    "AKIA[0-9A-Z]{16}"
-    "['\"][0-9a-zA-Z/+]{40}['\"]"
-    
-    # Stripe Keys
-    "sk_live_[0-9a-zA-Z]{24,}"
-    "pk_live_[0-9a-zA-Z]{24,}"
-    
-    # Other common patterns
-    "['\"][a-zA-Z0-9]{32,}['\"]"
-  )
-  
-  FOUND_SECRETS=false
-  
+
+  # One regex per line. Quoted heredoc => taken literally, no shell expansion.
+  SECRET_PATTERNS=$(cat <<'EOF'
+[aA][pP][iI][_-]?[kK][eE][yY].*[=:].*['"][a-zA-Z0-9]{20,}['"]
+[sS][eE][cC][rR][eE][tT].*[=:].*['"][a-zA-Z0-9]{20,}['"]
+[tT][oO][kK][eE][nN].*[=:].*['"][a-zA-Z0-9]{20,}['"]
+[pP][aA][sS][sS][wW][oO][rR][dD].*[=:].*['"].{8,}['"]
+postgresql://.*:.*@.*
+mysql://.*:.*@.*
+mongodb://.*:.*@.*
+[jJ][wW][tT][_-]?[sS][eE][cC][rR][eE][tT].*[=:].*['"].{20,}['"]
+AKIA[0-9A-Z]{16}
+['"][0-9a-zA-Z/+]{40}['"]
+sk_live_[0-9a-zA-Z]{24,}
+pk_live_[0-9a-zA-Z]{24,}
+['"][a-zA-Z0-9]{32,}['"]
+EOF
+)
+
+  FOUND_SECRETS=""
+
+  # Heredoc (not a pipe) feeds the inner loop so FOUND_SECRETS survives in this
+  # shell — a `... | while` would set it in a subshell and lose it.
   for file in $STAGED_FILES; do
-    if [ -f "$file" ]; then
-      for pattern in "${SECRET_PATTERNS[@]}"; do
-        if grep -qE "$pattern" "$file"; then
-          echo "❌ Potential secret found in $file"
-          echo "   Pattern: $pattern"
-          grep -nE "$pattern" "$file" | head -3
-          FOUND_SECRETS=true
-        fi
-      done
-    fi
+    [ -f "$file" ] || continue
+    while IFS= read -r pattern; do
+      [ -z "$pattern" ] && continue
+      if grep -qE "$pattern" "$file"; then
+        echo "❌ Potential secret found in $file"
+        echo "   Pattern: $pattern"
+        grep -nE "$pattern" "$file" | head -3
+        FOUND_SECRETS="yes"
+      fi
+    done <<EOF
+$SECRET_PATTERNS
+EOF
   done
-  
-  if [ "$FOUND_SECRETS" = true ]; then
+
+  if [ -n "$FOUND_SECRETS" ]; then
     echo ""
     echo "🚨 SECURITY WARNING: Potential secrets detected in staged files!"
     echo "Please review the files above and remove any sensitive information."
