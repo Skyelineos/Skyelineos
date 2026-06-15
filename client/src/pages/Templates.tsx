@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useLocation } from 'wouter';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -75,13 +76,13 @@ const CATEGORIES: Record<TemplateCategory, CategoryMeta> = {
     contentPlaceholder: 'Contract clauses, scope language, lien waiver text…',
   },
   task: {
-    label: 'Task Templates',
-    description: 'Pre-define tasks which need to be completed for workflows.',
+    label: 'Master Task List',
+    description: 'The Custom Home build playbook — phases, tasks, acceptance criteria. (Other project types use Schedule Templates.)',
     icon: CheckSquare,
     color: '#22c55e',
     bg: '#f0fdf4',
     border: '#bbf7d0',
-    contentPlaceholder: 'Checklist items, dependencies, assignee notes…',
+    contentPlaceholder: 'Phases, tasks, acceptance criteria…',
   },
   job: {
     label: 'Job Templates',
@@ -720,13 +721,21 @@ function DetailView({
 
 export default function Templates() {
   const [activeCategory, setActiveCategory] = useState<TemplateCategory | null>(null);
+  const [, navigate] = useLocation();
+
+  // The Master Task List (Custom Home playbook) is the dedicated /master-tasks
+  // editor, not a generic templates list — route there instead of the stub view.
+  const handleSelect = (c: TemplateCategory) => {
+    if (c === 'task') { navigate('/master-tasks'); return; }
+    setActiveCategory(c);
+  };
 
   return (
     <AppLayout>
       {activeCategory ? (
         <DetailView category={activeCategory} onBack={() => setActiveCategory(null)} />
       ) : (
-        <HubView onSelect={setActiveCategory} />
+        <HubView onSelect={handleSelect} />
       )}
     </AppLayout>
   );

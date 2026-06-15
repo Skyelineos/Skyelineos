@@ -1,6 +1,8 @@
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { BuildLocation } from '@/components/common/BuildLocation';
+import { PROJECT_TYPES } from '@/modules/gantt/projectTypes';
 import type { ProjectSetupDraft } from '@/types/projectSetup';
 
 /**
@@ -47,6 +49,21 @@ export function Step1Identity({ draft, onChange }: Props) {
           />
           <p className="text-[11px] text-gray-500 mt-1">
             How this project shows up in lists for you, the client, and your team.
+          </p>
+        </div>
+
+        <div className="md:col-span-2">
+          <Label htmlFor="proj-type">Project type</Label>
+          <Select value={draft.projectType || ''} onValueChange={(v) => patch({ projectType: v })}>
+            <SelectTrigger id="proj-type" className="mt-1.5">
+              <SelectValue placeholder="Select project type…" />
+            </SelectTrigger>
+            <SelectContent>
+              {PROJECT_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <p className="text-[11px] text-gray-500 mt-1">
+            Picks the matching schedule template (and, for Custom Home, the master task list) for this job.
           </p>
         </div>
 

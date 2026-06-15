@@ -84,6 +84,9 @@ export interface ProjectSetupDraft {
   // ── Step 1: Identity ────────────────────────────────────────────────
   name: string;
   projectCode?: string;
+  /** One of PROJECT_TYPES (Custom Home, Spec Home, Remodel…). Drives which
+   *  schedule template auto-attaches to the job in Step 6. */
+  projectType?: string;
   address: string;
   // Canonical build/jobsite location (address + map pin + confirmation state).
   // addressLine1 is mirrored to `address` above for back-compat.

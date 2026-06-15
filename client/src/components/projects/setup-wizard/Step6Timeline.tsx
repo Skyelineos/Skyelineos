@@ -8,7 +8,10 @@ import { Plus, Trash2, Calendar } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { listTemplates } from '@/modules/gantt/useSchedulePersistence';
 import { applyTemplateToProject } from '@/modules/gantt/applyTemplateToProject';
+import { normalizeProjectType } from '@/modules/gantt/projectTypes';
 import type { ProjectSetupDraft, ProjectMilestone } from '@/types/projectSetup';
+
+interface TemplateOpt { id: string; name: string; projectType?: string }
 
 /**
  * Step 6 — Timeline.
@@ -44,18 +47,41 @@ export function Step6Timeline({ draft, onChange }: Props) {
 
   const [, navigate] = useLocation();
   const { toast } = useToast();
-  const [templates, setTemplates] = useState<{ id: string; name: string }[]>([]);
+  const [templates, setTemplates] = useState<TemplateOpt[]>([]);
+
+  const wantType = draft.projectType ? normalizeProjectType(draft.projectType) : null;
+  const matches = (t: TemplateOpt) => !!wantType && normalizeProjectType(t.projectType) === wantType;
+  // Matching-type templates float to the top of the picker.
+  const sortedTemplates = [...templates].sort((a, b) => (matches(b) ? 1 : 0) - (matches(a) ? 1 : 0));
+
   useEffect(() => {
-    listTemplates().then(ts => setTemplates(ts.map(t => ({ id: t.id, name: t.name })))).catch(() => {});
+    listTemplates()
+      .then(ts => setTemplates(ts.map(t => ({ id: t.id, name: t.name, projectType: (t as any).projectType }))))
+      .catch(() => {});
   }, []);
+
+  // When the project type is set and nothing's chosen yet, auto-tie the matching
+  // schedule template to the job (the GC can still change it).
+  useEffect(() => {
+    if (!wantType || draft.scheduleTemplateId || templates.length === 0) return;
+    const hit = templates.find(matches);
+    if (hit) pickTemplate(hit.id, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wantType, templates, draft.scheduleTemplateId]);
 
   // Pick a standard schedule template → seed the project's Gantt (re-anchored to
   // the start date). If it's not quite right, the GC edits it in the Gantt.
-  const pickTemplate = async (id: string) => {
+  const pickTemplate = async (id: string, auto = false) => {
     patch({ scheduleTemplateId: id });
     if (id && draft.id) {
-      const ok = await applyTemplateToProject(draft.id, id, draft.startDate, { onlyIfEmpty: false });
-      if (ok) toast({ title: 'Schedule seeded from template', description: 'Open "Edit in Gantt" to fine-tune it for this job.' });
+      const ok = await applyTemplateToProject(draft.id, id, draft.startDate, { onlyIfEmpty: auto });
+      if (ok) {
+        const t = templates.find(x => x.id === id);
+        toast({
+          title: auto ? `Schedule attached for ${wantType}` : 'Schedule seeded from template',
+          description: `"${t?.name || 'Template'}" — open "Edit in Gantt" to fine-tune it for this job.`,
+        });
+      }
     }
   };
 
@@ -149,7 +175,11 @@ export function Step6Timeline({ draft, onChange }: Props) {
             className="px-3 py-2 border border-gray-300 rounded-md text-sm bg-white min-w-[220px]"
           >
             <option value="">None — build manually</option>
-            {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+            {sortedTemplates.map(t => (
+              <option key={t.id} value={t.id}>
+                {t.name}{matches(t) ? `  ✓ matches ${wantType}` : ''}
+              </option>
+            ))}
           </select>
           {draft.id && draft.scheduleTemplateId && (
             <Button

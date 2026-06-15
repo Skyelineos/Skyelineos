@@ -2,6 +2,7 @@
 // template to a project). Granular set per product direction.
 export const PROJECT_TYPES = [
   'Custom Home',
+  'Spec Home',
   'Remodel',
   'Addition',
   'Basement',
@@ -17,6 +18,7 @@ export type ProjectType = (typeof PROJECT_TYPES)[number];
 export function normalizeProjectType(raw?: string | null): ProjectType {
   const v = String(raw || '').toLowerCase();
   if (v === 'new_build' || v === 'custom home' || v === 'custom_home' || v === 'new build') return 'Custom Home';
+  if (v === 'spec_home' || v === 'spec home' || v === 'spec') return 'Spec Home';
   if (v === 'remodel') return 'Remodel';
   if (v === 'addition') return 'Addition';
   if (v === 'basement') return 'Basement';
