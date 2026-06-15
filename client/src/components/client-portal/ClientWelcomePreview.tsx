@@ -6,9 +6,22 @@
 
 import { useState } from 'react';
 import {
-  LayoutDashboard, CalendarClock, DollarSign, Palette, ClipboardList,
-  ClipboardCheck, FileText, MessageSquare, Image, Sparkles, ArrowRight,
-  MapPin, PenTool, HardHat, ChevronDown, type LucideIcon,
+  LayoutDashboard,
+  CalendarClock,
+  DollarSign,
+  Palette,
+  ClipboardList,
+  ClipboardCheck,
+  FileText,
+  MessageSquare,
+  Image,
+  Sparkles,
+  ArrowRight,
+  MapPin,
+  PenTool,
+  HardHat,
+  ChevronDown,
+  type LucideIcon,
 } from 'lucide-react';
 
 const GOLD = '#C9A96E';
@@ -23,21 +36,88 @@ interface FeatureTile {
 
 // Mirrors the portal TABS so each tile maps to a real destination.
 const FEATURES: FeatureTile[] = [
-  { key: 'dashboard',     icon: LayoutDashboard, title: 'Build Progress',    description: 'Live progress, current phase, and your build timeline at a glance.' },
-  { key: 'schedule',      icon: CalendarClock,   title: 'Schedule',          description: 'Your estimated build timeline, phase by phase, start to move-in.' },
-  { key: 'financials',    icon: DollarSign,      title: 'Financials',        description: 'Contract value, budget, allowances, and your payment history.' },
-  { key: 'selections',    icon: Palette,         title: 'Design Selections', description: 'Review and approve every finish and material for your home.' },
-  { key: 'change-orders', icon: ClipboardList,   title: 'Change Orders',     description: 'See and approve any changes to scope or cost — full transparency.' },
-  { key: 'site-log',      icon: ClipboardCheck,  title: 'Site Log',          description: 'Daily updates from the field as your home comes together.' },
-  { key: 'documents',     icon: FileText,        title: 'Documents',         description: 'Contracts, plans, warranties, and project paperwork in one place.' },
-  { key: 'messages',      icon: MessageSquare,   title: 'Messages',          description: 'A direct line to your Skyeline team, all in one thread.' },
-  { key: 'photos',        icon: Image,           title: 'Photos',            description: 'A growing gallery of your home being built, week by week.' },
+  {
+    key: 'dashboard',
+    icon: LayoutDashboard,
+    title: 'Build Progress',
+    description:
+      'Live progress, current phase, and your build timeline at a glance.',
+  },
+  {
+    key: 'schedule',
+    icon: CalendarClock,
+    title: 'Schedule',
+    description:
+      'Your estimated build timeline, phase by phase, start to move-in.',
+  },
+  {
+    key: 'financials',
+    icon: DollarSign,
+    title: 'Financials',
+    description:
+      'Contract value, budget, allowances, and your payment history.',
+  },
+  {
+    key: 'selections',
+    icon: Palette,
+    title: 'Design Selections',
+    description: 'Review and approve every finish and material for your home.',
+  },
+  {
+    key: 'change-orders',
+    icon: ClipboardList,
+    title: 'Change Orders',
+    description:
+      'See and approve any changes to scope or cost — full transparency.',
+  },
+  {
+    key: 'site-log',
+    icon: ClipboardCheck,
+    title: 'Site Log',
+    description: 'Daily updates from the field as your home comes together.',
+  },
+  {
+    key: 'documents',
+    icon: FileText,
+    title: 'Documents',
+    description:
+      'Contracts, plans, warranties, and project paperwork in one place.',
+  },
+  {
+    key: 'messages',
+    icon: MessageSquare,
+    title: 'Messages',
+    description: 'A direct line to your Skyeline team, all in one thread.',
+  },
+  {
+    key: 'photos',
+    icon: Image,
+    title: 'Photos',
+    description: 'A growing gallery of your home being built, week by week.',
+  },
 ];
 
 const STEPS = [
-  { icon: PenTool,  title: 'We finalize your estimate', body: 'Your scope, allowances, and pricing get locked in.' },
-  { icon: Palette,  title: 'You review your selections', body: 'Approve finishes and materials right here in the portal.' },
-  { icon: HardHat,  title: 'We break ground',           body: 'Progress, photos, and field updates start flowing in.' },
+  {
+    icon: PenTool,
+    title: 'We match you with an architect',
+    body: 'We discuss your vision and match you with the best architect partner to design your dream home — walking you through the entire process.',
+  },
+  {
+    icon: FileText,
+    title: 'We finalize your estimate',
+    body: 'Once your plans are ready, we lock in scope, allowances, and pricing.',
+  },
+  {
+    icon: Palette,
+    title: 'You review your selections',
+    body: 'Approve finishes and materials right here in the portal.',
+  },
+  {
+    icon: HardHat,
+    title: 'We break ground',
+    body: 'Progress, photos, and field updates start flowing in.',
+  },
 ];
 
 interface Props {
@@ -48,7 +128,13 @@ interface Props {
   onNavigate: (tab: string) => void;
 }
 
-export function ClientWelcomePreview({ clientFirstName, projectName, projectAddress, hasProject, onNavigate }: Props) {
+export function ClientWelcomePreview({
+  clientFirstName,
+  projectName,
+  projectAddress,
+  hasProject,
+  onNavigate,
+}: Props) {
   const name = clientFirstName?.trim();
   // Feature preview is collapsed by default so the page stays short and the
   // "Explore Skyeline" content below sits within reach instead of being buried
@@ -60,7 +146,9 @@ export function ClientWelcomePreview({ clientFirstName, projectName, projectAddr
       {/* ── Hero ─────────────────────────────────────────────────────────── */}
       <div
         className="relative overflow-hidden rounded-2xl px-6 py-10 sm:px-10 sm:py-14"
-        style={{ background: `linear-gradient(135deg, ${BLACK} 0%, #1f1d1a 55%, #2a2419 100%)` }}
+        style={{
+          background: `linear-gradient(135deg, ${BLACK} 0%, #1f1d1a 55%, #2a2419 100%)`,
+        }}
       >
         {/* Soft gold glow accent */}
         <div
@@ -70,7 +158,11 @@ export function ClientWelcomePreview({ clientFirstName, projectName, projectAddr
         <div className="relative max-w-2xl">
           <div
             className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-widest"
-            style={{ backgroundColor: 'rgba(201,169,110,0.15)', color: GOLD, letterSpacing: '0.18em' }}
+            style={{
+              backgroundColor: 'rgba(201,169,110,0.15)',
+              color: GOLD,
+              letterSpacing: '0.18em',
+            }}
           >
             <Sparkles className="h-3.5 w-3.5" />
             Skyeline Homes · Project Portal
@@ -82,11 +174,20 @@ export function ClientWelcomePreview({ clientFirstName, projectName, projectAddr
 
           <p className="mt-3 text-base sm:text-lg text-gray-300 leading-relaxed">
             {hasProject ? (
-              <>We're getting <span className="text-white font-medium">{projectName || 'your project'}</span> set up.
-                This is your home base — every milestone, selection, dollar, and photo will live right here.</>
+              <>
+                We're getting{' '}
+                <span className="text-white font-medium">
+                  {projectName || 'your project'}
+                </span>{' '}
+                set up. This is your home base — every milestone, selection,
+                dollar, and photo will live right here.
+              </>
             ) : (
-              <>This is your home base for building with Skyeline. Once your project kicks off, every milestone,
-                selection, dollar, and photo will live right here.</>
+              <>
+                This is your home base for building with Skyeline. Once your
+                project kicks off, every milestone, selection, dollar, and photo
+                will live right here.
+              </>
             )}
           </p>
 
@@ -104,11 +205,14 @@ export function ClientWelcomePreview({ clientFirstName, projectName, projectAddr
       </div>
 
       {/* ── What happens next ────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {STEPS.map((step, i) => {
           const Icon = step.icon;
           return (
-            <div key={step.title} className="relative rounded-xl border border-gray-200 bg-white p-4">
+            <div
+              key={step.title}
+              className="relative rounded-xl border border-gray-200 bg-white p-4"
+            >
               <div className="flex items-center gap-3">
                 <div
                   className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg"
@@ -120,8 +224,12 @@ export function ClientWelcomePreview({ clientFirstName, projectName, projectAddr
                   Step {i + 1}
                 </span>
               </div>
-              <p className="mt-3 text-sm font-semibold text-gray-900">{step.title}</p>
-              <p className="mt-1 text-xs text-gray-500 leading-relaxed">{step.body}</p>
+              <p className="mt-3 text-sm font-semibold text-gray-900">
+                {step.title}
+              </p>
+              <p className="mt-1 text-xs text-gray-500 leading-relaxed">
+                {step.body}
+              </p>
             </div>
           );
         })}
@@ -146,14 +254,20 @@ export function ClientWelcomePreview({ clientFirstName, projectName, projectAddr
             <div className="min-w-0">
               <span
                 className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-widest"
-                style={{ backgroundColor: 'rgba(201,169,110,0.18)', color: '#8a6a3a' }}
+                style={{
+                  backgroundColor: 'rgba(201,169,110,0.18)',
+                  color: '#8a6a3a',
+                }}
               >
                 In the meantime
               </span>
-              <h3 className="mt-2 text-lg font-bold text-gray-900">Let's start your Design Discovery</h3>
+              <h3 className="mt-2 text-lg font-bold text-gray-900">
+                Let's start your Design Discovery
+              </h3>
               <p className="mt-1 max-w-xl text-sm leading-relaxed text-gray-600">
-                While we get your project set up, explore inspiring homes, materials, and finishes.
-                It helps us understand your vision and personalize your build from day one.
+                While we get your project set up, explore inspiring homes,
+                materials, and finishes. It helps us understand your vision and
+                personalize your build from day one.
               </p>
             </div>
           </div>
@@ -176,7 +290,7 @@ export function ClientWelcomePreview({ clientFirstName, projectName, projectAddr
           expands the full descriptive tiles for homeowners who want detail. */}
       <div className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5">
         <button
-          onClick={() => setShowFeatures(v => !v)}
+          onClick={() => setShowFeatures((v) => !v)}
           className="flex w-full items-center justify-between gap-3 text-left"
         >
           <div>
@@ -184,7 +298,8 @@ export function ClientWelcomePreview({ clientFirstName, projectName, projectAddr
               What you'll be able to track
             </h2>
             <p className="mt-0.5 text-xs text-gray-400">
-              {FEATURES.length} things you'll follow once your build is live — tap to {showFeatures ? 'collapse' : 'explore'}
+              {FEATURES.length} things you'll follow once your build is live —
+              tap to {showFeatures ? 'collapse' : 'explore'}
             </p>
           </div>
           <ChevronDown
@@ -194,7 +309,7 @@ export function ClientWelcomePreview({ clientFirstName, projectName, projectAddr
 
         {showFeatures ? (
           <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {FEATURES.map(feat => {
+            {FEATURES.map((feat) => {
               const Icon = feat.icon;
               return (
                 <button
@@ -208,10 +323,15 @@ export function ClientWelcomePreview({ clientFirstName, projectName, projectAddr
                   >
                     <Icon className="h-5 w-5" style={{ color: GOLD }} />
                   </div>
-                  <p className="mt-4 text-sm font-semibold text-gray-900">{feat.title}</p>
-                  <p className="mt-1 flex-1 text-xs text-gray-500 leading-relaxed">{feat.description}</p>
+                  <p className="mt-4 text-sm font-semibold text-gray-900">
+                    {feat.title}
+                  </p>
+                  <p className="mt-1 flex-1 text-xs text-gray-500 leading-relaxed">
+                    {feat.description}
+                  </p>
                   <span className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-gray-400 group-hover:text-[#8a6a3a]">
-                    Open <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+                    Open{' '}
+                    <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
                   </span>
                 </button>
               );
@@ -219,7 +339,7 @@ export function ClientWelcomePreview({ clientFirstName, projectName, projectAddr
           </div>
         ) : (
           <div className="mt-4 flex flex-wrap gap-2">
-            {FEATURES.map(feat => {
+            {FEATURES.map((feat) => {
               const Icon = feat.icon;
               return (
                 <button
@@ -238,7 +358,10 @@ export function ClientWelcomePreview({ clientFirstName, projectName, projectAddr
 
       <p className="text-center text-xs text-gray-400 pt-2">
         Questions in the meantime? Use the{' '}
-        <button onClick={() => onNavigate('messages')} className="font-medium text-[#8a6a3a] hover:underline">
+        <button
+          onClick={() => onNavigate('messages')}
+          className="font-medium text-[#8a6a3a] hover:underline"
+        >
           Messages
         </button>{' '}
         tab to reach your Skyeline team anytime.
