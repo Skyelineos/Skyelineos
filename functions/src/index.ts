@@ -2183,6 +2183,11 @@ export { createWarrantyReminders } from './projects/warrantyReminders';
 //    thereafter. Idempotent.
 export { oneShotPhaseMigration } from './projects/phaseMigration';
 
+// ── Recommended-For-You bridge: when a client sets aside a recommended look,
+//    create a client "upload a photo" task; complete it when they upload; notify
+//    the designers throughout. (Clients can't write projectTasks directly.)
+export { recommendationTaskBridge } from './projects/recommendationTaskBridge';
+
 
 // (qboOAuth standalone removed — routes folded into the api Express app
 //  to avoid the org-IAM block on new public Cloud Functions.)

@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { InspirationBoard } from '@/components/client-portal/InspirationBoard';
 import StyleQuiz from '@/components/client-portal/StyleQuiz';
+import RecommendedSelections from '@/components/client-portal/RecommendedSelections';
 import {
   Image as ImageIcon, Layers, CheckCircle2, ChevronRight, Sparkles, Lock,
 } from 'lucide-react';
@@ -133,6 +134,9 @@ export default function DesignStudio({ projectId, clientContactId, clientName, o
 
       {/* ── Discover your style (guided quiz) ───────────────────────────── */}
       <StyleQuiz projectId={projectId} fromUserId={clientContactId} fromUserName={clientName} />
+
+      {/* ── Recommended for you (bridges the quiz → selections) ──────────── */}
+      <RecommendedSelections projectId={projectId} clientContactId={clientContactId} clientName={clientName} />
 
       {/* ── Your inspiration (front-and-center before plans/options exist) ─ */}
       <div>
