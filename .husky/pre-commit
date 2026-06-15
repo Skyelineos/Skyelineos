@@ -71,7 +71,12 @@ EOF
   fi
 fi
 
-# Run lint-staged if it exists
+# Run lint-staged if it exists.
+# ESLint v9 is installed but the repo still uses the legacy .eslintrc.json, which
+# v9 only reads when ESLINT_USE_FLAT_CONFIG=false. Export it here so lint-staged's
+# `eslint --fix` step finds the config instead of failing every commit. (Drop this
+# once the config is migrated to flat `eslint.config.js`.)
+export ESLINT_USE_FLAT_CONFIG=false
 if command -v npx >/dev/null 2>&1 && npx lint-staged --help >/dev/null 2>&1; then
   echo "🧹 Running lint-staged..."
   npx lint-staged
