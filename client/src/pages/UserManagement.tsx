@@ -13,7 +13,7 @@ import { useAuth } from '@/auth/AuthContext';
 import { TEAM_NAV } from '@/components/layout/Sidebar';
 import {
   Search, X, Shield, UserCheck, HardHat, Palette, Users,
-  CheckCircle2, XCircle, Clock, Wrench, MapPin, Settings2, Pencil, Briefcase
+  CheckCircle2, XCircle, Clock, Wrench, MapPin, Settings2, Pencil, Briefcase, Archive, ArchiveRestore
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -32,6 +32,7 @@ interface FirestoreUser {
   projectCity?: string;
   linkedClientId?: string;
   navDisabled?: string[];
+  archived?: boolean;
   createdAt?: any;
 }
 
@@ -291,15 +292,17 @@ function EditUserDialog({
 // ─── User Row ─────────────────────────────────────────────────────────────────
 
 function UserRow({
-  user, currentUserId, projects, onRoleChange, onToggleActive, onPermissionsChange, onSaveEdit,
+  user, currentUserId, projects, showArchived, onRoleChange, onToggleActive, onPermissionsChange, onSaveEdit, onArchive,
 }: {
   user: FirestoreUser;
   currentUserId: string;
   projects: ProjectLite[];
+  showArchived: boolean;
   onRoleChange: (uid: string, role: string) => void;
   onToggleActive: (uid: string, active: boolean, status: string) => void;
   onPermissionsChange: (uid: string, navDisabled: string[]) => void;
   onSaveEdit: (uid: string, data: EditUserData) => void;
+  onArchive: (uid: string, archived: boolean) => void;
 }) {
   const isSelf = user.id === currentUserId;
   const [permOpen, setPermOpen] = useState(false);
@@ -430,6 +433,34 @@ function UserRow({
         </div>
       )}
 
+      {/* Archive (hide from list) / Restore. Does NOT affect sign-in access —
+          that's the separate Activate/Deactivate control. */}
+      {!isSelf && (
+        <div className="flex-shrink-0">
+          {showArchived ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs gap-1.5"
+              title="Restore to the active list"
+              onClick={() => onArchive(user.id, false)}
+            >
+              <ArchiveRestore className="h-3.5 w-3.5" /> Restore
+            </Button>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0 text-gray-400 hover:text-gray-700"
+              title="Archive (hide from this list)"
+              onClick={() => onArchive(user.id, true)}
+            >
+              <Archive className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
+      )}
+
       {editOpen && (
         <EditUserDialog
           user={user}
@@ -471,6 +502,9 @@ export default function UserManagement() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
+  // Archived view toggle. Archiving only hides a user from this list to
+  // declutter it — it does not change their sign-in access.
+  const [showArchived, setShowArchived] = useState(false);
 
   useEffect(() => {
     const q = query(collection(db, 'users'), orderBy('createdAt', 'desc'));
@@ -572,6 +606,11 @@ export default function UserManagement() {
     toast({ title: 'Permissions saved' });
   };
 
+  const handleArchive = async (uid: string, archived: boolean) => {
+    await updateDoc(doc(db, 'users', uid), { archived, updatedAt: serverTimestamp() });
+    toast({ title: archived ? 'User archived' : 'User restored' });
+  };
+
   const handleSaveEdit = async (uid: string, data: EditUserData) => {
     // 1) Update the user's own profile (name / role / active status).
     await updateDoc(doc(db, 'users', uid), {
@@ -602,7 +641,14 @@ export default function UserManagement() {
     toast({ title: 'User updated' });
   };
 
+  // Split active vs archived first; stats + pending banners reflect the active
+  // roster so archiving genuinely declutters the page.
+  const activeRoster = users.filter(u => u.archived !== true);
+  const archivedCount = users.length - activeRoster.length;
+
   const filtered = users.filter(u => {
+    // Active view shows non-archived; archived view shows only archived.
+    if ((u.archived === true) !== showArchived) return false;
     const matchSearch = !search || [u.name, u.email, u.company]
       .filter(Boolean).some(v => v!.toLowerCase().includes(search.toLowerCase()));
     const matchRole =
@@ -613,21 +659,30 @@ export default function UserManagement() {
     return matchSearch && matchRole;
   });
 
-  const pending = users.filter(u => u.status === 'pending_approval');
+  const pending = activeRoster.filter(u => u.status === 'pending_approval');
 
   return (
     <AppLayout>
       <div className="space-y-5">
         {/* Header */}
-        <div>
-          <h1 className="font-heading font-semibold text-brand-black" style={{ fontSize: 'clamp(1.5rem, 3vw, 2rem)' }}>
-            Users
-          </h1>
-          <p className="text-sm text-gray-500">{users.length} accounts registered</p>
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <h1 className="font-heading font-semibold text-brand-black" style={{ fontSize: 'clamp(1.5rem, 3vw, 2rem)' }}>
+              {showArchived ? 'Archived Users' : 'Users'}
+            </h1>
+            <p className="text-sm text-gray-500">
+              {showArchived
+                ? `${archivedCount} archived account${archivedCount === 1 ? '' : 's'}`
+                : `${activeRoster.length} accounts registered`}
+            </p>
+          </div>
+          <Button variant="outline" className="gap-2" onClick={() => setShowArchived(v => !v)}>
+            {showArchived ? <><Users className="h-4 w-4" /> Active Users</> : <><Archive className="h-4 w-4" /> Archived Users{archivedCount ? ` (${archivedCount})` : ''}</>}
+          </Button>
         </div>
 
         {/* Pending account activations */}
-        {pending.length > 0 && (
+        {!showArchived && pending.length > 0 && (
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
             <Clock className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
@@ -640,7 +695,7 @@ export default function UserManagement() {
         )}
 
         {/* Pending trade requests */}
-        {pendingTrades.length > 0 && (
+        {!showArchived && pendingTrades.length > 0 && (
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-3">
             <div className="flex items-center gap-2">
               <Wrench className="h-5 w-5 text-blue-500 flex-shrink-0" />
@@ -668,7 +723,7 @@ export default function UserManagement() {
         )}
 
         {/* Pending sub-assignment approvals (from Project Managers) */}
-        {pendingSubs.length > 0 && (
+        {!showArchived && pendingSubs.length > 0 && (
           <div className="bg-sky-50 border border-sky-200 rounded-xl p-4 space-y-3">
             <div className="flex items-center gap-2">
               <HardHat className="h-5 w-5 text-sky-500 flex-shrink-0" />
@@ -720,13 +775,14 @@ export default function UserManagement() {
           </Select>
         </div>
 
-        {/* Stats */}
+        {/* Stats — active roster only; hidden in the archived view. */}
+        {!showArchived && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
-            { label: 'Staff',         filter: 'staff',    count: users.filter(u => isTeamRoleValue(u.role)).length, color: '#C9A96E' },
-            { label: 'Home Owners',   filter: 'client',   count: users.filter(u => u.role === 'client').length,   color: '#3b82f6' },
-            { label: 'Subs',          filter: 'sub',      count: users.filter(u => u.role === 'sub').length,       color: '#f59e0b' },
-            { label: 'Designers',     filter: 'designer', count: users.filter(u => u.role === 'designer').length,  color: '#8b5cf6' },
+            { label: 'Staff',         filter: 'staff',    count: activeRoster.filter(u => isTeamRoleValue(u.role)).length, color: '#C9A96E' },
+            { label: 'Home Owners',   filter: 'client',   count: activeRoster.filter(u => u.role === 'client').length,   color: '#3b82f6' },
+            { label: 'Subs',          filter: 'sub',      count: activeRoster.filter(u => u.role === 'sub').length,       color: '#f59e0b' },
+            { label: 'Designers',     filter: 'designer', count: activeRoster.filter(u => u.role === 'designer').length,  color: '#8b5cf6' },
           ].map(stat => {
             const active = roleFilter === stat.filter;
             return (
@@ -745,6 +801,7 @@ export default function UserManagement() {
             );
           })}
         </div>
+        )}
 
         {/* User list */}
         {loading && <p className="text-sm text-gray-400 py-8 text-center">Loading...</p>}
@@ -755,16 +812,18 @@ export default function UserManagement() {
               user={u}
               currentUserId={currentUser?.firebaseUid ?? ''}
               projects={projects}
+              showArchived={showArchived}
               onRoleChange={handleRoleChange}
               onToggleActive={handleToggleActive}
               onPermissionsChange={handlePermissionsChange}
               onSaveEdit={handleSaveEdit}
+              onArchive={handleArchive}
             />
           ))}
           {!loading && filtered.length === 0 && (
             <div className="text-center py-12 text-gray-400">
-              <Users className="h-10 w-10 mx-auto mb-2 opacity-30" />
-              <p>No users found</p>
+              {showArchived ? <Archive className="h-10 w-10 mx-auto mb-2 opacity-30" /> : <Users className="h-10 w-10 mx-auto mb-2 opacity-30" />}
+              <p>{showArchived ? 'No archived users' : 'No users found'}</p>
             </div>
           )}
         </div>
