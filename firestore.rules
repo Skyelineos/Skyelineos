@@ -339,8 +339,56 @@ service cloud.firestore {
     // (Removed: legacy root-level /messages and /threads rules. The dead
     // /api/messaging UI that used them was deleted in the Communication Center
     // cleanup. Live chat is project-scoped channels — see the project
-    // channels/messages rules below. The Communication Center adds its own
-    // top-level /communications rules.)
+    // channels/messages rules below.)
+
+    // ── Communication Center ─────────────────────────────────────────────────
+    // Lifecycle-spanning conversations keyed by subjectRef (lead|client|project).
+    // Visibility model: 'internal'/'restricted' = staff + explicit members only;
+    // 'client'/'trade' = any member (uid in memberUids). Staff (isGC) see all.
+    // AI output lives in the extractions subcollection — Internal-only, and
+    // written ONLY by Cloud Functions (admin SDK bypasses these rules).
+    function commThread(threadId) {
+      return get(/databases/$(database)/documents/communications/$(threadId)).data;
+    }
+    function commMember(t) {
+      return isSignedIn() && request.auth.uid in t.memberUids;
+    }
+    function commCanRead(t) {
+      return isGC()
+        || (commMember(t) && (t.visibility == 'client' || t.visibility == 'trade' || t.visibility == 'restricted'));
+    }
+
+    match /communications/{threadId} {
+      allow read: if commCanRead(resource.data);
+      allow create: if isGC()
+        && request.resource.data.createdBy == request.auth.uid;
+      // Staff edit freely; members may only post (last-message denormalization)
+      // or be added via @mention — never change title / category / visibility.
+      allow update: if isGC()
+        || (commMember(resource.data)
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(['memberUids', 'lastMessageAt', 'lastMessageText']));
+      allow delete: if isAdmin();
+
+      match /messages/{messageId} {
+        allow read: if commCanRead(commThread(threadId));
+        allow create: if request.resource.data.authorUid == request.auth.uid
+          && request.resource.data.source != 'ai'
+          && (isGC() || commMember(commThread(threadId)));
+        allow update, delete: if isGC()
+          || (isSignedIn() && resource.data.authorUid == request.auth.uid);
+      }
+
+      // AI extractions: Internal-only, read by staff; writes are Cloud-Function
+      // only. Staff may update just the disposition fields from the review UI.
+      match /extractions/{extractionId} {
+        allow read: if isGC();
+        allow create, delete: if false;
+        allow update: if isGC()
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['status', 'linkedRef', 'reviewedAt', 'reviewedByUid']);
+      }
+    }
 
     // Financial data (bills, financial transactions). Read-blocked for PM.
     match /financials/{docId} {

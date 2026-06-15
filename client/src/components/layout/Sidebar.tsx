@@ -10,6 +10,7 @@ import {
   Calendar,
   DollarSign,
   MessageSquare,
+  MessagesSquare,
   Users,
   X,
   UserCheck,
@@ -105,6 +106,7 @@ const TEAM_NAV: NavGroup[] = [
   {
     label: 'Communication',
     items: [
+      { label: 'Communication Center', href: '/communications', icon: MessagesSquare },
       { label: 'Messaging', href: '/messages',  icon: MessageSquare },
       { label: 'Comms Log', href: '/comms-log', icon: Radio },
     ],

@@ -38,6 +38,7 @@ const GlobalSchedule = lazy(() => import("@/pages/GlobalSchedule"));
 const FullscreenTimeline = lazy(() => import("@/pages/FullscreenTimeline"));
 const Financials = lazy(() => import("@/pages/Financials"));
 const Messages = lazy(() => import("@/pages/Messages"));
+const CommunicationCenter = lazy(() => import("@/pages/CommunicationCenter"));
 const Settings = lazy(() => import("@/pages/Settings"));
 const Contacts = lazy(() => import("@/pages/Contacts"));
 const Contracts = lazy(() => import("@/pages/Contracts"));
@@ -564,6 +565,16 @@ function Router() {
           <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
             <Suspense fallback={<MinimalSpinner title="Loading Messages" />}>
               <Messages />
+            </Suspense>
+          </RoleGuard>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/communications">
+        <ProtectedRoute>
+          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+            <Suspense fallback={<MinimalSpinner title="Loading Communication Center" />}>
+              <CommunicationCenter />
             </Suspense>
           </RoleGuard>
         </ProtectedRoute>

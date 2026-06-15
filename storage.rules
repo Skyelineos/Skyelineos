@@ -35,6 +35,13 @@ service firebase.storage {
       allow read, write: if request.auth != null;
     }
 
+    // Communication Center attachments (images/videos/docs/audio on threads).
+    // Any authed user can upload + read; per-thread visibility is enforced by the
+    // Firestore /communications rules, not here.
+    match /communications/{allPaths=**} {
+      allow read, write: if request.auth != null;
+    }
+
     // Style Quiz renderings (Templates → Style Quiz). Readable by anyone
     // (shown in the client portal); written by authed staff via the editor.
     match /styleQuiz/{allPaths=**} {
