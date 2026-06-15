@@ -25,6 +25,7 @@ const Dashboard = lazy(() => import('@/pages/Dashboard'));
 const Projects = lazy(() => import('@/pages/Projects'));
 const ProjectDetail = lazy(() => import('@/pages/ProjectDetail'));
 const ProjectOverview = lazy(() => import('@/pages/ProjectOverview'));
+const ProjectDesigner = lazy(() => import('@/pages/ProjectDesigner'));
 const ProjectSetup = lazy(() => import('@/pages/ProjectSetup'));
 const ProjectEstimates = lazy(() => import('@/pages/ProjectEstimates'));
 const ProjectBids = lazy(() => import('@/pages/ProjectBids'));
@@ -272,6 +273,29 @@ function Router() {
           >
             <Suspense fallback={<MinimalSpinner title="Loading Takeoff" />}>
               <ProjectTakeoff />
+            </Suspense>
+          </RoleGuard>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/projects/:id/designer">
+        <ProtectedRoute>
+          <RoleGuard
+            allowedRoles={[
+              'admin',
+              'gc',
+              'projectManager',
+              'designer',
+              'client',
+            ]}
+            showNotAuthorized
+          >
+            <Suspense
+              fallback={<MinimalSpinner title="Loading Designer Portal" />}
+            >
+              <ErrorBoundary>
+                <ProjectDesigner />
+              </ErrorBoundary>
             </Suspense>
           </RoleGuard>
         </ProtectedRoute>

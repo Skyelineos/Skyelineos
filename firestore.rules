@@ -479,6 +479,33 @@ service cloud.firestore {
       allow delete: if isAdmin() || isGC();
     }
 
+    // Designer Portal — mood boards (one per room; items embedded as an array).
+    // GC + designer curate; the client (project owner) reads + approves/requests
+    // revisions (an update). Matches the collaborative selectionRecommendations
+    // pattern below.
+    match /projects/{projectId}/moodBoards/{boardId} {
+      allow read: if isGC() || isDesigner() || (isClient() && clientOwnsProject(projectId));
+      allow create, update: if isGC() || isDesigner() || (isClient() && clientOwnsProject(projectId));
+      allow delete: if isGC() || isDesigner();
+    }
+
+    // Designer Portal — design decisions (room-by-room). GC + designer raise +
+    // resolve; the client approves / rejects / requests revisions.
+    match /projects/{projectId}/designDecisions/{decisionId} {
+      allow read: if isGC() || isDesigner() || (isClient() && clientOwnsProject(projectId));
+      allow create, update: if isGC() || isDesigner() || (isClient() && clientOwnsProject(projectId));
+      allow delete: if isGC() || isDesigner();
+    }
+
+    // Designer Portal — file library metadata (the bytes live in Firebase
+    // Storage under projects/{projectId}/rfis/... which storage.rules already
+    // opens to authed users). Client may upload + read; GC/designer manage.
+    match /projects/{projectId}/designFiles/{fileId} {
+      allow read: if isGC() || isDesigner() || (isClient() && clientOwnsProject(projectId));
+      allow create, update: if isGC() || isDesigner() || (isClient() && clientOwnsProject(projectId));
+      allow delete: if isGC() || isDesigner();
+    }
+
     // Style quiz answers — the homeowner's guided style preferences. The client
     // (project owner) reads/writes their own; GC + designer read to guide the
     // selections.

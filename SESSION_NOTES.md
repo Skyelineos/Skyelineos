@@ -20,12 +20,79 @@ then run `npm run deploy*` to deploy to the `skyelineos` Firebase project so the
 actually reaches users. A GitHub push alone does **not** update the live site. See the
 "How work ships" section in `CLAUDE.md`.
 
+## Session 16 — Project Designer Portal (room-by-room design collaboration)
+
+New **project-scoped** Designer Portal at `/projects/:id/designer` (distinct from
+the existing multi-project `/designer-portal/:tab*`). Built entirely on existing
+conventions — no new app, no rebuilt auth/upload/messaging.
+
+### Route + access
+
+- `client/src/App.tsx` — lazy `ProjectDesigner` + route behind
+  `RoleGuard(['admin','gc','projectManager','designer','client'])`, wrapped in
+  `ProtectedRoute` + `ErrorBoundary` like the sibling project routes. Uses
+  `ProjectLayout` (existing project sidebar). Param is `:id` (codebase convention),
+  read with Wouter `useRoute`.
+- Role gating in-page via `normalizeRole()` → `canEditDesign` (admin/gc/PM/designer)
+  vs `canReviewAsClient` (client: view/comment/upload/approve/reject). Subs/accountants
+  have no access (not in `allowedRoles`).
+
+### Data model (Firestore, project subcollections)
+
+- **Reused** `projects/{id}/rooms` (room nav; seeded on demand via "Add standard
+  design rooms" — never auto-polluted), `projects/{id}/selections` (Selection
+  Tracker — spec fields added as **additive optional** fields: `designStatus`,
+  `selectedAmount`, `varianceAmount`, `productUrl`, `specSheetUrl`, `isCustom/isTBD/
+isNotApplicable`, `linkVerified`, `linkedScheduleMilestone`, etc. — legacy
+  `clientApprovalStatus` kept in sync so the client portal keeps working),
+  `projects/{id}/channels` (Discussion — one `design-<roomId>` channel per room).
+- **New** `projects/{id}/moodBoards` (items embedded as array, like selections do),
+  `projects/{id}/designDecisions`, `projects/{id}/designFiles` (metadata; bytes go
+  to Storage via the existing `uploadRFIAttachment` under `projects/{id}/rfis/...`).
+- `firestore.rules` — added 3 blocks (`moodBoards`, `designDecisions`, `designFiles`)
+  mirroring the collaborative `selectionRecommendations` rule (GC+designer manage,
+  client-owner reads + approves). **`storage.rules` needs NO change** — the
+  `projects/{projectId}/{allPaths=**}` block already covers designer uploads.
+
+### Files
+
+- `client/src/lib/designer/portalTypes.ts` (types + constants + validation helpers)
+- `client/src/lib/designer/portalService.ts` (Firestore service; reuses messaging+upload)
+- `client/src/lib/designer/aiActions.ts` (10 AI **placeholders** — no model backend
+  wired; swap the runner body for a `/api/designer/ai/:action` route on the shared
+  Express `api` later)
+- `client/src/pages/ProjectDesigner.tsx` + 9 components under
+  `client/src/components/designer/portal/` (Header, Dashboard, RoomNav, RoomWorkspace,
+  MoodBoardPanel, SelectionTrackerPanel, DecisionTrackerPanel, DiscussionPanel,
+  FileLibraryPanel, AiActionsMenu, shared primitives).
+
+### Validation done
+
+- `vite build` green; page code-splits to its own chunk. `tsc` clean for all new
+  files (repo-wide `tsc` is non-green by design — pre-existing). **Runtime smoke
+  test (headless browser) NOT run** — needs live Firebase auth/Firestore, not
+  available in the build sandbox. Verify the route loads + a mood-board/selection
+  round-trips after `npm run deploy:hosting` + `deploy:rules`.
+
+### Deliberate deferrals
+
+- AI actions are UI + stubbed service only (no Claude call yet).
+- Timeline/budget are **data hooks only** (`timelineImpact`, `dueDate`,
+  `requiredBeforeTrade`, `linkedScheduleMilestone`, allowance/selected/variance) —
+  schedule/financial engines intentionally untouched.
+- Message pin/mark-as-decision and true cross-author "move" need a message-schema
+  extension / Cloud Function; "move to room" currently **copies** with provenance
+  fields (`originalMessageId`, `originalRoomId`, `movedBy`, `movedAt`).
+- Per-room design channel read assumes the designer/client is in the project's
+  `assignedUserIds`/`clientId` (normal case) since channel reads gate on `memberUids`.
+
 ## Session 15 — Portal access without admin approval + sub bid-link fix
 
 Subs (and clients/designers) were getting walled behind the "Access Pending Approval"
 screen, and subs arriving via a bid magic-link couldn't reach the bid in their portal.
 
 ### Root cause
+
 `client/src/auth/AuthContext.tsx` stamped **every** first-time sign-in with no `users`
 doc as `role: 'pending_gc'`. The email/password registration form (`SignIn.tsx`) already
 assigns `client` / `sub` / `designer` correctly, but any cold sign-in that skipped it —
@@ -35,6 +102,7 @@ the portal where their bid would surface. The sub portal is also role-gated to `
 (`App.tsx` ~600), so even a non-blocked cold sub stamped `client` couldn't see bids.
 
 ### What changed
+
 - **`AuthContext.tsx`** — on first sign-in with no profile, resolve the portal role from a
   matching **contact card** by email (new `derivePortalRole()`, mirrors
   `functions/src/auth/ensureContactAuth.ts` `deriveUserRole()`): subcontractor/vendor → `sub`,
@@ -48,6 +116,7 @@ the portal where their bid would surface. The sub portal is also role-gated to `
   `.slice(0, 10)`, ensuring the primary invite keys never get truncated away.
 
 ### Notes for future sessions
+
 - `RequestBidsModal.tsx` and `StartBidModal.tsx` are **orphaned** (not imported/rendered
   anywhere). The live GC send path is `SendBidPackageModal` → `/api/bid-requests/send`
   (`functions/src/bids/sendBidRequestRoute.ts`), which writes `invitedSubIds` =
@@ -55,7 +124,7 @@ the portal where their bid would surface. The sub portal is also role-gated to `
   them in a future cleanup if desired.
 - The `firestore.rules` bidRequests read rule only matches on `request.auth.uid` or
   `request.auth.token.email.lower()` in `invitedSubIds` (not contactId), so the backend
-  *must* keep including the lowercased email — it does.
+  _must_ keep including the lowercased email — it does.
 
 ## Session 15 — Jobsite map: Google Places autocomplete + portal view access
 
@@ -80,6 +149,7 @@ is independent.
 **New — Google Places autocomplete.** Replaced the weak/rate-limited OSM
 Nominatim geocoding with Google Places (New), proxied server-side so the Maps key
 never ships to the browser:
+
 - `functions/src/places/placesRoutes.ts` → `GET /api/places/autocomplete` +
   `GET /api/places/details` (signed-in only; session tokens for cheap billing).
   Registered on the shared `api` Express app (index.ts) — no new Cloud Run
@@ -100,6 +170,7 @@ dashboard) and `DesignerPortal` (selected project's Dashboard tab). Data access
 already existed in firestore.rules (`assignedUserIds`); this is the UI.
 
 **OPERATOR PREREQUISITES (Places won't work until these are done):**
+
 1. In Google Cloud project `skyelineos`, enable the **Places API (New)**.
 2. Create an **API key** restricted to the Places API (and, ideally, restricted
    by IP to the Cloud Functions egress — it's only used server-side).
@@ -114,6 +185,7 @@ compliance. The dispatcher already supported Twilio; the gaps were phone
 formatting, a dead opt-in toggle, no STOP handling, and subs never being texted.
 
 ### What shipped (code)
+
 - **Shared SMS util** — `functions/src/notifications/sms.ts`. `toE164()` coerces
   free-form phones (`(801) 555-1234`, `801-555-1234`, `8015551234`, `1-801…`) to
   the `+18015551234` Twilio requires; defaults to +1. Returns null on ambiguous
@@ -126,7 +198,7 @@ formatting, a dead opt-in toggle, no STOP handling, and subs never being texted.
   this, un-normalized phones silently failed at Twilio.
 - **STOP/START/HELP webhook** — `functions/src/notifications/smsInboundRoute.ts`,
   `POST /api/sms/inbound`. Writes a phone-keyed ledger at `sms_opt_outs/{e164}`.
-  Every sender skips opted-out numbers, *including* `forceSms` alerts. Twilio's
+  Every sender skips opted-out numbers, _including_ `forceSms` alerts. Twilio's
   carrier-level STOP is a backstop; this mirrors it so we don't waste sends and
   so START re-enables. Added `express.urlencoded` (Twilio posts form-encoded).
 - **Opt-in toggle is now real** — `UserPreferencesContext.tsx` syncs the
@@ -147,6 +219,7 @@ formatting, a dead opt-in toggle, no STOP handling, and subs never being texted.
   (sensitive raw phone numbers; was already covered by default-deny).
 
 ### Operator prerequisites (REQUIRED before subs get reliable texts)
+
 1. **Set your phone, E.164** — `users/{your-uid}.phone = +1801…`. Lead alerts
    (`forceSms`) start texting you immediately once this is set. Twilio secrets
    are already configured; no new secrets.
@@ -166,7 +239,8 @@ formatting, a dead opt-in toggle, no STOP handling, and subs never being texted.
    `npm run deploy:rules` (sms_opt_outs), `npm run deploy:hosting` (toggle).
 
 ### Deliberately NOT built this session
-- Consent capture on the sub *portal* self-onboarding (`SubcontractorPortalAccess`)
+
+- Consent capture on the sub _portal_ self-onboarding (`SubcontractorPortalAccess`)
   — the GC-side capture (EditContactModal checkbox) is built; a sub self-opting-in
   during their own signup is the remaining surface.
 - Per-kind SMS toggles in the UI (the dispatcher already supports
@@ -178,6 +252,7 @@ formatting, a dead opt-in toggle, no STOP handling, and subs never being texted.
 ## Session 13 — Client portal: real-client project access
 
 The client portal couldn't load a real homeowner's project — two layered bugs:
+
 1. **Identity:** it queried `projects` by `user.firebaseUid`, but projects key
    the client by their **contact-doc id** (`contacts.linkedUserId = auth.uid`),
    not the uid. (Admin impersonation "worked" only because the admin passes
@@ -187,6 +262,7 @@ The client portal couldn't load a real homeowner's project — two layered bugs:
    query matched.
 
 Fixes:
+
 - `SkyelineClientPortal.tsx` now uses `resolveClientIdentity()` (same helper
   `ClientTodayFeed` uses) to resolve the uid+email→contact-id union, and queries
   `clientIds array-contains-any` + `clientId in` that union (dropped the
@@ -204,6 +280,7 @@ Fixes:
   all, so converted projects were invisible to the homeowner.
 
 Known follow-ups (not regressions — these were already broken for clients):
+
 - **Estimates** rule (`firestore.rules` ~line 200) still keys
   `estimates/{id}.clientId == uid`, but the Sales path writes the estimate's
   `clientId` as the **sales `clients`-doc id** (neither uid nor contactId). The
@@ -219,6 +296,7 @@ Hardened the lead-intake path end to end and added new-lead alerting + lead-gen
 source documentation across every avenue.
 
 ### What shipped
+
 - **New-lead alert (Cloud Function).** `functions/src/leads/newLeadAlert.ts` —
   `onDocumentCreated('clients/{clientId}')`. Because **every** avenue (manual
   Sales entry, public web form, Crestview QR/Google Form, future event QR + ad
@@ -237,7 +315,7 @@ source documentation across every avenue.
   no composite index).
 - **Lead-gen source documentation.** Source taxonomy extended to
   `website · event · ad_campaign · referral · instagram · parade_of_homes ·
-  email · phone · other`. Each lead now stores `source` + a free-text
+email · phone · other`. Each lead now stores `source` + a free-text
   `sourceDetail` (the specific event/campaign/referrer). Three places kept in
   sync: `LEAD_SOURCES` (`Sales.tsx`), `ALLOWED_SOURCES` (`intakeRoute.ts`),
   `SOURCE_LABELS` (`newLeadAlert.ts` + `GCTodayFeed.tsx`).
@@ -253,12 +331,14 @@ source documentation across every avenue.
     `source: 'website'` or the Crestview tags.
 
 ### Operator prerequisite for the SMS
+
 The text only sends if the **admin user doc has a `phone`** (E.164, e.g.
 `+18015551234`). Set it on `users/{tyler-uid}.phone`. No SMS opt-in needed —
 `lead_created` forces it. Twilio secrets are already configured (shared with the
 notification dispatcher). No new secrets required.
 
 ### Verification
+
 - `functions` `tsc --noEmit` → clean. Client `vite build` → green.
 - Pre-existing `tsc` errors remain (ModernTimelineBuilder, App.tsx `'gc'` role
   taxonomy, two in `Sales.tsx` at the legacy `getDocs`/`Set` spots) — none
@@ -280,9 +360,9 @@ missing, added a lightweight reusable pin picker, and tightened the QR lead form
   into the project's `buildLocation` so directions work immediately.
 - **GC project widget** — `client/src/components/projects/ProjectJobsiteCard.tsx`,
   added to `ProjectOverview.tsx` below the details grid. View mode shows the map
-  + an "Open Directions" button; "Set/Edit pin" flips to edit mode (keyed
-  remount so the map rebinds handlers) and saves via `saveBuildLocation`. Lets
-  the GC pin legacy projects that only had a text address.
+  - an "Open Directions" button; "Set/Edit pin" flips to edit mode (keyed
+    remount so the map rebinds handlers) and saves via `saveBuildLocation`. Lets
+    the GC pin legacy projects that only had a text address.
 - **Directions = default app** — `buildLocation.ts` `directionsUrl` now detects
   iOS (incl. iPadOS-as-Mac) and returns an Apple Maps link there, Google Maps
   elsewhere — so it opens the user's actual default maps app.
@@ -304,6 +384,7 @@ field; the project overview pin picker covers them after creation. Migrate to
 Built the admin-only AI ingestion pipeline at `/admin/ingestion-lab`. Full reference: `docs/ingestion-lab-schema.md`. Code under `functions/src/ingestionLab/` (backend) and `client/src/components/ingestionLab/` + `client/src/pages/IngestionLab.tsx` (UI).
 
 ### What shipped
+
 - **Namespace + rules** (`firestore.rules` lines 526–558): one wildcard rule gates `ingestion_lab/**` on `isAdmin()` reads + Cloud-Function-only writes. One carve-out: admin can update five whitelisted review fields on `processed_items`.
 - **OAuth handlers** for Gmail + Drive (`oauthHandlers.ts`). `POST /start` is admin-token-gated and returns `{ url }` for client navigation; `GET /callback` verifies the state nonce (which carries `adminUid` from `/start`) and writes the tokens.
 - **Ingesters** for Gmail (`gmailIngester.ts`, label-filtered, MIME-tree text extraction, sender→project resolution via contacts_cache) and Drive (`driveIngester.ts`, two folders, recursive cap 5 deep / 500 files / 25 MB per file, per-mime extraction via pdf-parse v2 + Drive exports).
@@ -395,7 +476,7 @@ These are real, not speculative:
 - **`shared/types.ts:240` defines `UserRole` a SECOND time**, identical to `shared/auth-types.ts:16`. Whichever import wins. Roll into the role-taxonomy refactor (see `ROLE_AUDIT.md`).
 - **`pending_team` role is a dead state** — written by `functions/src/auth/ensureContactAuth.ts:34` and `contactAuthBackfill.ts:29` when a contact has role `team` or `employee`, but no client code recognizes it and `ProtectedRoute.tsx:87` only blocks `pending_gc`. Users with this role have no portal.
 - **`functions/src/index.ts:1101` and `:1606`** still hardcode `role === 'gc'` checks. After the role refactor, these need to switch to whatever the canonical "team member" role becomes.
-- **`tsconfig.json` does not include `functions/**/*`** — the Functions package has its own `functions/tsconfig.json` and its own `tsc` run during predeploy. Root `tsc` does not see the Functions code. Fine, but worth knowing — `npm run check` won't catch type errors in `functions/src/`.
+- **`tsconfig.json` does not include `functions/**/\*`** — the Functions package has its own `functions/tsconfig.json`and its own`tsc`run during predeploy. Root`tsc`does not see the Functions code. Fine, but worth knowing —`npm run check`won't catch type errors in`functions/src/`.
 - **212 prod dependencies**, including multiple Gantt libraries (`@daypilot/daypilot-lite-react`, `dhtmlx-gantt`, `frappe-gantt`, `@fullcalendar/*`) and multiple PDF libraries (`jspdf`, `pdf-lib`, `pdfjs-dist`, `@react-pdf/renderer`). At least one of each is unused. A dep audit would shrink the install.
 - **`prepare: husky` script** is in `package.json` but no actual git hooks are configured. The dependency is installed without effect.
 
