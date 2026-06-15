@@ -67,18 +67,27 @@ jobs:
         run: npx playwright install chromium
 
       # Self-cleaning suite: data (taskLibrary) + UI smoke. Streams to qa_runs.
+      # continue-on-error: a normal run that finds failures exits non-zero — that
+      # is NOT a workflow crash. The runner posts its own final report (with the
+      # real error/results) and writes qa-report.json; we only treat a MISSING
+      # report as a true crash below.
       - name: Run E2E suite
+        continue-on-error: true
         run: node scripts/e2e/run.mjs --ui --yes
 
-      # Belt-and-suspenders: if the run crashed before posting its final report,
-      # release the lock + mark errored so deploys + the dashboard don't hang.
-      - name: Release lock on hard failure
-        if: failure()
+      # Only a genuine crash (no qa-report.json => the runner never reached its
+      # finally) needs the safety-net lock release. Otherwise the runner already
+      # posted the real final report, so don't clobber it.
+      - name: Release lock if the runner produced no report
+        if: always()
         run: |
-          curl -s -X POST "$E2E_REPORT_URL" \
-            -H "Authorization: Bearer $E2E_REPORT_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "{\"runId\":\"$E2E_RUN_ID\",\"phase\":\"final\",\"patch\":{\"status\":\"error\",\"error\":\"workflow crashed before final report\"}}" || true
+          if [ ! -f qa-report.json ]; then
+            echo "No qa-report.json — runner crashed; releasing lock."
+            curl -s -X POST "$E2E_REPORT_URL" \
+              -H "Authorization: Bearer $E2E_REPORT_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "{\"runId\":\"$E2E_RUN_ID\",\"phase\":\"final\",\"patch\":{\"status\":\"error\",\"error\":\"workflow crashed before producing a report\"}}" || true
+          fi
 
       - name: Open issue on failed checks
         if: always()
