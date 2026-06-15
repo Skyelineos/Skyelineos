@@ -892,101 +892,11 @@ export const insertWeatherLocationSchema = createInsertSchema(weatherLocations).
 export type WeatherLocation = typeof weatherLocations.$inferSelect;
 export type InsertWeatherLocation = z.infer<typeof insertWeatherLocationSchema>;
 
-// Chat tables
-export const threads = pgTable('threads', {
-  id: serial('id').primaryKey(),
-  projectId: integer('project_id').notNull(),
-  title: varchar('title', { length: 255 }).notNull(),
-  description: text('description'),
-  createdBy: integer('created_by').notNull(),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
-  isArchived: boolean('is_archived').default(false).notNull(),
-});
-
-export const messages = pgTable('messages', {
-  id: serial('id').primaryKey(),
-  threadId: integer('thread_id').notNull(),
-  senderId: integer('sender_id').notNull(),
-  content: text('content').notNull(),
-  messageType: varchar('message_type', { length: 50 }).default('text').notNull(),
-  attachments: json('attachments'),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
-  isEdited: boolean('is_edited').default(false).notNull(),
-});
-
-export const threadParticipants = pgTable('thread_participants', {
-  id: serial('id').primaryKey(),
-  threadId: integer('thread_id').notNull(),
-  userId: integer('user_id').notNull(),
-  role: varchar('role', { length: 50 }).default('participant').notNull(),
-  joinedAt: timestamp('joined_at').defaultNow().notNull(),
-  lastReadAt: timestamp('last_read_at'),
-  isActive: boolean('is_active').default(true).notNull(),
-});
-
-// Chat relations
-export const threadRelations = relations(threads, ({ one, many }) => ({
-  project: one(projects, {
-    fields: [threads.projectId],
-    references: [projects.id],
-  }),
-  creator: one(users, {
-    fields: [threads.createdBy],
-    references: [users.id],
-  }),
-  messages: many(messages),
-  participants: many(threadParticipants),
-}));
-
-export const messageRelations = relations(messages, ({ one }) => ({
-  thread: one(threads, {
-    fields: [messages.threadId],
-    references: [threads.id],
-  }),
-  sender: one(users, {
-    fields: [messages.senderId],
-    references: [users.id],
-  }),
-}));
-
-export const threadParticipantRelations = relations(threadParticipants, ({ one }) => ({
-  thread: one(threads, {
-    fields: [threadParticipants.threadId],
-    references: [threads.id],
-  }),
-  user: one(users, {
-    fields: [threadParticipants.userId],
-    references: [users.id],
-  }),
-}));
-
-// Chat schemas
-export const insertThreadSchema = createInsertSchema(threads).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-
-export const insertMessageSchema = createInsertSchema(messages).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-
-export const insertThreadParticipantSchema = createInsertSchema(threadParticipants).omit({
-  id: true,
-  joinedAt: true,
-});
-
-// Chat types
-export type Thread = typeof threads.$inferSelect;
-export type InsertThread = z.infer<typeof insertThreadSchema>;
-export type Message = typeof messages.$inferSelect;
-export type InsertMessage = z.infer<typeof insertMessageSchema>;
-export type ThreadParticipant = typeof threadParticipants.$inferSelect;
-export type InsertThreadParticipant = z.infer<typeof insertThreadParticipantSchema>;
+// (Removed: legacy Drizzle chat tables — threads / messages / threadParticipants,
+// their relations, insert schemas, and types. They were never instantiated by the
+// Firebase-only backend and backed the dead /api/messaging UI deleted in the
+// Communication Center cleanup. Live chat is project-scoped Firestore channels;
+// the Communication Center introduces top-level `communications` collections.)
 
 // User authentication schemas
 export const insertUserSchema = createInsertSchema(users);

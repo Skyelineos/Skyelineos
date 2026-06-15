@@ -336,24 +336,11 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Messages and threads
-    match /messages/{messageId} {
-      // Author + staff only. (Was `if isSignedIn()`, which let any signed-in
-      // user read every message in the system.) The live messaging UI reads
-      // through the admin-SDK API, not direct Firestore reads, so this is a
-      // direct-access hardening with no client-behavior change.
-      allow read: if isGC()
-        || (isSignedIn() && resource.data.authorId == request.auth.uid);
-      allow create: if isSignedIn();
-      allow update, delete: if isGC() || resource.data.authorId == request.auth.uid;
-    }
-
-    match /threads/{threadId} {
-      allow read: if isSignedIn() && request.auth.uid in resource.data.participantIds;
-      allow create: if isGC();
-      allow update: if isSignedIn() && request.auth.uid in resource.data.participantIds;
-      allow delete: if isAdmin();
-    }
+    // (Removed: legacy root-level /messages and /threads rules. The dead
+    // /api/messaging UI that used them was deleted in the Communication Center
+    // cleanup. Live chat is project-scoped channels — see the project
+    // channels/messages rules below. The Communication Center adds its own
+    // top-level /communications rules.)
 
     // Financial data (bills, financial transactions). Read-blocked for PM.
     match /financials/{docId} {
