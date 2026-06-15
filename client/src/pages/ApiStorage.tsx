@@ -186,6 +186,30 @@ const INTEGRATIONS: Integration[] = [
     secrets: ['APP_BASE_URL'],
     status: 'config',
   },
+  {
+    name: 'QA Harness — GitHub dispatch',
+    vendor: 'GitHub',
+    category: 'QA / Testing',
+    icon: ShieldCheck,
+    description:
+      'Fine-scoped GitHub personal-access token (Actions: read/write on Skyelineos/Skyelineos) the api function uses to dispatch the qa-suite workflow when an admin clicks "Test app" on the dashboard. POST /api/qa/trigger reads it from Secret Manager.',
+    usedIn: ['Dashboard "Test app"', 'QA sweep workflow'],
+    secrets: ['GH_DISPATCH_TOKEN'],
+    status: 'active',
+    manageUrl: 'https://console.cloud.google.com/security/secret-manager?project=skyelineos',
+  },
+  {
+    name: 'QA Harness — report token',
+    vendor: 'SkyelineOS',
+    category: 'QA / Testing',
+    icon: ShieldCheck,
+    description:
+      'Shared bearer token the qa-suite GitHub workflow uses to POST sweep results back to POST /api/qa/report (which updates qa_runs + clears the deploy lock). Stored identically in Secret Manager (for the api function) and GitHub Actions secrets (for the workflow).',
+    usedIn: ['QA sweep workflow', 'Dashboard App QA panel'],
+    secrets: ['QA_REPORT_TOKEN'],
+    status: 'active',
+    manageUrl: 'https://console.cloud.google.com/security/secret-manager?project=skyelineos',
+  },
 ];
 
 function StatusBadge({ status }: { status: Status }) {

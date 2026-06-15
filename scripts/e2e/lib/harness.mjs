@@ -237,7 +237,7 @@ export function createHarness() {
   }
 
   return {
-    app, auth, db, registry, RUN_ID,
+    app, auth, db, registry, RUN_ID, results,
     signIn, signOut: () => signOut(auth),
     api, createDoc, trackDocPath, trackProjectScope,
     test, assert, assertEq, teardown, summary, log,
