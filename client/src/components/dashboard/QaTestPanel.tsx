@@ -86,7 +86,7 @@ export function QaTestPanel() {
             <span className="font-semibold">App QA</span>
             {inFlight && <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100 gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Running</Badge>}
           </div>
-          <Button onClick={startTest} disabled={starting || inFlight} className="gap-2" style={{ backgroundColor: '#141414' }}>
+          <Button onClick={startTest} disabled={starting || inFlight} className="gap-2 text-white hover:text-white disabled:opacity-100 disabled:text-gray-300" style={{ backgroundColor: '#141414' }}>
             {starting || inFlight ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlayCircle className="h-4 w-4" />}
             {inFlight ? 'Test in progress…' : 'Test app'}
           </Button>
