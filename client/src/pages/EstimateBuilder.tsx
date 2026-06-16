@@ -20,6 +20,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { useToast } from '@/hooks/use-toast';
 import { useConfirm } from '@/hooks/use-confirm';
 import { GmailBidImporter } from '@/components/estimates/GmailBidImporter';
+import { ImportEstimateModal } from '@/components/estimates/ImportEstimateModal';
 import { EstimateCostingsTab } from '@/components/estimates/EstimateCostingsTab';
 import { EstimateScheduleTab } from '@/components/estimates/EstimateScheduleTab';
 import { LineDescriptionButton } from '@/components/estimates/LineDescriptionButton';
@@ -31,7 +32,7 @@ import {
   Hammer, Zap, Droplets, Paintbrush, Thermometer, Package,
   TreePine, Layers, Grid3X3, ShieldCheck, Ruler, Scissors,
   Palette, AlertCircle, SlidersHorizontal, Lock, Eye, TrendingUp,
-  Check, FileSignature,
+  Check, FileSignature, Upload,
 } from 'lucide-react';
 import { lazy, Suspense } from 'react';
 import { MinimalSpinner } from '@/components/layout/MinimalSpinner';
@@ -1600,6 +1601,7 @@ export function EstimateBuilderContent({ projectId, projectName, embedded = fals
   const [modalOpen, setModalOpen]   = useState(false);
   const [editing, setEditing]       = useState<Estimate | null>(null);
   const [gmailOpen, setGmailOpen]   = useState(false);
+  const [importPdfOpen, setImportPdfOpen] = useState(false);
   const [importTarget, setImportTarget] = useState<Estimate | null>(null);
   const [viewMode, setViewMode]     = useState<'pipeline' | 'list'>('pipeline');
 
@@ -1835,6 +1837,10 @@ export function EstimateBuilderContent({ projectId, projectName, embedded = fals
             {projectName ? `${projectName} — Estimates` : 'Estimates'}
           </h1>
           <div className="flex items-center gap-2 flex-wrap justify-end">
+            <Button variant="outline" onClick={() => setImportPdfOpen(true)}
+              className="hidden sm:flex items-center gap-2 border-gray-300">
+              <Upload className="h-4 w-4 text-[#C9A96E]" /> Import from PDF/Email
+            </Button>
             <Button variant="outline" onClick={() => { setImportTarget(null); setGmailOpen(true); }}
               className="hidden sm:flex items-center gap-2 border-gray-300">
               <Mail className="h-4 w-4 text-red-500" /> Import from Gmail
@@ -2019,6 +2025,13 @@ export function EstimateBuilderContent({ projectId, projectName, embedded = fals
         open={gmailOpen}
         onClose={() => { setGmailOpen(false); setImportTarget(null); }}
         onImport={handleGmailImport}
+      />
+
+      <ImportEstimateModal
+        open={importPdfOpen}
+        onClose={() => setImportPdfOpen(false)}
+        projectId={projectId}
+        projectName={projectName}
       />
     </>
   );

@@ -9,6 +9,7 @@ import { registerUploadEndpoint } from './ingestionLab/uploadEndpoint';
 import { registerBrainPass } from './ingestionLab/brainPass';
 import { registerPlacesRoutes } from './places/placesRoutes';
 import { registerTaskLibrary } from './taskLibrary/routes';
+import { registerExtractEstimateRoute } from './estimates/extractEstimateRoute';
 
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -117,6 +118,7 @@ registerPlacesRoutes(app);           // GET /api/places/{autocomplete,details}
 // are admin-only; project task generation/editing is GC-level. See
 // taskLibrary/routes.ts for the full route map.
 registerTaskLibrary(app, db);        // /api/taskLibrary/...
+registerExtractEstimateRoute(app, authMiddleware); // POST /api/extract-estimate
 
 // Real Firestore API endpoints
 app.get('/api/projects', async (req: any, res: any) => {
