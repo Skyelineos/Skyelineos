@@ -119,7 +119,7 @@ export default function PortalLogin() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen min-h-[100dvh] flex flex-col items-center justify-start sm:justify-center bg-gray-50 py-8 sm:py-12 px-4 sm:px-6 lg:px-8 overflow-y-auto">
       <div className="max-w-md w-full space-y-8">
         <div className="text-center">
           <h2 className="mt-6 text-3xl font-extrabold text-gray-900">
