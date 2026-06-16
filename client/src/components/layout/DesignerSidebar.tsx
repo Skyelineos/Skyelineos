@@ -15,43 +15,30 @@ import {
   Menu
 } from 'lucide-react';
 
-const sidebarItems = [
-  {
-    id: 'projects',
-    label: 'Projects',
-    icon: Briefcase,
-    path: 'projects'
-  },
-  {
-    id: 'selections',
-    label: 'Design Selections',
-    icon: Palette,
-    path: 'selections'
-  },
-  {
-    id: 'gallery',
-    label: 'Design Gallery',
-    icon: Camera,
-    path: 'gallery'
-  },
-  {
-    id: 'schedule',
-    label: 'Schedule',
-    icon: Calendar,
-    path: 'schedule'
-  },
-  {
-    id: 'documents',
-    label: 'Documents',
-    icon: FileText,
-    path: 'documents'
-  },
-  {
-    id: 'messages',
-    label: 'Messages',
-    icon: MessageSquare,
-    path: 'messages'
-  }
+// Each entry advertises a destination the designer can actually reach.
+//   - 'projects' + 'selections' resolve inside /designer-portal (URL→view
+//     sync in DesignerPortal.tsx routes them correctly).
+//   - 'documents' + 'messages' jump to the global /documents and /messages
+//     routes — both already allow the designer role in App.tsx, and a
+//     designer's docs / DMs aren't portal-scoped.
+//   - 'gallery' and 'schedule' rendered as stubs because the destinations
+//     don't exist yet; ComingSoonView in DesignerPortal handles those keys.
+interface SidebarItem {
+  id: string;
+  label: string;
+  icon: typeof Briefcase;
+  // 'tab' = pushes /designer-portal/<id>; 'route' = href as-is (global path).
+  kind: 'tab' | 'route';
+  href?: string;
+}
+
+const sidebarItems: SidebarItem[] = [
+  { id: 'projects',   label: 'Projects',          icon: Briefcase,     kind: 'tab' },
+  { id: 'selections', label: 'Design Selections', icon: Palette,       kind: 'tab' },
+  { id: 'gallery',    label: 'Design Gallery',    icon: Camera,        kind: 'tab' },
+  { id: 'schedule',   label: 'Schedule',          icon: Calendar,      kind: 'tab' },
+  { id: 'documents',  label: 'Documents',         icon: FileText,      kind: 'route', href: '/documents' },
+  { id: 'messages',   label: 'Messages',          icon: MessageSquare, kind: 'route', href: '/messages' },
 ];
 
 interface DesignerSidebarProps {
@@ -64,6 +51,15 @@ export default function DesignerSidebar({ isOpen = false, onToggle }: DesignerSi
   const currentTab = location.split('/')[2] || 'projects';
   const { user, logout } = useAuth();
   const designerName = user?.name || 'Designer';
+
+  // True if the sidebar entry corresponds to the current URL — handles both
+  // /designer-portal/<id> tabs and absolute /documents | /messages routes.
+  const isItemActive = (item: SidebarItem) => {
+    if (item.kind === 'route') {
+      return item.href === location || location.startsWith((item.href || '') + '/');
+    }
+    return currentTab === item.id;
+  };
 
   // Hard redirect to /sign-in after logout so any cached portal state is
   // dropped. Matches the pattern in SubcontractorSidebar + TopNavbar.
@@ -135,12 +131,14 @@ export default function DesignerSidebar({ isOpen = false, onToggle }: DesignerSi
         <nav className="flex flex-col p-4 space-y-1">
           {sidebarItems.map(item => {
             const Icon = item.icon;
-            const isActive = currentTab === item.path;
-            const linkPath = `/designer-portal/${item.path}`;
+            const isActive = isItemActive(item);
+            const linkPath = item.kind === 'route'
+              ? (item.href as string)
+              : `/designer-portal/${item.id}`;
             
             return (
               <Link
-                key={item.path}
+                key={item.id}
                 href={linkPath}
                 className={cn(
                   "group flex items-center space-x-3 px-3 py-3 text-sm font-medium rounded-lg transition-colors",

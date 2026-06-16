@@ -45,31 +45,42 @@ interface MobileNavProps {
 }
 
 const getNavigationItems = () => [
-  { label: 'Dashboard',             href: '/dashboard',            icon: LayoutDashboard, roles: ['Admin', 'ProjectManager'] as const },
-  { label: 'Sales & CRM',           href: '/sales',                icon: TrendingUp,      roles: ['Admin', 'ProjectManager'] as const },
-  { label: 'Estimates',             href: '/estimates',            icon: DollarSign,      roles: ['Admin'] as const },
-  { label: 'Contacts',              href: '/contacts',             icon: Users,           roles: ['Admin', 'ProjectManager'] as const },
-  { label: 'Projects',              href: '/projects',             icon: FolderOpen,      roles: ['Admin', 'ProjectManager'] as const },
-  { label: 'Schedule',              href: '/schedule',             icon: Calendar,        roles: ['Admin', 'ProjectManager'] as const },
-  { label: 'Tasks',                 href: '/tasks',                icon: ClipboardList,   roles: ['Admin', 'ProjectManager'] as const },
-  { label: 'Change Orders',         href: '/change-orders',        icon: GitPullRequest,  roles: ['Admin', 'ProjectManager'] as const },
-  { label: 'Documents',             href: '/documents',            icon: FileText,        roles: ['Admin', 'ProjectManager'] as const },
-  { label: 'Timesheet',             href: '/timesheet',            icon: Clock,           roles: ['Admin', 'ProjectManager'] as const },
-  { label: 'Safety',                href: '/safety',               icon: ShieldCheck,     roles: ['Admin', 'ProjectManager'] as const },
-  { label: 'Catalogs',              href: '/catalogs',             icon: BookOpen,        roles: ['Admin', 'ProjectManager'] as const },
-  { label: 'Tools',                 href: '/tools',                icon: Hammer,          roles: ['Admin', 'ProjectManager'] as const },
-  { label: 'Finance',               href: '/financials',           icon: DollarSign,      roles: ['Admin'] as const },
-  { label: 'Reports',               href: '/reports',              icon: BarChart2,       roles: ['Admin'] as const },
-  { label: 'Templates',             href: '/templates',            icon: Hammer,          roles: ['Admin'] as const },
-  { label: 'Communication Center',  href: '/communications',       icon: MessageSquare,   roles: ['Admin', 'ProjectManager'] as const },
-  { label: 'Messaging',             href: '/messages',             icon: MessageSquare,   roles: ['Admin', 'ProjectManager'] as const },
-  { label: 'Comms Log',             href: '/comms-log',            icon: Radio,           roles: ['Admin', 'ProjectManager'] as const },
+  { label: 'Dashboard',             href: '/dashboard',            icon: LayoutDashboard, roles: ['Admin', 'GC', 'ProjectManager'] as const },
+  { label: 'Sales & CRM',           href: '/sales',                icon: TrendingUp,      roles: ['Admin', 'GC', 'ProjectManager'] as const },
+  // /estimates RoleGuard: ['admin', 'gc'] — drop ProjectManager.
+  { label: 'Estimates',             href: '/estimates',            icon: DollarSign,      roles: ['Admin', 'GC'] as const },
+  { label: 'Contacts',              href: '/contacts',             icon: Users,           roles: ['Admin', 'GC', 'ProjectManager'] as const },
+  { label: 'Projects',              href: '/projects',             icon: FolderOpen,      roles: ['Admin', 'GC', 'ProjectManager'] as const },
+  { label: 'Schedule',              href: '/schedule',             icon: Calendar,        roles: ['Admin', 'GC', 'ProjectManager'] as const },
+  { label: 'Tasks',                 href: '/tasks',                icon: ClipboardList,   roles: ['Admin', 'GC', 'ProjectManager'] as const },
+  { label: 'Change Orders',         href: '/change-orders',        icon: GitPullRequest,  roles: ['Admin', 'GC', 'ProjectManager'] as const },
+  // /documents RoleGuard: ['admin', 'gc', 'projectManager', 'designer', 'subcontractor', 'client'].
+  { label: 'Documents',             href: '/documents',            icon: FileText,        roles: ['Admin', 'GC', 'ProjectManager', 'Designer', 'Subcontractor', 'Client'] as const },
+  { label: 'Timesheet',             href: '/timesheet',            icon: Clock,           roles: ['Admin', 'GC', 'ProjectManager'] as const },
+  { label: 'Safety',                href: '/safety',               icon: ShieldCheck,     roles: ['Admin', 'GC', 'ProjectManager'] as const },
+  // /catalogs RoleGuard: ['admin', 'gc', 'projectManager', 'designer'].
+  { label: 'Catalogs',              href: '/catalogs',             icon: BookOpen,        roles: ['Admin', 'GC', 'ProjectManager', 'Designer'] as const },
+  { label: 'Tools',                 href: '/tools',                icon: Hammer,          roles: ['Admin', 'GC', 'ProjectManager'] as const },
+  // /financials, /reports RoleGuard: ['admin', 'gc'] — drop PM.
+  { label: 'Finance',               href: '/financials',           icon: DollarSign,      roles: ['Admin', 'GC'] as const },
+  { label: 'Reports',               href: '/reports',              icon: BarChart2,       roles: ['Admin', 'GC'] as const },
+  // /templates RoleGuard: ['admin', 'gc'].
+  { label: 'Templates',             href: '/templates',            icon: Hammer,          roles: ['Admin', 'GC'] as const },
+  { label: 'Communication Center',  href: '/communications',       icon: MessageSquare,   roles: ['Admin', 'GC', 'ProjectManager'] as const },
+  // /messages RoleGuard allows every signed-in persona.
+  { label: 'Messaging',             href: '/messages',             icon: MessageSquare,   roles: ['Admin', 'GC', 'ProjectManager', 'Designer', 'Subcontractor', 'Client'] as const },
+  { label: 'Comms Log',             href: '/comms-log',            icon: Radio,           roles: ['Admin', 'GC', 'ProjectManager'] as const },
+  // /automations RoleGuard: ['admin'].
   { label: 'Automations',           href: '/automations',          icon: Zap,             roles: ['Admin'] as const },
-  { label: 'Client Portal',         href: '/client-portal',        icon: UserCheck,       roles: ['Admin', 'ProjectManager'] as const },
-  { label: 'Subcontractor Portal',  href: '/subcontractor-portal', icon: HardHat,         roles: ['Admin', 'ProjectManager'] as const },
-  { label: 'Designer Portal',       href: '/designer-portal',      icon: Palette,         roles: ['Admin', 'ProjectManager', 'Designer'] as const },
-  { label: 'Design Board',          href: '/design-board',         icon: Palette,         roles: ['Admin', 'ProjectManager', 'Designer'] as const },
-  { label: 'Social Media',          href: '/social-media',         icon: Share2,          roles: ['Admin', 'ProjectManager'] as const },
+  // Portal entries: gated to portal users + admin (impersonation). Hiding
+  // them from GC/PM stops the bounce-to-/not-authorized loop.
+  { label: 'Client Portal',         href: '/client-portal',        icon: UserCheck,       roles: ['Admin', 'Client'] as const },
+  { label: 'Subcontractor Portal',  href: '/subcontractor-portal', icon: HardHat,         roles: ['Admin', 'Sub', 'Subcontractor'] as const },
+  { label: 'Designer Portal',       href: '/designer-portal',      icon: Palette,         roles: ['Admin', 'Designer'] as const },
+  // /design-board RoleGuard: ['admin', 'gc', 'designer'] — drop PM.
+  { label: 'Design Board',          href: '/design-board',         icon: Palette,         roles: ['Admin', 'GC', 'Designer'] as const },
+  // /social-media RoleGuard: ['admin', 'gc'] — drop PM.
+  { label: 'Social Media',          href: '/social-media',         icon: Share2,          roles: ['Admin', 'GC'] as const },
   { label: 'Subscriptions',         href: '/subscriptions',        icon: Wallet,          roles: ['Admin'] as const },
   { label: 'Users',                 href: '/users',                icon: UserCog,         roles: ['Admin'] as const },
 ];

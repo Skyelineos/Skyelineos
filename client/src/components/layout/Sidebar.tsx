@@ -146,6 +146,26 @@ const TEAM_NAV: NavGroup[] = [
 // Management section only for admins
 const MANAGEMENT_HREFS = ['/users', '/master-tasks', '/templates', '/playbook', '/automations', '/import-center', '/subscriptions', '/api-storage', '/admin/ingestion-lab'];
 
+// Portal entries — only admins should see these in the team sidebar, since
+// the portal RoleGuards reject gc/projectManager (they're for the portal
+// users themselves + admin impersonation via AdminPortalControls). Surfacing
+// these to GC/PM previously sent them to the NotAuthorized page on click.
+const PORTAL_HREFS = ['/client-portal', '/subcontractor-portal', '/designer-portal'];
+
+// Hrefs whose route's RoleGuard excludes projectManager. We hide these in the
+// PM sidebar instead of regressing them to /not-authorized.
+const PM_RESTRICTED_HREFS = [
+  '/estimates',
+  '/financials',
+  '/bills',
+  '/reports',
+  '/social-media',
+  '/design-board',
+  '/templates',
+  '/playbook',
+  '/import-center',
+];
+
 // Designer sidebar — focused on their work
 const DESIGNER_NAV: NavGroup[] = [
   {
@@ -169,20 +189,25 @@ const DESIGNER_NAV: NavGroup[] = [
   },
 ];
 
-// Subcontractor sidebar
+// Subcontractor sidebar — every href below resolves to a tab on the
+// /subcontractor-portal page (SubcontractorPortal.tsx) or a global route the
+// 'sub' role is allowed to hit. The global /schedule, /timesheet, /safety
+// pages are GC-only; route subs to their portal-scoped equivalents instead.
 const SUB_NAV: NavGroup[] = [
   {
     label: 'My Work',
     items: [
-      { label: 'My Jobs',      href: '/subcontractor-portal', icon: Briefcase },
-      { label: 'Schedule',     href: '/schedule',             icon: Calendar },
+      { label: 'My Jobs',      href: '/subcontractor-portal',          icon: Briefcase },
+      { label: 'Schedule',     href: '/subcontractor-portal/schedule', icon: Calendar },
     ],
   },
   {
     label: 'Field',
     items: [
-      { label: 'Timesheet',    href: '/timesheet',  icon: Clock },
-      { label: 'Safety',       href: '/safety',     icon: ShieldCheck },
+      // /subcontractor-portal/compliance covers COIs, safety docs, and
+      // certifications — the closest in-portal equivalent of the GC's
+      // global Safety + Timesheet pages (which subs can't see).
+      { label: 'Compliance',   href: '/subcontractor-portal/compliance', icon: ShieldCheck },
     ],
   },
   {
@@ -223,9 +248,28 @@ function getNavForRole(role: string, navDisabled: string[]): NavGroup[] {
   } else {
     // admin, gc, project_manager — full nav, restricted by navDisabled
     base = TEAM_NAV;
-    // Non-admin team members don't see Management
+    // Non-admin team members don't see Management; also hide the Portals
+    // group (those routes are gated to portal users + admin impersonation).
     if (role !== 'admin') {
-      base = base.filter(g => !g.items.every(i => MANAGEMENT_HREFS.includes(i.href)));
+      base = base
+        .map(g => ({
+          ...g,
+          items: g.items.filter(i => !PORTAL_HREFS.includes(i.href)),
+        }))
+        .filter(g => g.items.length > 0)
+        .filter(g => !g.items.every(i => MANAGEMENT_HREFS.includes(i.href)));
+    }
+    // Project managers don't have RoleGuard access to several team routes
+    // (estimates, financials, bills, reports, social-media, design-board,
+    // templates, playbook, import-center) — hide them rather than letting
+    // a click bounce to /not-authorized.
+    if (role === 'projectManager' || role === 'project_manager') {
+      base = base
+        .map(g => ({
+          ...g,
+          items: g.items.filter(i => !PM_RESTRICTED_HREFS.includes(i.href)),
+        }))
+        .filter(g => g.items.length > 0);
     }
   }
 
