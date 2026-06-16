@@ -811,7 +811,7 @@ export function SendBidPackageModal({ open, projectId, projectName, onClose }: P
           </div>
         </div>
 
-        <DialogFooter className="border-t pt-4 mt-2">
+        <DialogFooter className="border-t pt-4 mt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
           <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button
             onClick={handleSubmit}
