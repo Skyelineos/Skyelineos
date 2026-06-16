@@ -14,6 +14,7 @@ import { MissingTradeAlertCard } from '@/components/dashboard/MissingTradeAlertC
 import { MissingTradeScopesCard } from '@/components/dashboard/MissingTradeScopesCard';
 import { RemindersCard } from '@/components/dashboard/RemindersCard';
 import { PendingReviewsCard } from '@/components/dashboard/PendingReviewsCard';
+import { SignoffQueueCard } from '@/components/dashboard/SignoffQueueCard';
 import { MissingTasksAlertCard } from '@/components/dashboard/MissingTasksAlertCard';
 import { UnsignedSchedulesCard } from '@/components/dashboard/UnsignedSchedulesCard';
 import { TeamAccessRequestsCard } from '@/components/dashboard/TeamAccessRequestsCard';
@@ -66,6 +67,7 @@ export default function Dashboard() {
             <TeamAccessRequestsCard />
             <RemindersCard />
             <PendingReviewsCard />
+            <SignoffQueueCard />
             <UnsignedSchedulesCard />
             <MissingTasksAlertCard />
             <MissingTradeAlertCard />

@@ -36,6 +36,7 @@ import { ProjectStageTracker, deriveStageFromProject } from '@/components/projec
 import { SoftBudgetBadge } from '@/components/projects/SoftBudgetBadge';
 import { ContractProfitCard } from '@/components/projects/ContractProfitCard';
 import { SelectionsProgressCard } from '@/components/projects/SelectionsProgressCard';
+import { ProjectProgressView } from '@/components/projects/ProjectProgressView';
 import { ProjectJobsiteCard } from '@/components/projects/ProjectJobsiteCard';
 import { useRoleAccess } from '@/hooks/useRoleAccess';
 
@@ -327,6 +328,11 @@ export default function ProjectOverview() {
             )}
           </CardContent>
         </Card>
+
+        {/* Schedule Progress View — phase-grouped, honest-progress surface.
+            Sits ABOVE the Gantt link / project progress card; doesn't replace
+            either. See docs/Skyelineos_CTO_Audit_2026-06-16.md §7. */}
+        <ProjectProgressView projectId={projectId!} audience="gc" />
 
         {/* Communication & Progress Section */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
