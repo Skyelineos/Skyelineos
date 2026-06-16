@@ -184,6 +184,7 @@ export default function PortalLogin() {
               </Button>
             </form>
 
+            {import.meta.env.DEV && (
             <div className="mt-6 pt-6 border-t border-gray-200">
               <p className="text-sm text-gray-600 mb-3">
                 Test portal access with these demo accounts:
@@ -267,6 +268,7 @@ export default function PortalLogin() {
                 </div>
               </div>
             </div>
+            )}
           </CardContent>
         </Card>
       </div>
