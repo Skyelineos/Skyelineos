@@ -17,6 +17,23 @@ const firebaseConfig = {
 // Guard against HMR double-init
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 
+// ── App Check ────────────────────────────────────────────────────────────────
+// Activates reCAPTCHA v3 attestation on Firebase requests in production. Closes
+// the Security_Exposure_Assessment.md §3 finding — App Check was implemented
+// but never wired into bootstrap, so a stolen web config could hammer the
+// backend directly. Conditional so local dev (no key) still boots; in PROD the
+// inner function bails cleanly if the key is missing (logs a warning, returns
+// null) so a missing key won't crash production either.
+if (import.meta.env.PROD || import.meta.env.VITE_FIREBASE_APP_CHECK_KEY) {
+  // Lazy import so the App Check SDK isn't pulled into the dev bundle when the
+  // feature is off — saves ~30kb on hot-reload roundtrips.
+  import('./firebase-appcheck').then(({ initializeFirebaseAppCheck }) => {
+    initializeFirebaseAppCheck();
+  }).catch((err) => {
+    console.warn('App Check init failed (continuing without):', err);
+  });
+}
+
 export { app };
 export const auth = getAuth(app);
 // Firestore with in-memory cache (default). Persistent IndexedDB cache was

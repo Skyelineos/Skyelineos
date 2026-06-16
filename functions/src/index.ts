@@ -21,8 +21,88 @@ app.use(express.json());
 // Twilio inbound webhooks (STOP/HELP) post application/x-www-form-urlencoded.
 app.use(express.urlencoded({ extended: false }));
 
+// ── Auth middleware helper ────────────────────────────────────────────────────
+// Verifies the caller's Firebase ID token and populates req.user + req.userProfile.
+// Declared up here (rather than inline at first use) so that `app.use('/api', authMiddleware)`
+// below can gate the legacy Express routes wholesale. Closes the unauthed
+// /api/** exposure called out in docs/Security_Exposure_Assessment.md.
+async function authMiddleware(req: any, res: any, next: any) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'No token' });
+  try {
+    const decoded = await admin.auth().verifyIdToken(authHeader.substring(7));
+    req.user = decoded;
+    req.userProfile = await resolveUserProfile(decoded);
+    next();
+  } catch {
+    return res.status(401).json({ error: 'Invalid token' });
+  }
+}
+
+// ── Public route allowlist ────────────────────────────────────────────────────
+// These MUST be registered BEFORE `app.use('/api', authMiddleware)` so they
+// bypass the gate. Each has its own out-of-band gating (Twilio signature,
+// magic-link token, OAuth state nonce, shared secret, honeypot+validation).
+//
+//   POST /api/sms/inbound                         Twilio webhook (signed)
+//   GET  /api/bid-requests/by-token/:token        Magic-link landing (token is auth)
+//   POST /api/leads/intake                        LEAD_INTAKE_SECRET shared secret
+//   POST /api/leads/public-intake                 Honeypot + strict validation
+//   GET  /api/ingestionLab/oauth/{gmail|drive}/callback   Google redirect (state nonce gates)
+//   GET  /api/health                              Liveness probe
+//
+// (The QBO OAuth callback is at /qbo/oauth/callback — not under /api — so it's
+// outside this gate entirely.)
+import { registerSmsInboundRoute }      from './notifications/smsInboundRoute';
+import { registerBidTokenEndpoint }     from './bids/bidTokenEndpoint';
+import { registerLeadIntakeRoute }      from './leads/intakeRoute';
+registerSmsInboundRoute(app, admin.firestore());
+registerBidTokenEndpoint(app, admin.firestore());
+registerLeadIntakeRoute(app, admin.firestore());
+
+// /api/health stays public (liveness probe).
+app.get('/api/health', async (_req: any, res: any) => {
+  try {
+    await db.collection('_health').doc('test').get();
+    res.json({
+      status: 'OK',
+      timestamp: new Date().toISOString(),
+      version: '2.0.0',
+      environment: 'Firebase Functions',
+      database: 'Firestore',
+      endpoints: 'COMPLETE FIREBASE INTEGRATION',
+      services: { firestore: 'connected', functions: 'operational', api: 'all_endpoints_active' },
+    });
+  } catch (error) {
+    console.error('❌ Health check error:', error);
+    res.status(500).json({ status: 'ERROR', timestamp: new Date().toISOString(), error: 'Firestore connection failed' });
+  }
+});
+
+// ── /api auth gate ────────────────────────────────────────────────────────────
+// Everything under /api registered AFTER this line requires a valid Firebase
+// ID token (Bearer header). Module-scoped Route.ts files (bids/, contracts/,
+// notifications/, qa/, etc.) layer their own role checks on top — this is the
+// outer gate that closes the ~46 previously-unauthed legacy routes (lines
+// ~50–1340 below) from anonymous internet traffic.
+//
+// Allowlist for /api paths that MUST stay unauthed even after this gate.
+// These are top-level browser redirects (OAuth callbacks) — they can't carry
+// a Bearer header, so the upstream state nonce is the gate instead.
+const API_AUTH_ALLOWLIST = [
+  /^\/ingestionLab\/oauth\/(gmail|drive)\/callback$/,
+];
+app.use('/api', (req: any, res: any, next: any) => {
+  if (API_AUTH_ALLOWLIST.some((re) => re.test(req.path))) return next();
+  return authMiddleware(req, res, next);
+});
+
 // Ingestion Lab — registered early so the routes sit alongside other /api/**
 // routes and resolve before the catch-all 404 below.
+// (Note: the gmail/drive OAuth /callback paths are registered ABOVE the gate
+// because Google's redirect can't send a Bearer header. The /start paths use
+// adminOnly middleware inside oauthHandlers.ts, so going through the gate
+// here is correct — admin already has an ID token.)
 registerIngestionLabOAuth(app, db);  // /api/ingestionLab/oauth/{gmail|drive}/{start|callback}
 registerGmailIngester(app, db);      // POST /api/ingestionLab/ingest/gmail
 registerDriveIngester(app, db);      // POST /api/ingestionLab/ingest/drive
@@ -777,35 +857,8 @@ app.get('/api/branding', (req: any, res: any) => {
   });
 });
 
-// Comprehensive health check endpoint  
-app.get('/api/health', async (req: any, res: any) => {
-  try {
-    // Test Firestore connection
-    const testDoc = await db.collection('_health').doc('test').get();
-    
-    res.json({ 
-      status: 'OK', 
-      timestamp: new Date().toISOString(),
-      version: '2.0.0',
-      environment: 'Firebase Functions',
-      database: 'Firestore',
-      endpoints: 'COMPLETE FIREBASE INTEGRATION',
-      services: {
-        firestore: 'connected',
-        functions: 'operational',
-        api: 'all_endpoints_active'
-      },
-      updated: 'Complete Firebase deployment with real Firestore integration'
-    });
-  } catch (error) {
-    console.error('❌ Health check error:', error);
-    res.status(500).json({ 
-      status: 'ERROR', 
-      timestamp: new Date().toISOString(),
-      error: 'Firestore connection failed'
-    });
-  }
-});
+// (Comprehensive health check endpoint moved above the /api auth gate so it
+// remains a public liveness probe.)
 
 // Additional Firebase-specific endpoints
 app.post('/api/projects', async (req: any, res: any) => {
@@ -1334,19 +1387,9 @@ app.post('/api/ai/render', async (req: any, res: any) => {
   } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
 
-// ── Auth middleware helper ────────────────────────────────────────────────────
-async function authMiddleware(req: any, res: any, next: any) {
-  const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'No token' });
-  try {
-    const decoded = await admin.auth().verifyIdToken(authHeader.substring(7));
-    req.user = decoded;
-    req.userProfile = await resolveUserProfile(decoded);
-    next();
-  } catch {
-    return res.status(401).json({ error: 'Invalid token' });
-  }
-}
+// (authMiddleware helper hoisted to the top of the file so `app.use('/api', authMiddleware)`
+// can gate the legacy routes block above. Module-scoped Route.ts files import
+// authMiddleware indirectly via the gate.)
 
 // ── Sub portal contact-claim routes ──────────────────────────────────────────
 // Same reason as analyze-bill: org policy blocks new Cloud Run services with
@@ -2032,10 +2075,8 @@ registerBidRequestRoute(app, admin.firestore());
 import { registerQboPaymentLink } from './qbo/paymentLink';
 registerQboPaymentLink(app, admin.firestore());
 
-// Public token-resolution endpoint for the magic-link bid response flow.
-// Route: GET /api/bid-requests/by-token/:token (public, no auth)
-import { registerBidTokenEndpoint } from './bids/bidTokenEndpoint';
-registerBidTokenEndpoint(app, admin.firestore());
+// (Public magic-link bid endpoint /api/bid-requests/by-token/:token is
+// registered at the top of the file in the public allowlist, BEFORE the gate.)
 
 // Post-signup contact linking for new subs (D-012-h).
 // Route: POST /api/sub/post-signup-link
@@ -2067,16 +2108,11 @@ registerAwardBidRoute(app, admin.firestore());
 import { registerCommenceRoute } from './contracts/commenceRoute';
 registerCommenceRoute(app, admin.firestore());
 
-// Public lead intake for the Crestview Solace QR / model-home Google Form.
-// Gated by the LEAD_INTAKE_SECRET shared secret (not Firebase auth).
-// Route: POST /api/leads/intake
-import { registerLeadIntakeRoute } from './leads/intakeRoute';
-registerLeadIntakeRoute(app, admin.firestore());
+// (Public lead intake /api/leads/intake + /api/leads/public-intake are
+// registered at the top of the file in the public allowlist, BEFORE the gate.)
 
-// Twilio inbound SMS webhook — STOP/START/HELP keyword handling + opt-out
-// ledger. Route: POST /api/sms/inbound (public; Twilio-signed, no Firebase auth)
-import { registerSmsInboundRoute } from './notifications/smsInboundRoute';
-registerSmsInboundRoute(app, admin.firestore());
+// (Twilio inbound SMS webhook /api/sms/inbound is registered at the top of the
+// file in the public allowlist, BEFORE the /api auth gate.)
 
 // Portal-invite email — sends a stage-specific template (emailTemplates/{id})
 // to a client's documented address via SendGrid. Route: POST /api/send-portal-invite
