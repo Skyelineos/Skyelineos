@@ -27,6 +27,21 @@ export default {
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
       },
+      // Mobile Audit Batch 1 — safe-area inset utilities (pb-safe, pt-safe-top,
+      // pl-safe-left, pr-safe-right) backed by env(safe-area-inset-*) so primary
+      // CTAs never hide under the iOS home indicator / notch / dynamic island.
+      spacing: {
+        'safe': 'env(safe-area-inset-bottom, 0px)',
+        'safe-top': 'env(safe-area-inset-top, 0px)',
+        'safe-bottom': 'env(safe-area-inset-bottom, 0px)',
+        'safe-left': 'env(safe-area-inset-left, 0px)',
+        'safe-right': 'env(safe-area-inset-right, 0px)',
+      },
+      minHeight: {
+        // Falls back to 100vh on older browsers, uses 100dvh (dynamic viewport
+        // height) on modern ones so iOS Safari URL bar collapse doesn't clip.
+        'screen-safe': ['100vh', '100dvh'],
+      },
       colors: {
         background: "var(--background)",
         foreground: "var(--foreground)",

@@ -259,8 +259,15 @@ export function ProjectSetupWizard({ draftId, onPublished, onCancel }: ProjectSe
         </CardContent>
       </Card>
 
-      {/* Footer nav */}
-      <div className="flex items-center justify-between gap-2 flex-wrap">
+      {/* Footer nav.
+          Mobile Audit Batch 1 — bottom pad anchors to safe-area-inset-bottom
+          so the Next / Publish button can never hide under the iOS home
+          indicator on small screens. flex-wrap stays so Back / Save / Next
+          can each take a full line if cramped. */}
+      <div
+        className="flex items-center justify-between gap-2 flex-wrap"
+        style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
+      >
         <Button variant="outline" size="sm" onClick={handleBack} disabled={stepIdx === 0} className="gap-1.5">
           <ChevronLeft className="w-4 h-4" /> Back
         </Button>
