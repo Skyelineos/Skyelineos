@@ -1,89 +1,172 @@
 rules_version = '2';
 
-// Storage rules for construction management app
+// Storage rules for construction management app.
+//
+// Per-project membership is the dominant access pattern: a user (admin / GC /
+// PM / designer / sub / client) can touch files under projects/{projectId}/**
+// only if they're listed on that project, either via assignedUserIds or as the
+// owning client. Mirrors the firestore.rules clientOwnsProject /
+// isAssignedToProject pattern so the two surfaces stay in lockstep.
 service firebase.storage {
   match /b/{bucket}/o {
-    // Allow authenticated users to read/write their own files
+
+    // ── Predicates ────────────────────────────────────────────────────────────
+    // Pulled from firestore.rules. Storage rules can't import, so re-declare.
+
+    function isSignedIn() { return request.auth != null; }
+
+    // users/{uid}.role lookup (Cloud Functions stamp this on first login).
+    function userRole() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    // Admin / GC / PM. Matches firestore.rules isStaff() (which folds in PM).
+    function isStaff() {
+      return isSignedIn() && (
+        userRole() == 'admin'
+        || userRole() == 'gc'
+        || userRole() == 'projectManager'
+      );
+    }
+
+    // Per-project membership: the user is on projects/{projectId}.assignedUserIds
+    // (covers designer/sub/PM/GC assignment), OR they're the project's client
+    // (matched by uid OR by their linked contact id), OR they're staff (admin/GC/PM).
+    function isOnProject(projectId) {
+      return isStaff()
+        || (isSignedIn()
+            && request.auth.uid in firestore.get(/databases/(default)/documents/projects/$(projectId)).data.assignedUserIds)
+        || (isSignedIn()
+            && firestore.get(/databases/(default)/documents/projects/$(projectId)).data.clientId == request.auth.uid);
+    }
+
+    // ── User-owned scratch space ──────────────────────────────────────────────
     match /users/{userId}/{allPaths=**} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read, write: if isSignedIn() && request.auth.uid == userId;
     }
-    
-    // Project files - accessible by authenticated users
+
+    // ── Project files — gated to project members ──────────────────────────────
+    // Every project participant (assigned staff/designer/sub + the homeowner)
+    // can read AND write project files. Cross-project reads are blocked.
     match /projects/{projectId}/{allPaths=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isOnProject(projectId);
     }
 
-    // Sub-scoped takeoff PDFs — any authed user can upload/read. Per-doc
-    // visibility is enforced by the Firestore subTakeoffs rule, not here.
-    match /subTakeoffs/{allPaths=**} {
-      allow read, write: if request.auth != null;
-    }
-
-    // Bid attachments — subs upload quote PDFs, COI, and supporting files when
-    // submitting a bid (path: bids/{projectId}/{subId}/...). Authed write so
-    // subs can submit; authed read so the GC reviews them in the portal.
-    // Without this block, uploads to bids/** were denied by default (no
-    // cascading), which silently broke the sub bid submission flow.
+    // ── Bid attachments — gated to project members ────────────────────────────
+    // Path: bids/{projectId}/{subId}/... (sub bid submissions). The bid sub is
+    // on the project's assignedUserIds the moment they're a candidate, so the
+    // existing isOnProject() membership rule covers them. Staff read freely.
     match /bids/{projectId}/{allPaths=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isOnProject(projectId);
     }
-    
-    // Site log media — any authenticated user can upload; any auth user can read
+
+    // ── Site-log media — gated to project members ─────────────────────────────
+    // Convention: paths begin with the projectId — site-logs/{projectId}/**.
+    match /site-logs/{projectId}/{allPaths=**} {
+      allow read, write: if isOnProject(projectId);
+    }
+    // Legacy / un-prefixed site-log uploads (no projectId in path). Cannot scope
+    // these without rewriting upload call sites — leave gated on auth as a
+    // stop-gap and surface as a follow-up so the next pass can either migrate
+    // the paths or delete the un-scoped files.
+    // TODO Stream-1-followup: audit existing site-logs/** uploads (e.g. is
+    // SiteLogEntry.tsx writing site-logs/{projectId}/... in every call site?).
+    // Migrate any un-prefixed paths into a project subfolder, then drop this
+    // permissive sibling rule.
     match /site-logs/{allPaths=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isSignedIn();
     }
 
-    // Bills (vendor invoices for AI OCR) — any authenticated user can upload + read
-    // (Firestore rules gate which users can create the metadata record)
+    // ── Vendor bills — gated to project members ───────────────────────────────
+    // Convention: bills/{projectId}/{billId}/{filename}. Firestore /bills rule
+    // gates which users can create the metadata; we mirror per-project membership
+    // for the binary itself so cross-project bill PDFs don't leak.
+    match /bills/{projectId}/{allPaths=**} {
+      allow read, write: if isOnProject(projectId);
+    }
+    // Legacy / un-prefixed bill uploads. Same caveat as site-logs above.
+    // TODO Stream-1-followup: confirm bill upload call sites all use
+    // bills/{projectId}/... and drop this fallback if so.
     match /bills/{allPaths=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isSignedIn();
     }
 
-    // Content Studio media (photos + videos for social posts)
+    // ── Sub takeoff PDFs — gated to project members ───────────────────────────
+    // Convention: subTakeoffs/{projectId}/{takeoffId}/{filename}. Firestore rule
+    // controls per-doc visibility; Storage mirrors project membership.
+    match /subTakeoffs/{projectId}/{allPaths=**} {
+      allow read, write: if isOnProject(projectId);
+    }
+    // Legacy / un-prefixed sub takeoff uploads.
+    // TODO Stream-1-followup: same as bills — confirm path convention and drop
+    // this permissive sibling once verified.
+    match /subTakeoffs/{allPaths=**} {
+      allow read, write: if isSignedIn();
+    }
+
+    // ── Content Studio media (project-scoped) ─────────────────────────────────
+    // Project-scoped paths: content/{projectId}/{mediaId}/{filename}. Cross-
+    // project reads previously leaked the full social-post pipeline.
+    match /content/{projectId}/{allPaths=**} {
+      allow read, write: if isOnProject(projectId);
+    }
+    // Global Content Studio media that isn't tied to a project (e.g. brand-level
+    // marketing posts). Staff-only write; reads stay auth-gated since these are
+    // not public marketing assets (the salesPitch / branding paths handle that).
+    // TODO Stream-1-followup: split this into project-scoped vs. company-scoped
+    // upload UIs so we can drop this catch-all and require explicit scoping.
     match /content/{allPaths=**} {
-      allow read, write: if request.auth != null;
+      allow read: if isSignedIn();
+      allow write: if isStaff();
     }
 
-    // Communication Center attachments (images/videos/docs/audio on threads).
-    // Any authed user can upload + read; per-thread visibility is enforced by the
-    // Firestore /communications rules, not here.
+    // ── Communication Center attachments — gated to project members ───────────
+    // Convention: communications/{projectId}/{threadId}/{filename}. Firestore
+    // /communications rule still enforces per-thread visibility; this gates the
+    // binary so other projects' attachments aren't enumerable via URL guess.
+    match /communications/{projectId}/{allPaths=**} {
+      allow read, write: if isOnProject(projectId);
+    }
+    // Cross-project / 1:1 thread attachments (no projectId in path — e.g. a
+    // GC-to-vendor thread not tied to a specific job).
+    // TODO Stream-1-followup: thread docs carry projectId in Firestore even when
+    // they aren't strictly project threads. Once the upload path adopts that id
+    // consistently, drop this fallback.
     match /communications/{allPaths=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isSignedIn();
     }
 
-    // Style Quiz renderings (Templates → Style Quiz). Readable by anyone
-    // (shown in the client portal); written by authed staff via the editor.
+    // ── Global assets — public read, staff-only write ─────────────────────────
+    // Style Quiz / Discovery renderings, sales-pitch one-pagers, company branding,
+    // and the generic /public bucket are READ-OPEN by design (linked from the
+    // client portal and shown to unsigned-in visitors on lead-intake pages).
+    // Writes are tightened to staff (was "any signed-in user", which let any
+    // client overwrite the company sales-pitch video — see
+    // docs/Security_Exposure_Assessment.md §5).
+
     match /styleQuiz/{allPaths=**} {
       allow read: if true;
-      allow write: if request.auth != null;
+      allow write: if isStaff();
     }
 
-    // Style Discovery library renderings (admin curation tool). Readable by
-    // anyone (shown in the client preference flow); written by authed staff.
     match /styleLibrary/{allPaths=**} {
       allow read: if true;
-      allow write: if request.auth != null;
+      allow write: if isStaff();
     }
 
-    // Public files - readable by anyone, writable by authenticated users
     match /public/{allPaths=**} {
       allow read: if true;
-      allow write: if request.auth != null;
+      allow write: if isStaff();
     }
 
-    // Company branding/assets - readable by all, writable by admins only
     match /branding/{allPaths=**} {
       allow read: if true;
-      allow write: if request.auth != null;
+      allow write: if isStaff();
     }
 
-    // Sales-pitch documents/videos shown in the client portal one-pagers.
-    // Readable by anyone (downloaded straight from the portal); the UI only
-    // exposes the upload/delete affordances to staff. Firestore rules gate who
-    // can reference these on a section doc.
     match /salesPitch/{allPaths=**} {
       allow read: if true;
-      allow write: if request.auth != null;
+      allow write: if isStaff();
     }
   }
 }
