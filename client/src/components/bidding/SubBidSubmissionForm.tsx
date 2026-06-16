@@ -339,6 +339,11 @@ export function SubBidSubmissionForm({
         projectName: request.projectName || '',
         trade: request.trade,
         subContactId: subId,
+        // T0-3 DEPENDENCY: `user.id` is the Firebase Auth uid at runtime
+        // (see client/src/hooks/use-auth.ts). Before the T0-3 fix this wrote
+        // literal "0" for every sub. Downstream (bid match, award emails)
+        // expects an opaque uid — keep `.toString()` so the contract is
+        // explicit even if the BackendUser.id type ever tightens.
         subUserId: user.id?.toString() || '',
         subName: user.name || 'Unknown',
         subCompany: '',
