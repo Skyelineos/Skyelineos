@@ -1,6 +1,11 @@
 import { useAuth as useAuthContext } from '@/auth/AuthContext';
 
-// Legacy User interface for backward compatibility
+// Legacy User interface for backward compatibility.
+//
+// NOTE (T0-3): `id` is still typed `number` for backward compatibility with
+// older callers that do arithmetic on it (e.g. `createdBy: user?.id || 1`).
+// At runtime after the T0-3 fix below it is actually the Firebase Auth UID
+// (a string). All new code should use `.toString()` and treat it as opaque.
 interface User {
   id: number;
   email: string;
@@ -32,9 +37,24 @@ interface AuthContextType {
 export function useAuth(): AuthContextType {
   const auth = useAuthContext();
 
-  // Map the new AuthContext user to the legacy User interface
+  // Map the new AuthContext user to the legacy User interface.
+  //
+  // T0-3 FIX (Skyelineos_CTO_Audit_2026-06-16.md Workflow 6): `auth.user.id`
+  // is a Drizzle-era SQL serial hardcoded to 0 in AuthContext.loadUserProfile
+  // (BackendUser.id: number is a historical type — the system migrated to
+  // Firebase Auth string UIDs but the field is still typed `number`).
+  // Mapping `id: auth.user.id` here meant every downstream
+  // `user.id?.toString()` site read literal "0" — silently breaking the
+  // walkthrough notification chain (sub never sees Tyler's assignments),
+  // bid `subUserId` writes, and every `createdBy` / `actorUid` audit field.
+  //
+  // Fix: prefer `firebaseUid` so callers get the real Firebase auth uid via
+  // the legacy interface. TS allows the `string | undefined` to flow into a
+  // `number`-typed field because we widen at the call sites with
+  // `.toString()`. The `BackendUser.id: number` type itself stays wrong on
+  // paper — tighten it in a follow-up sweep (T0 cleanup).
   const legacyUser: User | null = auth.user ? {
-    id: auth.user.id,
+    id: (auth.user.firebaseUid || auth.user.id) as any,
     email: auth.user.email,
     role: auth.user.role,
     name: auth.user.name,

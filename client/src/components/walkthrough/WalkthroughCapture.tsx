@@ -25,6 +25,9 @@ interface Sub {
   name: string;
   trade?: string;
   email?: string;
+  /** Firebase Auth uid for the sub's portal account, populated when the sub
+   *  has signed in. Used as the notification recipient key. T0-3. */
+  linkedUserId?: string;
 }
 
 interface Props {
@@ -72,7 +75,13 @@ export function WalkthroughCapture({ projectId, projectName, buttonLabel = 'Capt
         const list: Sub[] = snap.docs
           .map(d => ({ id: d.id, ...d.data() } as any))
           .filter((c: any) => c.role === 'sub' || c.role === 'subcontractor' || c.role === 'employee')
-          .map((c: any) => ({ id: c.id, name: c.name, trade: c.trade, email: c.email }));
+          .map((c: any) => ({
+            id: c.id,
+            name: c.name,
+            trade: c.trade,
+            email: c.email,
+            linkedUserId: c.linkedUserId || undefined,
+          }));
         setSubs(list);
       } catch {}
     })();
@@ -182,20 +191,43 @@ export function WalkthroughCapture({ projectId, projectName, buttonLabel = 'Capt
 
       await batch.commit();
 
-      // Fire notification to the assignee (best-effort, non-blocking)
+      // Fire notification to the assignee (best-effort, non-blocking).
+      //
+      // T0-3 FIX (Skyelineos_CTO_Audit_2026-06-16.md Workflow 6):
+      // notification.userId is the *recipient's Firebase Auth uid* — the same
+      // key NotificationCenter queries by (`user.id?.toString()`, which is
+      // now the auth uid after the use-auth.ts fix). Previously we wrote
+      // `userId: assigneeId`, where assigneeId is a *contacts/{docId}* — a
+      // completely different keyspace — so the sub's NotificationCenter
+      // listener never saw the doc. Resolve the contact's linkedUserId here
+      // and use *that* as the userId. If the sub hasn't signed into the
+      // portal yet (no linkedUserId), surface a warning to the GC so they
+      // know the assignment landed but the sub won't be notified.
       if (assigneeId && sub) {
-        await createNotification({
-          userId: assigneeId,
-          kind: 'walkthrough_assigned',
-          title: `New walkthrough item from ${user.name || 'GC'}`,
-          body: note.trim() || 'Photo / video captured on site',
-          link: `/subcontractor-portal`,
-          projectId,
-          refType: 'walkthrough',
-          refId: walkRef.id,
-          fromUserId: user.id?.toString() || user.email || 'unknown',
-          fromUserName: user.name || user.email || 'GC',
-        });
+        const targetUid = sub.linkedUserId?.trim();
+        if (!targetUid) {
+          toast({
+            title: 'Sub has no portal account yet',
+            description: `${sub.name} won't see a notification until they sign into the subcontractor portal.`,
+            variant: 'default',
+          });
+        } else {
+          await createNotification({
+            userId: targetUid,
+            kind: 'walkthrough_assigned',
+            title: `New walkthrough item from ${user.name || 'GC'}`,
+            body: note.trim() || 'Photo / video captured on site',
+            link: `/subcontractor-portal`,
+            projectId,
+            refType: 'walkthrough',
+            refId: walkRef.id,
+            // user.id is the GC's Firebase Auth uid after the T0-3 use-auth.ts
+            // fix; falling back to email keeps audit non-empty if for some
+            // reason the uid is missing.
+            fromUserId: user.id?.toString() || user.email || 'unknown',
+            fromUserName: user.name || user.email || 'GC',
+          });
+        }
       }
 
       toast({
