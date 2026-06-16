@@ -1,15 +1,25 @@
 # Auto-deploy to Firebase on every push to main.
 #
-# One-time setup required (already done):
-#   1. On your local Mac: firebase login:ci
-#   2. GitHub repo → Settings → Secrets and variables → Actions
-#   3. Add secret named FIREBASE_TOKEN with the token from step 1
+# Authentication: Workload Identity Federation (WIF). The job mints a GitHub
+# OIDC token (gated by the job-level id-token: write permission) and exchanges
+# it for short-lived Google Cloud credentials via the github-actions WIF pool.
+# No long-lived FIREBASE_TOKEN needed. After the auth step runs, firebase-tools
+# picks up creds from the ambient gcloud context automatically.
+#
+# WIF setup (already done in GCP):
+#   * Project number: 1062333414392
+#   * Pool: github-actions
+#   * Provider: github
+#   * Service account: github-actions-deployer@skyelineos.iam.gserviceaccount.com
+#   * Principal bound: principalSet://iam.googleapis.com/projects/1062333414392/
+#       locations/global/workloadIdentityPools/github-actions/attribute.repository/
+#       Skyelineos/Skyelineos  (with roles/iam.workloadIdentityUser)
 #
 # Safety:
 #   - Only triggers on push to main + manual dispatch. No pull_request trigger.
-#   - `concurrency:` cancels stale runs when a newer push lands.
-#   - The deploy step has an explicit `if:` guard as belt-and-suspenders.
-#   - Pre-flight verifies FIREBASE_TOKEN is set so we fail fast.
+#   - concurrency: cancels stale runs when a newer push lands.
+#   - Deploy step has an explicit `if:` guard as belt-and-suspenders.
+#   - Deploy lock check at the top aborts if a QA run is in progress.
 
 name: Deploy to Firebase
 on:
@@ -25,6 +35,13 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+
+    # Required for Workload Identity Federation — the deploy job needs
+    # permission to mint a GitHub OIDC token for google-github-actions/auth.
+    permissions:
+      contents: read
+      id-token: write
+
     steps:
       - uses: actions/checkout@v4
 
@@ -42,22 +59,20 @@ jobs:
             exit 1
           fi
 
+      # Authenticate to Google Cloud via Workload Identity Federation.
+      # On success this exports GOOGLE_APPLICATION_CREDENTIALS pointing at a
+      # short-lived credentials file that firebase-tools (and gcloud) pick up
+      # automatically. No --token flag needed on the deploy command.
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/1062333414392/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: github-actions-deployer@skyelineos.iam.gserviceaccount.com
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
-
-      - name: Verify FIREBASE_TOKEN is set
-        env:
-          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
-        run: |
-          if [ -z "$FIREBASE_TOKEN" ]; then
-            echo "::error::FIREBASE_TOKEN secret is missing or empty."
-            echo "Fix: run 'firebase login:ci' locally, then update the secret at"
-            echo "  Settings → Secrets and variables → Actions → FIREBASE_TOKEN"
-            exit 1
-          fi
-          echo "FIREBASE_TOKEN present (length: ${#FIREBASE_TOKEN})"
 
       - name: Install root dependencies
         run: npm ci --no-audit --no-fund
@@ -70,13 +85,21 @@ jobs:
         working-directory: functions
         run: npm run build
 
+      # Vite build needs VITE_FIREBASE_APP_CHECK_KEY baked into the bundle so
+      # initializeFirebaseAppCheck() can register with the reCAPTCHA v3 site
+      # key in production. Set the value at:
+      #   Settings → Secrets and variables → Actions → VITE_FIREBASE_APP_CHECK_KEY
+      # The secret can be empty in non-prod; the boot guard in client/src/lib/
+      # firebase.ts no-ops when the key is missing.
       - name: Build hosting bundle (vite)
         run: npm run build
+        env:
+          VITE_FIREBASE_APP_CHECK_KEY: ${{ secrets.VITE_FIREBASE_APP_CHECK_KEY }}
 
       - name: Install Firebase CLI
         run: npm install -g firebase-tools@13
 
+      # WIF-authenticated deploy. firebase-tools reads GOOGLE_APPLICATION_CREDENTIALS
+      # set by the auth step. No --token flag.
       - name: Deploy
-        run: firebase deploy --only hosting,functions,firestore:rules,firestore:indexes,storage --project skyelineos --force --non-interactive --token "$FIREBASE_TOKEN"
-        env:
-          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+        run: firebase deploy --only hosting,functions,firestore:rules,firestore:indexes,storage --project skyelineos --force --non-interactive
