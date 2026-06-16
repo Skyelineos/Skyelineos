@@ -467,7 +467,19 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // Change orders
+    // Change orders — SOURCE OF TRUTH (top-level, keyed by projectId field).
+    // All 6 client readers (ChangeOrders.tsx, ChangeOrdersTab.tsx,
+    // ClientDashboard.tsx, ClientFinancials.tsx, SelectionsBoard.tsx,
+    // ProjectFinancialsCard.tsx) read from here. Server route
+    // PATCH /api/projects/:projectId/change-orders/:coId/decision was
+    // migrated 2026-06-16 (T0-4) to also write here.
+    //
+    // DEPRECATED: any docs in `projects/{projectId}/changeOrders/{coId}`
+    // are orphan writes from the pre-T0-4 server route. Safe to delete
+    // after 30 days (post 2026-07-16) once we're sure nothing reads them.
+    // No rules are defined for that subcollection path, so it is now
+    // unreadable/unwritable by clients regardless — the orphans only
+    // accumulate via admin SDK writes that we have already removed.
     match /changeOrders/{orderId} {
       allow read: if isGC()
         || clientOwns(resource.data)

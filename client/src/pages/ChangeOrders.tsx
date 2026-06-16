@@ -202,6 +202,7 @@ export function ChangeOrdersContent({ projectId: scopedProjectId }: { projectId?
         status: 'pending' as COStatus,
         createdAt: serverTimestamp()
       });
+      // TODO Dispatch 6: fire 'change_order_created' trigger with audience=client of this project. Until that trigger is registered, leave as silent write.
       setDialogOpen(false);
       setFormData(seededForm());
       toast({ title: 'Change order created' });

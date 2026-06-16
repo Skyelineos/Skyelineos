@@ -1328,23 +1328,73 @@ app.patch('/api/projects/:projectId/change-orders/:coId/decision', async (req: a
     const { projectId, coId } = req.params;
     const { decision, decidedBy } = req.body; // decision: 'approved' | 'declined'
     if (!['approved', 'declined'].includes(decision)) return res.status(400).json({ error: 'Invalid decision' });
-    const ref = db.collection('projects').doc(projectId).collection('changeOrders').doc(coId);
-    await ref.update({
-      status: decision,
-      decidedBy,
-      decidedAt: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+
+    // SOURCE OF TRUTH: top-level `changeOrders/{coId}` (audit Workflow 7 / Section 6.3).
+    // The old code wrote to the subcollection `projects/{projectId}/changeOrders/{coId}`,
+    // which nobody reads — so approvals silently no-op'd from the user's perspective.
+    const coRef = db.collection('changeOrders').doc(coId);
+    const projectRef = db.collection('projects').doc(projectId);
+
+    // Run inside a transaction so two simultaneous approvals can't both add
+    // the CO amount to contractAmount (causing double-counting). Firestore
+    // requires ALL reads to happen before ANY writes inside a transaction,
+    // so we read the CO + (conditionally) the project first, then issue
+    // every tx.update at the end.
+    const result = await db.runTransaction(async (tx) => {
+      const coSnap = await tx.get(coRef);
+      if (!coSnap.exists) throw new Error('CO_NOT_FOUND');
+      const co = coSnap.data() as any;
+      // Verify the CO actually belongs to the project in the URL — otherwise a
+      // caller authorised on project A could mutate a CO on project B by id.
+      if (co.projectId && co.projectId !== projectId) throw new Error('CO_PROJECT_MISMATCH');
+
+      const shouldBumpContract = decision === 'approved' && co.status !== 'approved';
+      // Read project doc up front (before any writes) so we satisfy the
+      // Firestore read-before-write constraint.
+      let projSnap: any = null;
+      if (shouldBumpContract) {
+        projSnap = await tx.get(projectRef);
+      }
+
+      // ── writes from here down ────────────────────────────────────────────
+      tx.update(coRef, {
+        status: decision,
+        decidedBy,
+        decidedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      // On approve, atomically bump the project's contractAmount so the
+      // budget cards (ProjectFinancialsCard, ClientFinancials) reflect the
+      // new contract value immediately. Idempotency note: if this route is
+      // somehow called twice on an already-approved CO, the second call
+      // sees status === 'approved' and skips the bump.
+      if (shouldBumpContract && projSnap && projSnap.exists) {
+        const proj = projSnap.data() as any;
+        const base = Number(proj.contractAmount ?? proj.budget ?? 0) || 0;
+        const delta = Number(co.totalAmount ?? co.amount ?? 0) || 0;
+        tx.update(projectRef, {
+          contractAmount: base + delta,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      }
+      return { sourceSelectionId: co.sourceSelectionId || null };
     });
-    // If approved selection change order, mark selection as approved too
-    const co = (await ref.get()).data() as any;
-    if (decision === 'approved' && co?.sourceSelectionId) {
-      await db.collection('projects').doc(projectId).collection('selections').doc(co.sourceSelectionId).update({
+
+    // Selection bookkeeping happens outside the transaction (different doc tree).
+    if (decision === 'approved' && result.sourceSelectionId) {
+      await db.collection('projects').doc(projectId).collection('selections').doc(result.sourceSelectionId).update({
         status: 'approved',
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
     }
     res.json({ success: true, decision });
-  } catch (e) { res.status(500).json({ error: 'Failed to process decision' }); }
+  } catch (e: any) {
+    if (e?.message === 'CO_NOT_FOUND') return res.status(404).json({ error: 'Change order not found' });
+    if (e?.message === 'CO_PROJECT_MISMATCH') return res.status(400).json({ error: 'Change order does not belong to this project' });
+    console.error('CO decision failed', e);
+    res.status(500).json({ error: 'Failed to process decision' });
+  }
 });
 
 // ── AI Rendering ──────────────────────────────────────────────────────────────

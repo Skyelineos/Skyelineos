@@ -1,6 +1,6 @@
-import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { collection, getDocs, where, query as fsQuery } from 'firebase/firestore';
+import { useEffect, useState } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { collection, onSnapshot, where, query as fsQuery } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -29,19 +29,29 @@ export default function ChangeOrdersTab({ projectId, clientId, projectBudget = 0
   const [declineNote, setDeclineNote] = useState('');
   const [activeDecline, setActiveDecline] = useState<string | null>(null);
 
-  const { data: changeOrders = [], isLoading } = useQuery({
-    queryKey: ['changeOrders', projectId],
-    queryFn: async () => {
-      // Change orders live in the top-level `changeOrders` collection (keyed by
-      // projectId) — the GC pages + selections-overage flow all write there.
-      // Sort client-side to avoid a composite (projectId + createdAt) index.
-      const snap = await getDocs(fsQuery(collection(db, 'changeOrders'), where('projectId', '==', projectId)));
-      return snap.docs
-        .map(d => ({ id: d.id, ...d.data(), createdAt: d.data().createdAt?.toDate?.()?.toISOString() || null }))
+  // T0-4: live snapshot of the top-level `changeOrders` collection keyed by
+  // projectId. We use onSnapshot (not useQuery → getDocs) so that the moment
+  // the server PATCH /api/projects/:p/change-orders/:co/decision flips
+  // status: 'approved' on the doc, this view re-renders with the new badge
+  // without waiting for the queryClient.invalidateQueries roundtrip / next focus.
+  const [changeOrders, setChangeOrders] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  useEffect(() => {
+    if (!projectId) { setIsLoading(false); return; }
+    setIsLoading(true);
+    const q = fsQuery(collection(db, 'changeOrders'), where('projectId', '==', projectId));
+    const unsub = onSnapshot(q, (snap: any) => {
+      const rows = snap.docs
+        .map((d: any) => ({ id: d.id, ...d.data(), createdAt: (d.data() as any).createdAt?.toDate?.()?.toISOString() || null }))
         .sort((a: any, b: any) => (b.createdAt || '').localeCompare(a.createdAt || '')) as any[];
-    },
-    enabled: !!projectId,
-  });
+      setChangeOrders(rows);
+      setIsLoading(false);
+    }, (err: any) => {
+      console.error('changeOrders snapshot error', err);
+      setIsLoading(false);
+    });
+    return () => unsub();
+  }, [projectId]);
 
   const decisionMutation = useMutation({
     mutationFn: async ({ coId, decision }: { coId: string; decision: 'approved' | 'declined' }) => {
@@ -54,7 +64,9 @@ export default function ChangeOrdersTab({ projectId, clientId, projectBudget = 0
       return res.json();
     },
     onSuccess: (_, { decision }) => {
-      queryClient.invalidateQueries({ queryKey: ['changeOrders', projectId] });
+      // No need to invalidate ['changeOrders', projectId] — onSnapshot is live.
+      // We still bump ['selections', projectId] because selection status flips
+      // when an overage CO is approved.
       queryClient.invalidateQueries({ queryKey: ['selections', projectId] });
       toast({ title: decision === 'approved' ? 'Change order approved' : 'Change order declined' });
       setActiveDecline(null);
