@@ -5,7 +5,7 @@
 
 import { collection, doc, getDoc, getDocs, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { createNotification } from '@/lib/notifications';
+import { fireTrigger } from '@/lib/notifications';
 import { scheduleSignature } from './wbsToClientSchedule';
 import type { GeneratedSchedule } from './types';
 
@@ -60,23 +60,16 @@ export async function publishScheduleToClient(args: PublishScheduleArgs): Promis
 
   if (!notify) return;
 
-  // Notify the homeowner(s). createNotification fans out to email/SMS/push via
-  // the notifications/{id} Firestore trigger and mirrors to a spouse.
+  // Wave-2: route through fireTrigger so the server resolves the project's
+  // homeowner audience, applies per-user prefs, and fans out to email/SMS/push.
   try {
-    const projectSnap = await getDoc(doc(db, 'projects', projectId));
-    const project = projectSnap.exists() ? projectSnap.data() : {};
-    const uids = await resolveClientUids(project);
-    const projectName = (project as any)?.name || 'your project';
-    await Promise.all(uids.map(uid => createNotification({
-      userId: uid,
-      kind: 'system',
-      title: 'Your project schedule was updated',
-      body: `The timeline for ${projectName} has been updated. Open your portal to see what's next.`,
-      link: '/portal?tab=schedule',
+    await fireTrigger({
+      kind: 'schedule_published',
       projectId,
-      fromUserId,
-      fromUserName,
-    })));
+      payload: {
+        link: '/portal?tab=schedule',
+      },
+    });
   } catch (e) {
     // Notifications are best-effort — never block the publish.
     console.warn('[publishSchedule] notify failed', e);

@@ -5,7 +5,7 @@ import {
 } from 'firebase/firestore';
 import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '@/lib/firebase';
-import { createNotification } from '@/lib/notifications';
+import { fireTrigger } from '@/lib/notifications';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -182,19 +182,21 @@ export function WalkthroughCapture({ projectId, projectName, buttonLabel = 'Capt
 
       await batch.commit();
 
-      // Fire notification to the assignee (best-effort, non-blocking)
+      // Wave-2: fire through the server pipeline so SMS/email/push, audience
+      // resolution, and per-user prefs all run server-side. Single-uid kind:
+      // the assignee is pinned via overrides.targetUserIds. Best-effort.
       if (assigneeId && sub) {
-        await createNotification({
-          userId: assigneeId,
+        await fireTrigger({
           kind: 'walkthrough_assigned',
-          title: `New walkthrough item from ${user.name || 'GC'}`,
-          body: note.trim() || 'Photo / video captured on site',
-          link: `/subcontractor-portal`,
           projectId,
-          refType: 'walkthrough',
-          refId: walkRef.id,
-          fromUserId: user.id?.toString() || user.email || 'unknown',
-          fromUserName: user.name || user.email || 'GC',
+          targetUserIds: [assigneeId],
+          payload: {
+            fromName: user.name || user.email || 'GC',
+            note: note.trim() || 'Photo / video captured on site',
+            projectName: projectName || '',
+            link: `/subcontractor-portal`,
+            walkthroughId: walkRef.id,
+          },
         });
       }
 

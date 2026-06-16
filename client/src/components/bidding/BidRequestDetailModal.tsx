@@ -5,7 +5,7 @@ import {
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
-import { createNotificationsBatch } from '@/lib/notifications';
+import { fireTrigger } from '@/lib/notifications';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from '@/components/ui/dialog';
@@ -147,17 +147,18 @@ export function BidRequestDetailModal({ request, projectId, projectName, onClose
     qs.set('bidRequest', request.id);
     if (row.sub.email) qs.set('email', row.sub.email);
     try {
-      await createNotificationsBatch([{
-        userId: recipientId,
-        kind: 'system',
-        title: `Bid reminder — ${request.trade}`,
-        body: `Reminder: please submit your bid for ${projectName || 'this project'} (${request.trade}).${request.dueDate ? ` Due ${request.dueDate}.` : ''}`,
-        link: `/subcontractor-portal/bids?${qs.toString()}`,
+      await fireTrigger({
+        kind: 'bid_reminder',
         projectId,
-        refType: 'task',
-        refId: request.id,
-        fromUserName: user.name || 'Skyeline Homes',
-      }]);
+        targetUserIds: [recipientId],
+        payload: {
+          projectName: projectName || 'this project',
+          trade: request.trade,
+          dueDate: request.dueDate || '',
+          link: `/subcontractor-portal/bids?${qs.toString()}`,
+          bidRequestId: request.id,
+        },
+      });
       return true;
     } catch (e: any) {
       toast({ title: 'Reminder failed', description: e?.message || String(e), variant: 'destructive' });
@@ -233,17 +234,20 @@ export function BidRequestDetailModal({ request, projectId, projectName, onClose
       const qs = new URLSearchParams();
       qs.set('bidRequest', request.id);
       if (sub.email) qs.set('email', sub.email);
-      await createNotificationsBatch([{
-        userId: recipientId,
-        kind: 'system',
-        title: `Bid request — ${request.trade}`,
-        body: `You've been invited to bid on ${projectName || 'this project'} (${request.trade}).${request.dueDate ? ` Due ${request.dueDate}.` : ''} Open Skyeline OS to submit your quote.`,
-        link: `/subcontractor-portal/bids?${qs.toString()}`,
+      await fireTrigger({
+        kind: 'bid_invitation',
         projectId,
-        refType: 'task',
-        refId: request.id,
-        fromUserName: user.name || 'Skyeline Homes',
-      }]);
+        targetUserIds: [recipientId],
+        payload: {
+          projectName: projectName || 'this project',
+          trade: request.trade,
+          dueDate: request.dueDate || '',
+          requesterName: user.name || 'Skyeline Homes',
+          magicLink: `/subcontractor-portal/bids?${qs.toString()}`,
+          link: `/subcontractor-portal/bids?${qs.toString()}`,
+          bidRequestId: request.id,
+        },
+      });
 
       const channels = [sub.email && 'email', sub.phone && 'text'].filter(Boolean).join(' + ');
       toast({

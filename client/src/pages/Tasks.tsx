@@ -17,7 +17,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { useConfirm } from '@/hooks/use-confirm';
-import { createNotification } from '@/lib/notifications';
+import { fireTrigger } from '@/lib/notifications';
 import { getDefaultAssigneeForTask, inferTaskKindFromTitle } from '@/lib/taskDefaults';
 import {
   Plus, Search, CheckSquare, MoreVertical, Edit, Trash2, Calendar, User, List, LayoutGrid
@@ -276,17 +276,18 @@ export function TasksContent({ projectId: scopedProjectId }: { projectId?: strin
           updatedAt: serverTimestamp()
         });
         if (reassigned && formData.assignedToId) {
-          await createNotification({
-            userId: formData.assignedToId,
+          // Wave-2: route through fireTrigger so SMS/email + per-user prefs apply.
+          await fireTrigger({
             kind: 'task_assigned',
-            title: `Task assigned to you: ${formData.title}`,
-            body: formData.description || (formData.projectName ? `Project: ${formData.projectName}` : ''),
-            link: '/tasks',
             projectId: formData.projectId || undefined,
-            refType: 'task',
-            refId: editingTask.id,
-            fromUserId: meId,
-            fromUserName: meName,
+            targetUserIds: [formData.assignedToId],
+            payload: {
+              taskName: formData.title,
+              projectName: formData.projectName || '',
+              fromName: meName || 'A teammate',
+              link: '/tasks',
+              taskId: editingTask.id,
+            },
           });
         }
         toast({ title: 'Task updated' });
@@ -300,17 +301,17 @@ export function TasksContent({ projectId: scopedProjectId }: { projectId?: strin
         });
         // Notify the assignee on creation unless self-assigned.
         if (formData.assignedToId && formData.assignedToId !== meId) {
-          await createNotification({
-            userId: formData.assignedToId,
+          await fireTrigger({
             kind: 'task_assigned',
-            title: `Task assigned to you: ${formData.title}`,
-            body: formData.description || (formData.projectName ? `Project: ${formData.projectName}` : ''),
-            link: '/tasks',
             projectId: formData.projectId || undefined,
-            refType: 'task',
-            refId: ref.id,
-            fromUserId: meId,
-            fromUserName: meName,
+            targetUserIds: [formData.assignedToId],
+            payload: {
+              taskName: formData.title,
+              projectName: formData.projectName || '',
+              fromName: meName || 'A teammate',
+              link: '/tasks',
+              taskId: ref.id,
+            },
           });
         }
         toast({ title: 'Task created' });

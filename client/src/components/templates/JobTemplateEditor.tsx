@@ -4,7 +4,7 @@ import {
   deleteDoc, doc, serverTimestamp, updateDoc, where, writeBatch,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { createNotificationsBatch } from '@/lib/notifications';
+import { fireTrigger } from '@/lib/notifications';
 import { useAuth } from '@/hooks/use-auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -568,21 +568,24 @@ function ApplyToJobModal({
 
       await batch.commit();
 
-      // Summary notification to the applier
+      // Summary notification to the applier — routed through fireTrigger.
       if (user) {
         const userId = user.id?.toString() || user.email || '';
         const projName = projects.find(p => p.id === selectedProjectId)?.name || 'project';
         const tasksWithNotify = tasks.filter(t => t.notifyOnAssign).length;
-        await createNotificationsBatch([{
-          userId,
-          kind: 'system',
-          title: `Template applied to ${projName}`,
-          body: `${tasks.length} tasks created (${tasksWithNotify} flagged for assign-time notifications). Open Tasks to assign each role to a specific person.`,
-          link: `/projects/${selectedProjectId}/overview`,
-          projectId: selectedProjectId,
-          refType: 'task',
-          fromUserName: 'System',
-        }]);
+        if (userId) {
+          await fireTrigger({
+            kind: 'template_applied',
+            projectId: selectedProjectId,
+            targetUserIds: [userId],
+            payload: {
+              projectName: projName,
+              taskCount: tasks.length,
+              tasksWithNotify,
+              link: `/projects/${selectedProjectId}/overview`,
+            },
+          });
+        }
       }
 
       toast({ title: `Applied! ${tasks.length} tasks created.` });

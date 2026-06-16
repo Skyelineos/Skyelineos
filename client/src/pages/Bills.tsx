@@ -8,6 +8,7 @@ import { getAuth } from 'firebase/auth';
 import { db, storage } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
+import { fireTrigger } from '@/lib/notifications';
 import { useConfirm } from '@/hooks/use-confirm';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -250,6 +251,20 @@ export function BillsContent({ projectId: scopedProjectId }: { projectId?: strin
         createdAt: serverTimestamp(),
         createdBy: user.id?.toString() || user.email || 'unknown',
       });
+      // Wave-2: fire invoice_received so staff_on_project (admin + gc + PM) get
+      // the in-app alert via the server pipeline.
+      if (project?.id) {
+        await fireTrigger({
+          kind: 'invoice_received',
+          projectId: project.id,
+          payload: {
+            vendor: draft.vendor || 'vendor',
+            amount: (Number(draft.amount) || 0).toLocaleString(),
+            projectName: project.name || draft.projectName || '',
+            link: '/bills',
+          },
+        });
+      }
       toast({ title: 'Bill saved', description: `${draft.vendor} · $${draft.amount}` });
       reset();
     } catch (e: any) {
