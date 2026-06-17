@@ -95,7 +95,7 @@ export function registerQaRoutes(app: Express, db: admin.firestore.Firestore): v
       return;
     }
     try {
-      const { runId, phase, patch, releaseLock } = req.body || {};
+      const { runId, phase, patch, releaseLock, runUrl } = req.body || {};
       if (!runId) { res.status(400).json({ error: 'runId required' }); return; }
 
       const update: Record<string, any> = { ...(patch || {}) };
@@ -106,7 +106,9 @@ export function registerQaRoutes(app: Express, db: admin.firestore.Firestore): v
       await db.collection('qa_runs').doc(runId).set(update, { merge: true });
 
       // Final report (or explicit release) clears the deploy lock.
-      if (phase === 'final' || releaseLock) await clearLock(db, runId);
+      // runUrl (from GH Actions) gets stamped on the lock doc for debugging
+      // — answers 'which GH workflow run held this lock?'
+      if (phase === 'final' || releaseLock) await clearLock(db, runId, runUrl);
 
       res.json({ ok: true });
     } catch (e: any) {
@@ -142,16 +144,25 @@ export function registerQaRoutes(app: Express, db: admin.firestore.Firestore): v
   });
 }
 
-async function clearLock(db: admin.firestore.Firestore, runId: string): Promise<void> {
+async function clearLock(
+  db: admin.firestore.Firestore,
+  runId: string,
+  runUrl?: string,
+): Promise<void> {
   // Only clear if this run owns the lock (don't stomp a manual lock).
   const ref = db.doc(LOCK_DOC.join('/'));
   const snap = await ref.get();
   const data = snap.exists ? snap.data() || {} : {};
   if (data.source === 'manual' && data.locked) return; // leave manual locks alone
   if (data.qaRunId && data.qaRunId !== runId) return;   // a newer run owns it
-  await ref.set({
+  const update: Record<string, unknown> = {
     locked: false,
     qaRunId: null,
     unlockedAt: admin.firestore.FieldValue.serverTimestamp(),
-  }, { merge: true });
+  };
+  // Stamp the GH Actions run URL of whoever released the lock so a future
+  // 'why was this lock stuck?' question has a thread to pull. Optional —
+  // legacy callers without runUrl just won't write it.
+  if (runUrl) update.lastReleaseRunUrl = runUrl;
+  await ref.set(update, { merge: true });
 }
