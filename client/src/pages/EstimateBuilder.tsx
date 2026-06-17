@@ -20,7 +20,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { useToast } from '@/hooks/use-toast';
 import { useConfirm } from '@/hooks/use-confirm';
 import { GmailBidImporter } from '@/components/estimates/GmailBidImporter';
-import { ImportEstimateModal } from '@/components/estimates/ImportEstimateModal';
+import { ImportEstimateModal, type ImportedAttachmentMeta } from '@/components/estimates/ImportEstimateModal';
 import { EstimateCostingsTab } from '@/components/estimates/EstimateCostingsTab';
 import { EstimateScheduleTab } from '@/components/estimates/EstimateScheduleTab';
 import { LineDescriptionButton } from '@/components/estimates/LineDescriptionButton';
@@ -96,6 +96,15 @@ interface LineItem {
   awardedBidId?: string;
 }
 
+interface EstimateAttachment {
+  storagePath: string;
+  url: string;
+  fileName: string;
+  sizeBytes: number;
+  mimeType: string;
+  source: 'pdf' | 'email';
+}
+
 interface Estimate {
   id: string;
   title: string;
@@ -115,6 +124,8 @@ interface Estimate {
   tax?: number;          // percent — for JACK-style costings tab
   notes?: string;
   validUntil?: string;
+  /** Files attached to this estimate (sub PDFs, emails). Append-only. */
+  attachments?: EstimateAttachment[];
   sentAt?: any;
   createdAt?: any;
   updatedAt?: any;
@@ -891,6 +902,12 @@ function EstimateModal({
   const [notes, setNotes]           = useState('');
   const [validUntil, setValidUntil] = useState('');
   const [items, setItems]           = useState<LineItem[]>(defaultItems());
+  // Files attached via "Import from PDF" inside the Scope of Work table. Stays
+  // append-only — every imported sub PDF stays attached for audit.
+  const [attachments, setAttachments] = useState<EstimateAttachment[]>([]);
+  // Toggles the inline "Import from PDF" modal launched from the Scope of Work
+  // header. Distinct from the outer EstimateBuilder list-level importPdfOpen.
+  const [scopeImportOpen, setScopeImportOpen] = useState(false);
   // Live bids on the current project — surfaces "Apply bid" chips on any
   // line where a project bid matches both trade and one of the assigned subs.
   const [projectBids, setProjectBids] = useState<MatchableBid[]>([]);
@@ -938,6 +955,7 @@ function EstimateModal({
       setNotes(editing.notes ?? '');
       setValidUntil(editing.validUntil ?? '');
       setItems(editing.lineItems?.length ? editing.lineItems : defaultItems());
+      setAttachments(editing.attachments ?? []);
     } else {
       setTitle(prefillProject?.name ? `${prefillProject.name} — Estimate` : '');
       setClientId('');
@@ -951,6 +969,7 @@ function EstimateModal({
       setNotes('');
       setValidUntil('');
       setItems(defaultItems());
+      setAttachments([]);
     }
     setActiveTab('details');
     setMeasuringItemId(null);
@@ -977,6 +996,34 @@ function EstimateModal({
 
   const addItem = (trade: string) =>
     setItems(prev => [...prev, newLineItem(trade)]);
+
+  // Append rows extracted from a sub's PDF. Multiple PDFs aggregate into one
+  // estimate. Attachment metadata persists with the estimate so the source
+  // PDF stays auditable even after rows are edited.
+  const handleAppendImported = (
+    newRows: LineItem[],
+    attachment: ImportedAttachmentMeta,
+  ) => {
+    if (newRows.length) {
+      setItems(prev => [...prev, ...newRows]);
+      // Auto-expand any trades that just got imported so Tyler sees the rows
+      // appear instead of them hiding inside a collapsed group.
+      setExpandedTrades(prev => {
+        const next = new Set(prev);
+        for (const r of newRows) next.add(resolveTradeLabel(r.trade));
+        return next;
+      });
+    }
+    setAttachments(prev => [...prev, attachment]);
+    toast({
+      title: newRows.length
+        ? `Added ${newRows.length} line item${newRows.length === 1 ? '' : 's'} from ${attachment.fileName}`
+        : `Attached ${attachment.fileName}`,
+      description: newRows.length
+        ? 'Review, edit any field that came out wrong, then Save.'
+        : 'No rows could be parsed automatically — add them manually below.',
+    });
+  };
 
   const totals = calcTotals(items, overhead, profit);
 
@@ -1018,6 +1065,7 @@ function EstimateModal({
     const clientName = clients.find(c => c.id === clientId)?.name;
     try {
       await onSave({
+        ...(attachments.length ? { attachments } : {}),
         title: title.trim(),
         clientId: clientId || undefined,
         clientName,
@@ -1252,7 +1300,29 @@ function EstimateModal({
           {/* Line items by trade */}
           <div>
             <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
-              <h3 className="font-semibold text-gray-800">Scope of Work</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="font-semibold text-gray-800">Scope of Work</h3>
+                {/* Import sub PDFs directly into this estimate. Multiple PDFs */}
+                {/* across trades aggregate into one estimate's lineItems. */}
+                <button
+                  type="button"
+                  onClick={() => setScopeImportOpen(true)}
+                  className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-full border border-dashed text-gray-700 hover:bg-amber-50 transition-colors"
+                  style={{ borderColor: 'rgba(201,169,110,0.6)' }}
+                  title="Upload a sub's PDF — Claude will extract rows and append them here"
+                >
+                  <Upload className="w-3 h-3" />
+                  Import from PDF
+                </button>
+                {attachments.length > 0 && (
+                  <span
+                    className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600"
+                    title={attachments.map(a => a.fileName).join('\n')}
+                  >
+                    {attachments.length} attached
+                  </span>
+                )}
+              </div>
               <div className="flex items-center gap-2 flex-wrap">
                 {/* Status filter chips — show All, only allowances, only excluded/note items. */}
                 {([
@@ -1577,6 +1647,17 @@ function EstimateModal({
         </Dialog>
       );
     })()}
+
+    {/* Inline "Import from PDF" launched from the Scope of Work header. Lives
+        here so the modal sits over the open estimate, not the estimates list. */}
+    <ImportEstimateModal
+      open={scopeImportOpen}
+      onClose={() => setScopeImportOpen(false)}
+      projectId={projectId || editing?.projectId || prefillProject?.id}
+      projectName={title || prefillProject?.name}
+      mode="append-to-current"
+      onLineItemsExtracted={handleAppendImported}
+    />
     </>
   );
 }

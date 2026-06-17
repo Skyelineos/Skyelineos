@@ -1,18 +1,27 @@
 // "Import from PDF/Email" modal for Estimate Builder.
 //
-// Workaround for the broken bid-package flow (Workflow 3 in the CTO audit) so
-// Tyler can get sub quotes into client-visible estimates without going through
-// bid packages. Two paths:
-//   1. Upload a PDF (or photographed printout) of a sub's quote.
-//   2. Paste an email body — we save the text as a .txt for auditability.
-// In both cases the user fills (or edits) vendor / trade / total / description,
-// hits Save, and we create a draft estimate with the file attached.
+// Two modes (set via the `mode` prop):
 //
-// Storage path: projects/{projectId}/estimate-imports/{uuid}.{ext} — Stream 1's
-// tightened isOnProject(projectId) rules cover it.
+//   'create-new'           ← original behavior. Saves a NEW estimates/{id} doc
+//                            from the extracted/typed fields. Stays the
+//                            entry-point for the top-level /estimates list and
+//                            for projects where Tyler doesn't yet have an
+//                            estimate open.
 //
-// Saved as `status: 'draft'`. Tyler manually flips to 'sent' from the
-// Estimates list when he's ready to share with the client.
+//   'append-to-current'    ← new. Tyler clicked "Import from PDF" from INSIDE
+//                            an open estimate. We upload the file, run vision
+//                            extraction, and hand the mapped LineItem[] +
+//                            attachment metadata back to the parent via
+//                            onLineItemsExtracted. The parent appends rows to
+//                            its in-memory state — no Firestore write here.
+//
+// In both modes the PDF lands at projects/{projectId}/estimate-imports/{uuid}.{ext}
+// (Storage rules: isOnProject(projectId)). The file always stays attached for
+// auditability.
+//
+// In 'create-new' mode, vision-extracted line items are mapped through
+// mapExtractedToLineItems and saved on the new estimate doc — so even the
+// create-new path now uses the FULL extracted rows array, not just one.
 
 import { useState, useRef, useEffect } from 'react';
 import { collection, addDoc, getDocs, query, orderBy, serverTimestamp } from 'firebase/firestore';
@@ -35,14 +44,36 @@ import {
   uploadEstimateAttachment,
   type UploadedEstimateAttachment,
 } from '@/lib/estimateImports/uploadEstimateAttachment';
+import {
+  mapExtractedToLineItems,
+  type LineItem,
+  type ExtractedEstimate,
+} from '@/lib/estimateImports/mapExtractedLineItems';
+
+export type ImportEstimateMode = 'create-new' | 'append-to-current';
+
+export interface ImportedAttachmentMeta {
+  storagePath: string;
+  url: string;
+  fileName: string;
+  sizeBytes: number;
+  mimeType: string;
+  source: 'pdf' | 'email';
+}
 
 interface ImportEstimateModalProps {
   open: boolean;
   onClose: () => void;
   projectId?: string;
   projectName?: string;
-  /** Called after save so the parent can refresh / toast. Optional. */
+  /** 'create-new' (default) keeps the original Firestore-write flow. */
+  mode?: ImportEstimateMode;
+  /** Called after a `create-new` save so the parent can refresh / toast. */
   onSaved?: (estimateId: string) => void;
+  /** Called in `append-to-current` mode after extraction succeeds. The parent
+   *  is expected to append the rows + attachment to its in-memory estimate and
+   *  persist them on its next Save. */
+  onLineItemsExtracted?: (lineItems: LineItem[], attachment: ImportedAttachmentMeta) => void;
 }
 
 const FALLBACK_TRADES = [
@@ -56,18 +87,12 @@ const FALLBACK_TRADES = [
 const API_BASE =
   (import.meta as any).env?.VITE_API_BASE_URL || 'https://api-mtph34upva-uc.a.run.app';
 
-interface ExtractionResult {
+/** Raw extraction shape returned by /api/extract-estimate. */
+interface ExtractionResult extends ExtractedEstimate {
   vendor_name: string | null;
-  trade: string | null;
-  total_amount: number | null;
-  line_items: Array<{
-    description: string;
-    qty?: number | null;
-    unit?: string | null;
-    unit_cost?: number | null;
-    total?: number | null;
-  }> | null;
-  notes: string | null;
+  // Legacy single-trade field — present in older deploys, optional now.
+  trade?: string | null;
+  total_amount?: number | null;
 }
 
 async function callExtractEstimate(
@@ -94,6 +119,8 @@ async function callExtractEstimate(
 
 export function ImportEstimateModal({
   open, onClose, projectId, projectName, onSaved,
+  mode = 'create-new',
+  onLineItemsExtracted,
 }: ImportEstimateModalProps) {
   const { toast } = useToast();
   const [tab, setTab] = useState<'pdf' | 'email'>('pdf');
@@ -110,11 +137,16 @@ export function ImportEstimateModal({
       .catch(() => { /* fallback list is fine */ });
   }, [open]);
 
-  // Shared form state
+  // Shared form state (only used in create-new mode)
   const [vendorName, setVendorName] = useState('');
   const [trade, setTrade] = useState('');
   const [totalAmount, setTotalAmount] = useState('');
   const [description, setDescription] = useState('');
+
+  // Latest extraction kept around for create-new save — we map the line_items
+  // through mapExtractedToLineItems so the saved estimate carries the full row
+  // breakdown instead of one lump-sum row.
+  const [lastExtraction, setLastExtraction] = useState<ExtractionResult | null>(null);
 
   // PDF tab state
   const [file, setFile] = useState<File | null>(null);
@@ -144,6 +176,7 @@ export function ImportEstimateModal({
     setEmailBody('');
     setSaving(false);
     setDragOver(false);
+    setLastExtraction(null);
   };
 
   const handleClose = () => {
@@ -180,11 +213,34 @@ export function ImportEstimateModal({
       // Best-effort Claude vision extraction. Silent-fail to keep manual path working.
       setExtracting(true);
       const extracted = await callExtractEstimate(result.storagePath, result.mimeType);
+
+      if (mode === 'append-to-current') {
+        // Append mode: don't fill the form. Just convert + hand off to parent.
+        const rows = mapExtractedToLineItems(extracted, {
+          vendorName: extracted?.vendor_name ?? null,
+        });
+        const attachment: ImportedAttachmentMeta = {
+          storagePath: result.storagePath,
+          url: result.url,
+          fileName: result.fileName,
+          sizeBytes: result.sizeBytes,
+          mimeType: result.mimeType,
+          source: 'pdf',
+        };
+        onLineItemsExtracted?.(rows, attachment);
+        resetAll();
+        onClose();
+        return;
+      }
+
+      // create-new mode — auto-fill the form fields for review.
+      setLastExtraction(extracted);
       if (extracted) {
         if (extracted.vendor_name && !vendorName) setVendorName(extracted.vendor_name);
-        if (extracted.trade && !trade) setTrade(extracted.trade);
-        if (extracted.total_amount != null && !totalAmount) {
-          setTotalAmount(String(extracted.total_amount));
+        const legacyTrade = (extracted as any).default_trade || (extracted as any).trade;
+        if (legacyTrade && !trade) setTrade(legacyTrade);
+        if ((extracted as any).total_amount != null && !totalAmount) {
+          setTotalAmount(String((extracted as any).total_amount));
         }
         if (extracted.notes && (!description || description === selected.name)) {
           setDescription(extracted.notes);
@@ -211,7 +267,7 @@ export function ImportEstimateModal({
     if (f) handleFileSelected(f);
   };
 
-  // ── Save ───────────────────────────────────────────────────────────────────
+  // ── Save (create-new mode only) ────────────────────────────────────────────
   const handleSave = async () => {
     if (!guardProject()) return;
 
@@ -253,19 +309,31 @@ export function ImportEstimateModal({
       }
 
       const title = `${vendorName} — ${trade}${projectName ? ` (${projectName})` : ''}`;
-      const lineItem = {
-        id: crypto.randomUUID(),
-        trade,
-        description: description || vendorName,
-        qty: 1,
-        unit: 'lump sum',
-        unitCost: totalNum,
-        subCost: totalNum,
-        total: totalNum,
-        subName: vendorName,
-        kind: 'subcontractor' as const,
-        lineStatus: 'inc' as const,
-      };
+
+      // Prefer the full extracted line items array. Fall back to a single
+      // lump-sum row if extraction didn't produce anything.
+      let lineItems: LineItem[] = [];
+      if (lastExtraction && Array.isArray(lastExtraction.line_items) && lastExtraction.line_items.length) {
+        lineItems = mapExtractedToLineItems(lastExtraction, {
+          vendorName,
+          defaultTradeFallback: trade,
+        }).map(li => ({ ...li, subName: vendorName }));
+      }
+      if (!lineItems.length) {
+        lineItems = [{
+          id: crypto.randomUUID(),
+          trade,
+          description: description || vendorName,
+          qty: 1,
+          unit: 'lump sum',
+          unitCost: totalNum,
+          subCost: totalNum,
+          total: totalNum,
+          subName: vendorName,
+          kind: 'subcontractor' as const,
+          lineStatus: 'inc' as const,
+        }];
+      }
 
       const docRef = await addDoc(collection(db, 'estimates'), {
         title,
@@ -278,7 +346,7 @@ export function ImportEstimateModal({
         subtotal: totalNum,
         overhead: 0,
         profit: 0,
-        lineItems: [lineItem],
+        lineItems,
         importedFrom,
         attachments: attachment
           ? [{
@@ -313,26 +381,39 @@ export function ImportEstimateModal({
     }
   };
 
+  const isAppendMode = mode === 'append-to-current';
+
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) handleClose(); }}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Upload className="h-5 w-5 text-[#C9A96E]" />
-            Import Estimate from PDF or Email
+            {isAppendMode
+              ? 'Import line items from PDF'
+              : 'Import Estimate from PDF or Email'}
           </DialogTitle>
         </DialogHeader>
 
-        {/* Heads-up banner — sets expectation about draft + client visibility */}
-        <div className="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-900">
-          Saved as <strong>draft</strong> — switch status to <strong>"sent"</strong> from the
-          Estimates list when you're ready to share with the client.
-        </div>
+        {/* Heads-up banner */}
+        {isAppendMode ? (
+          <div className="rounded-md bg-blue-50 border border-blue-200 px-3 py-2 text-xs text-blue-900">
+            Upload a sub's PDF — extracted rows will be appended to the open
+            estimate's Scope of Work. The PDF stays attached for audit.
+          </div>
+        ) : (
+          <div className="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-900">
+            Saved as <strong>draft</strong> — switch status to <strong>"sent"</strong> from the
+            Estimates list when you're ready to share with the client.
+          </div>
+        )}
 
         <Tabs value={tab} onValueChange={v => setTab(v as 'pdf' | 'email')} className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className={isAppendMode ? 'grid w-full grid-cols-1' : 'grid w-full grid-cols-2'}>
             <TabsTrigger value="pdf"><Upload className="h-4 w-4 mr-1.5" /> Upload PDF</TabsTrigger>
-            <TabsTrigger value="email"><FileText className="h-4 w-4 mr-1.5" /> Paste email body</TabsTrigger>
+            {!isAppendMode && (
+              <TabsTrigger value="email"><FileText className="h-4 w-4 mr-1.5" /> Paste email body</TabsTrigger>
+            )}
           </TabsList>
 
           {/* ── PDF tab ─────────────────────────────────────────────────────── */}
@@ -400,81 +481,87 @@ export function ImportEstimateModal({
             )}
           </TabsContent>
 
-          {/* ── Email tab ──────────────────────────────────────────────────── */}
-          <TabsContent value="email" className="space-y-3 pt-2">
-            <Label htmlFor="email-body" className="text-sm">Email body</Label>
-            <Textarea
-              id="email-body"
-              rows={8}
-              placeholder="Paste the email content here. We'll save it as a .txt alongside the estimate."
-              value={emailBody}
-              onChange={e => setEmailBody(e.target.value)}
-              className="font-mono text-xs"
-            />
-            <p className="text-xs text-gray-500">
-              We save the text body as a file for auditability — Tyler always has the receipt.
-            </p>
-          </TabsContent>
+          {/* ── Email tab (create-new only) ─────────────────────────────────── */}
+          {!isAppendMode && (
+            <TabsContent value="email" className="space-y-3 pt-2">
+              <Label htmlFor="email-body" className="text-sm">Email body</Label>
+              <Textarea
+                id="email-body"
+                rows={8}
+                placeholder="Paste the email content here. We'll save it as a .txt alongside the estimate."
+                value={emailBody}
+                onChange={e => setEmailBody(e.target.value)}
+                className="font-mono text-xs"
+              />
+              <p className="text-xs text-gray-500">
+                We save the text body as a file for auditability — Tyler always has the receipt.
+              </p>
+            </TabsContent>
+          )}
         </Tabs>
 
-        {/* ── Shared form fields ─────────────────────────────────────────────── */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-          <div>
-            <Label htmlFor="vendorName" className="text-sm">Vendor / Subcontractor *</Label>
-            <Input
-              id="vendorName"
-              value={vendorName}
-              onChange={e => setVendorName(e.target.value)}
-              placeholder="ACME Electric LLC"
-            />
+        {/* ── Shared form fields (create-new only) ──────────────────────────── */}
+        {!isAppendMode && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+            <div>
+              <Label htmlFor="vendorName" className="text-sm">Vendor / Subcontractor *</Label>
+              <Input
+                id="vendorName"
+                value={vendorName}
+                onChange={e => setVendorName(e.target.value)}
+                placeholder="ACME Electric LLC"
+              />
+            </div>
+            <div>
+              <Label htmlFor="trade" className="text-sm">Trade *</Label>
+              <Select value={trade} onValueChange={setTrade}>
+                <SelectTrigger id="trade">
+                  <SelectValue placeholder="Pick a trade" />
+                </SelectTrigger>
+                <SelectContent>
+                  {trades.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="totalAmount" className="text-sm">Total amount (USD) *</Label>
+              <Input
+                id="totalAmount"
+                type="number"
+                inputMode="decimal"
+                min="0"
+                step="0.01"
+                value={totalAmount}
+                onChange={e => setTotalAmount(e.target.value)}
+                placeholder="12500.00"
+              />
+            </div>
+            <div>
+              <Label htmlFor="description" className="text-sm">Description</Label>
+              <Input
+                id="description"
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+                placeholder="One-line summary"
+              />
+            </div>
           </div>
-          <div>
-            <Label htmlFor="trade" className="text-sm">Trade *</Label>
-            <Select value={trade} onValueChange={setTrade}>
-              <SelectTrigger id="trade">
-                <SelectValue placeholder="Pick a trade" />
-              </SelectTrigger>
-              <SelectContent>
-                {trades.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label htmlFor="totalAmount" className="text-sm">Total amount (USD) *</Label>
-            <Input
-              id="totalAmount"
-              type="number"
-              inputMode="decimal"
-              min="0"
-              step="0.01"
-              value={totalAmount}
-              onChange={e => setTotalAmount(e.target.value)}
-              placeholder="12500.00"
-            />
-          </div>
-          <div>
-            <Label htmlFor="description" className="text-sm">Description</Label>
-            <Input
-              id="description"
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              placeholder="One-line summary"
-            />
-          </div>
-        </div>
+        )}
 
         <DialogFooter className="pt-3">
           <Button variant="outline" onClick={handleClose} disabled={saving || uploading}>
-            Cancel
+            {isAppendMode ? 'Close' : 'Cancel'}
           </Button>
-          <Button
-            onClick={handleSave}
-            disabled={saving || uploading || extracting}
-            style={{ backgroundColor: '#16a34a', color: '#fff' }}
-            className="hover:opacity-90"
-          >
-            {saving ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving…</> : 'Save as draft estimate'}
-          </Button>
+          {!isAppendMode && (
+            <Button
+              onClick={handleSave}
+              disabled={saving || uploading || extracting}
+              style={{ backgroundColor: '#16a34a', color: '#fff' }}
+              className="hover:opacity-90"
+            >
+              {saving ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving…</> : 'Save as draft estimate'}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
