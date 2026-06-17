@@ -2218,9 +2218,6 @@ registerNotificationRulesRoutes(app, admin.firestore());
 import { registerFireTriggerRoute } from './notifications/fireTriggerRoute';
 registerFireTriggerRoute(app, admin.firestore());
 
-import { registerQaRoutes } from './qa/qaRoutes';
-registerQaRoutes(app, admin.firestore());  // /api/qa/{trigger,report,lock}
-
 // Catch-all 404 — must come AFTER all route registrations (QBO routes above included)
 app.use('*', (req: any, res: any) => {
   console.log(`❌ 404 - API endpoint not found: ${req.method} ${req.originalUrl}`);

@@ -18,7 +18,6 @@ import { SignoffQueueCard } from '@/components/dashboard/SignoffQueueCard';
 import { MissingTasksAlertCard } from '@/components/dashboard/MissingTasksAlertCard';
 import { UnsignedSchedulesCard } from '@/components/dashboard/UnsignedSchedulesCard';
 import { TeamAccessRequestsCard } from '@/components/dashboard/TeamAccessRequestsCard';
-import { QaTestPanel } from '@/components/dashboard/QaTestPanel';
 
 export default function Dashboard() {
   const [, setLocation] = useLocation();
@@ -63,7 +62,6 @@ export default function Dashboard() {
         ) : (
           /* GC / admin: Today feed first — what matters today */
           <>
-            {user?.role === 'admin' && <QaTestPanel />}
             <TeamAccessRequestsCard />
             <RemindersCard />
             <PendingReviewsCard />
