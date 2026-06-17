@@ -340,10 +340,14 @@ export function Sidebar({ isOpen, onToggle }: SidebarProps) {
                     <Link
                       href={item.href}
                       className={cn(
+                        // Touch polish — active:bg companion to hover:text-white
+                        // so phone taps register an immediate visual hit. The
+                        // hover stays text-only on desktop pointer; the active
+                        // background only fires on press.
                         'flex items-center gap-3 px-3 py-2 rounded-md text-sm font-sans font-medium transition-all duration-150',
                         isActive
                           ? 'text-white'
-                          : 'hover:text-white'
+                          : 'hover:text-white hover:bg-white/5 active:bg-white/10 active:text-white'
                       )}
                       style={isActive
                         ? { backgroundColor: 'rgba(201,169,110,0.15)', color: '#C9A96E', borderLeft: '2px solid #C9A96E' }
