@@ -1275,7 +1275,12 @@ app.post('/api/projects/:projectId/selections/:selectionId/approve', async (req:
     const overage = (option.totalCost || 0) - (sel.allowanceAmount || 0);
 
     if (overage > 0) {
-      const coRef = await db.collection('projects').doc(projectId).collection('changeOrders').add({
+      // SOURCE OF TRUTH: top-level `changeOrders/{coId}` keyed by projectId field.
+      // Pre-migration this wrote to projects/{projectId}/changeOrders/ — the
+      // subcollection nobody reads, so selection-overage COs created here were
+      // silently invisible to the client portal. Mirrors T0-4 decision-route fix.
+      const coRef = await db.collection('changeOrders').add({
+        projectId,
         title: `${sel.category} Selection Overage`,
         description: `Approved selection "${option.name}" exceeds the $${sel.allowanceAmount?.toLocaleString()} allowance by $${overage.toLocaleString()}.`,
         amount: overage,
@@ -1306,7 +1311,13 @@ app.post('/api/projects/:projectId/selections/:selectionId/approve', async (req:
 app.get('/api/projects/:projectId/change-orders', async (req: any, res: any) => {
   try {
     const { projectId } = req.params;
-    const snap = await db.collection('projects').doc(projectId).collection('changeOrders').orderBy('createdAt', 'desc').get();
+    // SOURCE OF TRUTH: top-level `changeOrders/` filtered by projectId field
+    // (audit Workflow 7 / Section 6.3). Pre-migration this read from the
+    // subcollection — missing all top-level COs that client.tsx writes.
+    const snap = await db.collection('changeOrders')
+      .where('projectId', '==', projectId)
+      .orderBy('createdAt', 'desc')
+      .get();
     res.json(snap.docs.map(d => ({ id: d.id, ...d.data(), createdAt: d.data().createdAt?.toDate?.()?.toISOString() || null })));
   } catch (e) { res.status(500).json({ error: 'Failed to fetch change orders' }); }
 });
@@ -1314,8 +1325,13 @@ app.get('/api/projects/:projectId/change-orders', async (req: any, res: any) => 
 app.post('/api/projects/:projectId/change-orders', async (req: any, res: any) => {
   try {
     const { projectId } = req.params;
-    const ref = await db.collection('projects').doc(projectId).collection('changeOrders').add({
+    // SOURCE OF TRUTH: top-level `changeOrders/` keyed by projectId field.
+    // Pre-migration this wrote to projects/{projectId}/changeOrders/ —
+    // the subcollection nobody reads. Mirrors T0-4 decision-route fix.
+    // projectId stamped AFTER ...req.body so callers can't spoof it.
+    const ref = await db.collection('changeOrders').add({
       ...req.body,
+      projectId,
       status: 'pending',
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),

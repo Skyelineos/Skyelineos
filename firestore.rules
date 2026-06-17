@@ -515,9 +515,20 @@ service cloud.firestore {
     // DEPRECATED: any docs in `projects/{projectId}/changeOrders/{coId}`
     // are orphan writes from the pre-T0-4 server route. Safe to delete
     // after 30 days (post 2026-07-16) once we're sure nothing reads them.
-    // No rules are defined for that subcollection path, so it is now
-    // unreadable/unwritable by clients regardless — the orphans only
-    // accumulate via admin SDK writes that we have already removed.
+    // The 3 remaining Cloud Function writers (selection-approve + list +
+    // create routes) were migrated to top-level by the co-migration-finish
+    // branch on 2026-06-16. Until backfill copies orphans out, we keep
+    // reads OPEN one release cycle, but DENY new writes to prevent drift.
+    match /projects/{projectId}/changeOrders/{coId} {
+      // Reads kept open for one release cycle so the backfill script
+      // (scripts/backfill-co-subcollection-to-toplevel.mjs) can copy
+      // orphan docs to the top-level `changeOrders/` collection.
+      allow read: if isStaff() || (isClient() && clientOwnsProject(projectId));
+      // Writes denied — top-level `changeOrders/` is canonical. Delete
+      // this block 30 days after backfill confirms (~2026-07-16).
+      allow write: if false;
+    }
+
     match /changeOrders/{orderId} {
       allow read: if isGC()
         || clientOwns(resource.data)
