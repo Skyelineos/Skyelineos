@@ -31,6 +31,10 @@ export interface WbsTask {
   // UI meta (optional)
   status?: 'on_track' | 'delayed' | 'pending_approval';   // for colors/legend
   phase?: 'rough' | 'finish';                             // for grouping legend
+
+  // Explicit list order within a sibling group. undefined = inherit natural
+  // array order (backward-compatible). Used by manual ↑/↓ reorder buttons.
+  sortOrder?: number;
 }
 
 export interface Milestone { 
