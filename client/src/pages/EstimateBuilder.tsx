@@ -1302,18 +1302,33 @@ function EstimateModal({
             <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
               <div className="flex items-center gap-2">
                 <h3 className="font-semibold text-gray-800">Scope of Work</h3>
-                {/* Import sub PDFs directly into this estimate. Multiple PDFs */}
-                {/* across trades aggregate into one estimate's lineItems. */}
-                <button
-                  type="button"
-                  onClick={() => setScopeImportOpen(true)}
-                  className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-full border border-dashed text-gray-700 hover:bg-amber-50 transition-colors"
-                  style={{ borderColor: 'rgba(201,169,110,0.6)' }}
-                  title="Upload a sub's PDF — Claude will extract rows and append them here"
-                >
-                  <Upload className="w-3 h-3" />
-                  Import from PDF
-                </button>
+                {/* Import sub PDFs directly into this estimate. Multiple PDFs
+                    across trades aggregate into one estimate's lineItems.
+                    Only shown when the estimate has a project — the upload
+                    path is scoped to projects/{projectId}/estimate-imports/
+                    so the PDF can be attached to project files. For a
+                    project-less estimate (legacy or unassigned), the user
+                    should assign a project first via the Edit form, then
+                    return to the Scope of Work. */}
+                {(projectId || editing?.projectId || prefillProject?.id) ? (
+                  <button
+                    type="button"
+                    onClick={() => setScopeImportOpen(true)}
+                    className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-full border border-dashed text-gray-700 hover:bg-amber-50 transition-colors"
+                    style={{ borderColor: 'rgba(201,169,110,0.6)' }}
+                    title="Upload a sub's PDF — Claude will extract rows and append them here"
+                  >
+                    <Upload className="w-3 h-3" />
+                    Import from PDF
+                  </button>
+                ) : (
+                  <span
+                    className="text-[11px] text-gray-400 italic"
+                    title="Assign this estimate to a project to enable PDF import."
+                  >
+                    Assign a project to enable PDF import
+                  </span>
+                )}
                 {attachments.length > 0 && (
                   <span
                     className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600"
