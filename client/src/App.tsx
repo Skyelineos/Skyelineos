@@ -98,6 +98,7 @@ const ProjectWalkthroughs = lazy(() => import('@/pages/ProjectWalkthroughs'));
 const ProjectMoveInBinder = lazy(() => import('@/pages/ProjectMoveInBinder'));
 const Tools = lazy(() => import('@/pages/Tools'));
 const LumberTakeoff = lazy(() => import('@/pages/LumberTakeoff'));
+const BidCompareTool = lazy(() => import('@/pages/BidCompareTool'));
 const IngestionLab = lazy(() => import('@/pages/IngestionLab'));
 
 function Router() {
@@ -316,6 +317,11 @@ function Router() {
         </ProtectedRoute>
       </Route>
 
+        <Route path="/tools/bid-compare">
+          <Suspense fallback={<MinimalSpinner title="Loading Bid Leveling" />}>
+            <BidCompareTool />
+          </Suspense>
+        </Route>
       <Route path="/tools/lumber">
         <ProtectedRoute>
           <RoleGuard
