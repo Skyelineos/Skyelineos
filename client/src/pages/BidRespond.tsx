@@ -22,8 +22,15 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
-  Building2, Loader2, AlertTriangle, CheckCircle2, Clock, FileText, ShieldCheck,
+  Building2, Loader2, AlertTriangle, CheckCircle2, Clock, FileText, ShieldCheck, Download,
 } from 'lucide-react';
+
+interface BidPlan {
+  name: string;
+  url: string;
+  storagePath?: string;
+  size?: number;
+}
 
 interface BidContext {
   bidRequestId: string;
@@ -36,6 +43,9 @@ interface BidContext {
   selectionSpecs?: string;
   tierGuidance?: { parade: string; midLuxury: string; lowLuxury: string };
   customMessage?: string;
+  scope?: string;
+  callouts?: string;
+  plans?: BidPlan[];
   dueByDate: string;
   requesterName?: string;
   vendor: {
@@ -259,11 +269,83 @@ export default function BidRespond() {
           </div>
         )}
 
-        {ctx.customMessage && (
-          <Alert>
-            <FileText className="h-4 w-4" />
-            <AlertDescription>{ctx.customMessage}</AlertDescription>
-          </Alert>
+        {/* Specific Instructions — scope of work + common callouts. Yellow
+            callout so it's hard to miss. Renders for any signed-in / signed-out
+            state because it lives in the header. */}
+        {(ctx.scope || ctx.callouts || ctx.customMessage) && (
+          <div className="pt-3 border-t space-y-3">
+            <div className="rounded-md border border-amber-200 bg-amber-50/70 p-4">
+              <div className="flex items-start gap-2 mb-2">
+                <FileText className="h-4 w-4 text-amber-700 mt-0.5 shrink-0" />
+                <div className="font-semibold text-sm text-amber-900">
+                  Specific Instructions{ctx.trade ? ` for ${ctx.trade}` : ''}
+                </div>
+              </div>
+              {ctx.scope && (
+                <div className="mb-3">
+                  <div className="text-xs uppercase tracking-wide text-amber-800/70 mb-1">Scope of Work</div>
+                  <pre className="text-sm whitespace-pre-wrap font-sans text-amber-950 leading-relaxed">{ctx.scope}</pre>
+                </div>
+              )}
+              {ctx.callouts && (
+                <div className={ctx.scope ? 'pt-3 border-t border-amber-200/60' : ''}>
+                  <div className="text-xs uppercase tracking-wide text-amber-800/70 mb-1">Notes from Skyeline</div>
+                  <pre className="text-sm whitespace-pre-wrap font-sans text-amber-950 leading-relaxed">{ctx.callouts}</pre>
+                </div>
+              )}
+              {!ctx.scope && !ctx.callouts && ctx.customMessage && (
+                <pre className="text-sm whitespace-pre-wrap font-sans text-amber-950 leading-relaxed">{ctx.customMessage}</pre>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Project Plans — list each plan with a Download CTA. The url is a
+            long-lived Firebase Storage download URL minted at upload time;
+            the storage rule (projects/{id}/**) lets project members and
+            anyone with the URL read the file. The bid invite token is the
+            gate to this page. */}
+        {ctx.plans && ctx.plans.length > 0 && (
+          <div className="pt-3 border-t">
+            <div className="flex items-center gap-2 mb-2">
+              <FileText className="h-4 w-4 text-stone-700 shrink-0" />
+              <div className="font-semibold text-sm text-stone-900">
+                Project Plans ({ctx.plans.length})
+              </div>
+            </div>
+            <div className="space-y-2">
+              {ctx.plans.map((p, i) => (
+                <div
+                  key={`${p.storagePath || p.url}-${i}`}
+                  className="flex items-center justify-between gap-3 rounded-md border bg-white p-3"
+                >
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <FileText className="h-4 w-4 text-stone-500 shrink-0" />
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-stone-900 truncate">{p.name}</div>
+                      {typeof p.size === 'number' && p.size > 0 && (
+                        <div className="text-xs text-stone-500">{formatFileSize(p.size)}</div>
+                      )}
+                    </div>
+                  </div>
+                  <Button
+                    asChild
+                    size="sm"
+                    variant="outline"
+                    className="gap-1.5 shrink-0"
+                  >
+                    <a href={p.url} target="_blank" rel="noopener noreferrer" download={p.name}>
+                      <Download className="h-3.5 w-3.5" />
+                      Download
+                    </a>
+                  </Button>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-stone-500 mt-2">
+              Open or download each file to review before submitting your bid.
+            </p>
+          </div>
         )}
       </CardContent>
     </Card>
@@ -458,6 +540,12 @@ function TierRow({ label, description }: { label: string; description: string })
       <p className="text-sm text-muted-foreground">{description}</p>
     </div>
   );
+}
+
+function formatFileSize(bytes: number): string {
+  if (!bytes || bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
 function ChecklistRow({ done, label }: { done: boolean; label: string }) {

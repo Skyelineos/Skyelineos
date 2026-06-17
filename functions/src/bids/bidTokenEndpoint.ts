@@ -16,6 +16,13 @@
 import type { Express } from 'express';
 import * as admin from 'firebase-admin';
 
+interface PublicBidPlan {
+  name: string;
+  url: string;          // long-lived Firebase Storage download URL
+  storagePath?: string;
+  size?: number;
+}
+
 interface PublicBidContext {
   bidRequestId: string;
   projectId: string;
@@ -27,6 +34,12 @@ interface PublicBidContext {
   selectionSpecs?: string;
   tierGuidance?: { parade: string; midLuxury: string; lowLuxury: string };
   customMessage?: string;
+  // Bid-package fields — surfaced so BidRespond can render scope, callouts,
+  // and plan downloads above the submission CTA. The token IS the auth: any
+  // sub holding a valid invite token to this bidRequest may view these.
+  scope?: string;                             // per-trade scope-of-work narrative
+  callouts?: string;                          // common notes for all subs on this package
+  plans?: PublicBidPlan[];                    // plans / docs the sub should review
   dueByDate: string;                          // ISO
   requesterName?: string;
   vendor: {
@@ -111,6 +124,19 @@ export function registerBidTokenEndpoint(app: Express, db: admin.firestore.Fires
         await bidRequestRef.update({ vendors: vendorsArr });
       }
 
+      // Sanitize plans into a minimal public shape — drop storage-internal
+      // refs the sub doesn't need, keep download url + filename + size for the
+      // UI listing.
+      const rawPlans = Array.isArray(br.plans) ? (br.plans as any[]) : [];
+      const publicPlans: PublicBidPlan[] = rawPlans
+        .filter(p => p && typeof p.url === 'string' && p.url)
+        .map(p => ({
+          name: typeof p.name === 'string' && p.name ? p.name : 'Plan',
+          url: String(p.url),
+          storagePath: typeof p.storagePath === 'string' ? p.storagePath : undefined,
+          size: typeof p.size === 'number' ? p.size : undefined,
+        }));
+
       const response: PublicBidContext = {
         bidRequestId,
         projectId,
@@ -122,6 +148,9 @@ export function registerBidTokenEndpoint(app: Express, db: admin.firestore.Fires
         selectionSpecs: br.selectionSpecs || undefined,
         tierGuidance: br.tierGuidance || undefined,
         customMessage: br.customMessage || undefined,
+        scope: typeof br.scope === 'string' && br.scope ? br.scope : undefined,
+        callouts: typeof br.callouts === 'string' && br.callouts ? br.callouts : undefined,
+        plans: publicPlans.length > 0 ? publicPlans : undefined,
         dueByDate: br.dueByDate?.toDate().toISOString(),
         requesterName: br.requesterName || undefined,
         vendor: {
