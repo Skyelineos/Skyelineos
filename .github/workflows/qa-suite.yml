@@ -75,19 +75,42 @@ jobs:
         continue-on-error: true
         run: node scripts/e2e/run.mjs --ui --yes
 
-      # Only a genuine crash (no qa-report.json => the runner never reached its
-      # finally) needs the safety-net lock release. Otherwise the runner already
-      # posted the real final report, so don't clobber it.
-      - name: Release lock if the runner produced no report
+      # Step 1 — backstop the runner's own final report.
+      # If the runner crashed before producing qa-report.json, post a final
+      # error report so the qa_runs dashboard reflects the crash + the deploy
+      # lock release fires via the existing phase:'final' code path.
+      - name: Report runner crash if no qa-report.json
         if: always()
         run: |
           if [ ! -f qa-report.json ]; then
-            echo "No qa-report.json — runner crashed; releasing lock."
+            echo "No qa-report.json — runner crashed; posting error final."
             curl -s -X POST "$E2E_REPORT_URL" \
               -H "Authorization: Bearer $E2E_REPORT_TOKEN" \
               -H "Content-Type: application/json" \
               -d "{\"runId\":\"$E2E_RUN_ID\",\"phase\":\"final\",\"patch\":{\"status\":\"error\",\"error\":\"workflow crashed before producing a report\"}}" || true
           fi
+
+      # Step 2 — unconditional deploy-lock release.
+      # Even if the runner produced qa-report.json AND posted its own final, the
+      # report POST could have transient-failed network-wise without the runner
+      # noticing. This step ALWAYS POSTs releaseLock=true so the lock cannot
+      # stay set after this workflow ends, for any reason (success, fail,
+      # cancel, timeout). The release endpoint is idempotent and respects
+      # ownership (qaRunId) so a stomp on a manual lock or a newer QA run is
+      # impossible.
+      #
+      # Includes runUrl so /api/qa/report can stamp it on the deploy lock doc
+      # for future debugging ('here's the GH run that held the lock').
+      - name: Release deploy lock (always)
+        if: always()
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          echo "Always-release: POST releaseLock=true for run $E2E_RUN_ID (runUrl=$RUN_URL)"
+          curl -s -X POST "$E2E_REPORT_URL" \
+            -H "Authorization: Bearer $E2E_REPORT_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"runId\":\"$E2E_RUN_ID\",\"releaseLock\":true,\"runUrl\":\"$RUN_URL\"}" || true
 
       - name: Open issue on failed checks
         if: always()

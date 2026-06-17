@@ -52,12 +52,47 @@ jobs:
       - name: Check deploy lock
         run: |
           URL="https://firestore.googleapis.com/v1/projects/skyelineos/databases/(default)/documents/system/deployLock"
-          LOCKED=$(curl -s "$URL" | jq -r '.fields.locked.booleanValue // false' 2>/dev/null || echo false)
-          echo "deployLock.locked = $LOCKED"
-          if [ "$LOCKED" = "true" ]; then
-            echo "::error::Deploy blocked — a QA run is in progress (system/deployLock). Re-run this job once it finishes."
-            exit 1
+          RESP=$(curl -s "$URL" 2>/dev/null || echo "{}")
+          LOCKED=$(echo "$RESP" | jq -r '.fields.locked.booleanValue // false' 2>/dev/null || echo false)
+          LOCKED_AT=$(echo "$RESP" | jq -r '.fields.lockedAt.timestampValue // empty' 2>/dev/null || echo "")
+          LOCKED_BY=$(echo "$RESP" | jq -r '.fields.lockedBy.stringValue // empty' 2>/dev/null || echo "")
+          QA_RUN_ID=$(echo "$RESP" | jq -r '.fields.qaRunId.stringValue // empty' 2>/dev/null || echo "")
+          echo "deployLock.locked  = $LOCKED"
+          echo "deployLock.lockedAt = $LOCKED_AT"
+          echo "deployLock.lockedBy = $LOCKED_BY"
+          echo "deployLock.qaRunId  = $QA_RUN_ID"
+
+          if [ "$LOCKED" != "true" ]; then
+            echo "Lock is clear — proceeding."
+            exit 0
           fi
+
+          # TTL safety net — if the lock has been held for > 30 minutes, treat
+          # as stale and proceed with a warning. The QA workflow has an
+          # if:always() release step now, so a stuck lock past this window
+          # almost certainly means the trigger fired but the workflow_dispatch
+          # never reached the runner (rare GitHub Actions failure) OR the
+          # release POST itself broke. Either way, holding deploys indefinitely
+          # is worse than risking a deploy mid-QA-run.
+          if [ -z "$LOCKED_AT" ]; then
+            echo "::warning::Lock is set but lockedAt is missing — pre-TTL lock format. Treating as stale; proceeding."
+            exit 0
+          fi
+
+          # Compute lock age in seconds. Firestore timestamps are ISO 8601 UTC.
+          LOCK_EPOCH=$(date -u -d "$LOCKED_AT" +%s 2>/dev/null || echo 0)
+          NOW_EPOCH=$(date -u +%s)
+          AGE=$(( NOW_EPOCH - LOCK_EPOCH ))
+          TTL_SEC=$(( 30 * 60 ))
+          echo "Lock age: ${AGE}s (TTL: ${TTL_SEC}s)"
+
+          if [ "$AGE" -gt "$TTL_SEC" ]; then
+            echo "::warning::Lock is stale (age ${AGE}s > ${TTL_SEC}s TTL). Held by '$LOCKED_BY' for qa run '$QA_RUN_ID'. Proceeding anyway. If a QA run truly is in flight, the deploy may interrupt it."
+            exit 0
+          fi
+
+          echo "::error::Deploy blocked — a QA run is in progress (held by '$LOCKED_BY', qa run '$QA_RUN_ID', age ${AGE}s). Re-run this job after the QA run finishes, or clear system/deployLock in the Firebase Console."
+          exit 1
 
       # Authenticate to Google Cloud via Workload Identity Federation.
       # On success this exports GOOGLE_APPLICATION_CREDENTIALS pointing at a
