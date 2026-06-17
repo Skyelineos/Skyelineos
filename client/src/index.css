@@ -158,6 +158,16 @@
     overscroll-behavior-y: contain;
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
+    /* Touch polish — eliminate the legacy 300ms tap delay on phones and
+       prevent unintended pinch-zoom on UI controls. Interactive elements
+       get a tighter tap response without blocking pinch-zoom on content
+       (img, video, canvas, [data-allow-zoom]) — those opt back in below. */
+    touch-action: manipulation;
+  }
+
+  /* Re-enable native zoom on content surfaces that should still allow it. */
+  img, video, canvas, [data-allow-zoom="true"] {
+    touch-action: auto;
   }
 
   /* Text wrapping and hyphenation */
