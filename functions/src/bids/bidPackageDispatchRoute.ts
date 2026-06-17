@@ -48,6 +48,7 @@ interface TradeDetail {
   scope?: string;
   callouts?: string;
   plans?: PlanRef[];
+  selections?: SelectionRef[];
 }
 
 interface PlanRef {
@@ -55,6 +56,20 @@ interface PlanRef {
   url: string;
   storagePath?: string;
   size?: number;
+}
+
+// Public-safe shape of a client selection — what the sub sees inline in the
+// email + on BidRespond. Pulled from projects/{id}/selections/{id}.items[0].
+interface SelectionRef {
+  id: string;
+  category?: string;
+  area?: string;
+  room?: string;
+  productName?: string;
+  vendor?: string;       // brand
+  description?: string;  // size / layout / grout summary
+  imageUrl?: string;
+  productUrl?: string;
 }
 
 interface VendorBundle {
@@ -127,7 +142,38 @@ function buildPackageEmailHtml(args: {
           ${td.plans.map(p => `<div style="margin:0 0 6px 0;"><a href="${p.url}" style="display:inline-block;background:#ffffff;border:1px solid #C9A96E;color:#141414;text-decoration:none;padding:8px 14px;border-radius:4px;font-size:13px;font-weight:500;">⬇ ${escapeHtml(p.name)}${typeof p.size === 'number' && p.size > 0 ? ` <span style="color:#888;font-weight:400;">(${formatBytes(p.size)})</span>` : ''}</a></div>`).join('')}
         </div>`
       : '';
-    const body = scopeHtml + noteHtml + plansHtml;
+    // Selections table — surfaces what the client picked so subs bid against
+    // a known product/finish/brand rather than guessing. Renders a small
+    // thumbnail + product name + brand + spec line + optional "View product"
+    // link. Heading: "Selections for {trade}".
+    const selectionsHtml = td.selections && td.selections.length > 0
+      ? `<div style="margin:12px 0 4px 0;">
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.6px;color:#8a6a2c;margin-bottom:6px;">Selections for ${escapeHtml(td.trade)} (${td.selections.length})</div>
+          <table style="border-collapse:collapse;width:100%;">
+            <tbody>
+              ${td.selections.map(s => `
+                <tr>
+                  <td style="vertical-align:top;padding:6px 8px 6px 0;width:64px;">
+                    ${s.imageUrl ? `<img src="${s.imageUrl}" alt="${escapeHtml(s.productName || s.category || 'Selection')}" style="width:56px;height:56px;object-fit:cover;border-radius:4px;border:1px solid #e5e3da;display:block;" />` : `<div style="width:56px;height:56px;border-radius:4px;border:1px solid #e5e3da;background:#FAFAF6;"></div>`}
+                  </td>
+                  <td style="vertical-align:top;padding:6px 0;">
+                    <div style="font-size:13px;font-weight:600;color:#141414;">${escapeHtml(s.productName || s.category || 'Selection')}</div>
+                    <div style="font-size:12px;color:#666;margin-top:2px;">
+                      ${s.vendor ? `<span>${escapeHtml(s.vendor)}</span>` : ''}
+                      ${s.vendor && (s.category || s.description) ? ' · ' : ''}
+                      ${s.category ? `<span>${escapeHtml(s.category)}</span>` : ''}
+                      ${s.category && s.description ? ' · ' : ''}
+                      ${s.description ? `<span>${escapeHtml(s.description)}</span>` : ''}
+                    </div>
+                    ${s.productUrl ? `<div style="margin-top:4px;"><a href="${s.productUrl}" style="font-size:12px;color:#8a6a2c;text-decoration:underline;">View product</a></div>` : ''}
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>`
+      : '';
+    const body = scopeHtml + noteHtml + plansHtml + selectionsHtml;
     return `
       <div style="background:#FAFAF6;border-left:3px solid #C9A96E;padding:14px 18px;margin:12px 0;border-radius:0 4px 4px 0;">
         <div style="font-weight:600;font-size:15px;color:#141414;margin-bottom:4px;">${escapeHtml(td.trade)}</div>
@@ -179,6 +225,16 @@ function buildPackageEmailText(args: {
       tradeBlocks.push(`Plans / Documents:`);
       for (const p of td.plans) {
         tradeBlocks.push(`  • ${p.name} — ${p.url}`);
+      }
+    }
+    if (td.selections && td.selections.length > 0) {
+      tradeBlocks.push(`Selections for ${td.trade}:`);
+      for (const s of td.selections) {
+        const bits = [s.productName || s.category || 'Selection'];
+        if (s.vendor) bits.push(s.vendor);
+        if (s.description) bits.push(s.description);
+        const line = bits.join(' — ');
+        tradeBlocks.push(`  • ${line}${s.productUrl ? ` (${s.productUrl})` : ''}`);
       }
     }
     tradeBlocks.push('');
@@ -326,11 +382,20 @@ export function registerBidPackageDispatchRoute(
                 storagePath: typeof p.storagePath === 'string' ? p.storagePath : undefined,
                 size: typeof p.size === 'number' ? p.size : undefined,
               }));
+            const attachedSelIds: string[] = Array.isArray(br.attachedSelectionIds)
+              ? (br.attachedSelectionIds as any[]).filter(x => typeof x === 'string') as string[]
+              : [];
+            // Stash IDs onto the TradeDetail so we can resolve them in one
+            // pass after the bundling loop. We swap them out for SelectionRef
+            // objects before the email build.
             bundle.tradeDetails.push({
               trade,
               scope: typeof br.scope === 'string' && br.scope.trim() ? br.scope.trim() : undefined,
               callouts: typeof br.callouts === 'string' && br.callouts.trim() ? br.callouts.trim() : undefined,
               plans: cleanPlans.length > 0 ? cleanPlans : undefined,
+              selections: attachedSelIds.length > 0
+                ? attachedSelIds.map(id => ({ id })) // placeholder, resolved below
+                : undefined,
             });
           }
           if (!bundle.bidRequestIds.includes(doc.id)) bundle.bidRequestIds.push(doc.id);
@@ -344,6 +409,65 @@ export function registerBidPackageDispatchRoute(
           await Promise.all(tokenWrites);
         } catch (e: any) {
           console.error('[bidPackageDispatch] token persistence failed:', e?.message || e);
+        }
+      }
+
+      // Resolve attached selection IDs → public-safe SelectionRef objects.
+      // We collect all unique IDs across every bundle's tradeDetails so we
+      // hit Firestore once per ID instead of once per (vendor, trade).
+      const allSelIds = new Set<string>();
+      for (const bundle of bundles.values()) {
+        for (const td of bundle.tradeDetails) {
+          for (const s of td.selections || []) {
+            if (s.id) allSelIds.add(s.id);
+          }
+        }
+      }
+      const selectionMap = new Map<string, SelectionRef>();
+      if (allSelIds.size > 0) {
+        const fetches = Array.from(allSelIds).map(async id => {
+          try {
+            const snap = await db
+              .collection('projects').doc(data.projectId)
+              .collection('selections').doc(id)
+              .get();
+            if (!snap.exists) return;
+            const d = snap.data() as any;
+            const items: any[] = Array.isArray(d.items) ? d.items : [];
+            const firstItem = items.find(i => i && i.status !== 'removed') || items[0] || {};
+            const parts: string[] = [];
+            if (firstItem.size) parts.push(String(firstItem.size));
+            if (firstItem.tileLayout) parts.push(`Layout: ${firstItem.tileLayout}`);
+            if (firstItem.grout) parts.push(`Grout: ${firstItem.grout}`);
+            if (d.area) parts.push(String(d.area));
+            if (d.room) parts.push(String(d.room));
+            selectionMap.set(id, {
+              id,
+              category: typeof d.category === 'string' ? d.category : undefined,
+              area: typeof d.area === 'string' ? d.area : undefined,
+              room: typeof d.room === 'string' ? d.room : undefined,
+              productName: typeof firstItem.productName === 'string' ? firstItem.productName : undefined,
+              vendor: typeof firstItem.vendor === 'string' ? firstItem.vendor : undefined,
+              description: parts.length > 0 ? parts.join(' · ') : undefined,
+              imageUrl: Array.isArray(firstItem.imageUrls) && firstItem.imageUrls[0]
+                ? String(firstItem.imageUrls[0])
+                : undefined,
+              productUrl: typeof firstItem.productUrl === 'string' ? firstItem.productUrl : undefined,
+            });
+          } catch (e: any) {
+            console.warn('[bidPackageDispatch] selection fetch failed', id, e?.message || e);
+          }
+        });
+        await Promise.all(fetches);
+      }
+      // Replace each TradeDetail.selections placeholder with resolved refs.
+      for (const bundle of bundles.values()) {
+        for (const td of bundle.tradeDetails) {
+          if (!td.selections || td.selections.length === 0) continue;
+          const resolved = td.selections
+            .map(s => selectionMap.get(s.id))
+            .filter((s): s is SelectionRef => !!s);
+          td.selections = resolved.length > 0 ? resolved : undefined;
         }
       }
 

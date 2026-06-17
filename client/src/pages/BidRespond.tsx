@@ -32,6 +32,21 @@ interface BidPlan {
   size?: number;
 }
 
+// IA-audit gap #3 — client selections attached to this trade. Renders inline
+// so subs bid against the actual product/finish the client picked, not
+// generic placeholder specs.
+interface BidSelection {
+  id: string;
+  category?: string;
+  area?: string;
+  room?: string;
+  productName?: string;
+  vendor?: string;
+  description?: string;
+  imageUrl?: string;
+  productUrl?: string;
+}
+
 interface BidContext {
   bidRequestId: string;
   projectId: string;
@@ -46,6 +61,7 @@ interface BidContext {
   scope?: string;
   callouts?: string;
   plans?: BidPlan[];
+  selections?: BidSelection[];
   dueByDate: string;
   requesterName?: string;
   vendor: {
@@ -345,6 +361,70 @@ export default function BidRespond() {
             <p className="text-xs text-stone-500 mt-2">
               Open or download each file to review before submitting your bid.
             </p>
+          </div>
+        )}
+
+        {/* Project Selections for this trade. Yellow-bordered card, same
+            visual weight as the Specific Instructions block above. Each
+            selection shows image + product name + brand + spec + optional
+            "View product" link. Skipped when nothing is attached. */}
+        {ctx.selections && ctx.selections.length > 0 && (
+          <div className="pt-3 border-t">
+            <div className="rounded-md border border-amber-200 bg-amber-50/70 p-4">
+              <div className="flex items-start gap-2 mb-3">
+                <FileText className="h-4 w-4 text-amber-700 mt-0.5 shrink-0" />
+                <div className="font-semibold text-sm text-amber-900">
+                  Project Selections{ctx.trade ? ` for ${ctx.trade}` : ''} ({ctx.selections.length})
+                </div>
+              </div>
+              <p className="text-xs text-amber-900/80 mb-3">
+                Bid against these specific products. Brand, model, and finish are what the client picked — match these in your pricing or call out alternates.
+              </p>
+              <div className="space-y-2">
+                {ctx.selections.map((s) => (
+                  <div
+                    key={s.id}
+                    className="flex items-start gap-3 rounded-md border border-amber-200/60 bg-white p-3"
+                  >
+                    {s.imageUrl ? (
+                      <img
+                        src={s.imageUrl}
+                        alt={s.productName || s.category || 'Selection'}
+                        className="w-16 h-16 rounded object-cover border border-stone-200 shrink-0"
+                      />
+                    ) : (
+                      <div className="w-16 h-16 rounded bg-stone-100 border border-stone-200 shrink-0" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-medium text-stone-900">
+                          {s.productName || s.category || 'Selection'}
+                        </span>
+                        {s.category && (
+                          <Badge variant="outline" className="text-[10px]">{s.category}</Badge>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-stone-600 mt-0.5">
+                        {s.vendor && <span><strong>{s.vendor}</strong></span>}
+                        {s.description && <span>{s.description}</span>}
+                      </div>
+                      {s.productUrl && (
+                        <div className="mt-1">
+                          <a
+                            href={s.productUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-amber-800 hover:underline"
+                          >
+                            View product
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         )}
       </CardContent>

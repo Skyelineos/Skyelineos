@@ -88,6 +88,11 @@ interface RequestPayload {
   scope?: string;              // scope of work narrative for this trade
   callouts?: string;           // common notes from the package
   plans?: Array<{ name?: string; url: string; storagePath?: string; size?: number }>;
+  // IA-audit gap #1 + #3: per-trade attachments. Tyler picks docs already on
+  // the project (no re-upload) + selections the client made. The dispatch +
+  // public token endpoint use these IDs to render attachments per trade.
+  attachedPlanIds?: string[];
+  attachedSelectionIds?: string[];
 
   // When true: persist the bidRequest doc and mint tokens, but DO NOT send
   // email or SMS from this endpoint. Used by the bid-package flow which
@@ -611,6 +616,8 @@ export function registerBidRequestRoute(app: Express, db: admin.firestore.Firest
           scope: data.scope || null,
           callouts: data.callouts || null,
           plans: data.plans || [],
+          attachedPlanIds: Array.isArray(data.attachedPlanIds) ? data.attachedPlanIds : [],
+          attachedSelectionIds: Array.isArray(data.attachedSelectionIds) ? data.attachedSelectionIds : [],
           dueDate: data.dueDate || replyByDate.toISOString().slice(0, 10),
           invitedSubIds,
           invitedSubContactIds,
