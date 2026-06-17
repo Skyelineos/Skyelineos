@@ -23,6 +23,21 @@ interface PublicBidPlan {
   size?: number;
 }
 
+// Public-safe shape of a client selection. Subs see only what they need to
+// bid against the right product — image, brand, spec — never the allowance
+// amount or any other competitive-bid info.
+interface PublicSelection {
+  id: string;
+  category?: string;
+  area?: string;
+  room?: string;
+  productName?: string;
+  vendor?: string;
+  description?: string;
+  imageUrl?: string;
+  productUrl?: string;
+}
+
 interface PublicBidContext {
   bidRequestId: string;
   projectId: string;
@@ -40,6 +55,10 @@ interface PublicBidContext {
   scope?: string;                             // per-trade scope-of-work narrative
   callouts?: string;                          // common notes for all subs on this package
   plans?: PublicBidPlan[];                    // plans / docs the sub should review
+  // IA-audit gap #3: selections attached by trade. Subs need these to bid
+  // against the actual brand/finish/spec the client picked. Resolved by ID
+  // from projects/{id}/selections/{id}; competitive-bid fields are stripped.
+  selections?: PublicSelection[];
   dueByDate: string;                          // ISO
   requesterName?: string;
   vendor: {
@@ -137,6 +156,54 @@ export function registerBidTokenEndpoint(app: Express, db: admin.firestore.Fires
           size: typeof p.size === 'number' ? p.size : undefined,
         }));
 
+      // Resolve attached selection IDs into public-safe records. The token IS
+      // the auth for this view — any sub holding a valid invite token to this
+      // bidRequest may see the selections that drive their bid. Allowance
+      // amounts and approval status are NEVER returned.
+      const selIds: string[] = Array.isArray(br.attachedSelectionIds)
+        ? (br.attachedSelectionIds as any[]).filter(x => typeof x === 'string') as string[]
+        : [];
+      const publicSelections: PublicSelection[] = [];
+      if (selIds.length > 0) {
+        const fetches = selIds.map(async id => {
+          try {
+            const snap = await db
+              .collection('projects').doc(projectId)
+              .collection('selections').doc(id)
+              .get();
+            if (!snap.exists) return null;
+            const d = snap.data() as any;
+            const items: any[] = Array.isArray(d.items) ? d.items : [];
+            const firstItem = items.find(i => i && i.status !== 'removed') || items[0] || {};
+            const parts: string[] = [];
+            if (firstItem.size) parts.push(String(firstItem.size));
+            if (firstItem.tileLayout) parts.push(`Layout: ${firstItem.tileLayout}`);
+            if (firstItem.grout) parts.push(`Grout: ${firstItem.grout}`);
+            if (d.area) parts.push(String(d.area));
+            if (d.room) parts.push(String(d.room));
+            const sel: PublicSelection = {
+              id,
+              category: typeof d.category === 'string' ? d.category : undefined,
+              area: typeof d.area === 'string' ? d.area : undefined,
+              room: typeof d.room === 'string' ? d.room : undefined,
+              productName: typeof firstItem.productName === 'string' ? firstItem.productName : undefined,
+              vendor: typeof firstItem.vendor === 'string' ? firstItem.vendor : undefined,
+              description: parts.length > 0 ? parts.join(' · ') : undefined,
+              imageUrl: Array.isArray(firstItem.imageUrls) && firstItem.imageUrls[0]
+                ? String(firstItem.imageUrls[0])
+                : undefined,
+              productUrl: typeof firstItem.productUrl === 'string' ? firstItem.productUrl : undefined,
+            };
+            return sel;
+          } catch (e: any) {
+            console.warn('[bidToken] selection fetch failed', id, e?.message || e);
+            return null;
+          }
+        });
+        const resolved = await Promise.all(fetches);
+        for (const r of resolved) if (r) publicSelections.push(r);
+      }
+
       const response: PublicBidContext = {
         bidRequestId,
         projectId,
@@ -151,6 +218,7 @@ export function registerBidTokenEndpoint(app: Express, db: admin.firestore.Fires
         scope: typeof br.scope === 'string' && br.scope ? br.scope : undefined,
         callouts: typeof br.callouts === 'string' && br.callouts ? br.callouts : undefined,
         plans: publicPlans.length > 0 ? publicPlans : undefined,
+        selections: publicSelections.length > 0 ? publicSelections : undefined,
         dueByDate: br.dueByDate?.toDate().toISOString(),
         requesterName: br.requesterName || undefined,
         vendor: {

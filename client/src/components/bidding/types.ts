@@ -19,6 +19,11 @@ export interface BidRequest {
   plans: BidRequestPlan[];   // PDFs the sub should review
   designBoardId?: string;    // optional link to design selections
   designSelectionsRoom?: string;
+  // IA-audit gap #1 + #3: per-trade auto-attachments from the bid package
+  // modal. attachedPlanIds reference documents/, attachedSelectionIds
+  // reference projects/{projectId}/selections.
+  attachedPlanIds?: string[];
+  attachedSelectionIds?: string[];
   dueDate: string;           // YYYY-MM-DD
   invitedSubIds: string[];   // contact IDs of subs invited
   invitedByUserId: string;

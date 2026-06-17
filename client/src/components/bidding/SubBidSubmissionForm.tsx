@@ -110,6 +110,22 @@ export function SubBidSubmissionForm({
   // invited to a bid can reference. Loaded when the form mounts.
   const [projectDocs, setProjectDocs] = useState<{ id: string; name: string; fileUrl: string; category?: string }[]>([]);
 
+  // IA-audit gap #3 — client selections attached to THIS trade by the GC
+  // when sending the package. Renders inline so subs bid against the exact
+  // brand/finish/spec the client picked instead of guessing. Loaded from
+  // projects/{projectId}/selections/{id} using the IDs persisted on the
+  // bidRequest doc.
+  interface AttachedSelection {
+    id: string;
+    category?: string;
+    productName?: string;
+    vendor?: string;
+    description?: string;
+    imageUrl?: string;
+    productUrl?: string;
+  }
+  const [attachedSelections, setAttachedSelections] = useState<AttachedSelection[]>([]);
+
   // Project-level context — address, sqft, scope statement, special
   // considerations. The bid request doc itself only carries the per-trade
   // scope; without these the sub can't really "review as a project" — they
@@ -187,6 +203,54 @@ export function SubBidSubmissionForm({
       }
     })();
   }, [request.projectId]);
+
+  // Load attached selections for this trade — uses the bidRequest's
+  // attachedSelectionIds array (written by SendBidPackageModal) to fetch each
+  // matching projects/{projectId}/selections/{id} doc and flatten the first
+  // item's product data for display.
+  useEffect(() => {
+    if (!request.projectId) return;
+    const ids: string[] = Array.isArray((request as any).attachedSelectionIds)
+      ? ((request as any).attachedSelectionIds as any[]).filter(x => typeof x === 'string')
+      : [];
+    if (ids.length === 0) {
+      setAttachedSelections([]);
+      return;
+    }
+    (async () => {
+      try {
+        const fetches = ids.map(async id => {
+          const snap = await getDoc(doc(db, 'projects', request.projectId, 'selections', id));
+          if (!snap.exists()) return null;
+          const d = snap.data() as any;
+          const items: any[] = Array.isArray(d.items) ? d.items : [];
+          const firstItem = items.find(i => i && i.status !== 'removed') || items[0] || {};
+          const parts: string[] = [];
+          if (firstItem.size) parts.push(String(firstItem.size));
+          if (firstItem.tileLayout) parts.push(`Layout: ${firstItem.tileLayout}`);
+          if (firstItem.grout) parts.push(`Grout: ${firstItem.grout}`);
+          if (d.area) parts.push(String(d.area));
+          if (d.room) parts.push(String(d.room));
+          const sel: AttachedSelection = {
+            id,
+            category: typeof d.category === 'string' ? d.category : undefined,
+            productName: typeof firstItem.productName === 'string' ? firstItem.productName : undefined,
+            vendor: typeof firstItem.vendor === 'string' ? firstItem.vendor : undefined,
+            description: parts.length > 0 ? parts.join(' · ') : undefined,
+            imageUrl: Array.isArray(firstItem.imageUrls) && firstItem.imageUrls[0]
+              ? String(firstItem.imageUrls[0])
+              : undefined,
+            productUrl: typeof firstItem.productUrl === 'string' ? firstItem.productUrl : undefined,
+          };
+          return sel;
+        });
+        const out = (await Promise.all(fetches)).filter((s): s is AttachedSelection => !!s);
+        setAttachedSelections(out);
+      } catch (e) {
+        console.warn('[sub-bid-form] attached selections load failed', e);
+      }
+    })();
+  }, [request.projectId, (request as any).attachedSelectionIds]);
 
   // Load project-level context (address, sqft, scope statement, special
   // considerations). Without this the sub only sees the per-trade scope —
@@ -533,6 +597,62 @@ export function SubBidSubmissionForm({
                     {d.category && <Badge variant="outline" className="text-[10px]">{d.category}</Badge>}
                     <ExternalLink className="w-3 h-3" />
                   </a>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Project Selections for this trade — yellow card mirroring the
+              callouts/instructions visual weight. Bidding against the actual
+              brand + spec the client picked is what makes the bid useful. */}
+          {attachedSelections.length > 0 && (
+            <div className="rounded-md border border-amber-200 bg-amber-50/70 p-3">
+              <Label className="text-xs uppercase tracking-wide text-amber-700">
+                Project Selections for {request.trade} ({attachedSelections.length})
+              </Label>
+              <p className="text-[11px] text-amber-900/80 mb-2">
+                Match these brands + specs in your pricing, or call out alternates in your notes.
+              </p>
+              <div className="space-y-2">
+                {attachedSelections.map(s => (
+                  <div
+                    key={s.id}
+                    className="flex items-start gap-3 rounded border border-amber-200/60 bg-white p-2"
+                  >
+                    {s.imageUrl ? (
+                      <img
+                        src={s.imageUrl}
+                        alt={s.productName || s.category || 'Selection'}
+                        className="w-12 h-12 rounded object-cover border border-stone-200 shrink-0"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 rounded bg-stone-100 border border-stone-200 shrink-0" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-medium text-gray-900">
+                          {s.productName || s.category || 'Selection'}
+                        </span>
+                        {s.category && (
+                          <Badge variant="outline" className="text-[10px]">{s.category}</Badge>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-gray-600 mt-0.5">
+                        {s.vendor && <span><strong>{s.vendor}</strong></span>}
+                        {s.description && <span>{s.description}</span>}
+                      </div>
+                      {s.productUrl && (
+                        <a
+                          href={s.productUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-amber-800 hover:underline inline-flex items-center gap-1 mt-1"
+                        >
+                          View product <ExternalLink className="w-3 h-3" />
+                        </a>
+                      )}
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>
