@@ -2,7 +2,9 @@ import { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import {
   collection, query, where, onSnapshot, doc, getDoc, getDocs, orderBy,
+  updateDoc, serverTimestamp,
 } from 'firebase/firestore';
+import { createNotification } from '@/lib/notifications';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { SubcontractorLayout } from '@/components/layout/SubcontractorLayout';
@@ -48,9 +50,10 @@ interface FSTask {
   name: string;
   projectId?: string;
   projectName?: string;
-  status: 'todo' | 'in_progress' | 'done' | 'blocked';
+  status: 'todo' | 'in_progress' | 'awaiting_signoff' | 'done' | 'blocked';
   dueDate?: string;
   priority?: string;
+  submittedForSignoffAt?: any; // Firestore Timestamp once sub submits ready-for-review
 }
 
 interface FSBid {
@@ -116,6 +119,7 @@ interface ContactComplianceMap {
 const taskStatusColor: Record<string, string> = {
   todo: 'bg-gray-100 text-gray-600',
   in_progress: 'bg-blue-100 text-blue-700',
+  awaiting_signoff: 'bg-amber-100 text-amber-700',
   done: 'bg-green-100 text-green-700',
   blocked: 'bg-red-100 text-red-700',
 };
@@ -333,7 +337,7 @@ export default function SubcontractorPortal() {
                     <div className="flex items-center gap-2">
                       {t.dueDate && <span className="text-xs text-gray-400">{fmt(t.dueDate)}</span>}
                       <span className={`text-xs px-2 py-0.5 rounded-full ${taskStatusColor[t.status] || 'bg-gray-100 text-gray-600'}`}>
-                        {t.status.replace('_', ' ')}
+                        {t.status === 'awaiting_signoff' ? 'Awaiting sign-off' : t.status.replace('_', ' ')}
                       </span>
                     </div>
                   </div>
@@ -434,6 +438,57 @@ export default function SubcontractorPortal() {
     </div>
   );
 
+  // Submit a task for GC/PM sign-off. Status flips to 'awaiting_signoff' and
+  // we capture a submittedForSignoffAt timestamp so the GC dashboard queue can
+  // sort oldest-first. Notifies anyone on the project who should approve.
+  //
+  // Sub cannot undo from their side — only GC/PM can approve or reject.
+  async function handleSubmitForSignoff(task: FSTask) {
+    try {
+      await updateDoc(doc(db, 'tasks', task.id), {
+        status: 'awaiting_signoff',
+        submittedForSignoffAt: serverTimestamp(),
+        submittedForSignoffBy: effectiveUid,
+        updatedAt: serverTimestamp(),
+      });
+      // Notify the project owners. Fetch the project doc once to get assignedUserIds.
+      // TODO Dispatch 6: switch to fireTrigger with kind 'task_awaiting_signoff'
+      //   once feat/notifications-engine lands; that branch's catalog will own
+      //   the email/SMS fan-out. Until then, in-app notifications cover it.
+      try {
+        if (task.projectId) {
+          const projSnap = await getDoc(doc(db, 'projects', task.projectId));
+          const assigned: string[] = (projSnap.data() as any)?.assignedUserIds || [];
+          for (const uid of assigned) {
+            if (uid === effectiveUid) continue; // don't notify self
+            await createNotification({
+              userId: uid,
+              kind: 'task_completed', // existing kind — Dispatch 6 will introduce 'task_awaiting_signoff'
+              title: 'Task awaiting sign-off',
+              body: `${userName} submitted "${task.name}" for your review.`,
+              link: `/projects/${task.projectId}/tasks`,
+              projectId: task.projectId,
+              refType: 'task',
+              refId: task.id,
+              fromUserId: effectiveUid,
+              fromUserName: userName,
+            });
+          }
+        }
+      } catch { /* notifications are best-effort */ }
+      toast({
+        title: 'Submitted for review',
+        description: `"${task.name}" is now waiting on the GC's sign-off.`,
+      });
+    } catch (e: any) {
+      toast({
+        title: 'Could not submit',
+        description: e?.message || 'Try again in a moment.',
+        variant: 'destructive',
+      });
+    }
+  }
+
   const renderSchedule = () => (
     <div className="space-y-4">
       <h2 className="text-xl font-bold text-gray-900">Job Schedule</h2>
@@ -454,10 +509,20 @@ export default function SubcontractorPortal() {
           }).map(task => (
             <Card key={task.id}>
               <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-semibold text-gray-900">{task.name}</p>
-                    {task.projectName && <p className="text-sm text-gray-500">{task.projectName}</p>}
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-gray-900 truncate">{task.name}</p>
+                    {task.projectName && <p className="text-sm text-gray-500 truncate">{task.projectName}</p>}
+                    {task.status === 'awaiting_signoff' && task.submittedForSignoffAt ? (
+                      <p className="text-xs text-amber-700 mt-1">
+                        Submitted {(() => {
+                          const at: any = task.submittedForSignoffAt;
+                          const ms = at?.toMillis?.() ?? (at ? Date.parse(at) : NaN);
+                          if (!Number.isFinite(ms)) return 'recently';
+                          return new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                        })()}
+                      </p>
+                    ) : null}
                   </div>
                   <div className="flex items-center gap-3">
                     {task.dueDate && (
@@ -466,9 +531,21 @@ export default function SubcontractorPortal() {
                         {fmt(task.dueDate)}
                       </div>
                     )}
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${taskStatusColor[task.status] || 'bg-gray-100 text-gray-600'}`}>
-                      {task.status.replace('_', ' ')}
+                    <span className={`text-xs px-2 py-0.5 rounded-full whitespace-nowrap ${taskStatusColor[task.status] || 'bg-gray-100 text-gray-600'}`}>
+                      {task.status === 'awaiting_signoff' ? 'Awaiting GC sign-off' : task.status.replace('_', ' ')}
                     </span>
+                    {/* Sub-side action: 'Mark Ready for Review' submits the task to
+                        awaiting_signoff. Once submitted, the sub sees the 'Awaiting GC
+                        sign-off' badge and cannot undo from their side. */}
+                    {(task.status === 'todo' || task.status === 'in_progress') && (
+                      <Button
+                        size="sm"
+                        onClick={() => handleSubmitForSignoff(task)}
+                        className="bg-[#C9A96E] hover:bg-[#b59459] text-white min-h-[44px] md:min-h-0"
+                      >
+                        Mark Ready for Review
+                      </Button>
+                    )}
                   </div>
                 </div>
               </CardContent>

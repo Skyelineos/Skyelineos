@@ -44,6 +44,7 @@ import ClientFinancials from '@/components/client-portal/ClientFinancials';
 import ClientSiteLog from '@/components/site-log/ClientSiteLog';
 import { ClientTodayFeed } from '@/components/today/ClientTodayFeed';
 import { ScheduleTimeline } from '@/components/schedule/ScheduleTimeline';
+import { ProjectProgressView } from '@/components/projects/ProjectProgressView';
 import type { GeneratedSchedule } from '@/lib/schedule/types';
 
 import {
@@ -488,9 +489,14 @@ export default function SkyelineClientPortal() {
 
       case 'schedule':
         return (
-          <div className="p-6">
+          <div className="p-6 space-y-6 max-w-3xl">
+            {/* Live phase progress — what's done, what's now, what's next.
+                Client audience hides assignee names + condenses task lists. */}
+            {selectedProjectId && (
+              <ProjectProgressView projectId={selectedProjectId} audience="client" />
+            )}
             {selectedProject?.estimatedSchedule ? (
-              <div className="rounded-xl border border-gray-200 bg-white p-5 max-w-3xl">
+              <div className="rounded-xl border border-gray-200 bg-white p-5">
                 {(() => {
                   const at = (selectedProject as any)
                     .estimatedSchedulePublishedAt;
