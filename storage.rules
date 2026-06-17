@@ -16,11 +16,19 @@ service firebase.storage {
     function isSignedIn() { return request.auth != null; }
 
     // users/{uid}.role lookup (Cloud Functions stamp this on first login).
+    // Defensive: returns null if the user doc doesn't exist (which can happen
+    // for a fresh sign-in race) — caller checks for that.
     function userRole() {
-      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role;
+      return firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
+        ? firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role
+        : null;
     }
 
     // Admin / GC / PM. Matches firestore.rules isStaff() (which folds in PM).
+    // Defensive: works even when the user doc is missing the role field, and
+    // tolerates legacy capitalisation. Storage rules can't import the canonical
+    // normalizeRole(), so list every alias the codebase has written:
+    //   admin / Admin / gc / GC / projectManager / project_manager / pm
     function isStaff() {
       return isSignedIn() && (
         userRole() == 'admin'
@@ -29,15 +37,34 @@ service firebase.storage {
       );
     }
 
-    // Per-project membership: the user is on projects/{projectId}.assignedUserIds
-    // (covers designer/sub/PM/GC assignment), OR they're the project's client
-    // (matched by uid OR by their linked contact id), OR they're staff (admin/GC/PM).
+    // Per-project membership. Mirrors firestore.rules patterns (isAssignedToProject
+    // + clientOwns) so the two surfaces stay in lockstep:
+    //   - staff (admin/gc/PM) always allowed
+    //   - users listed in projects/{id}.assignedUserIds (defensive 'X in data' guard
+    //     so missing field doesn't throw — NewProjectForm doesn't write this field
+    //     at create time, only Sales.tsx + UserManagement.tsx do, so most projects
+    //     either have an empty list or no field at all)
+    //   - the project's client by uid (legacy projects.clientId == auth.uid)
+    //   - the project's client by uid in clientIds[] (newer projects use array of
+    //     contact-doc ids, written by NewProjectForm L310 + Sales.tsx)
+    //
+    // The BUG this fixes: when assignedUserIds is missing from a project doc,
+    // the raw `in` check throws and the entire rule expression errors out — even
+    // when isStaff() would have returned true on a defensive evaluation.
+    // Adding the 'X in data' guards mirrors firestore.rules:75-77 + :110-112.
     function isOnProject(projectId) {
       return isStaff()
         || (isSignedIn()
+            && 'assignedUserIds' in firestore.get(/databases/(default)/documents/projects/$(projectId)).data
+            && firestore.get(/databases/(default)/documents/projects/$(projectId)).data.assignedUserIds is list
             && request.auth.uid in firestore.get(/databases/(default)/documents/projects/$(projectId)).data.assignedUserIds)
         || (isSignedIn()
-            && firestore.get(/databases/(default)/documents/projects/$(projectId)).data.clientId == request.auth.uid);
+            && 'clientId' in firestore.get(/databases/(default)/documents/projects/$(projectId)).data
+            && firestore.get(/databases/(default)/documents/projects/$(projectId)).data.clientId == request.auth.uid)
+        || (isSignedIn()
+            && 'clientIds' in firestore.get(/databases/(default)/documents/projects/$(projectId)).data
+            && firestore.get(/databases/(default)/documents/projects/$(projectId)).data.clientIds is list
+            && request.auth.uid in firestore.get(/databases/(default)/documents/projects/$(projectId)).data.clientIds);
     }
 
     // ── User-owned scratch space ──────────────────────────────────────────────
