@@ -15,7 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Building2, Mail, Lock, Loader2, CheckCircle2, User, HardHat, UserCheck, Users, Palette, ChevronRight, ArrowLeft, MapPin, Wrench, Phone, Compass } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -876,18 +876,20 @@ export default function SignIn() {
                 </div>
               )}
 
-              <Button
-                onClick={handleRegisterSubmit}
-                className="w-full"
-                disabled={
-                  isLoading || !regName || !regEmail || !regPassword || !regConfirm ||
-                  (accountType === 'sub' && !regTrade) ||
-                  (accountType === 'sub' && regTrade === 'Other...' && !regOtherTrade.trim())
-                }
-              >
-                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                {accountType === 'team' ? 'Submit for Approval' : 'Create Account'}
-              </Button>
+              <DialogFooter>
+                <Button
+                  onClick={handleRegisterSubmit}
+                  className="w-full"
+                  disabled={
+                    isLoading || !regName || !regEmail || !regPassword || !regConfirm ||
+                    (accountType === 'sub' && !regTrade) ||
+                    (accountType === 'sub' && regTrade === 'Other...' && !regOtherTrade.trim())
+                  }
+                >
+                  {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  {accountType === 'team' ? 'Submit for Approval' : 'Create Account'}
+                </Button>
+              </DialogFooter>
             </div>
           )}
         </DialogContent>
