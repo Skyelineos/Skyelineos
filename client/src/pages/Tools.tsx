@@ -7,6 +7,7 @@ import {
   Grid3X3,
   Box,
   Calculator,
+  Scale,
   ArrowRight,
   Sparkles,
 } from 'lucide-react';
@@ -30,6 +31,16 @@ const TOOLS: ToolDef[] = [
       'Upload your plan, walk through a guided wizard, and get a categorized lumber list — studs, plates, sheathing, headers, and AdvanTech subfloor — with quantities and waste built in.',
     icon: Hammer,
     href: '/tools/lumber',
+    status: 'available',
+  },
+  {
+    id: 'bid-compare',
+    title: 'Bid Leveling & Scope Check',
+    blurb: 'Sub bids + plans → leveled comparison + winner',
+    description:
+      'Drop in subcontractor bid PDFs and the trade’s plan sheets. AI extracts each bid’s scope and pricing, checks it against the plans for missing scope, lays out a side-by-side leveling sheet, and recommends a winner with the reasoning.',
+    icon: Scale,
+    href: '/tools/bid-compare',
     status: 'available',
   },
   {

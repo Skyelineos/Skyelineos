@@ -10,6 +10,7 @@ import { registerBrainPass } from './ingestionLab/brainPass';
 import { registerPlacesRoutes } from './places/placesRoutes';
 import { registerTaskLibrary } from './taskLibrary/routes';
 import { registerExtractEstimateRoute } from './estimates/extractEstimateRoute';
+import { registerBidCompareRoutes } from './bids/analyzeBidsRoute';
 import { registerTaskSignoffRoute } from './tasks/signoffRoute';
 
 // Initialize Firebase Admin
@@ -120,6 +121,7 @@ registerPlacesRoutes(app);           // GET /api/places/{autocomplete,details}
 // taskLibrary/routes.ts for the full route map.
 registerTaskLibrary(app, db);        // /api/taskLibrary/...
 registerExtractEstimateRoute(app, authMiddleware); // POST /api/extract-estimate
+registerBidCompareRoutes(app, authMiddleware);
 registerTaskSignoffRoute(app, db);   // POST /api/tasks/:taskId/signoff  (GC/PM/admin approval flow)
 
 // Real Firestore API endpoints
