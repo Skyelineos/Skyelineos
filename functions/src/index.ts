@@ -2160,6 +2160,21 @@ registerAwardBidRoute(app, admin.firestore());
 import { registerCommenceRoute } from './contracts/commenceRoute';
 registerCommenceRoute(app, admin.firestore());
 
+// Sub self-service compliance doc registration (Stream 4 — Wave B).
+// Storage upload lands at projects/{projectId}/compliance/{subContactId}/...
+// under Stream 1's isOnProject(projectId) rule; this route writes the
+// Firestore side and mirrors to users/{uid} for the D-016 award gate.
+// Route: POST /api/compliance/upload
+import { registerComplianceUploadRoute } from './compliance/uploadRoute';
+registerComplianceUploadRoute(app, admin.firestore());
+
+// Sub self-service invoice / pay-application submission (Stream 4 — Wave B).
+// Writes to /financials with submittedBy:'sub' so the GC's existing Bills
+// page surfaces it; server verifies the sub is awarded on the project.
+// Route: POST /api/sub/invoices/submit
+import { registerSubmitInvoiceRoute } from './sub/submitInvoiceRoute';
+registerSubmitInvoiceRoute(app, admin.firestore());
+
 // (Public lead intake /api/leads/intake + /api/leads/public-intake are
 // registered at the top of the file in the public allowlist, BEFORE the gate.)
 
