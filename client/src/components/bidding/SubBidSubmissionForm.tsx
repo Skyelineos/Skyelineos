@@ -6,7 +6,7 @@ import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebas
 import { db, storage } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
-import { createNotification } from '@/lib/notifications';
+import { fireTrigger } from '@/lib/notifications';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -374,17 +374,20 @@ export function SubBidSubmissionForm({
 
       await addDoc(collection(db, 'bids'), bidPayload);
 
-      // Notify GC
-      await createNotification({
-        userId: request.invitedByUserId,
-        kind: 'system',
-        title: `New bid received: ${request.trade} from ${user.name || 'sub'}`,
-        body: `Total: $${total.toLocaleString()}. Open Project Bids to review.`,
-        link: `/projects/${request.projectId}/bids`,
+      // Wave-2: route through fireTrigger — the GC who requested the bid
+      // is the pinned recipient.
+      await fireTrigger({
+        kind: 'bid_received',
         projectId: request.projectId,
-        refType: 'task',
-        refId: request.id,
-        fromUserName: user.name || 'Subcontractor',
+        targetUserIds: [request.invitedByUserId],
+        payload: {
+          subName: user.name || 'Subcontractor',
+          trade: request.trade,
+          total: total.toLocaleString(),
+          projectName: '',
+          link: `/projects/${request.projectId}/bids`,
+          bidRequestId: request.id,
+        },
       });
 
       toast({ title: 'Bid submitted', description: `Total: $${total.toLocaleString()}` });

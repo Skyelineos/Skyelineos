@@ -17,6 +17,7 @@ import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
+import { fireTrigger } from '@/lib/notifications';
 import {
   Plus, Edit2, Trash2, CheckCircle2, XCircle, DollarSign,
   CalendarDays, AlertCircle,
@@ -141,6 +142,17 @@ export default function DrawScheduleTab({ projects }: { projects: Project[] }) {
       } else {
         await addDoc(collection(db, 'projects', selectedProjectId, 'draws'), {
           ...data, createdAt: serverTimestamp(),
+        });
+        // Wave-2: fire draw_requested — server resolves client_of_project.
+        await fireTrigger({
+          kind: 'draw_requested',
+          projectId: selectedProjectId,
+          payload: {
+            drawName: data.name || 'Draw',
+            amount: (data.amount || 0).toLocaleString(),
+            projectName: '',
+            link: '/portal?tab=draws',
+          },
         });
         toast({ title: 'Draw added' });
       }

@@ -17,7 +17,7 @@ import {
   type FirestoreError,
 } from 'firebase/firestore';
 import { db } from '../firebase';
-import { createNotification } from '../notifications';
+import { fireTrigger } from '../notifications';
 import type { RFI, RFIAttachment, RFIPriority } from '@/types/rfi';
 
 const rfiCollection = (projectId: string) =>
@@ -118,18 +118,21 @@ export async function answerRFI(
     updatedAt: serverTimestamp(),
   });
 
-  // Notify the author that their question was answered.
+  // Wave-2: route through the server pipeline so SMS/email + per-user prefs
+  // apply. The RFI author is the pinned recipient (single_uid kind).
   if (rfi.createdByUid && rfi.createdByUid !== answerer.uid) {
-    await createNotification({
-      userId: rfi.createdByUid,
+    await fireTrigger({
       kind: 'rfi_answered',
-      title: `RFI-${String(rfi.number).padStart(3, '0')} answered`,
-      body: `${answerer.name} answered "${rfi.subject}".`,
       projectId,
-      refType: 'rfi',
-      refId: rfi.id,
-      fromUserId: answerer.uid,
-      fromUserName: answerer.name,
+      targetUserIds: [rfi.createdByUid],
+      payload: {
+        rfiNumber: `RFI-${String(rfi.number).padStart(3, '0')}`,
+        subject: rfi.subject,
+        answererName: answerer.name,
+        projectName: '',
+        link: `/projects/${projectId}/rfis`,
+        rfiId: rfi.id,
+      },
     });
   }
 }

@@ -5,7 +5,7 @@ import {
 } from 'firebase/firestore';
 import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '@/lib/firebase';
-import { createNotification } from '@/lib/notifications';
+import { fireTrigger } from '@/lib/notifications';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -191,18 +191,18 @@ export function WalkthroughCapture({ projectId, projectName, buttonLabel = 'Capt
 
       await batch.commit();
 
-      // Fire notification to the assignee (best-effort, non-blocking).
+      // Combined T0-3 (uid keying) + Dispatch 6 (fireTrigger) resolution.
       //
-      // T0-3 FIX (Skyelineos_CTO_Audit_2026-06-16.md Workflow 6):
-      // notification.userId is the *recipient's Firebase Auth uid* — the same
-      // key NotificationCenter queries by (`user.id?.toString()`, which is
-      // now the auth uid after the use-auth.ts fix). Previously we wrote
-      // `userId: assigneeId`, where assigneeId is a *contacts/{docId}* — a
-      // completely different keyspace — so the sub's NotificationCenter
-      // listener never saw the doc. Resolve the contact's linkedUserId here
-      // and use *that* as the userId. If the sub hasn't signed into the
-      // portal yet (no linkedUserId), surface a warning to the GC so they
-      // know the assignment landed but the sub won't be notified.
+      // T0-3: resolve sub.linkedUserId before firing — assigneeId is a
+      // contacts/{docId}, NOT a Firebase Auth uid. Without this resolution
+      // the trigger's audience resolver can't match the assignee against
+      // notification recipients. If the sub hasn't claimed their portal
+      // account yet (no linkedUserId), warn the GC and skip the fire —
+      // a notification to a non-existent uid is silent failure.
+      //
+      // Dispatch 6: fireTrigger routes through the server pipeline so
+      // SMS/email/push fan-out + per-user prefs + audience resolver all
+      // run server-side. Best-effort, non-blocking.
       if (assigneeId && sub) {
         const targetUid = sub.linkedUserId?.trim();
         if (!targetUid) {
@@ -212,20 +212,17 @@ export function WalkthroughCapture({ projectId, projectName, buttonLabel = 'Capt
             variant: 'default',
           });
         } else {
-          await createNotification({
-            userId: targetUid,
+          await fireTrigger({
             kind: 'walkthrough_assigned',
-            title: `New walkthrough item from ${user.name || 'GC'}`,
-            body: note.trim() || 'Photo / video captured on site',
-            link: `/subcontractor-portal`,
             projectId,
-            refType: 'walkthrough',
-            refId: walkRef.id,
-            // user.id is the GC's Firebase Auth uid after the T0-3 use-auth.ts
-            // fix; falling back to email keeps audit non-empty if for some
-            // reason the uid is missing.
-            fromUserId: user.id?.toString() || user.email || 'unknown',
-            fromUserName: user.name || user.email || 'GC',
+            targetUserIds: [targetUid],
+            payload: {
+              fromName: user.name || user.email || 'GC',
+              note: note.trim() || 'Photo / video captured on site',
+              projectName: projectName || '',
+              link: `/subcontractor-portal`,
+              walkthroughId: walkRef.id,
+            },
           });
         }
       }

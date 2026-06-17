@@ -2177,6 +2177,12 @@ registerSendPortalInviteRoute(app, admin.firestore());
 import { registerNotificationRulesRoutes } from './notifications/rulesRoutes';
 registerNotificationRulesRoutes(app, admin.firestore());
 
+// Wave-2 universal fire endpoint — every client-side createNotification call
+// site routes through here so audience resolution, per-user prefs, and
+// SMS/email/push fan-out run server-side. Auth-gated by authMiddleware.
+import { registerFireTriggerRoute } from './notifications/fireTriggerRoute';
+registerFireTriggerRoute(app, admin.firestore());
+
 import { registerQaRoutes } from './qa/qaRoutes';
 registerQaRoutes(app, admin.firestore());  // /api/qa/{trigger,report,lock}
 
@@ -2251,6 +2257,11 @@ export { newLeadAlert } from './leads/newLeadAlert';
 
 // ── Phase 3: Scheduled due-date sweep (7am MT daily) ─────────────────────────
 export { dueSweep } from './notifications/scheduledDueSweep';
+
+// ── Wave-2: Schedule slip sweep (7:30am MT daily). Fires schedule_slip for any
+//    active project that transitioned into amber/red since yesterday. Idempotent
+//    via projects.scheduleSlipLastFiredOn marker.
+export { scheduleSlipSweep } from './notifications/scheduleSlipSweep';
 
 // ── Auto-create Firebase Auth account for every contact with an email ────────
 // Lets any contact use the "Forgot password" flow without an admin first

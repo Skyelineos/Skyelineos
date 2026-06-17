@@ -31,6 +31,7 @@ import {
   RotateCcw,
   Palette,
 } from 'lucide-react';
+import { NotificationPrefsMatrix } from './NotificationPrefsMatrix';
 
 interface UserPreferencesDialogProps {
   open: boolean;
@@ -233,8 +234,21 @@ export function UserPreferencesDialog({ open, onOpenChange }: UserPreferencesDia
             <TabsContent value="notifications" className="space-y-6">
               <div className="space-y-4">
                 <h3 className="text-lg font-medium">Notification Settings</h3>
-                
+
+                {/* Wave-2: per-trigger × per-channel matrix wired to
+                   users/{uid}.notificationPrefs[kind][channel]. The two
+                   legacy global toggles below remain for back-compat with
+                   the older dispatcher reads. */}
+                <NotificationPrefsMatrix />
+
+                <Separator />
+
                 <div className="space-y-4">
+                  <h4 className="font-medium">Quick toggles (legacy)</h4>
+                  <p className="text-xs text-muted-foreground">
+                    Coarse global toggles still honored by the legacy dispatcher.
+                    The matrix above takes precedence per (event, channel).
+                  </p>
                   <div className="flex items-center justify-between">
                     <div>
                       <Label htmlFor="email-notifications">Email notifications</Label>
@@ -257,39 +271,6 @@ export function UserPreferencesDialog({ open, onOpenChange }: UserPreferencesDia
                       checked={preferences.smsNotifications}
                       onCheckedChange={(checked) => updatePref('smsNotifications', checked)}
                     />
-                  </div>
-
-                  <Separator />
-
-                  <h4 className="font-medium">Notification Types</h4>
-                  
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="project-updates">Project updates</Label>
-                      <Switch
-                        id="project-updates"
-                        checked={preferences.projectUpdates}
-                        onCheckedChange={(checked) => updatePref('projectUpdates', checked)}
-                      />
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="bid-alerts">Bid alerts</Label>
-                      <Switch
-                        id="bid-alerts"
-                        checked={preferences.bidAlerts}
-                        onCheckedChange={(checked) => updatePref('bidAlerts', checked)}
-                      />
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="schedule-changes">Schedule changes</Label>
-                      <Switch
-                        id="schedule-changes"
-                        checked={preferences.scheduleChanges}
-                        onCheckedChange={(checked) => updatePref('scheduleChanges', checked)}
-                      />
-                    </div>
                   </div>
                 </div>
               </div>

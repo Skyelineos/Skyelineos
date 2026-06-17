@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
+import { fireTrigger } from '@/lib/notifications';
 import { formatCurrency } from '@/lib/utils';
 import type {
   DecisionStatus,
@@ -311,6 +312,21 @@ function NewDecisionDialog({
           ? parseFloat(form.budgetImpact)
           : undefined,
       });
+      // Wave-2: notify the project's homeowner(s) that a selection is due.
+      // The server resolves client_of_project from projectId so no client list
+      // is sent here.
+      if (form.dueDate) {
+        await fireTrigger({
+          kind: 'selection_due',
+          projectId,
+          payload: {
+            selectionName: form.title,
+            dueDate: form.dueDate,
+            projectName: '',
+            link: '/portal?tab=decisions',
+          },
+        });
+      }
       toast({ title: 'Decision created' });
       onClose();
     } catch (e: any) {

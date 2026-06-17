@@ -149,6 +149,78 @@ export const TRIGGER_CATALOG: TriggerDef[] = [
     ],
   },
   {
+    key: 'template_applied',
+    label: 'Template applied to a project',
+    description: 'A job template was applied to a project — summary of tasks created.',
+    audiences: ['team', 'pm'],
+    variables: [
+      { name: 'projectName', description: 'Project name' },
+      { name: 'taskCount', description: 'Number of tasks created' },
+      { name: 'tasksWithNotify', description: 'Tasks flagged for assign-time notifications' },
+      LINK_VAR,
+    ],
+  },
+  {
+    key: 'schedule_published',
+    label: 'Schedule published',
+    description: 'A project schedule was published or updated; notify the homeowners.',
+    audiences: ['client'],
+    variables: [
+      { name: 'projectName', description: 'Project name' },
+      LINK_VAR,
+    ],
+  },
+  {
+    key: 'bid_received',
+    label: 'Bid received',
+    description: 'A sub submitted a bid; notify the GC who requested it.',
+    audiences: ['team', 'pm'],
+    variables: [
+      { name: 'subName', description: 'Subcontractor name' },
+      { name: 'trade', description: 'Trade' },
+      { name: 'total', description: 'Bid total' },
+      { name: 'projectName', description: 'Project name' },
+      LINK_VAR,
+    ],
+  },
+  {
+    key: 'bid_reminder',
+    label: 'Bid reminder',
+    description: 'A reminder to a sub who has not yet submitted their bid.',
+    audiences: ['sub'],
+    variables: [
+      { name: 'projectName', description: 'Project name' },
+      { name: 'trade', description: 'Trade' },
+      { name: 'dueDate', description: 'Bid due date' },
+      LINK_VAR,
+    ],
+  },
+  {
+    key: 'rfi_answered',
+    label: 'RFI answered',
+    description: 'An RFI was answered; notify the original author.',
+    audiences: ['team', 'pm', 'sub', 'client', 'designer'],
+    variables: [
+      { name: 'rfiNumber', description: 'RFI display number (RFI-003)' },
+      { name: 'subject', description: 'RFI subject' },
+      { name: 'answererName', description: 'Who answered the RFI' },
+      { name: 'projectName', description: 'Project name' },
+      LINK_VAR,
+    ],
+  },
+  {
+    key: 'task_assigned',
+    label: 'Task assigned',
+    description: 'A task was assigned to a user.',
+    audiences: ['sub', 'pm', 'client', 'designer', 'team'],
+    variables: [
+      { name: 'taskName', description: 'Task name' },
+      { name: 'projectName', description: 'Project name' },
+      { name: 'fromName', description: 'Assigner display name' },
+      LINK_VAR,
+    ],
+  },
+  {
     key: 'task_due',
     label: 'Task due',
     description: 'A task is due within 24 hours (daily 7am sweep).',
@@ -157,6 +229,118 @@ export const TRIGGER_CATALOG: TriggerDef[] = [
       { name: 'taskName', description: 'Task name' },
       { name: 'dueDate', description: 'Due date' },
       { name: 'projectName', description: 'Project name' },
+      LINK_VAR,
+    ],
+  },
+
+  // ── Phase 2: added by Dispatch 6 — wave-2 trigger kinds ──────────────────
+  // Kinds, audiences, and default channel intents mirror
+  // shared/notifications-catalog.ts. Keep the two in sync when adding kinds.
+  {
+    key: 'schedule_slip',
+    label: 'Schedule slipped',
+    description: 'A project schedule slipped (computeScheduleSlip tone goes red/amber).',
+    audiences: ['team', 'pm'],
+    variables: [
+      { name: 'projectName', description: 'Project name' },
+      { name: 'tone', description: 'Slip tone (red / amber / green)' },
+      { name: 'days', description: 'Days of slip vs target completion' },
+      LINK_VAR,
+    ],
+  },
+  {
+    key: 'change_order_created',
+    label: 'Change order created',
+    description: 'A change order was created and needs the client to approve / reject it.',
+    audiences: ['client'],
+    variables: [
+      { name: 'projectName', description: 'Project name' },
+      { name: 'title', description: 'Change-order title' },
+      { name: 'amount', description: 'Dollar amount' },
+      LINK_VAR,
+    ],
+  },
+  {
+    key: 'selection_due',
+    label: 'Selection due',
+    description: 'A homeowner selection is due (catalog item / finish pick / approval).',
+    audiences: ['client'],
+    critical: true,
+    variables: [
+      { name: 'projectName', description: 'Project name' },
+      { name: 'selectionName', description: 'Selection name (Cabinets, Flooring…)' },
+      { name: 'dueDate', description: 'Due date' },
+      LINK_VAR,
+    ],
+  },
+  {
+    key: 'draw_requested',
+    label: 'Draw requested',
+    description: 'A construction draw was requested; the client / lender needs to release funds.',
+    audiences: ['client'],
+    variables: [
+      { name: 'projectName', description: 'Project name' },
+      { name: 'drawName', description: 'Draw name / milestone' },
+      { name: 'amount', description: 'Draw amount' },
+      LINK_VAR,
+    ],
+  },
+  {
+    key: 'invoice_received',
+    label: 'Invoice received',
+    description: 'A vendor invoice / bill was logged for a project.',
+    audiences: ['team', 'pm'],
+    variables: [
+      { name: 'projectName', description: 'Project name' },
+      { name: 'vendor', description: 'Vendor / supplier name' },
+      { name: 'amount', description: 'Invoice amount' },
+      LINK_VAR,
+    ],
+  },
+  {
+    key: 'photo_uploaded',
+    label: 'Photo uploaded',
+    description: 'A new project photo was uploaded and made visible to the client.',
+    audiences: ['client'],
+    variables: [
+      { name: 'projectName', description: 'Project name' },
+      { name: 'caption', description: 'Photo caption' },
+      LINK_VAR,
+    ],
+  },
+  {
+    key: 'walkthrough_assigned',
+    label: 'Walkthrough item assigned',
+    description: 'A walkthrough capture (photo/video + note) was assigned to a sub on the project.',
+    audiences: ['sub'],
+    critical: true,
+    variables: [
+      { name: 'projectName', description: 'Project name' },
+      { name: 'note', description: 'GC note attached to the capture' },
+      { name: 'fromName', description: 'Who captured it' },
+      LINK_VAR,
+    ],
+  },
+  {
+    key: 'compliance_doc_uploaded',
+    label: 'Compliance doc uploaded',
+    description: 'A sub uploaded a compliance document (W-9, COI, license).',
+    audiences: ['team'],
+    variables: [
+      { name: 'subName', description: 'Subcontractor name' },
+      { name: 'docKind', description: 'Document kind (W-9, COI, license, …)' },
+      LINK_VAR,
+    ],
+  },
+  {
+    key: 'sub_invoice_submitted',
+    label: 'Sub invoice submitted',
+    description: 'A sub submitted an invoice via the portal; staff need to review + approve.',
+    audiences: ['team', 'pm'],
+    variables: [
+      { name: 'subName', description: 'Subcontractor name' },
+      { name: 'projectName', description: 'Project name' },
+      { name: 'amount', description: 'Invoice amount' },
       LINK_VAR,
     ],
   },
@@ -238,6 +422,78 @@ export function defaultFlow(triggerKey: string, audience: Audience): Flow {
           smsBody: 'Skyeline Homes: {projectName} is starting — you are on the team for {trade}.',
         })],
       };
+    case 'template_applied':
+      return {
+        enabled: true,
+        steps: [immediateStep({
+          channels: { inApp: true, email: false, sms: false, push: true },
+          inAppTitle: 'Template applied to {projectName}',
+          inAppBody: '{taskCount} tasks created ({tasksWithNotify} flagged for assign-time notifications).',
+          emailSubject: 'Template applied to {projectName}',
+          emailBody: '{taskCount} tasks were created on {projectName}.',
+          smsBody: 'Skyeline OS: template applied — {taskCount} tasks on {projectName}.',
+        })],
+      };
+    case 'schedule_published':
+      return {
+        enabled: true,
+        steps: [immediateStep({
+          channels: { inApp: true, email: true, sms: false, push: true },
+          inAppTitle: 'Your project schedule was updated',
+          inAppBody: 'The timeline for {projectName} has been updated. Open your portal to see what is next.',
+          emailSubject: 'Your project schedule was updated — {projectName}',
+          emailBody: 'The timeline for {projectName} has been updated. Open your portal to see what is next.',
+          smsBody: 'Skyeline Homes: schedule updated on {projectName}.',
+        })],
+      };
+    case 'bid_received':
+      return {
+        enabled: true,
+        steps: [immediateStep({
+          channels: { inApp: true, email: true, sms: false, push: true },
+          inAppTitle: 'New bid: {trade} from {subName}',
+          inAppBody: 'Total: ${total} for {projectName}.',
+          emailSubject: 'Bid received — {trade} on {projectName}',
+          emailBody: '{subName} submitted a bid of ${total} for {trade} on {projectName}.',
+          smsBody: 'Skyeline OS: {subName} submitted a bid (${total}) for {trade} on {projectName}.',
+        })],
+      };
+    case 'bid_reminder':
+      return {
+        enabled: true,
+        steps: [immediateStep({
+          channels: { inApp: true, email: true, sms: false, push: true },
+          inAppTitle: 'Bid reminder: {trade}',
+          inAppBody: '{projectName} bid is due {dueDate}.',
+          emailSubject: 'Reminder: bid due {dueDate} — {projectName}',
+          emailBody: 'Reminder: please submit your bid for {trade} on {projectName}. Due {dueDate}.',
+          smsBody: 'Skyeline Homes: bid reminder — {projectName} ({trade}) due {dueDate}.',
+        })],
+      };
+    case 'rfi_answered':
+      return {
+        enabled: true,
+        steps: [immediateStep({
+          channels: { inApp: true, email: true, sms: false, push: true },
+          inAppTitle: '{rfiNumber} answered',
+          inAppBody: '{answererName} answered "{subject}".',
+          emailSubject: '{rfiNumber} answered — {projectName}',
+          emailBody: '{answererName} answered "{subject}" on {projectName}. Open the RFI to read the response.',
+          smsBody: 'Skyeline OS: {rfiNumber} answered on {projectName}.',
+        })],
+      };
+    case 'task_assigned':
+      return {
+        enabled: true,
+        steps: [immediateStep({
+          channels: { inApp: true, email: true, sms: false, push: true },
+          inAppTitle: 'Task assigned: {taskName}',
+          inAppBody: '{fromName} assigned you {taskName} on {projectName}.',
+          emailSubject: 'Task assigned: {taskName}',
+          emailBody: '{fromName} assigned you {taskName} on {projectName}.',
+          smsBody: 'Skyeline OS: {fromName} assigned you {taskName}.',
+        })],
+      };
     case 'task_due':
       return {
         enabled: audience !== 'client', // clients usually don't want task pings by default
@@ -248,6 +504,115 @@ export function defaultFlow(triggerKey: string, audience: Audience): Flow {
           emailSubject: 'Due today: {taskName}',
           emailBody: '{taskName} is due {dueDate} on {projectName}.',
           smsBody: 'Skyeline Homes: {taskName} is due {dueDate}.',
+        })],
+      };
+    case 'schedule_slip':
+      return {
+        enabled: true,
+        steps: [immediateStep({
+          channels: { inApp: true, email: false, sms: false, push: true },
+          inAppTitle: 'Schedule slip: {projectName}',
+          inAppBody: '{projectName} is now {days} day(s) behind target ({tone}).',
+          emailSubject: 'Schedule slip: {projectName}',
+          emailBody: '{projectName} is {days} day(s) behind target completion ({tone}).',
+          smsBody: 'Skyeline OS: {projectName} schedule slipped {days}d ({tone}).',
+        })],
+      };
+    case 'change_order_created':
+      return {
+        enabled: true,
+        steps: [immediateStep({
+          channels: { inApp: true, email: true, sms: false, push: true },
+          inAppTitle: 'Change order needs your approval',
+          inAppBody: '{title} (${amount}) on {projectName}.',
+          emailSubject: 'Change order ready for review — {projectName}',
+          emailBody: 'A new change order is ready for your review on {projectName}.\n\n{title} — ${amount}\n\nOpen your portal to approve or decline.',
+          smsBody: 'Skyeline Homes: change order ready for review on {projectName}. Open your portal.',
+        })],
+      };
+    case 'selection_due':
+      return {
+        enabled: true,
+        steps: [immediateStep({
+          channels: { inApp: true, email: true, sms: false, push: true },
+          inAppTitle: 'Selection due: {selectionName}',
+          inAppBody: '{selectionName} is due {dueDate} on {projectName}.',
+          emailSubject: 'Selection due — {selectionName}',
+          emailBody: 'Your {selectionName} selection is due {dueDate} on {projectName}. Open your portal to make your pick.',
+          smsBody: 'Skyeline Homes: {selectionName} is due {dueDate} on {projectName}.',
+        })],
+      };
+    case 'draw_requested':
+      return {
+        enabled: true,
+        steps: [immediateStep({
+          channels: { inApp: true, email: true, sms: false, push: true },
+          inAppTitle: 'Draw requested: {drawName}',
+          inAppBody: '${amount} requested on {projectName}.',
+          emailSubject: 'Draw requested — {projectName}',
+          emailBody: 'A draw has been requested on {projectName}.\n\n{drawName} — ${amount}\n\nOpen your portal to review and release funds.',
+          smsBody: 'Skyeline Homes: draw requested on {projectName} — {drawName} (${amount}).',
+        })],
+      };
+    case 'invoice_received':
+      return {
+        enabled: true,
+        steps: [immediateStep({
+          channels: { inApp: true, email: false, sms: false, push: true },
+          inAppTitle: 'Bill received: {vendor}',
+          inAppBody: '${amount} for {projectName}.',
+          emailSubject: 'Bill received: {vendor}',
+          emailBody: 'A new vendor bill was logged.\n\nVendor: {vendor}\nAmount: ${amount}\nProject: {projectName}',
+          smsBody: 'Skyeline OS: bill received from {vendor} — ${amount} on {projectName}.',
+        })],
+      };
+    case 'photo_uploaded':
+      return {
+        enabled: audience === 'client',
+        steps: [immediateStep({
+          channels: { inApp: true, email: false, sms: false, push: true },
+          inAppTitle: 'New photo: {projectName}',
+          inAppBody: '{caption}',
+          emailSubject: 'New photo on {projectName}',
+          emailBody: 'A new photo was added to {projectName}.\n\n{caption}',
+          smsBody: 'Skyeline Homes: new photo on {projectName}.',
+        })],
+      };
+    case 'walkthrough_assigned':
+      return {
+        enabled: true,
+        steps: [immediateStep({
+          channels: { inApp: true, email: false, sms: true, push: true },
+          forceSms: true,
+          inAppTitle: 'Walkthrough item assigned',
+          inAppBody: '{fromName} sent you a walkthrough item: {note}',
+          emailSubject: 'New walkthrough item — {projectName}',
+          emailBody: '{fromName} captured a walkthrough item for you on {projectName}.\n\n{note}',
+          smsBody: 'Skyeline Homes: {fromName} assigned you a walkthrough item on {projectName}.',
+        })],
+      };
+    case 'compliance_doc_uploaded':
+      return {
+        enabled: true,
+        steps: [immediateStep({
+          channels: { inApp: true, email: false, sms: false, push: true },
+          inAppTitle: 'Compliance doc: {subName}',
+          inAppBody: '{subName} uploaded a {docKind}.',
+          emailSubject: 'Compliance doc — {subName}',
+          emailBody: '{subName} uploaded a {docKind}. Open Skyeline OS to review.',
+          smsBody: 'Skyeline OS: {subName} uploaded a {docKind}.',
+        })],
+      };
+    case 'sub_invoice_submitted':
+      return {
+        enabled: true,
+        steps: [immediateStep({
+          channels: { inApp: true, email: false, sms: false, push: true },
+          inAppTitle: 'Sub invoice: {subName}',
+          inAppBody: '${amount} on {projectName}.',
+          emailSubject: 'Sub invoice — {subName} on {projectName}',
+          emailBody: '{subName} submitted an invoice for ${amount} on {projectName}. Open Skyeline OS to review.',
+          smsBody: 'Skyeline OS: {subName} submitted an invoice (${amount}) on {projectName}.',
         })],
       };
     default:

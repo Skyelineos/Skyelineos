@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
+import { fireTrigger } from '@/lib/notifications';
 import { useConfirm } from '@/hooks/use-confirm';
 import {
   Plus, Search, FileText, MoreVertical, CheckCircle, XCircle, Eye,
@@ -189,7 +190,7 @@ export function ChangeOrdersContent({ projectId: scopedProjectId }: { projectId?
     if (!formData.title.trim()) return;
     setIsSaving(true);
     try {
-      await addDoc(collection(db, 'changeOrders'), {
+      const coRef = await addDoc(collection(db, 'changeOrders'), {
         title: formData.title,
         description: formData.description,
         projectId: formData.projectId,
@@ -202,7 +203,21 @@ export function ChangeOrdersContent({ projectId: scopedProjectId }: { projectId?
         status: 'pending' as COStatus,
         createdAt: serverTimestamp()
       });
-      // TODO Dispatch 6: fire 'change_order_created' trigger with audience=client of this project. Until that trigger is registered, leave as silent write.
+      // Wave-2: fire change_order_created — server resolves the project's
+      // client audience and fans out via the configured channels.
+      if (formData.projectId) {
+        await fireTrigger({
+          kind: 'change_order_created',
+          projectId: formData.projectId,
+          payload: {
+            title: formData.title,
+            amount: (parseFloat(formData.amount) || 0).toLocaleString(),
+            projectName: formData.projectName || '',
+            link: '/portal?tab=change-orders',
+            changeOrderId: coRef.id,
+          },
+        });
+      }
       setDialogOpen(false);
       setFormData(seededForm());
       toast({ title: 'Change order created' });

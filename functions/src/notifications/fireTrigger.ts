@@ -75,6 +75,33 @@ export function evalCondition(cond: FlowCondition | undefined, vars: Record<stri
   }
 }
 
+
+/** Read a user's per-kind channel pref overrides for the wave-2 catalog.
+ *  Shape: users/{uid}.notificationPrefs[triggerKey] = { in_app?, email?, sms?, push? }
+ *  Returns undefined for any channel the user hasn't explicitly set so the
+ *  catalog-driven default still applies. */
+async function loadUserChannelPrefs(
+  db: admin.firestore.Firestore,
+  uid: string,
+  triggerKey: string,
+): Promise<{ inApp?: boolean; email?: boolean; sms?: boolean; push?: boolean }> {
+  try {
+    const snap = await db.collection('users').doc(uid).get();
+    const data = snap.exists ? snap.data() as any : null;
+    const perKind = data?.notificationPrefs?.[triggerKey];
+    if (!perKind || typeof perKind !== 'object') return {};
+    return {
+      inApp: typeof perKind.in_app === 'boolean' ? perKind.in_app : undefined,
+      email: typeof perKind.email === 'boolean' ? perKind.email : undefined,
+      sms:   typeof perKind.sms   === 'boolean' ? perKind.sms   : undefined,
+      push:  typeof perKind.push  === 'boolean' ? perKind.push  : undefined,
+    };
+  } catch (e) {
+    console.warn('[fireTrigger] loadUserChannelPrefs failed', e);
+    return {};
+  }
+}
+
 export interface FireTriggerInput {
   db: admin.firestore.Firestore;
   triggerKey: string;
@@ -154,10 +181,19 @@ export async function fireTrigger(input: FireTriggerInput): Promise<void> {
     if (delayMs === 0) {
       // Immediate: gate on the snapshot condition, then create the notification.
       if (!evalCondition(step.condition, variables)) continue;
+      // Apply per-user catalog prefs (wave-2): users.notificationPrefs[kind][channel]
+      // boolean overrides the step's default channels for this recipient.
+      const userPrefs = await loadUserChannelPrefs(db, recipientUserId, triggerKey);
       const ref = db.collection('notifications').doc();
-      batch.set(ref, buildNotificationDoc(triggerKey, step, {
+      const doc = buildNotificationDoc(triggerKey, step, {
         recipientUserId, variables, projectId, fromUserName: input.fromUserName,
-      }));
+      });
+      // Intersect: a false override turns the channel off; undefined leaves it.
+      if (userPrefs.inApp === false) { doc.channels.inApp = false; doc.hidden = true; }
+      if (userPrefs.email === false) doc.channels.email = false;
+      if (userPrefs.sms   === false) doc.channels.sms = false;
+      if (userPrefs.push  === false) doc.channels.push = false;
+      batch.set(ref, doc);
     } else {
       // Delayed: enqueue a job the sweeper picks up at runAt.
       const ref = db.collection('notificationJobs').doc();
