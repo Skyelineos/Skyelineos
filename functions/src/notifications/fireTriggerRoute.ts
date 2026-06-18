@@ -41,6 +41,7 @@ const KIND_AUDIENCE: Record<string, AudienceKind> = {
   invoice_received:        'staff_on_project',
   photo_uploaded:          'client_of_project',
   walkthrough_assigned:    'single_uid',
+  estimate_sent:           'client_of_project',
   // Phase 2 — Stream-4 stubs
   compliance_doc_uploaded: 'staff_on_project',
   sub_invoice_submitted:   'staff_on_project',

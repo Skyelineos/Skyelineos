@@ -40,6 +40,7 @@ import DesignStudio from '@/components/client-portal/DesignStudio';
 import StyleDiscovery from '@/components/client-portal/StyleDiscovery';
 import ClientSelectionsTimeline from '@/components/client/ClientSelectionsTimeline';
 import ChangeOrdersTab from '@/components/client-portal/ChangeOrdersTab';
+import EstimatesTab from '@/components/client-portal/EstimatesTab';
 import ClientFinancials from '@/components/client-portal/ClientFinancials';
 import ClientSiteLog from '@/components/site-log/ClientSiteLog';
 import { ClientTodayFeed } from '@/components/today/ClientTodayFeed';
@@ -411,7 +412,10 @@ export default function SkyelineClientPortal() {
         case 'contracts':
           return <ComingSoonTab feature="Your contract" />;
         case 'estimates':
-          return <ComingSoonTab feature="Estimates" />;
+          // Real EstimatesTab — subscribes to estimates the GC has sent on
+          // this project, with Approve/Decline/Request changes. Replaces the
+          // ComingSoonTab stub.
+          return <EstimatesTab projectId={selectedProjectId} />;
         case 'punch-list':
           return <ComingSoonTab feature="Punch list" />;
         case 'warranty':
@@ -628,7 +632,7 @@ export default function SkyelineClientPortal() {
       case 'contracts':
         return <ComingSoonTab feature="Your contract" />;
       case 'estimates':
-        return <ComingSoonTab feature="Estimates" />;
+        return <EstimatesTab projectId={selectedProjectId} />;
       case 'punch-list':
         return <ComingSoonTab feature="Punch list" />;
       case 'warranty':

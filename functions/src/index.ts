@@ -12,6 +12,7 @@ import { registerTaskLibrary } from './taskLibrary/routes';
 import { registerExtractEstimateRoute } from './estimates/extractEstimateRoute';
 import { registerBidCompareRoutes } from './bids/analyzeBidsRoute';
 import { registerTaskSignoffRoute } from './tasks/signoffRoute';
+import { registerEstimateRoutes }   from './estimates/estimateRoutes';
 
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -123,6 +124,7 @@ registerTaskLibrary(app, db);        // /api/taskLibrary/...
 registerExtractEstimateRoute(app, authMiddleware); // POST /api/extract-estimate
 registerBidCompareRoutes(app, authMiddleware);
 registerTaskSignoffRoute(app, db);   // POST /api/tasks/:taskId/signoff  (GC/PM/admin approval flow)
+registerEstimateRoutes(app, db);     // POST /api/estimates/:id/{send-to-client,client-response}
 
 // Real Firestore API endpoints
 app.get('/api/projects', async (req: any, res: any) => {
