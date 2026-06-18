@@ -56,6 +56,17 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
 }
 
 function DefaultErrorFallback({ error, reset }: { error?: Error; reset: () => void }) {
+  // Detect chunk-load errors — when a deploy invalidates JS bundle hashes
+  // while a tab is open, the lazy import throws "Loading chunk N failed".
+  // The plain reset() just re-renders the same broken lazy import and throws
+  // again; for these cases the user needs a true page reload.
+  const msg = String(error?.message || '');
+  const isChunkError =
+    error?.name === 'ChunkLoadError' ||
+    /Loading chunk \d+ failed/i.test(msg) ||
+    /Failed to fetch dynamically imported module/i.test(msg) ||
+    /Importing a module script failed/i.test(msg);
+  const doReload = () => { try { window.location.reload(); } catch {} };
   return (
     <div className="flex items-center justify-center min-h-[400px] p-6">
       <Card className="w-full max-w-md">
@@ -65,14 +76,22 @@ function DefaultErrorFallback({ error, reset }: { error?: Error; reset: () => vo
           </div>
           <CardTitle className="text-red-900">Something went wrong</CardTitle>
           <CardDescription>
-            {error?.message || 'An unexpected error occurred while loading this page.'}
+            {isChunkError
+              ? 'A piece of the app updated since this tab last loaded. Reloading the page should fix it.'
+              : (error?.message || 'An unexpected error occurred while loading this page.')}
           </CardDescription>
         </CardHeader>
-        <CardContent className="text-center">
-          <Button onClick={reset} variant="outline" className="w-full">
+        <CardContent className="text-center space-y-2">
+          <Button onClick={doReload} className="w-full text-white" style={{ backgroundColor: '#C9A96E' }}>
             <RefreshCw className="mr-2 h-4 w-4" />
-            Try again
+            Reload page
           </Button>
+          {!isChunkError && (
+            <Button onClick={reset} variant="outline" className="w-full">
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Try again without reload
+            </Button>
+          )}
           {process.env.NODE_ENV === 'development' && error && (
             <details className="mt-4 text-left">
               <summary className="cursor-pointer text-sm text-gray-600">

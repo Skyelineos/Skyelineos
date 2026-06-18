@@ -1,5 +1,6 @@
 import { ReactNode } from 'react';
 import { useAuth } from '@/hooks/use-auth';
+import { PageLoader } from '@/components/common/PageLoader';
 import { useAdminView } from '@/contexts/AdminViewContext';
 import { Redirect } from 'wouter';
 import { getDefaultRouteForRole } from '@/utils/roleRedirects';
@@ -50,14 +51,19 @@ export function RoleGuard({
   const { user, isLoading } = useAuth();
   const { isAdminView } = useAdminView();
 
-  // Show loading state while checking auth
+  // Show loading state while checking auth — was returning null which
+  // produced a literal blank screen until the auth context settled. Now
+  // we render a full-viewport loader so the user always sees that work is
+  // happening.
   if (isLoading) {
-    return null;
+    return <PageLoader title="Verifying access" />;
   }
 
-  // If no user, they should be redirected to login by ProtectedRoute
+  // If no user, ProtectedRoute will redirect to /sign-in. While that redirect
+  // commits we render the same loader instead of null so there is no blank
+  // gap between the role check failing and the redirect resolving.
   if (!user) {
-    return null;
+    return <PageLoader title="Redirecting" />;
   }
 
   // Normalize user role consistently with useRoleAccess
@@ -81,7 +87,7 @@ export function RoleGuard({
       const home = getDefaultRouteForRole(normalizedRole as any);
       return <Redirect to={home && home !== '/sign-in' ? home : '/not-authorized'} />;
     }
-    return fallback || null;
+    return (fallback as ReactNode) ?? <PageLoader title="Checking permissions" />;
   }
 
   return <>{children}</>;
