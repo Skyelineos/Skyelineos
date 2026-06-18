@@ -9,7 +9,7 @@
 // directly; the server endpoint verifies the caller is on the project's client
 // audience and writes the status + clientResponseMessage on their behalf.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
@@ -86,6 +86,28 @@ export default function EstimatesTab({ projectId }: EstimatesTabProps) {
   const [submittingId, setSubmittingId] = useState<string | null>(null);
   const [requestModal, setRequestModal] = useState<{ id: string; title: string } | null>(null);
   const [requestMessage, setRequestMessage] = useState('');
+
+  // Deep-link target from the email CTA — `/client-portal/estimates?estimateId=<id>`.
+  // When the page renders and the matching card mounts, scroll it into view +
+  // briefly highlight so the homeowner sees the estimate they were sent the
+  // email about. Falls through silently when the query param is absent.
+  const deepLinkId = useMemo(() => {
+    try {
+      return new URLSearchParams(window.location.search).get('estimateId') || '';
+    } catch { return ''; }
+  }, []);
+  const [highlightId, setHighlightId] = useState('');
+  const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  useEffect(() => {
+    if (!deepLinkId || estimates.length === 0) return;
+    const el = cardRefs.current[deepLinkId];
+    if (!el) return;
+    try { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch {}
+    setHighlightId(deepLinkId);
+    const t = setTimeout(() => setHighlightId(''), 2400);
+    return () => clearTimeout(t);
+  }, [deepLinkId, estimates.length]);
+
 
   useEffect(() => {
     if (!projectId) { setLoading(false); return; }
@@ -189,7 +211,11 @@ export default function EstimatesTab({ projectId }: EstimatesTabProps) {
             const isAwaiting = statusKey === 'sent';
             const sentLabel = fmtDate(est.sentAt);
             return (
-              <Card key={est.id}>
+              <Card
+                key={est.id}
+                ref={(el) => { cardRefs.current[est.id] = el as HTMLDivElement | null; }}
+                className={highlightId === est.id ? "ring-2 ring-[#C9A96E] ring-offset-2 transition-shadow" : ""}
+              >
                 <CardContent className="p-4 sm:p-5">
                   <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                     <div className="min-w-0 flex-1">

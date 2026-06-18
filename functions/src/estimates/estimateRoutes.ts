@@ -182,7 +182,11 @@ export function registerEstimateRoutes(app: Express, db: admin.firestore.Firesto
       }
 
       const appBaseUrl = normalizeBaseUrl(process.env.APP_BASE_URL);
-      const portalLink = `${appBaseUrl}/client?tab=estimates`;
+      // Deep-link directly to the Estimates tab inside the client portal,
+      // with the estimate id as a query so the tab can scroll/open the specific
+      // card. The mounted SPA route is `/client-portal/:tab*` — `/client` was a
+      // wrong-path link that produced a blank screen in earlier sends.
+      const portalLink = `${appBaseUrl}/client-portal/estimates?estimateId=${encodeURIComponent(id)}`;
 
       const subject = `Estimate from Skyeline Homes — ${projectName}`;
       const noteBlock = messageNote
