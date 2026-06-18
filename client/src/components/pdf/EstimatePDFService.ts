@@ -1,12 +1,9 @@
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
-
-// Extend jsPDF type to include autoTable
-declare module 'jspdf' {
-  interface jsPDF {
-    autoTable: (options: any) => jsPDF;
-  }
-}
+// jspdf-autotable@5.x switched from side-effect prototype attachment to a
+// named export ESM pattern. The legacy `autoTable(doc, ...)` call site is
+// undefined under Vite's ESM bundler, so we import autoTable as a function
+// and call autoTable(doc, options) instead.
+import autoTable from 'jspdf-autotable';
 
 export interface EstimatePDFData {
   id?: number;
@@ -113,7 +110,7 @@ export class EstimatePDFService {
       this.formatCurrency(this.calculateItemTotal(item))
     ]);
 
-    doc.autoTable({
+    autoTable(doc, {
       startY: startY,
       head: [['Trade', 'Vendor', 'Description', 'Duration', 'Cost']],
       body: tableData,
@@ -155,7 +152,7 @@ export class EstimatePDFService {
           this.formatCurrency(this.calculateItemTotal(item))
         ]);
 
-        doc.autoTable({
+        autoTable(doc, {
           startY: currentY,
           head: [['Trade', 'Vendor', 'Description', 'Duration', 'Cost']],
           body: tableData,

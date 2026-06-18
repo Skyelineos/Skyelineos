@@ -113,29 +113,45 @@ export function SendEstimateModal({
       let pdfStoragePath: string | undefined;
       let pdfDownloadUrl: string | undefined;
 
+      // Graceful fallback: if PDF gen or upload fails for any reason
+      // (broken pdf lib, malformed data, storage rule mismatch), still let
+      // the Send proceed without the attachment. Tyler was operationally
+      // blocked when 'Failed to generate PDF blob' became a hard wall —
+      // shipping the email text body is more valuable than blocking on
+      // the PDF.
+      let pdfFallbackNote: string | null = null;
       if (attachPdf) {
         if (!estimate.projectId) {
+          // This one stays hard — without a projectId we have no Storage path,
+          // and the rules-gated upload would fail anyway. Surface clearly.
           throw new Error('This estimate has no project — PDF attachment needs a project to store it under.');
         }
-        setStage('pdf');
-        const pdfData: EstimatePDFData = {
-          projectName: estimate.projectName || estimate.title || 'Project',
-          clientName: estimate.clientName || '',
-          title: estimate.title,
-          totalCost: estimate.totalAmount,
-          items: (estimate.lineItems || []).map(li => ({
-            trade: li.trade || '',
-            vendor: li.subName,
-            description: li.description || '',
-            cost: typeof li.total === 'number' ? li.total : Number(li.total || 0),
-          })),
-        };
-        const blob = await EstimatePDFService.getPDFBlob(pdfData);
+        try {
+          setStage('pdf');
+          const pdfData: EstimatePDFData = {
+            projectName: estimate.projectName || estimate.title || 'Project',
+            clientName: estimate.clientName || '',
+            title: estimate.title,
+            totalCost: estimate.totalAmount,
+            items: (estimate.lineItems || []).map(li => ({
+              trade: li.trade || '',
+              vendor: li.subName,
+              description: li.description || '',
+              cost: typeof li.total === 'number' ? li.total : Number(li.total || 0),
+            })),
+          };
+          const blob = await EstimatePDFService.getPDFBlob(pdfData);
 
-        setStage('upload');
-        const uploaded = await uploadEstimatePdf(estimate.projectId, estimate.id, blob);
-        pdfStoragePath = uploaded.storagePath;
-        pdfDownloadUrl = uploaded.downloadUrl;
+          setStage('upload');
+          const uploaded = await uploadEstimatePdf(estimate.projectId, estimate.id, blob);
+          pdfStoragePath = uploaded.storagePath;
+          pdfDownloadUrl = uploaded.downloadUrl;
+        } catch (pdfErr: any) {
+          // Don't block the send. Log + remember so the success toast tells
+          // Tyler what happened.
+          console.warn('[SendEstimateModal] PDF attach skipped:', pdfErr);
+          pdfFallbackNote = pdfErr?.message || 'PDF could not be generated';
+        }
       }
 
       setStage('send');
@@ -162,10 +178,16 @@ export function SendEstimateModal({
           variant: 'destructive',
         });
       } else {
+        // Surface either a server-side attachment skip OR the client-side PDF
+        // fallback (pdfFallbackNote). Server side note takes priority since
+        // it indicates an actual upload failure on the receiving end.
+        const noteParts: string[] = [];
+        if (json.attachmentSkippedReason) noteParts.push(`Server: ${json.attachmentSkippedReason}`);
+        if (pdfFallbackNote) noteParts.push(`PDF skipped: ${pdfFallbackNote}`);
         toast({
           title: `Estimate sent to ${email}`,
-          description: json.attachmentSkippedReason
-            ? `Note: ${json.attachmentSkippedReason}`
+          description: noteParts.length
+            ? noteParts.join(' • ')
             : 'The client will receive an email and an in-app notification.',
         });
       }
