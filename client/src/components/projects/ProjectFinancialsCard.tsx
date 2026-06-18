@@ -21,6 +21,14 @@ interface Props {
 interface EstimateRow {
   id: string;
   title?: string;
+  // EstimateBuilder.handleSave writes `totalAmount`; the legacy
+  // SimplifiedEstimateForm / EstimateManagement code writes `totalCost`
+  // (+ `estimatedAmount`). Some imported / hand-rolled docs may still
+  // carry a bare `total`. We read all four so a dashboard never shows
+  // $0 just because the writer used a different field name.
+  totalAmount?: number;
+  totalCost?: number;
+  estimatedAmount?: number;
   total?: number;
   status?: string;
   pipelineStage?: string;
@@ -84,7 +92,16 @@ export function ProjectFinancialsCard({ projectId, projectName, spent = 0 }: Pro
     return () => unsub();
   }, [projectId]);
 
-  const estimateTotal = Number(estimate?.total || 0);
+  // Read every field name we've seen estimates persist their total under.
+  // Number(...) coerces string-typed legacy values; `|| 0` guards NaN.
+  const estimateTotal =
+    Number(
+      estimate?.totalAmount ??
+      estimate?.totalCost ??
+      estimate?.estimatedAmount ??
+      estimate?.total ??
+      0,
+    ) || 0;
   // Approved change orders contribute to revenue. Pending/rejected are tracked separately.
   const approvedCOAmount = changeOrders
     .filter(c => String(c.status || '').toLowerCase() === 'approved')
