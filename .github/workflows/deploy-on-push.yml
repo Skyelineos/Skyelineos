@@ -137,4 +137,39 @@ jobs:
       # WIF-authenticated deploy. firebase-tools reads GOOGLE_APPLICATION_CREDENTIALS
       # set by the auth step. No --token flag.
       - name: Deploy
-        run: firebase deploy --only hosting,functions,firestore:rules,firestore:indexes,storage --project skyelineos --force --non-interactive
+        id: deploy
+        run: firebase deploy --only hosting,functions,firestore:rules,firestore:indexes,storage --project skyelineos --force --non-interactive 2>&1 | tee deploy.log
+
+      # Tyler asked for an email on every push that triggers a deploy so he
+      # can scan his inbox at a glance. Both steps below skip when the workflow
+      # is cancelled (the concurrency block kills stale runs - not worth an
+      # email). All complex logic lives in scripts/notify-deploy.sh so the YAML
+      # stays simple. Script falls back to a warning and exit 0 if any secret
+      # is missing, so notification failures never break the deploy.
+      #
+      # Operator setup: add DEPLOY_NOTIFY_TO_EMAIL to repo secrets via
+      # Settings > Secrets and variables > Actions. Other two SendGrid secrets
+      # are already configured for bid packages and estimate sends.
+      - name: Notify Tyler on success
+        if: success()
+        env:
+          SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
+          SENDGRID_FROM_EMAIL: ${{ secrets.SENDGRID_FROM_EMAIL }}
+          TO_EMAIL: ${{ secrets.DEPLOY_NOTIFY_TO_EMAIL }}
+          GH_SHA: ${{ github.sha }}
+          GH_REPO: ${{ github.repository }}
+          GH_SERVER_URL: ${{ github.server_url }}
+          GH_RUN_ID: ${{ github.run_id }}
+        run: bash scripts/notify-deploy.sh ok
+
+      - name: Notify Tyler on failure
+        if: failure()
+        env:
+          SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
+          SENDGRID_FROM_EMAIL: ${{ secrets.SENDGRID_FROM_EMAIL }}
+          TO_EMAIL: ${{ secrets.DEPLOY_NOTIFY_TO_EMAIL }}
+          GH_SHA: ${{ github.sha }}
+          GH_REPO: ${{ github.repository }}
+          GH_SERVER_URL: ${{ github.server_url }}
+          GH_RUN_ID: ${{ github.run_id }}
+        run: bash scripts/notify-deploy.sh fail
