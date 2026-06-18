@@ -150,6 +150,12 @@ export const TRIGGER_KINDS: Record<string, TriggerKindSpec> = {
     category: 'Other',
     label: 'New photo on your project',
   },
+  estimate_sent: {
+    audience: 'client_of_project',
+    channels: { in_app: 'default', email: 'default', sms: 'opt_in', push: 'default' },
+    category: 'Money',
+    label: 'Estimate ready for your review',
+  },
   walkthrough_assigned: {
     audience: 'single_uid',
     channels: { in_app: 'default', email: 'opt_in', sms: 'default', push: 'default' },

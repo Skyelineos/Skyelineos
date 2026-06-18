@@ -25,6 +25,7 @@ import { EstimateCostingsTab } from '@/components/estimates/EstimateCostingsTab'
 import { EstimateScheduleTab } from '@/components/estimates/EstimateScheduleTab';
 import { LineDescriptionButton } from '@/components/estimates/LineDescriptionButton';
 import { SubPickerButton } from '@/components/estimates/SubPickerButton';
+import { SendEstimateModal, type SendEstimateModalEstimate } from '@/components/estimates/SendEstimateModal';
 import {
   Plus, Search, MoreVertical, ChevronDown, ChevronRight,
   Trash2, Edit2, FileText, DollarSign, User, Send,
@@ -922,6 +923,7 @@ function EstimateModal({
   }, [projectId]);
   const [lineStatusFilter, setLineStatusFilter] = useState<'all' | 'inc' | 'allow' | 'not-incl'>('all');
   const [saving, setSaving]         = useState(false);
+  const [sendModalOpen, setSendModalOpen] = useState(false);
   const [expandedTrades, setExpandedTrades] = useState<Set<string>>(new Set(FALLBACK_TRADES));
   // Live trade list from Firestore (same source as Contacts → Trades)
   const [firestoreTrades, setFirestoreTrades] = useState<string[]>([]);
@@ -1502,6 +1504,20 @@ function EstimateModal({
 
         <DialogFooter className="px-6 py-4 border-t gap-2 sticky bottom-0 bg-white">
           <Button variant="outline" onClick={onClose}>Cancel</Button>
+          {/* Send to Client — only on existing, un-sent estimates. Hidden for
+              brand-new drafts (no id) and for ones the GC has already sent
+              (status === 'sent'). Clicking opens SendEstimateModal which
+              handles PDF gen, Storage upload, and the server send. */}
+          {editing && editing.id && status !== 'sent' && (
+            <Button
+              type="button"
+              onClick={() => setSendModalOpen(true)}
+              disabled={saving}
+              className="bg-green-600 hover:bg-green-700 text-white"
+            >
+              <Send className="w-4 h-4 mr-1.5" /> Send to Client
+            </Button>
+          )}
           <Button
             onClick={handleSave}
             disabled={saving || !title.trim()}
@@ -1672,6 +1688,42 @@ function EstimateModal({
       projectName={title || prefillProject?.name}
       mode="append-to-current"
       onLineItemsExtracted={handleAppendImported}
+    />
+
+    {/* Send-to-client modal. Mounted alongside the edit dialog so it overlays
+        cleanly. Reads from the current editor state so unsaved field edits to
+        title/total are reflected in the email body + generated PDF. The
+        modal handles PDF generation, Storage upload, and the server call;
+        on success it closes and triggers the parent list snapshot to refresh
+        (status flips to 'sent' on the doc, which hides this button next time). */}
+    <SendEstimateModal
+      open={sendModalOpen}
+      onClose={() => setSendModalOpen(false)}
+      estimate={
+        editing && editing.id
+          ? ({
+              id: editing.id,
+              title: title.trim() || editing.title,
+              projectId: projectId || editing.projectId,
+              projectName: editing.projectName,
+              clientName: editing.clientName || clients.find(c => c.id === clientId)?.name,
+              clientEmail: clients.find(c => c.id === clientId)?.email as string | undefined,
+              totalAmount: totals.total,
+              status,
+              lineItems: items.map(li => ({
+                trade: li.trade,
+                description: li.description,
+                subName: li.subName,
+                qty: li.qty,
+                unit: li.unit,
+                unitCost: li.unitCost,
+                total: li.total,
+              })),
+              notes,
+              validUntil,
+            } satisfies SendEstimateModalEstimate)
+          : null
+      }
     />
     </>
   );

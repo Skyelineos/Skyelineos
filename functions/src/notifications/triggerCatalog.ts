@@ -344,6 +344,18 @@ export const TRIGGER_CATALOG: TriggerDef[] = [
       LINK_VAR,
     ],
   },
+  {
+    key: 'estimate_sent',
+    label: 'Estimate sent to client',
+    description: 'GC/PM sent an estimate to the homeowner — open in the portal to review.',
+    audiences: ['client'],
+    variables: [
+      { name: 'projectName', description: 'Project name' },
+      { name: 'title', description: 'Estimate title' },
+      { name: 'amount', description: 'Estimate total' },
+      LINK_VAR,
+    ],
+  },
 ];
 
 export function getTrigger(key: string): TriggerDef | undefined {
@@ -613,6 +625,18 @@ export function defaultFlow(triggerKey: string, audience: Audience): Flow {
           emailSubject: 'Sub invoice — {subName} on {projectName}',
           emailBody: '{subName} submitted an invoice for ${amount} on {projectName}. Open Skyeline OS to review.',
           smsBody: 'Skyeline OS: {subName} submitted an invoice (${amount}) on {projectName}.',
+        })],
+      };
+    case 'estimate_sent':
+      return {
+        enabled: true,
+        steps: [immediateStep({
+          channels: { inApp: true, email: true, sms: false, push: true },
+          inAppTitle: 'Estimate ready: {title}',
+          inAppBody: '{title} ({amount}) for {projectName} — open your portal to review.',
+          emailSubject: 'Your estimate is ready — {projectName}',
+          emailBody: 'Your estimate "{title}" ({amount}) for {projectName} is ready. Open your Skyeline portal to review, approve, or request changes.',
+          smsBody: 'Skyeline Homes: estimate ready for {projectName} ({amount}). Open your portal.',
         })],
       };
     default:
