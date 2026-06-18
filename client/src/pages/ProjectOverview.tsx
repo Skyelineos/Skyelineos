@@ -37,6 +37,12 @@ import { SoftBudgetBadge } from '@/components/projects/SoftBudgetBadge';
 import { ContractProfitCard } from '@/components/projects/ContractProfitCard';
 import { SelectionsProgressCard } from '@/components/projects/SelectionsProgressCard';
 import { JobsiteLocationCard } from '@/components/common/JobsiteLocationCard';
+import { ProjectOverviewKPIStrip } from '@/components/projects/ProjectOverviewKPIStrip';
+import { ProjectTodayInbox } from '@/components/projects/ProjectTodayInbox';
+import { ProjectActivityFeed } from '@/components/projects/ProjectActivityFeed';
+import { ProjectPeopleStrip } from '@/components/projects/ProjectPeopleStrip';
+import { ProjectBudgetHeatMap } from '@/components/projects/ProjectBudgetHeatMap';
+import { ProjectWeatherCard } from '@/components/projects/ProjectWeatherCard';
 import { ProjectProgressView } from '@/components/projects/ProjectProgressView';
 import { ProjectJobsiteCard } from '@/components/projects/ProjectJobsiteCard';
 import { useRoleAccess } from '@/hooks/useRoleAccess';
@@ -275,10 +281,27 @@ export default function ProjectOverview() {
           </CardContent>
         </Card>
 
-        {/* Job site map + address + Directions. Mounts here so the pin is
-            visible on every project's overview page — the buildLocation /
-            legacy address fallback is handled inside JobsiteLocationCard. */}
-        <JobsiteLocationCard project={project} defaultMapOpen />
+        {/* Hero KPI strip — six tiles always visible, each clickable. */}
+        <ProjectOverviewKPIStrip
+          projectId={projectId!}
+          project={project}
+          showFinancials={showFinancials}
+        />
+
+        {/* Job site map (with the pin) + weather forecast side by side. */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="lg:col-span-2">
+            <JobsiteLocationCard project={project} defaultMapOpen />
+          </div>
+          <ProjectWeatherCard project={project} />
+        </div>
+
+        {/* Today's inbox — what needs your attention on THIS project. */}
+        <ProjectTodayInbox projectId={projectId!} />
+
+        {/* Phase progress strip — reuses the same source-of-truth as the
+            client portal so GC + client see the same numbers. */}
+        <ProjectProgressView projectId={projectId!} audience="gc" />
 
         {/* Profit vs. contracts — revenue from client contracts, costs from
             sub + designer contracts, cash on hand from paid milestones.
@@ -299,6 +322,17 @@ export default function ProjectOverview() {
             homeowner's client-portal bar, so a glance tells the GC
             how close the client is to "everything picked." */}
         <SelectionsProgressCard projectId={projectId!} />
+
+        {/* Budget heat map by category — over/under per trade. */}
+        {showFinancials && (
+          <ProjectBudgetHeatMap projectId={projectId!} projectName={transformedProject.name} />
+        )}
+
+        {/* People involved — client / PM / designer / awarded subs. */}
+        <ProjectPeopleStrip projectId={projectId!} project={project} />
+
+        {/* Recent activity — last 14 days of notifications for this project. */}
+        <ProjectActivityFeed projectId={projectId!} />
 
         {/* Trades on this project — derived from task data. */}
         <Card>
@@ -334,11 +368,6 @@ export default function ProjectOverview() {
             )}
           </CardContent>
         </Card>
-
-        {/* Schedule Progress View — phase-grouped, honest-progress surface.
-            Sits ABOVE the Gantt link / project progress card; doesn't replace
-            either. See docs/Skyelineos_CTO_Audit_2026-06-16.md §7. */}
-        <ProjectProgressView projectId={projectId!} audience="gc" />
 
         {/* Communication & Progress Section */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
