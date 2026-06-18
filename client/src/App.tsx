@@ -17,6 +17,8 @@ import { RoleBasedRedirect } from '@/components/auth/RoleBasedRedirect';
 import { NavigationHandler } from '@/components/navigation/NavigationHandler';
 import { MinimalSpinner } from '@/components/layout/MinimalSpinner';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
+import { AppErrorBoundary } from '@/components/common/AppErrorBoundary';
+import { PageLoader } from '@/components/common/PageLoader';
 import { useState, Suspense, useEffect, lazy } from 'react';
 import { usePerformanceOptimizations } from '@/hooks/usePerformanceOptimizations';
 
@@ -1157,7 +1159,7 @@ function AppContent() {
 
   if (loading) {
     if (!stuck) {
-      return <MinimalSpinner title="Loading..." />;
+      return <PageLoader title="Loading Skyeline" />;
     }
     return (
       <div className="flex items-center justify-center min-h-screen p-6">
@@ -1215,19 +1217,26 @@ function AppContent() {
 
 export default function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider>
-        <UserPreferencesProvider>
-          <BrandingProvider>
-            <AdminViewProvider>
-              <ConfirmProvider>
-                <AppContent />
-                <Toaster />
-              </ConfirmProvider>
-            </AdminViewProvider>
-          </BrandingProvider>
-        </UserPreferencesProvider>
-      </ThemeProvider>
-    </QueryClientProvider>
+    // Top-level error boundary. Catches lazy-chunk load failures (stale
+    // bundle hashes after a deploy), runtime exceptions inside any route,
+    // and presents a recoverable UI with Reload + Go home buttons instead
+    // of a blank screen. Per-route ErrorBoundaries continue to live below
+    // for component-level isolation.
+    <AppErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <UserPreferencesProvider>
+            <BrandingProvider>
+              <AdminViewProvider>
+                <ConfirmProvider>
+                  <AppContent />
+                  <Toaster />
+                </ConfirmProvider>
+              </AdminViewProvider>
+            </BrandingProvider>
+          </UserPreferencesProvider>
+        </ThemeProvider>
+      </QueryClientProvider>
+    </AppErrorBoundary>
   );
 }
