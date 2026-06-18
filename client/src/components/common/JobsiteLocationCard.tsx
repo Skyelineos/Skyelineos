@@ -23,11 +23,15 @@ interface Props {
   /** Optional status/phase chip(s) shown under the address. */
   badge?: React.ReactNode;
   className?: string;
+  /** When true, the map is rendered as soon as the card mounts instead of
+   *  waiting for a "Show map" tap. Use on the Project Overview where the
+   *  pin should be visible at a glance. */
+  defaultMapOpen?: boolean;
 }
 
-export function JobsiteLocationCard({ project, title, badge, className }: Props) {
+export function JobsiteLocationCard({ project, title, badge, className, defaultMapOpen = false }: Props) {
   const loc = locationFromProject(project);
-  const [showMap, setShowMap] = useState(false);
+  const [showMap, setShowMap] = useState(defaultMapOpen);
 
   const address = formatAddress(loc);
   const pinned = hasPin(loc);

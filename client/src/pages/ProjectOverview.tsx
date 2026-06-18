@@ -36,6 +36,7 @@ import { ProjectStageTracker, deriveStageFromProject } from '@/components/projec
 import { SoftBudgetBadge } from '@/components/projects/SoftBudgetBadge';
 import { ContractProfitCard } from '@/components/projects/ContractProfitCard';
 import { SelectionsProgressCard } from '@/components/projects/SelectionsProgressCard';
+import { JobsiteLocationCard } from '@/components/common/JobsiteLocationCard';
 import { ProjectProgressView } from '@/components/projects/ProjectProgressView';
 import { ProjectJobsiteCard } from '@/components/projects/ProjectJobsiteCard';
 import { useRoleAccess } from '@/hooks/useRoleAccess';
@@ -273,6 +274,11 @@ export default function ProjectOverview() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Job site map + address + Directions. Mounts here so the pin is
+            visible on every project's overview page — the buildLocation /
+            legacy address fallback is handled inside JobsiteLocationCard. */}
+        <JobsiteLocationCard project={project} defaultMapOpen />
 
         {/* Profit vs. contracts — revenue from client contracts, costs from
             sub + designer contracts, cash on hand from paid milestones.
