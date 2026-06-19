@@ -24,10 +24,12 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'wouter';
 import { collection, doc, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { CheckCircle2, Clock, Circle, ChevronDown, ChevronUp, Calendar, AlertCircle } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { CheckCircle2, Clock, Circle, ChevronDown, ChevronUp, Calendar, AlertCircle, CalendarPlus, ArrowRight } from 'lucide-react';
 import { normalizeTaskStatus, type TaskStatus } from '@/lib/taskStatus';
 
 // Canonical build-phase ordering. Tasks store their phase via the `phase`
@@ -120,9 +122,14 @@ function fmtDate(v: any): string {
 export interface ProjectProgressViewProps {
   projectId: string;
   audience: 'gc' | 'client';
+  /** Optional callback to open the project's Edit Details dialog (focused
+   *  on the start date). When provided, the empty-state "Set Project
+   *  Start Date" CTA fires this instead of routing away to /projects/setup. */
+  onSetStartDate?: () => void;
 }
 
-export function ProjectProgressView({ projectId, audience }: ProjectProgressViewProps) {
+export function ProjectProgressView({ projectId, audience, onSetStartDate }: ProjectProgressViewProps) {
+  const [, setLocation] = useLocation();
   const [tasks, setTasks] = useState<TaskDoc[]>([]);
   const [project, setProject] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -206,14 +213,54 @@ export function ProjectProgressView({ projectId, audience }: ProjectProgressView
         </CardHeader>
         <CardContent>
           {!startDate ? (
-            <div className="flex items-start gap-3 rounded-lg bg-amber-50 border border-amber-200 p-4">
-              <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-amber-800">
-                Set the project start date in Project Setup to see the schedule view.
-              </p>
+            <div className="rounded-lg bg-amber-50 border border-amber-200 p-4 space-y-3">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-amber-800">
+                  Set the project start date so we can show the schedule view here.
+                </p>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+                <Button
+                  size="sm"
+                  className="gap-1.5 text-white w-full sm:w-auto"
+                  style={{ backgroundColor: '#C9A96E' }}
+                  onClick={() => {
+                    if (onSetStartDate) onSetStartDate();
+                    else setLocation(`/projects/setup/${projectId}`);
+                  }}
+                >
+                  <CalendarPlus className="w-3.5 h-3.5" />
+                  Set Project Start Date
+                  <ArrowRight className="w-3 h-3" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1.5 text-amber-800 hover:bg-amber-100 w-full sm:w-auto"
+                  onClick={() => setLocation(`/projects/${projectId}/schedule`)}
+                >
+                  Open Schedule
+                  <ArrowRight className="w-3 h-3" />
+                </Button>
+              </div>
             </div>
           ) : (
-            <p className="text-sm text-gray-500">No tasks scheduled yet. Add tasks to see phase progress here.</p>
+            <div className="rounded-lg bg-gray-50 border border-gray-200 p-4 space-y-3">
+              <p className="text-sm text-gray-600">
+                No tasks scheduled yet. Add tasks to see phase progress here.
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5"
+                onClick={() => setLocation(`/projects/${projectId}/schedule`)}
+              >
+                <Calendar className="w-3.5 h-3.5" />
+                Open Schedule
+                <ArrowRight className="w-3 h-3" />
+              </Button>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -233,9 +280,19 @@ export function ProjectProgressView({ projectId, audience }: ProjectProgressView
             <Calendar className="h-4 w-4 text-[#C9A96E]" />
             Progress at a glance
           </div>
-          <span className="text-sm font-normal text-gray-500">
-            {totalDone} of {totalTasks} signed off ({totalPct}%)
-          </span>
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-sm font-normal text-gray-500">
+              {totalDone} of {totalTasks} signed off ({totalPct}%)
+            </span>
+            <button
+              type="button"
+              onClick={() => setLocation(`/projects/${projectId}/schedule`)}
+              className="text-xs text-[#8a6a3a] hover:underline inline-flex items-center gap-0.5 font-medium"
+            >
+              Open Full Schedule
+              <ArrowRight className="w-3 h-3" />
+            </button>
+          </div>
         </CardTitle>
         {(startDate || targetDate) && (
           <p className="text-xs text-gray-500 mt-1">

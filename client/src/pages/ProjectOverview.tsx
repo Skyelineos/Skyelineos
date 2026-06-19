@@ -293,7 +293,11 @@ export default function ProjectOverview() {
 
         {/* Phase progress strip — reuses the same source-of-truth as the
             client portal so GC + client see the same numbers. */}
-        <ProjectProgressView projectId={projectId!} audience="gc" />
+        <ProjectProgressView
+          projectId={projectId!}
+          audience="gc"
+          onSetStartDate={() => setEditDialogOpen(true)}
+        />
 
         {/* Profit vs. contracts — revenue from client contracts, costs from
             sub + designer contracts, cash on hand from paid milestones.
