@@ -288,14 +288,6 @@ export default function ProjectOverview() {
           showFinancials={showFinancials}
         />
 
-        {/* Job site map (with the pin) + weather forecast side by side. */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="lg:col-span-2">
-            <JobsiteLocationCard project={project} defaultMapOpen />
-          </div>
-          <ProjectWeatherCard project={project} />
-        </div>
-
         {/* Today's inbox — what needs your attention on THIS project. */}
         <ProjectTodayInbox projectId={projectId!} />
 
@@ -317,6 +309,16 @@ export default function ProjectOverview() {
             spent={transformedProject.spent || 0}
           />
         )}
+
+        {/* Job site map (with the pin) + weather forecast side by side.
+            Sits BELOW the financial cards per the source-of-truth that
+            the dollar numbers matter more than the location at a glance. */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="lg:col-span-2">
+            <JobsiteLocationCard project={project} defaultMapOpen />
+          </div>
+          <ProjectWeatherCard project={project} />
+        </div>
 
         {/* Live selections-progress bar — same scale + tones as the
             homeowner's client-portal bar, so a glance tells the GC

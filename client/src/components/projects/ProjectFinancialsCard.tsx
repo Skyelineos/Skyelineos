@@ -31,11 +31,18 @@ interface EstimateRow {
   estimatedAmount?: number;
   total?: number;
   // Cost breakdown — EstimateBuilder persists these alongside totalAmount.
-  // Required to compute projected profit honestly (we cannot derive profit
-  // from contract amount alone).
+  // Required to compute projected gross profit honestly (we cannot derive
+  // it from contract amount alone).
   subtotal?: number;          // sum of billable line items before OH + profit
   overhead?: number;          // percent
   profit?: number;            // percent — GC's target margin
+  // Denormalized rollups from EstimateBuilder. When persisted we use these
+  // directly; when missing (legacy/imported estimates) we recompute from
+  // lineItems below.
+  subCosts?: number;             // sum of qty × subCost across billable lines
+  projectedGrossProfit?: number; // = totalAmount − subCosts (what Skyeline keeps)
+  grossMarginPct?: number;       // = projectedGrossProfit / totalAmount × 100
+  lineItems?: Array<{ qty?: number; subCost?: number; lineStatus?: string }>;
   status?: string;            // 'draft' | 'sent' | 'accepted' | 'rejected' | 'revised' | …
   pipelineStage?: string;
   markup?: number;
@@ -130,20 +137,42 @@ export function ProjectFinancialsCard({ projectId, projectName, spent = 0 }: Pro
   const contractSigned = !!estimate && SIGNED_STATUSES.has(estimateStatus);
   const contractAmount = contractSigned ? estimateTotal + approvedCOAmount : 0;
 
-  // Projected profit is the profit BAKED INTO the estimate — the GC's
-  // target margin on the work as priced. Independent of spend. From
-  // EstimateBuilder.calcTotals:
-  //   profitAmt = (subtotal + subtotal*overhead/100) * (profit/100)
-  // Older / imported estimates that didn't persist subtotal + overhead +
-  // profit fall back to a conservative 0 rather than misreporting.
-  const estSubtotal = Number(estimate?.subtotal ?? 0) || 0;
-  const estOverheadPct = Number(estimate?.overhead ?? 0) || 0;
-  const estProfitPct = Number(estimate?.profit ?? 0) || 0;
-  const projectedProfit =
-    estSubtotal > 0 && estProfitPct > 0
-      ? (estSubtotal + estSubtotal * (estOverheadPct / 100)) * (estProfitPct / 100)
-      : 0;
-  const profitPct = estProfitPct;
+  // Projected Gross Profit is what Skyeline keeps on the job — the
+  // EstimateBuilder Costings-tab tile of the same name. From calcTotals:
+  //   grossProfit = totalAmount − internalSubtotal (sum of sub costs)
+  // Captures line markup + overhead % + profit % combined — the full GC
+  // take before non-sub costs and before invoicing settles real numbers.
+  //
+  // Modern estimates persist subCosts + projectedGrossProfit directly.
+  // For legacy / imported estimates (no rollups stored), we recompute the
+  // sub-costs sum from lineItems[].qty × lineItems[].subCost so the
+  // dashboard still shows an honest number — never $0 just because the
+  // writer didn't persist the rollup.
+  const computedSubCostsFromLines = Array.isArray(estimate?.lineItems)
+    ? estimate!.lineItems!.reduce((sum: number, li) => {
+        // Exclude lines explicitly marked 'ex' (excluded from total) /
+        // 'note' (informational) — mirrors EstimateBuilder.calcTotals.
+        const ls = String((li as any)?.lineStatus ?? 'inc');
+        if (ls === 'ex' || ls === 'note') return sum;
+        const qty = Number((li as any)?.qty ?? 0) || 0;
+        const sub = Number((li as any)?.subCost ?? 0) || 0;
+        return sum + qty * sub;
+      }, 0)
+    : 0;
+  const subCostsTotal =
+    Number(estimate?.subCosts ?? 0) > 0
+      ? Number(estimate!.subCosts)
+      : computedSubCostsFromLines;
+  const projectedGrossProfit =
+    Number(estimate?.projectedGrossProfit ?? 0) > 0
+      ? Number(estimate!.projectedGrossProfit)
+      : Math.max(0, estimateTotal - subCostsTotal);
+  const grossMarginPct =
+    estimateTotal > 0 ? (projectedGrossProfit / estimateTotal) * 100 : 0;
+  // Legacy alias so the existing JSX (and any downstream code) keeps
+  // working without renames.
+  const projectedProfit = projectedGrossProfit;
+  const profitPct = grossMarginPct;
   // Actual profit lives on a future card — comes from invoicing/AP/AR
   // once the build is moving. We surface a placeholder ribbon below so
   // Tyler can see where it'll land.
@@ -222,14 +251,14 @@ export function ProjectFinancialsCard({ projectId, projectName, spent = 0 }: Pro
                 dimmed={!contractSigned}
               />
               <Stat
-                label="Projected Profit"
-                value={fmt(projectedProfit)}
-                sub={projectedProfit > 0
-                  ? `${profitPct.toFixed(1)}% of contract — from estimate`
-                  : (estSubtotal === 0
-                      ? 'Add line items to forecast profit'
-                      : 'No profit % set on estimate')}
-                tone={projectedProfit > 0 ? 'good' : undefined}
+                label="Projected Gross Profit"
+                value={fmt(projectedGrossProfit)}
+                sub={projectedGrossProfit > 0
+                  ? `${grossMarginPct.toFixed(1)}% margin — from estimate`
+                  : estimateTotal > 0
+                      ? 'Set sub costs on line items to forecast profit'
+                      : 'Add line items to forecast profit'}
+                tone={projectedGrossProfit > 0 ? 'good' : undefined}
               />
             </div>
 

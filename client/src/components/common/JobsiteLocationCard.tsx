@@ -7,12 +7,13 @@
 // list of many assigned projects doesn't spin up a map per row. Data access is
 // already granted by firestore.rules to assigned users; this is purely the UI.
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { MapPin, Navigation, ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { BuildLocation } from '@/components/common/BuildLocation';
 import {
   locationFromProject, formatAddress, directionsUrl, hasPin,
+  type BuildLocation as BLType,
 } from '@/lib/buildLocation';
 
 interface Props {
@@ -30,10 +31,63 @@ interface Props {
 }
 
 export function JobsiteLocationCard({ project, title, badge, className, defaultMapOpen = false }: Props) {
-  const loc = locationFromProject(project);
+  const baseLoc = locationFromProject(project);
   const [showMap, setShowMap] = useState(defaultMapOpen);
 
-  const address = formatAddress(loc);
+  const address = formatAddress(baseLoc);
+  const basePinned = hasPin(baseLoc);
+
+  // One-shot geocode fallback. When the project has an address but no
+  // lat/lng (typed by hand, not picked from Places autocomplete), the map
+  // would render at Skyeline's default center with NO marker — looking
+  // like the pin "doesn't show". Fire a Nominatim geocode (free, no API
+  // key, OpenStreetMap-backed) and augment the location with the result
+  // so BuildLocation's marker-placement effect fires.
+  const [geocoded, setGeocoded] = useState<{ lat: number; lng: number } | null>(null);
+  const [geocodeError, setGeocodeError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (basePinned || !address || geocoded) return;
+    let cancelled = false;
+    const url =
+      'https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=' +
+      encodeURIComponent(address);
+    fetch(url, {
+      headers: { 'Accept': 'application/json' },
+    })
+      .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
+      .then((rows: any[]) => {
+        if (cancelled) return;
+        const top = Array.isArray(rows) ? rows[0] : null;
+        if (top && typeof top.lat === 'string' && typeof top.lon === 'string') {
+          const lat = parseFloat(top.lat);
+          const lng = parseFloat(top.lon);
+          if (Number.isFinite(lat) && Number.isFinite(lng)) {
+            setGeocoded({ lat, lng });
+            return;
+          }
+        }
+        setGeocodeError('No match found for that address.');
+      })
+      .catch(err => {
+        if (cancelled) return;
+        console.warn('[JobsiteLocationCard] geocode failed', err);
+        setGeocodeError('Geocoding service unavailable. Edit the project to drop a pin manually.');
+      });
+    return () => { cancelled = true; };
+  }, [basePinned, address, geocoded]);
+
+  // The location passed into the map. If we have a live geocode result,
+  // overlay it on the base location so BuildLocation's pin-placement
+  // effect fires. The base loc is left untouched in storage — we don't
+  // write the geocoded coords back to Firestore here; that's reserved for
+  // the GC's explicit edit-mode confirmation in BuildLocation.
+  const loc: BLType = useMemo(() => {
+    if (basePinned) return baseLoc;
+    if (geocoded) return { ...baseLoc, latitude: geocoded.lat, longitude: geocoded.lng };
+    return baseLoc;
+  }, [baseLoc, basePinned, geocoded]);
+
   const pinned = hasPin(loc);
   const hasAnything = !!address || pinned;
 
@@ -71,6 +125,18 @@ export function JobsiteLocationCard({ project, title, badge, className, defaultM
           {showMap && (
             <div className="mt-3">
               <BuildLocation mode="view" value={loc} />
+              {!pinned && address && !geocoded && (
+                <p className="mt-2 text-[11px] text-amber-700">
+                  {geocodeError
+                    ? geocodeError
+                    : 'Locating the address on the map…'}
+                </p>
+              )}
+              {!pinned && !address && (
+                <p className="mt-2 text-[11px] text-gray-500">
+                  No address on the project yet — edit project details to set one.
+                </p>
+              )}
             </div>
           )}
         </>

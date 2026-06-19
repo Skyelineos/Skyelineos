@@ -121,6 +121,11 @@ interface Estimate {
   overhead: number;      // percent
   profit: number;        // percent
   totalAmount: number;
+  // Denormalized rollups so the project dashboard does not need to re-sum
+  // every line item on render. Derived in calcTotals on save.
+  subCosts?: number;             // = sum of qty × subCost across billable lines
+  projectedGrossProfit?: number; // = totalAmount − subCosts
+  grossMarginPct?: number;       // = projectedGrossProfit / totalAmount × 100
   markup?: number;       // percent — for JACK-style costings tab
   tax?: number;          // percent — for JACK-style costings tab
   notes?: string;
@@ -1080,6 +1085,12 @@ function EstimateModal({
         markup: markupPct,
         tax: taxPct,
         totalAmount: totals.total,
+        // Denormalized rollups — same numbers shown in the Costings tab
+        // tiles. Project dashboard reads subCosts to compute Projected
+        // Gross Profit without re-summing line items.
+        subCosts: totals.internalSubtotal,
+        projectedGrossProfit: totals.grossProfit,
+        grossMarginPct: totals.grossMarginPct,
         notes: notes.trim() || undefined,
         validUntil: validUntil || undefined,
       });
@@ -1288,7 +1299,7 @@ function EstimateModal({
             <div className="rounded-lg border border-green-200 bg-green-50 p-3">
               <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-green-800 font-semibold">
                 <DollarSign className="w-3 h-3" />
-                Gross Profit
+                Projected Gross Profit
               </div>
               <div className="text-lg font-bold text-gray-900 mt-0.5">
                 {fmt(totals.grossProfit)}
