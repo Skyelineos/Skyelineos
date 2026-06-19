@@ -830,6 +830,22 @@ function Router() {
           </RoleGuard>
         </ProtectedRoute>
       </Route>
+      {/* Explicit single-segment tab route — guaranteed to match the emailed
+          CTA shape '/client-portal/estimates' on wouter 3.x. The portal's
+          internal currentTab derivation reads urlParts[2] regardless of how
+          the route matched, so '/client-portal/<anything>' renders the
+          correct tab inside SkyelineClientPortal. */}
+      <Route path="/client-portal/:tab">
+        <ProtectedRoute>
+          <RoleGuard allowedRoles={['admin', 'client']} showNotAuthorized>
+            <Suspense
+              fallback={<MinimalSpinner title="Loading Client Portal" />}
+            >
+              <SkyelineClientPortal />
+            </Suspense>
+          </RoleGuard>
+        </ProtectedRoute>
+      </Route>
       <Route path="/client-portal/:tab*">
         <ProtectedRoute>
           <RoleGuard allowedRoles={['admin', 'client']} showNotAuthorized>
