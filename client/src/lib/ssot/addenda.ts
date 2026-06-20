@@ -124,12 +124,15 @@ export async function publishedAddendaForTrades(
 ): Promise<Addendum[]> {
   const clean = trades.filter(Boolean).slice(0, 10);
   if (clean.length === 0) return [];
+  // status == 'published' MUST be in the query, not just a client filter: the
+  // subcontractor read rule only authorizes published addenda, and Firestore
+  // denies a list query that could match a doc the rule forbids (drafts).
   const snap = await getDocs(query(
     addendaCol(projectId),
+    where('status', '==', 'published'),
     where('affectsTrades', 'array-contains-any', clean),
   ));
   return snap.docs
     .map(d => ({ id: d.id, ...(d.data() as Omit<Addendum, 'id'>) }))
-    .filter(a => a.status === 'published')
     .sort((a, b) => b.number - a.number);
 }
