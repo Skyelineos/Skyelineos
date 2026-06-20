@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import type { BidRequestPlan } from './types';
 import { defaultsForTrade, isDefaultPlanForTrade, isDefaultSelectionForTrade } from '@/lib/bidPackageTradeMap';
+import { getBidSetGate, missingApprovals, type BidSetGate } from '@/lib/ssot/bidSet';
 
 interface Props {
   open: boolean;
@@ -130,6 +131,18 @@ export function SendBidPackageModal({ open, projectId, projectName, onClose }: P
     return d.toISOString().slice(0, 10);
   });
   const [commonNotes, setCommonNotes] = useState('');
+
+  // Pre-bid client-approval gate (design §5b): no sub can be invited until the
+  // bid set clears the Approval Quorum.
+  const [bidGate, setBidGate] = useState<BidSetGate | null>(null);
+  useEffect(() => {
+    if (!open || !projectId) return;
+    let cancelled = false;
+    getBidSetGate(projectId)
+      .then(g => { if (!cancelled) setBidGate(g); })
+      .catch(e => console.warn('[ssot] bid-set gate load failed', e));
+    return () => { cancelled = true; };
+  }, [open, projectId]);
 
   const [allSubs, setAllSubs] = useState<Sub[]>([]);
   // Trade name → { id, defaultScope } so we can apply / save default scopes.
@@ -493,6 +506,16 @@ export function SendBidPackageModal({ open, projectId, projectName, onClose }: P
       toast({
         title: 'Scope of work missing',
         description: `Add a scope description for: ${incomplete.map(s => s.trade).join(', ')}.`,
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Pre-bid gate: the client must approve the bid set before any sub is invited.
+    if (bidGate && !bidGate.approved) {
+      toast({
+        title: 'Bid set not approved yet',
+        description: `The client must approve the bid set before subs are invited. Waiting on: ${missingApprovals(bidGate).join(', ')}.`,
         variant: 'destructive',
       });
       return;
@@ -1190,11 +1213,19 @@ export function SendBidPackageModal({ open, projectId, projectName, onClose }: P
           </div>
         </div>
 
+        {bidGate && !bidGate.approved && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 mt-2">
+            The client hasn’t approved the bid set yet — sending is blocked until they do
+            (waiting on: {missingApprovals(bidGate).join(', ')}). Approve it from the
+            project’s Bids page.
+          </div>
+        )}
+
         <DialogFooter className="border-t pt-4 mt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
           <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button
             onClick={handleSubmit}
-            disabled={submitting || totalInvitedSubs === 0}
+            disabled={submitting || totalInvitedSubs === 0 || (!!bidGate && !bidGate.approved)}
             className="gap-2 text-white"
             style={{ backgroundColor: '#C9A96E' }}
           >

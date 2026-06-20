@@ -16,7 +16,7 @@ const PASS  = process.env.SMOKE_PASSWORD || 'SkyeTest2024!';
 const FS = 'https://firestore.googleapis.com/v1/projects/skyelineos/databases/(default)/documents';
 
 const browser = await chromium.launch({ headless: true });
-const page = await (await browser.newContext({ viewport: { width: 1400, height: 900 } })).newPage();
+const page = await (await browser.newContext({ viewport: { width: 1400, height: 900 }, ignoreHTTPSErrors: true })).newPage();
 await page.goto('https://skyelineos.web.app/sign-in', { waitUntil: 'domcontentloaded' });
 await page.waitForTimeout(2000);
 await page.locator('input[type=email]').first().fill(EMAIL);

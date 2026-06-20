@@ -117,6 +117,18 @@ service cloud.firestore {
       return clientOwns(get(/databases/$(database)/documents/projects/$(pid)).data);
     }
 
+    // SSOT: true if the signed-in user is a member of the project
+    // (projects.assignedUserIds) — the Firestore mirror of Storage's isOnProject.
+    // Used to gate subcontractor read of Single-Source-of-Truth items (only
+    // items flagged inSsot, and only for projects they're on). Safe for
+    // project-scoped reads/queries (not collection-group). See
+    // docs/single-source-of-truth-design.md §8.
+    function isOnProjectFs(pid) {
+      return isSignedIn()
+        && 'assignedUserIds' in get(/databases/$(database)/documents/projects/$(pid)).data
+        && request.auth.uid in get(/databases/$(database)/documents/projects/$(pid)).data.assignedUserIds;
+    }
+
     // Users — each user reads/writes their own profile; admins can write any profile
     match /users/{userId} {
       allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
@@ -500,7 +512,12 @@ service cloud.firestore {
     // Documents and photos
     match /documents/{docId} {
       allow read: if isGC()
-        || (isClient() && resource.data.visibleToClient == true);
+        || (isClient() && resource.data.visibleToClient == true)
+        // SSOT: a sub on the project may read a document only once it's been
+        // promoted into the Single Source of Truth (inSsot == true). Sub-portal
+        // queries MUST filter where inSsot == true or the read is denied.
+        || (isSub() && resource.data.get('inSsot', false) == true
+            && isOnProjectFs(resource.data.projectId));
       allow write: if isGC();
       allow delete: if isAdmin();
     }
@@ -591,7 +608,10 @@ service cloud.firestore {
     match /projects/{projectId}/selections/{selectionId} {
       allow read: if isGC()
         || isDesigner()
-        || (isClient() && clientOwnsProject(projectId));
+        || (isClient() && clientOwnsProject(projectId))
+        // SSOT: subs on the project may read selections promoted into the SSOT.
+        || (isSub() && resource.data.get('inSsot', false) == true
+            && isOnProjectFs(projectId));
       // Client can approve their own project's selections when not locked
       allow update: if isClient()
         && clientOwnsProject(projectId)
@@ -609,7 +629,12 @@ service cloud.firestore {
     // revisions (an update). Matches the collaborative selectionRecommendations
     // pattern below.
     match /projects/{projectId}/moodBoards/{boardId} {
-      allow read: if isGC() || isDesigner() || (isClient() && clientOwnsProject(projectId));
+      allow read: if isGC() || isDesigner() || (isClient() && clientOwnsProject(projectId))
+        // SSOT: subs may read a mood board only once it's client-approved AND
+        // promoted into the SSOT (approved-only design entry, §2).
+        || (isSub() && isOnProjectFs(projectId)
+            && resource.data.get('inSsot', false) == true
+            && resource.data.get('status', '') == 'Approved');
       allow create, update: if isGC() || isDesigner() || (isClient() && clientOwnsProject(projectId));
       allow delete: if isGC() || isDesigner();
     }
@@ -799,6 +824,20 @@ service cloud.firestore {
     match /projects/{projectId}/bidPackages/{packageId} {
       allow read: if isGC() || isDesigner() || isSub();
       allow create, update: if isGC();
+      allow delete: if isAdmin() || isGC();
+    }
+
+    // Addenda — deviations from the base plans (SSOT §5). GC/designer author +
+    // run them through the Approval Quorum; the client signs off (an update).
+    // A sub on the project may read only PUBLISHED addenda — that's the
+    // deviation list they must acknowledge before bidding. Drafts/pending stay
+    // staff-side. Sub-portal queries MUST filter status == 'published'.
+    match /projects/{projectId}/addenda/{addendumId} {
+      allow read: if isGC() || isDesigner() || (isClient() && clientOwnsProject(projectId))
+        || (isSub() && isOnProjectFs(projectId)
+            && resource.data.get('status', '') == 'published');
+      allow create, update: if isGC() || isDesigner()
+        || (isClient() && clientOwnsProject(projectId));   // client adds their quorum approval
       allow delete: if isAdmin() || isGC();
     }
 
