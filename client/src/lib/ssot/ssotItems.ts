@@ -10,7 +10,7 @@ import {
   collection, query, where, getDocs, doc, updateDoc, serverTimestamp,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import type { SsotItem, SsotCategory } from './types';
+import type { SsotItem, SsotCategory, SsotItemSource } from './types';
 
 const DOC_CATEGORY_TO_SSOT: Record<string, SsotCategory> = {
   drawing: 'Plans',
@@ -103,4 +103,68 @@ export async function listSsotItems(projectId: string): Promise<SsotItem[]> {
   });
 
   return items;
+}
+
+// ── GC curation: list candidates with their current SSOT membership ───────────
+
+export interface CurationCandidate {
+  id: string;
+  source: SsotItemSource;
+  title: string;
+  inSsot: boolean;
+  // Mood boards only enter the SSOT once approved; the panel disables the rest.
+  promotable: boolean;
+  note?: string;
+}
+
+/**
+ * Everything a GC could promote into the SSOT for a project: all project
+ * documents, all selections, and mood boards (approved ones are promotable).
+ * GC-only — relies on the blanket isGC() read in the rules.
+ */
+export async function listCurationCandidates(projectId: string): Promise<CurationCandidate[]> {
+  const out: CurationCandidate[] = [];
+
+  const docsSnap = await getDocs(query(
+    collection(db, 'documents'),
+    where('projectId', '==', projectId),
+  ));
+  docsSnap.docs.forEach(d => {
+    const data = d.data() as any;
+    out.push({
+      id: d.id,
+      source: 'document',
+      title: data.name || data.fileName || 'Document',
+      inSsot: data.inSsot === true,
+      promotable: true,
+    });
+  });
+
+  const boardsSnap = await getDocs(collection(db, 'projects', projectId, 'moodBoards'));
+  boardsSnap.docs.forEach(d => {
+    const data = d.data() as any;
+    const approved = data.status === 'Approved';
+    out.push({
+      id: d.id,
+      source: 'moodBoard',
+      title: data.title || 'Design board',
+      inSsot: data.inSsot === true,
+      promotable: approved,
+      note: approved ? undefined : 'Client approval required first',
+    });
+  });
+
+  const selSnap = await getDocs(collection(db, 'projects', projectId, 'selections'));
+  selSnap.docs.forEach(d => {
+    const data = d.data() as any;
+    out.push({
+      id: d.id,
+      source: 'selection',
+      title: data.title || data.category || 'Selection',
+      inSsot: data.inSsot === true,
+      promotable: true,
+    });
+  });
+
+  return out;
 }

@@ -2,6 +2,7 @@ import { useRoute } from 'wouter';
 import { ProjectLayout } from '@/components/layout/ProjectLayout';
 import { PortalBidsPanel } from '@/components/bidding/PortalBidsPanel';
 import { AddendaManager } from '@/components/bidding/AddendaManager';
+import { SsotCurationPanel } from '@/components/bidding/SsotCurationPanel';
 import { useOptimizedProject } from '@/hooks/useOptimizedProjects';
 import { ProjectDetailSkeleton } from '@/components/projects/ProjectSkeleton';
 
@@ -40,6 +41,7 @@ export default function ProjectBids() {
     <ProjectLayout projectId={projectId!} projectName={transformedProject.name}>
       <div className="p-6 space-y-6">
         <PortalBidsPanel projectId={projectId!} projectName={transformedProject.name} />
+        <SsotCurationPanel projectId={projectId!} />
         <AddendaManager
           projectId={projectId!}
           designerAssigned={

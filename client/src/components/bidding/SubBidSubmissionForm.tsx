@@ -24,6 +24,7 @@ import TakeoffStudio from '@/components/takeoff/TakeoffStudio';
 import type { BidRequest, BidLineItem, BidInsurance, ContractorLicense } from './types';
 import { publishedAddendaForTrades } from '@/lib/ssot/addenda';
 import type { Addendum } from '@/lib/ssot/types';
+import { SsotFileBrowser } from './SsotFileBrowser';
 
 interface AttachedMeasurement {
   id: string;
@@ -556,6 +557,9 @@ export function SubBidSubmissionForm({
           </CardContent>
         </Card>
       )}
+
+      {/* Read-only SSOT browser — the current plans/design/selections to bid to. */}
+      <SsotFileBrowser projectId={request.projectId} />
 
       {/* Project context — top-of-form summary so the sub reads this as
           "a project I'm bidding on" not just "one trade in isolation".
