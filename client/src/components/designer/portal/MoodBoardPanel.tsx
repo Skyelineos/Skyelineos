@@ -43,6 +43,8 @@ import {
   addMoodBoardItem,
   createMoodBoard,
   deleteMoodBoard,
+  notifyClientDecided,
+  notifyDesignReviewRequested,
   removeMoodBoardItem,
   setMoodBoardStatus,
   updateMoodBoardItem,
@@ -52,6 +54,7 @@ import { Dropzone, EmptyState, StatusBadge } from './shared';
 
 interface Props {
   projectId: string;
+  projectName: string;
   roomId: string;
   roomName: string;
   boards: MoodBoard[];
@@ -61,6 +64,7 @@ interface Props {
 
 export function MoodBoardPanel({
   projectId,
+  projectName,
   roomId,
   roomName,
   boards,
@@ -99,6 +103,18 @@ export function MoodBoardPanel({
     try {
       await setMoodBoardStatus(projectId, board.id, status, note);
       toast({ title: `Mood board: ${status}` });
+      // Notify the loop: designer → client on send-to-review, client → staff on decision.
+      const vars = { itemName: board.title, room: roomName, projectName };
+      if (status === 'Client Review') {
+        void notifyDesignReviewRequested(projectId, vars);
+      } else if (canReview && status === 'Approved') {
+        void notifyClientDecided(projectId, { ...vars, decision: 'approved' });
+      } else if (canReview && status === 'Revision Requested') {
+        void notifyClientDecided(projectId, {
+          ...vars,
+          decision: 'requested a revision on',
+        });
+      }
     } catch (e: any) {
       toast({
         title: 'Update failed',

@@ -12,7 +12,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { fireTrigger } from '@/lib/notifications';
 import { formatCurrency } from '@/lib/utils';
 import type {
   DecisionStatus,
@@ -21,12 +20,14 @@ import type {
 import {
   createDecision,
   deleteDecision,
+  notifyClientDecided,
   setDecisionStatus,
 } from '@/lib/designer/portalService';
 import { EmptyState, StatusBadge } from './shared';
 
 interface Props {
   projectId: string;
+  projectName: string;
   roomId: string;
   roomName: string;
   decisions: DesignDecision[];
@@ -36,6 +37,7 @@ interface Props {
 
 export function DecisionTrackerPanel({
   projectId,
+  projectName,
   roomId,
   roomName,
   decisions,
@@ -52,6 +54,16 @@ export function DecisionTrackerPanel({
   ) {
     try {
       await setDecisionStatus(projectId, d.id, status, note);
+      if (canReview && status !== 'pending') {
+        const decision =
+          status === 'needsRevision' ? 'requested a revision on' : status;
+        void notifyClientDecided(projectId, {
+          itemName: d.title,
+          room: roomName,
+          projectName,
+          decision,
+        });
+      }
     } catch (e: any) {
       toast({
         title: 'Update failed',

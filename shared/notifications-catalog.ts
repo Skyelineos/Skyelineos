@@ -48,67 +48,122 @@ export const TRIGGER_KINDS: Record<string, TriggerKindSpec> = {
   // ── Phase 1 — already in production ────────────────────────────────────
   lead_created: {
     audience: 'single_uid',
-    channels: { in_app: 'default', email: 'default', sms: 'default', push: 'default' },
+    channels: {
+      in_app: 'default',
+      email: 'default',
+      sms: 'default',
+      push: 'default',
+    },
     category: 'Other',
     label: 'New lead arrived',
   },
   bid_invitation: {
     audience: 'single_uid',
-    channels: { in_app: 'default', email: 'default', sms: 'default', push: 'default' },
+    channels: {
+      in_app: 'default',
+      email: 'default',
+      sms: 'default',
+      push: 'default',
+    },
     category: 'Other',
     label: 'Bid invitation sent',
   },
   bid_awarded: {
     audience: 'single_uid',
-    channels: { in_app: 'default', email: 'default', sms: 'default', push: 'default' },
+    channels: {
+      in_app: 'default',
+      email: 'default',
+      sms: 'default',
+      push: 'default',
+    },
     category: 'Other',
     label: 'Bid awarded',
   },
   project_commenced: {
     audience: 'single_uid',
-    channels: { in_app: 'default', email: 'default', sms: 'opt_in', push: 'default' },
+    channels: {
+      in_app: 'default',
+      email: 'default',
+      sms: 'opt_in',
+      push: 'default',
+    },
     category: 'Project milestones',
     label: 'Project started',
   },
   task_due: {
     audience: 'single_uid',
-    channels: { in_app: 'default', email: 'default', sms: 'opt_in', push: 'default' },
+    channels: {
+      in_app: 'default',
+      email: 'default',
+      sms: 'opt_in',
+      push: 'default',
+    },
     category: 'Other',
     label: 'Task due',
   },
   task_assigned: {
     audience: 'single_uid',
-    channels: { in_app: 'default', email: 'default', sms: 'opt_in', push: 'default' },
+    channels: {
+      in_app: 'default',
+      email: 'default',
+      sms: 'opt_in',
+      push: 'default',
+    },
     category: 'Other',
     label: 'Task assigned to you',
   },
   rfi_answered: {
     audience: 'single_uid',
-    channels: { in_app: 'default', email: 'default', sms: 'opt_in', push: 'default' },
+    channels: {
+      in_app: 'default',
+      email: 'default',
+      sms: 'opt_in',
+      push: 'default',
+    },
     category: 'Decisions you owe',
     label: 'Your RFI was answered',
   },
   bid_received: {
     audience: 'single_uid',
-    channels: { in_app: 'default', email: 'default', sms: 'opt_in', push: 'default' },
+    channels: {
+      in_app: 'default',
+      email: 'default',
+      sms: 'opt_in',
+      push: 'default',
+    },
     category: 'Other',
     label: 'New bid received',
   },
   bid_reminder: {
     audience: 'single_uid',
-    channels: { in_app: 'default', email: 'default', sms: 'opt_in', push: 'default' },
+    channels: {
+      in_app: 'default',
+      email: 'default',
+      sms: 'opt_in',
+      push: 'default',
+    },
     category: 'Other',
     label: 'Bid reminder',
   },
   template_applied: {
     audience: 'single_uid',
-    channels: { in_app: 'default', email: 'opt_in', sms: 'opt_in', push: 'default' },
+    channels: {
+      in_app: 'default',
+      email: 'opt_in',
+      sms: 'opt_in',
+      push: 'default',
+    },
     category: 'Other',
     label: 'Template applied to a project',
   },
   schedule_published: {
     audience: 'client_of_project',
-    channels: { in_app: 'default', email: 'default', sms: 'opt_in', push: 'default' },
+    channels: {
+      in_app: 'default',
+      email: 'default',
+      sms: 'opt_in',
+      push: 'default',
+    },
     category: 'Project milestones',
     label: 'Your project schedule updated',
   },
@@ -116,49 +171,89 @@ export const TRIGGER_KINDS: Record<string, TriggerKindSpec> = {
   // ── Phase 2 — added by Dispatch 6 (per audit Section 7.2) ──────────────
   schedule_slip: {
     audience: 'staff_on_project',
-    channels: { in_app: 'default', email: 'opt_in', sms: 'opt_in', push: 'default' },
+    channels: {
+      in_app: 'default',
+      email: 'opt_in',
+      sms: 'opt_in',
+      push: 'default',
+    },
     category: 'Project milestones',
     label: 'Schedule slipped',
   },
   change_order_created: {
     audience: 'client_of_project',
-    channels: { in_app: 'default', email: 'default', sms: 'opt_in', push: 'default' },
+    channels: {
+      in_app: 'default',
+      email: 'default',
+      sms: 'opt_in',
+      push: 'default',
+    },
     category: 'Decisions you owe',
     label: 'Change order needs your approval',
   },
   selection_due: {
     audience: 'client_of_project',
-    channels: { in_app: 'default', email: 'default', sms: 'opt_in', push: 'default' },
+    channels: {
+      in_app: 'default',
+      email: 'default',
+      sms: 'opt_in',
+      push: 'default',
+    },
     category: 'Decisions you owe',
     label: 'Selection due',
   },
   draw_requested: {
     audience: 'client_of_project',
-    channels: { in_app: 'default', email: 'default', sms: 'opt_in', push: 'default' },
+    channels: {
+      in_app: 'default',
+      email: 'default',
+      sms: 'opt_in',
+      push: 'default',
+    },
     category: 'Money',
     label: 'Draw requested',
   },
   invoice_received: {
     audience: 'staff_on_project',
-    channels: { in_app: 'default', email: 'opt_in', sms: 'opt_in', push: 'default' },
+    channels: {
+      in_app: 'default',
+      email: 'opt_in',
+      sms: 'opt_in',
+      push: 'default',
+    },
     category: 'Money',
     label: 'Invoice received',
   },
   photo_uploaded: {
     audience: 'client_of_project',
-    channels: { in_app: 'default', email: 'opt_in', sms: 'opt_in', push: 'default' },
+    channels: {
+      in_app: 'default',
+      email: 'opt_in',
+      sms: 'opt_in',
+      push: 'default',
+    },
     category: 'Other',
     label: 'New photo on your project',
   },
   estimate_sent: {
     audience: 'client_of_project',
-    channels: { in_app: 'default', email: 'default', sms: 'opt_in', push: 'default' },
+    channels: {
+      in_app: 'default',
+      email: 'default',
+      sms: 'opt_in',
+      push: 'default',
+    },
     category: 'Money',
     label: 'Estimate ready for your review',
   },
   walkthrough_assigned: {
     audience: 'single_uid',
-    channels: { in_app: 'default', email: 'opt_in', sms: 'default', push: 'default' },
+    channels: {
+      in_app: 'default',
+      email: 'opt_in',
+      sms: 'default',
+      push: 'default',
+    },
     category: 'Other',
     label: 'Walkthrough item assigned to you',
   },
@@ -166,22 +261,57 @@ export const TRIGGER_KINDS: Record<string, TriggerKindSpec> = {
   // ── Stubbed by Stream 4 — register so theirs work ──────────────────────
   compliance_doc_uploaded: {
     audience: 'staff_on_project',
-    channels: { in_app: 'default', email: 'opt_in', sms: 'opt_in', push: 'default' },
+    channels: {
+      in_app: 'default',
+      email: 'opt_in',
+      sms: 'opt_in',
+      push: 'default',
+    },
     category: 'Other',
     label: 'Compliance doc uploaded',
   },
   sub_invoice_submitted: {
     audience: 'staff_on_project',
-    channels: { in_app: 'default', email: 'opt_in', sms: 'opt_in', push: 'default' },
+    channels: {
+      in_app: 'default',
+      email: 'opt_in',
+      sms: 'opt_in',
+      push: 'default',
+    },
     category: 'Money',
     label: 'Sub submitted an invoice',
+  },
+
+  // ── Designer Portal — design review loop (room-by-room selections) ──────
+  design_review_requested: {
+    audience: 'client_of_project',
+    channels: {
+      in_app: 'default',
+      email: 'default',
+      sms: 'opt_in',
+      push: 'default',
+    },
+    category: 'Decisions you owe',
+    label: 'Design ready for your review',
+  },
+  design_client_decided: {
+    audience: 'staff_on_project',
+    channels: {
+      in_app: 'default',
+      email: 'opt_in',
+      sms: 'opt_in',
+      push: 'default',
+    },
+    category: 'Decisions you owe',
+    label: 'Client responded to a design item',
   },
 } as const;
 
 export type TriggerKind = keyof typeof TRIGGER_KINDS;
 
-export const TRIGGER_KIND_LIST: TriggerKind[] =
-  Object.keys(TRIGGER_KINDS) as TriggerKind[];
+export const TRIGGER_KIND_LIST: TriggerKind[] = Object.keys(
+  TRIGGER_KINDS
+) as TriggerKind[];
 
 export const PREFS_CATEGORY_ORDER: TriggerKindSpec['category'][] = [
   'Project milestones',
@@ -200,7 +330,7 @@ export type UserNotificationPrefs = Partial<
 export function isChannelEnabledForUser(
   kind: TriggerKind,
   channel: ChannelKind,
-  prefs: UserNotificationPrefs | undefined | null,
+  prefs: UserNotificationPrefs | undefined | null
 ): boolean {
   const userOverride = prefs?.[kind]?.[channel];
   if (typeof userOverride === 'boolean') return userOverride;

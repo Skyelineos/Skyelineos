@@ -34,6 +34,7 @@ import {
   type ChatMessage,
 } from '@/lib/messaging/firestore';
 import { uploadRFIAttachment } from '@/lib/rfi/upload';
+import { fireTrigger } from '@/lib/notifications';
 import {
   DEFAULT_ROOMS,
   GENERAL_ROOM_ID,
@@ -587,6 +588,39 @@ export async function copyMessageToRoom(
       movedAt: serverTimestamp(),
     }
   );
+}
+
+// ── Notifications (reuse the catalog fire pipeline) ──────────────────────────
+// Best-effort: fireTrigger never throws, so a notification failure never blocks
+// the underlying design action. Audience is resolved server-side from projectId.
+
+/** Designer/staff asked the client to review a mood board or selection. */
+export async function notifyDesignReviewRequested(
+  projectId: string,
+  vars: { itemName: string; room: string; projectName: string }
+): Promise<void> {
+  await fireTrigger({
+    kind: 'design_review_requested',
+    projectId,
+    payload: { ...vars, designerName: actorName() },
+  });
+}
+
+/** The client approved / rejected / requested a revision on a design item. */
+export async function notifyClientDecided(
+  projectId: string,
+  vars: {
+    itemName: string;
+    room: string;
+    projectName: string;
+    decision: string;
+  }
+): Promise<void> {
+  await fireTrigger({
+    kind: 'design_client_decided',
+    projectId,
+    payload: { ...vars, clientName: actorName() },
+  });
 }
 
 export { GENERAL_ROOM_ID, GENERAL_ROOM_NAME };
