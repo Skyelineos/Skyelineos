@@ -1,6 +1,6 @@
 // Designer Portal — Selection Tracker panel for one room.
 // Reads/writes the existing projects/{id}/selections collection (additive fields).
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   AlertTriangle,
   Check,
@@ -43,11 +43,15 @@ import {
 } from '@/lib/designer/portalTypes';
 import {
   createSelection,
+  fetchProjectAllowances,
+  fetchProjectTasks,
   notifyClientDecided,
   notifyDesignReviewRequested,
   setSelectionStatus,
   updateSelection,
   verifySelectionLink,
+  type AllowanceLine,
+  type ScheduleTaskRef,
 } from '@/lib/designer/portalService';
 import { AiActionsMenu } from './AiActionsMenu';
 import { EmptyState, StatusBadge } from './shared';
@@ -458,6 +462,9 @@ function SelectionDialog({
       existing?.selectedAmount != null ? String(existing.selectedAmount) : '',
     requiredBeforeTrade: existing?.requiredBeforeTrade || '',
     linkedScheduleMilestone: existing?.linkedScheduleMilestone || '',
+    linkedScheduleTaskId: existing?.linkedScheduleTaskId || '',
+    linkedEstimateId: existing?.linkedEstimateId || '',
+    linkedEstimateLineId: existing?.linkedEstimateLineId || '',
     timelineImpact: existing?.timelineImpact || '',
     notes: existing?.notes || '',
     isCustom: existing?.isCustom || false,
@@ -467,6 +474,70 @@ function SelectionDialog({
   const [saving, setSaving] = useState(false);
   const set = (k: keyof typeof form, v: any) =>
     setForm((f) => ({ ...f, [k]: v }));
+
+  // Budget + schedule link sources (best-effort; empty when none/unauthorized).
+  const [allowances, setAllowances] = useState<AllowanceLine[]>([]);
+  const [tasks, setTasks] = useState<ScheduleTaskRef[]>([]);
+  useEffect(() => {
+    let active = true;
+    fetchProjectAllowances(projectId).then((a) => {
+      if (active) setAllowances(a);
+    });
+    fetchProjectTasks(projectId).then((t) => {
+      if (active) setTasks(t);
+    });
+    return () => {
+      active = false;
+    };
+  }, [projectId]);
+
+  function linkAllowance(lineId: string) {
+    if (lineId === 'none') {
+      setForm((f) => ({
+        ...f,
+        linkedEstimateId: '',
+        linkedEstimateLineId: '',
+      }));
+      return;
+    }
+    const a = allowances.find((x) => x.lineId === lineId);
+    if (!a) return;
+    setForm((f) => ({
+      ...f,
+      linkedEstimateId: a.estimateId,
+      linkedEstimateLineId: a.lineId,
+      allowanceAmount: String(a.amount),
+    }));
+  }
+
+  // Schedule link: real tasks use the value `task:<id>`; the canonical
+  // SELECTION_MILESTONES use their own name. Reference-only (no automation).
+  function onMilestoneChange(v: string) {
+    if (v === 'none') {
+      setForm((f) => ({
+        ...f,
+        linkedScheduleMilestone: '',
+        linkedScheduleTaskId: '',
+      }));
+    } else if (v.startsWith('task:')) {
+      const id = v.slice(5);
+      const t = tasks.find((x) => x.id === id);
+      setForm((f) => ({
+        ...f,
+        linkedScheduleTaskId: id,
+        linkedScheduleMilestone: t?.name || '',
+      }));
+    } else {
+      setForm((f) => ({
+        ...f,
+        linkedScheduleMilestone: v,
+        linkedScheduleTaskId: '',
+      }));
+    }
+  }
+  const milestoneValue = form.linkedScheduleTaskId
+    ? `task:${form.linkedScheduleTaskId}`
+    : form.linkedScheduleMilestone || 'none';
 
   const draft: Partial<DesignSelection> = {
     ...form,
@@ -496,6 +567,9 @@ function SelectionDialog({
         selectedAmount: parseFloat(form.selectedAmount) || 0,
         requiredBeforeTrade: form.requiredBeforeTrade || undefined,
         linkedScheduleMilestone: form.linkedScheduleMilestone || undefined,
+        linkedScheduleTaskId: form.linkedScheduleTaskId || undefined,
+        linkedEstimateId: form.linkedEstimateId || undefined,
+        linkedEstimateLineId: form.linkedEstimateLineId || undefined,
         timelineImpact: form.timelineImpact || undefined,
         notes: form.notes || undefined,
         isCustom: form.isCustom,
@@ -531,6 +605,35 @@ function SelectionDialog({
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
+          {allowances.length > 0 && (
+            <div>
+              <span className="mb-1 block text-xs font-medium text-gray-500">
+                Link to estimate allowance
+              </span>
+              <Select
+                value={form.linkedEstimateLineId || 'none'}
+                onValueChange={linkAllowance}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Not linked (manual)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Not linked (manual)</SelectItem>
+                  {allowances.map((a) => (
+                    <SelectItem key={a.lineId} value={a.lineId}>
+                      {a.description || a.trade || 'Allowance'} —{' '}
+                      {formatCurrency(a.amount)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {form.linkedEstimateLineId && (
+                <p className="mt-1 text-xs text-emerald-600">
+                  Allowance sourced from the estimate.
+                </p>
+              )}
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2">
               <span className="mb-1 block text-xs font-medium text-gray-500">
@@ -667,17 +770,18 @@ function SelectionDialog({
               <span className="mb-1 block text-xs font-medium text-gray-500">
                 Schedule milestone
               </span>
-              <Select
-                value={form.linkedScheduleMilestone || 'none'}
-                onValueChange={(v) =>
-                  set('linkedScheduleMilestone', v === 'none' ? '' : v)
-                }
-              >
+              <Select value={milestoneValue} onValueChange={onMilestoneChange}>
                 <SelectTrigger>
                   <SelectValue placeholder="None" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">None</SelectItem>
+                  {tasks.map((t) => (
+                    <SelectItem key={t.id} value={`task:${t.id}`}>
+                      {t.isMilestone ? '◆ ' : ''}
+                      {t.name}
+                    </SelectItem>
+                  ))}
                   {SELECTION_MILESTONES.map((m) => (
                     <SelectItem key={m} value={m}>
                       {m}

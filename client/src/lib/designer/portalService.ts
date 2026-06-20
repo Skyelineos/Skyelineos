@@ -250,6 +250,73 @@ export async function deleteMoodBoard(
   await deleteDoc(doc(db, 'projects', pid, 'moodBoards', boardId));
 }
 
+// ── Budget link: estimate allowance lines (server-stripped) ──────────────────
+export interface AllowanceLine {
+  estimateId: string;
+  estimateTitle: string;
+  lineId: string;
+  trade: string;
+  description: string;
+  amount: number;
+}
+
+/**
+ * The project's estimate "allowance" lines, via GET /api/projects/:id/allowances.
+ * The server strips internal cost/margin data, so this is safe for designers
+ * (who can't read `estimates` directly). Best-effort: returns [] on any failure.
+ */
+export async function fetchProjectAllowances(
+  projectId: string
+): Promise<AllowanceLine[]> {
+  try {
+    const token = await auth.currentUser?.getIdToken();
+    if (!token) return [];
+    const res = await fetch(
+      `/api/projects/${encodeURIComponent(projectId)}/allowances`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      }
+    );
+    if (!res.ok) return [];
+    const json = await res.json().catch(() => ({}));
+    return Array.isArray(json?.allowances) ? json.allowances : [];
+  } catch {
+    return [];
+  }
+}
+
+// ── Schedule link: project tasks (reference-only) ────────────────────────────
+export interface ScheduleTaskRef {
+  id: string;
+  name: string;
+  status?: string;
+  isMilestone?: boolean;
+}
+
+/** The project's schedule tasks from the top-level `tasks` collection. */
+export async function fetchProjectTasks(
+  projectId: string
+): Promise<ScheduleTaskRef[]> {
+  try {
+    const snap = await getDocs(
+      query(collection(db, 'tasks'), where('projectId', '==', projectId))
+    );
+    return snap.docs
+      .map((d) => {
+        const t = d.data() as any;
+        return {
+          id: d.id,
+          name: t.name || t.title || 'Task',
+          status: t.status,
+          isMilestone: !!t.isMilestone,
+        } as ScheduleTaskRef;
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+  } catch {
+    return [];
+  }
+}
+
 // ── Selections (reuse existing collection, additive writes) ──────────────────
 const selectionsCol = (pid: string) =>
   collection(db, 'projects', pid, 'selections');
@@ -297,6 +364,9 @@ export async function createSelection(
     timelineImpact: input.timelineImpact ?? null,
     requiredBeforeTrade: input.requiredBeforeTrade ?? null,
     linkedScheduleMilestone: input.linkedScheduleMilestone ?? null,
+    linkedScheduleTaskId: input.linkedScheduleTaskId ?? null,
+    linkedEstimateId: input.linkedEstimateId ?? null,
+    linkedEstimateLineId: input.linkedEstimateLineId ?? null,
     notes: input.notes ?? null,
     // legacy fields the existing SelectionsManager expects
     items: [],

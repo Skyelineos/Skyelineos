@@ -354,6 +354,7 @@ service cloud.firestore {
     // browser (the sub portal action). Everything else stays GC-write.
     match /tasks/{taskId} {
       allow read: if isGC()
+        || isDesigner()
         || (isClient() && resource.data.visibleToClient == true)
         || (isSub() && resource.data.assignedSubId == request.auth.uid);
 

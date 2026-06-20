@@ -192,6 +192,11 @@ export interface DesignSelection {
   timelineImpact?: string;
   requiredBeforeTrade?: string;
   linkedScheduleMilestone?: string;
+  /** Reference link to a schedule task in the `tasks` collection (read-only). */
+  linkedScheduleTaskId?: string;
+  /** Budget link: the estimate + allowance line this selection draws from. */
+  linkedEstimateId?: string;
+  linkedEstimateLineId?: string;
   createdAt?: Timestamp | any;
   updatedAt?: Timestamp | any;
 }

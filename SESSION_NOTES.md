@@ -56,11 +56,37 @@ notifications.ts` → `POST /api/notifications/fire`, audience resolved
   homeowner now reaches the mood-board/selection approval UI inside their own
   portal shell — no GC-style ProjectLayout.
 
-### Still open (the remaining gap list)
+### Step 3 — Budget integration (manual link to estimate allowance)
 
-- Budget integration (selection allowances still manual, not sourced from the
-  estimate), schedule-milestone wiring (data fields only), AI actions
-  (placeholders by design), and a live headless smoke test (needs real auth).
+- Estimates live in Firestore `estimates/{id}` with a `lineItems[]` array; an
+  allowance line is `lineItems[].lineStatus === 'allow'` (amount = `total`).
+- `estimates` read is **GC-only** (carries internal `subCost`/margins), so
+  designers can't read them directly. New server endpoint
+  **`GET /api/projects/:projectId/allowances`** (`functions/src/estimates/
+estimateRoutes.ts`, role-gated admin/gc/pm/designer) reads via Admin SDK and
+  returns ONLY client-facing allowance lines `{estimateId,lineId,trade,
+description,amount}` — no costs/margins leak.
+- Client: `fetchProjectAllowances()` in `portalService.ts`; the SelectionDialog
+  shows a "Link to estimate allowance" picker that fills `allowanceAmount` and
+  stamps `linkedEstimateId` / `linkedEstimateLineId`. Manual entry still works
+  when nothing is linked / no allowance lines exist.
+
+### Step 4 — Schedule link (reference-only)
+
+- `tasks` read rule gained `|| isDesigner()` (tasks aren't margin-sensitive).
+- `fetchProjectTasks()` queries the top-level `tasks` collection by projectId.
+  The SelectionDialog's milestone picker now lists the project's REAL schedule
+  tasks (value `task:<id>` → stamps `linkedScheduleTaskId` + display name)
+  alongside the 5 canonical SELECTION_MILESTONES. Reference-only — no
+  auto-advance of tasks (deliberate, per product decision).
+
+### Still open
+
+- AI actions remain placeholders by design (no model backend wired).
+- A live headless smoke test (needs real Firebase auth) — verify the review
+  loop + allowance/task pickers against a real project after deploy.
+- Budget picker only populates if the GC marks estimate lines `lineStatus:
+'allow'` in EstimateBuilder; schedule picker only if the project has `tasks`.
 
 ## Session 21 — AI Inbox Phase A (PDF intake · multi-mailbox · spam triage · link-flag)
 

@@ -19,6 +19,9 @@
 // Modeled on functions/src/bids/bidPackageDispatchRoute.ts (SendGrid pattern)
 // and functions/src/tasks/signoffRoute.ts (transactional update + audit row).
 
+/* eslint-disable import/namespace */
+// ^ firebase-admin's `admin.storage` / `admin.firestore` namespaces don't resolve
+//   under the root eslint import-plugin config (false positive); tsc validates them.
 import type { Express } from 'express';
 import * as admin from 'firebase-admin';
 import sgMail from '@sendgrid/mail';
@@ -26,9 +29,21 @@ import { fireTriggerForMany } from '../notifications/fireTrigger';
 import { resolveClientOfProject } from '../notifications/audienceResolvers';
 
 const STAFF_ROLES = new Set(['admin', 'gc', 'projectManager']);
+// Estimates carry internal cost/margin data, so the Firestore read rule is
+// GC-only. The Designer Portal needs allowance amounts to set selection
+// budgets — but designers must NOT see subCost/margins. This server endpoint
+// reads via the Admin SDK and returns ONLY the client-facing allowance lines.
+const DESIGN_READ_ROLES = new Set([
+  'admin',
+  'gc',
+  'projectManager',
+  'designer',
+]);
 
 function normalizeRole(raw: any): string {
-  const r = String(raw || '').toLowerCase().replace(/_/g, '');
+  const r = String(raw || '')
+    .toLowerCase()
+    .replace(/_/g, '');
   if (r === 'admin') return 'admin';
   if (r === 'gc') return 'gc';
   if (r === 'projectmanager' || r === 'pm') return 'projectManager';
@@ -44,15 +59,20 @@ function normalizeBaseUrl(raw?: string): string {
 
 function escapeHtml(s: string): string {
   return String(s ?? '')
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function fmtCurrency(amount: number | undefined | null): string {
   const n = typeof amount === 'number' ? amount : Number(amount || 0);
   return new Intl.NumberFormat('en-US', {
-    style: 'currency', currency: 'USD',
-    minimumFractionDigits: 0, maximumFractionDigits: 0,
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
   }).format(n);
 }
 
@@ -73,7 +93,10 @@ interface ClientResponseBody {
 // file by falling back to a download-link email.
 const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024; // 8 MB safety cap
 
-export function registerEstimateRoutes(app: Express, db: admin.firestore.Firestore): void {
+export function registerEstimateRoutes(
+  app: Express,
+  db: admin.firestore.Firestore
+): void {
   // POST /api/estimates/:id/send-to-client
   app.post('/api/estimates/:id/send-to-client', async (req: any, res: any) => {
     try {
@@ -86,18 +109,33 @@ export function registerEstimateRoutes(app: Express, db: admin.firestore.Firesto
       const profile = req.userProfile || {};
       const role = normalizeRole(profile.role);
       if (!STAFF_ROLES.has(role)) {
-        return res.status(403).json({ error: 'Only GC, PM, or admin can send estimates.' });
+        return res
+          .status(403)
+          .json({ error: 'Only GC, PM, or admin can send estimates.' });
       }
-      const byName: string = profile.name || profile.displayName || req.user?.name || req.user?.email || 'Skyeline OS';
+      const byName: string =
+        profile.name ||
+        profile.displayName ||
+        req.user?.name ||
+        req.user?.email ||
+        'Skyeline OS';
 
       const body: SendBody = req.body || {};
-      const pdfStoragePath = typeof body.pdfStoragePath === 'string' ? body.pdfStoragePath.trim() : '';
-      const pdfDownloadUrl = typeof body.pdfDownloadUrl === 'string' ? body.pdfDownloadUrl.trim() : '';
-      const messageNote = typeof body.message === 'string' ? body.message.trim() : '';
+      const pdfStoragePath =
+        typeof body.pdfStoragePath === 'string'
+          ? body.pdfStoragePath.trim()
+          : '';
+      const pdfDownloadUrl =
+        typeof body.pdfDownloadUrl === 'string'
+          ? body.pdfDownloadUrl.trim()
+          : '';
+      const messageNote =
+        typeof body.message === 'string' ? body.message.trim() : '';
 
       const estRef = db.collection('estimates').doc(id);
       const estSnap = await estRef.get();
-      if (!estSnap.exists) return res.status(404).json({ error: 'Estimate not found' });
+      if (!estSnap.exists)
+        return res.status(404).json({ error: 'Estimate not found' });
       const estimate = estSnap.data() as any;
       const projectId: string = String(estimate.projectId || '');
       const title: string = String(estimate.title || 'Estimate');
@@ -109,24 +147,37 @@ export function registerEstimateRoutes(app: Express, db: admin.firestore.Firesto
         const projSnap = await db.collection('projects').doc(projectId).get();
         if (projSnap.exists) project = projSnap.data();
       }
-      const projectName: string = String(project?.name || estimate.projectName || 'your project');
+      const projectName: string = String(
+        project?.name || estimate.projectName || 'your project'
+      );
 
       // Recipient resolution: explicit body.recipientEmail > project.clientEmail >
       // first project clientId -> contacts/{id}.email.
-      let recipientEmail = typeof body.recipientEmail === 'string'
-        ? body.recipientEmail.trim()
-        : '';
-      if (!recipientEmail && project?.clientEmail) recipientEmail = String(project.clientEmail);
-      if (!recipientEmail && estimate.clientEmail) recipientEmail = String(estimate.clientEmail);
+      let recipientEmail =
+        typeof body.recipientEmail === 'string'
+          ? body.recipientEmail.trim()
+          : '';
+      if (!recipientEmail && project?.clientEmail)
+        recipientEmail = String(project.clientEmail);
+      if (!recipientEmail && estimate.clientEmail)
+        recipientEmail = String(estimate.clientEmail);
       if (!recipientEmail) {
         const ids: string[] = [];
         const raw = project?.clientIds;
-        if (Array.isArray(raw)) raw.forEach((v: any) => { if (v) ids.push(String(v)); });
+        if (Array.isArray(raw))
+          raw.forEach((v: any) => {
+            if (v) ids.push(String(v));
+          });
         else if (typeof raw === 'string') {
           try {
             const parsed = JSON.parse(raw);
-            if (Array.isArray(parsed)) parsed.forEach((v: any) => { if (v) ids.push(String(v)); });
-          } catch { /* not JSON */ }
+            if (Array.isArray(parsed))
+              parsed.forEach((v: any) => {
+                if (v) ids.push(String(v));
+              });
+          } catch {
+            /* not JSON */
+          }
         }
         if (project?.clientContactId) ids.push(String(project.clientContactId));
         if (estimate.clientId) ids.push(String(estimate.clientId));
@@ -135,13 +186,23 @@ export function registerEstimateRoutes(app: Express, db: admin.firestore.Firesto
             const c = await db.collection('contacts').doc(cid).get();
             if (c.exists) {
               const ce = (c.data() as any)?.email;
-              if (ce) { recipientEmail = String(ce); break; }
+              if (ce) {
+                recipientEmail = String(ce);
+                break;
+              }
             }
-          } catch { /* skip */ }
+          } catch {
+            /* skip */
+          }
         }
       }
       if (!recipientEmail) {
-        return res.status(400).json({ error: 'No recipient email — set the project client email or pass recipientEmail in the request.' });
+        return res
+          .status(400)
+          .json({
+            error:
+              'No recipient email — set the project client email or pass recipientEmail in the request.',
+          });
       }
 
       // SendGrid init (mirror bidPackageDispatchRoute).
@@ -151,7 +212,14 @@ export function registerEstimateRoutes(app: Express, db: admin.firestore.Firesto
       if (sendgridReady) sgMail.setApiKey(sendgridKey!);
 
       // Optionally fetch the PDF from Storage so we can attach it directly.
-      let attachment: { content: string; filename: string; type: string; disposition: string } | undefined;
+      let attachment:
+        | {
+            content: string;
+            filename: string;
+            type: string;
+            disposition: string;
+          }
+        | undefined;
       let attachmentSkippedReason: string | undefined;
       if (pdfStoragePath) {
         try {
@@ -169,15 +237,19 @@ export function registerEstimateRoutes(app: Express, db: admin.firestore.Firesto
               const [buf] = await file.download();
               attachment = {
                 content: buf.toString('base64'),
-                filename: `${(title || 'estimate').replace(/[^a-z0-9_\-]+/gi, '_').slice(0, 60)}.pdf`,
+                filename: `${(title || 'estimate').replace(/[^a-z0-9_-]+/gi, '_').slice(0, 60)}.pdf`,
                 type: 'application/pdf',
                 disposition: 'attachment',
               };
             }
           }
         } catch (e: any) {
-          attachmentSkippedReason = e?.message || 'Failed to fetch PDF for attachment';
-          console.warn('[sendEstimate] attachment fetch failed:', attachmentSkippedReason);
+          attachmentSkippedReason =
+            e?.message || 'Failed to fetch PDF for attachment';
+          console.warn(
+            '[sendEstimate] attachment fetch failed:',
+            attachmentSkippedReason
+          );
         }
       }
 
@@ -192,9 +264,10 @@ export function registerEstimateRoutes(app: Express, db: admin.firestore.Firesto
       const noteBlock = messageNote
         ? `\n\nA note from ${byName}:\n${messageNote}\n`
         : '';
-      const linkLine = !attachment && pdfDownloadUrl
-        ? `\n\nDownload PDF: ${pdfDownloadUrl}`
-        : '';
+      const linkLine =
+        !attachment && pdfDownloadUrl
+          ? `\n\nDownload PDF: ${pdfDownloadUrl}`
+          : '';
       const text =
         `Hi,\n\n${byName} prepared an estimate for ${projectName}.\n\n` +
         `Estimate: ${title}\nTotal: ${fmtCurrency(totalAmount)}` +
@@ -205,9 +278,10 @@ export function registerEstimateRoutes(app: Express, db: admin.firestore.Firesto
       const htmlNoteBlock = messageNote
         ? `<p style="margin:16px 0;color:#374151;white-space:pre-line">${escapeHtml(messageNote)}</p>`
         : '';
-      const htmlAttachLine = !attachment && pdfDownloadUrl
-        ? `<p style="margin:12px 0"><a href="${escapeHtml(pdfDownloadUrl)}" style="color:#C9A96E;font-weight:600">Download PDF</a></p>`
-        : '';
+      const htmlAttachLine =
+        !attachment && pdfDownloadUrl
+          ? `<p style="margin:12px 0"><a href="${escapeHtml(pdfDownloadUrl)}" style="color:#C9A96E;font-weight:600">Download PDF</a></p>`
+          : '';
       const html = `
 <div style="font-family:Inter,-apple-system,Helvetica,Arial,sans-serif;max-width:560px;margin:0 auto;color:#141414">
   <h1 style="font-size:22px;margin:0 0 8px 0;color:#141414">Your estimate is ready</h1>
@@ -246,7 +320,8 @@ export function registerEstimateRoutes(app: Express, db: admin.firestore.Firesto
           console.error('[sendEstimate] sendgrid error:', emailError);
         }
       } else {
-        emailError = 'SendGrid not configured (SENDGRID_API_KEY / SENDGRID_FROM_EMAIL missing).';
+        emailError =
+          'SendGrid not configured (SENDGRID_API_KEY / SENDGRID_FROM_EMAIL missing).';
       }
 
       // Update estimate doc.
@@ -301,7 +376,7 @@ export function registerEstimateRoutes(app: Express, db: admin.firestore.Firesto
                 projectId,
                 fromUserName: byName,
               },
-              recipients,
+              recipients
             );
           }
         } catch (e: any) {
@@ -333,29 +408,56 @@ export function registerEstimateRoutes(app: Express, db: admin.firestore.Firesto
       const uid: string | undefined = req.user?.uid;
       if (!uid) return res.status(401).json({ error: 'No uid' });
       const profile = req.userProfile || {};
-      const byName: string = profile.name || profile.displayName || req.user?.name || req.user?.email || 'Client';
+      const byName: string =
+        profile.name ||
+        profile.displayName ||
+        req.user?.name ||
+        req.user?.email ||
+        'Client';
 
       const body: ClientResponseBody = req.body || {};
       const action = body.action;
-      if (action !== 'approve' && action !== 'decline' && action !== 'request_changes') {
-        return res.status(400).json({ error: "action must be 'approve', 'decline', or 'request_changes'" });
+      if (
+        action !== 'approve' &&
+        action !== 'decline' &&
+        action !== 'request_changes'
+      ) {
+        return res
+          .status(400)
+          .json({
+            error: "action must be 'approve', 'decline', or 'request_changes'",
+          });
       }
-      const message = typeof body.message === 'string' ? body.message.trim() : '';
+      const message =
+        typeof body.message === 'string' ? body.message.trim() : '';
       if (action === 'request_changes' && message.length === 0) {
-        return res.status(400).json({ error: 'A message describing the requested changes is required.' });
+        return res
+          .status(400)
+          .json({
+            error: 'A message describing the requested changes is required.',
+          });
       }
 
       const estRef = db.collection('estimates').doc(id);
       const estSnap = await estRef.get();
-      if (!estSnap.exists) return res.status(404).json({ error: 'Estimate not found' });
+      if (!estSnap.exists)
+        return res.status(404).json({ error: 'Estimate not found' });
       const estimate = estSnap.data() as any;
       const projectId: string = String(estimate.projectId || '');
       if (!projectId) {
-        return res.status(400).json({ error: 'Estimate has no projectId — cannot verify membership.' });
+        return res
+          .status(400)
+          .json({
+            error: 'Estimate has no projectId — cannot verify membership.',
+          });
       }
       const currentStatus = String(estimate.status || '');
       if (currentStatus !== 'sent') {
-        return res.status(409).json({ error: `Estimate is not awaiting a response (current: ${currentStatus}).` });
+        return res
+          .status(409)
+          .json({
+            error: `Estimate is not awaiting a response (current: ${currentStatus}).`,
+          });
       }
 
       // Verify caller is on this project's client audience (or is staff
@@ -367,17 +469,26 @@ export function registerEstimateRoutes(app: Express, db: admin.firestore.Firesto
           const clientUids = await resolveClientOfProject(db, projectId);
           allowed = clientUids.includes(uid);
         } catch (e: any) {
-          console.warn('[clientResponse] resolveClientOfProject failed:', e?.message || e);
+          console.warn(
+            '[clientResponse] resolveClientOfProject failed:',
+            e?.message || e
+          );
         }
       }
       if (!allowed) {
-        return res.status(403).json({ error: 'You are not authorized to respond to this estimate.' });
+        return res
+          .status(403)
+          .json({
+            error: 'You are not authorized to respond to this estimate.',
+          });
       }
 
       const newStatus =
-        action === 'approve' ? 'accepted' :
-        action === 'decline' ? 'rejected' :
-        'revised';
+        action === 'approve'
+          ? 'accepted'
+          : action === 'decline'
+            ? 'rejected'
+            : 'revised';
 
       const now = admin.firestore.FieldValue.serverTimestamp();
       const update: Record<string, any> = {
@@ -402,7 +513,10 @@ export function registerEstimateRoutes(app: Express, db: admin.firestore.Firesto
           createdAt: now,
         });
       } catch (e: any) {
-        console.warn('[clientResponse] audit row write failed:', e?.message || e);
+        console.warn(
+          '[clientResponse] audit row write failed:',
+          e?.message || e
+        );
       }
 
       return res.json({
@@ -414,6 +528,68 @@ export function registerEstimateRoutes(app: Express, db: admin.firestore.Firesto
     } catch (e: any) {
       console.error('[clientResponse] route error:', e?.message || e, e?.stack);
       return res.status(500).json({ error: e?.message || 'Response failed' });
+    }
+  });
+
+  // GET /api/projects/:projectId/allowances
+  // Designer Portal budget link: the project's estimate "allowance" lines
+  // (LineItem.lineStatus === 'allow'), stripped to client-facing fields only.
+  // Internal subCost / markup / margins are intentionally NOT returned, so a
+  // designer can set a selection's allowance without seeing builder costs.
+  app.get('/api/projects/:projectId/allowances', async (req: any, res: any) => {
+    try {
+      const projectId = String(req.params.projectId || '').trim();
+      if (!projectId)
+        return res.status(400).json({ error: 'projectId required' });
+
+      const uid: string | undefined = req.user?.uid;
+      if (!uid) return res.status(401).json({ error: 'No uid' });
+      const role = normalizeRole((req.userProfile || {}).role);
+      if (!DESIGN_READ_ROLES.has(role)) {
+        return res
+          .status(403)
+          .json({ error: 'Not authorized to read allowances.' });
+      }
+
+      const snap = await db
+        .collection('estimates')
+        .where('projectId', '==', projectId)
+        .get();
+
+      const allowances: Array<{
+        estimateId: string;
+        estimateTitle: string;
+        lineId: string;
+        trade: string;
+        description: string;
+        amount: number;
+      }> = [];
+
+      snap.forEach((docSnap) => {
+        const est = docSnap.data() as any;
+        // Skip rejected/archived estimates — only live ones inform allowances.
+        if (est.status === 'rejected') return;
+        const items = Array.isArray(est.lineItems) ? est.lineItems : [];
+        for (const li of items) {
+          if (li && li.lineStatus === 'allow') {
+            allowances.push({
+              estimateId: docSnap.id,
+              estimateTitle: String(est.title || 'Estimate'),
+              lineId: String(li.id || ''),
+              trade: String(li.trade || ''),
+              description: String(li.description || ''),
+              amount: Number(li.total) || 0, // client-facing total only
+            });
+          }
+        }
+      });
+
+      return res.json({ ok: true, allowances });
+    } catch (e: any) {
+      console.error('[allowances] route error:', e?.message || e);
+      return res
+        .status(500)
+        .json({ error: e?.message || 'Failed to load allowances' });
     }
   });
 }
