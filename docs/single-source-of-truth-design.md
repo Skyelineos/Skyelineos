@@ -160,6 +160,26 @@ GC-pushed urgent items — never drip-pinged, and only when their trade is affec
 > Post-final changes (during construction) are **change orders**, a separate concept —
 > out of scope for this design.
 
+## Build status (Phase 1)
+
+- ✅ **Slice 1 — data model + rules + indexes.** `client/src/lib/ssot/{types,addenda,ssotItems}.ts`;
+  `isOnProjectFs()` + sub read of inSsot documents/selections/approved boards + `addenda`
+  rule (subs read published only); composite indexes.
+- ✅ **Slice 2 — sub deviation gate.** `SubBidSubmissionForm` loads published addenda for the
+  sub's trade, requires acknowledgement before submit, stores acks on the bid.
+- ✅ **Slice 3 — GC Addenda manager.** `AddendaManager.tsx` create → quorum approve → publish;
+  wired into `ProjectBids`.
+- ⬜ **Slice 4** — sub-portal "Project Files" read-only browser (`listSsotItems`) + GC
+  promote-into-SSOT affordances on documents/selections/mood boards.
+- ⬜ **Slice 5** — pre-bid client approval gate (block "Send bid package" until the client
+  approves the bid set).
+- ⬜ **Later** — bid lifecycle rough→final re-bid request; Phase 2 roster; Phase 3 Q&A.
+
+> Not yet runtime-tested or deployed. Deploy needs `firestore:rules` +
+> `firestore:indexes` + `hosting`, and the rules changes should be checked against the
+> emulator first. Client/designer addendum approvals are currently recorded staff-side
+> in AddendaManager; dedicated client/designer approval surfaces come with their portals.
+
 ## 7. Phasing
 
 - **Phase 1 (this doc):** SSOT data model + `inSsot`/approval flags + sub-portal
