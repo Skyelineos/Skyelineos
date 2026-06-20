@@ -53,6 +53,7 @@ try {
   const checks = [
     ['AI Inbox heading', /AI Inbox/i.test(body)],
     ['Needs Review tab', /Needs Review/i.test(body)],
+    ['Ignored tab', /Ignored/i.test(body)],
     ['QuickBooks status pill', /QuickBooks/i.test(body)],
   ];
 
@@ -70,6 +71,9 @@ try {
     const setupOk = /\/api\/ai-inbox\/ingest/i.test(setupText) && /N8N_INGEST_SECRET/i.test(setupText);
     console.log(`${setupOk ? '✅' : '❌'} Setup tab shows ingest endpoint + secret name`);
     if (!setupOk) pass = false;
+    const mailboxOk = /Intake mailboxes/i.test(setupText) && /Add mailbox/i.test(setupText);
+    console.log(`${mailboxOk ? '✅' : '❌'} Setup tab shows intake-mailbox editor`);
+    if (!mailboxOk) pass = false;
   } catch (e) {
     console.log('⚠️  Could not open Setup tab:', e.message);
     pass = false;

@@ -18,7 +18,8 @@ export const AI_INBOX_CATEGORIES = [
   'bank_alert',            // bank/credit-card transaction alert or statement
   'subcontractor_email',   // correspondence from a sub (scheduling, questions, docs)
   'client_email',          // correspondence from a homeowner/client
-  'general',               // anything else / informational
+  'general',               // anything else / informational but plausibly relevant
+  'not_relevant',          // spam / marketing / nothing to do with the business → Ignored lane
 ] as const;
 
 export type AiInboxCategory = (typeof AI_INBOX_CATEGORIES)[number];
@@ -46,8 +47,20 @@ export function qboEntityForCategory(category: string): QboEntityType {
 
 // Review lanes — mirrors the spike's three-lane idea but tuned for finance.
 // Money ALWAYS needs review; non-financial high-confidence mail can auto-file
-// (it is never synced to QBO, so auto-filing it is safe).
-export type AiInboxLane = 'needs_review' | 'auto_filed' | 'ask';
+// (it is never synced to QBO, so auto-filing it is safe); clearly-irrelevant
+// mail (spam/marketing) is triaged to the Ignored lane so the catch-all
+// accounting@ feed doesn't bury real invoices.
+export type AiInboxLane = 'needs_review' | 'auto_filed' | 'ask' | 'ignored';
+
+// One configured intake mailbox. Up to MAX_INTAKE_MAILBOXES are stored on
+// ai_inbox_config/global.mailboxes; n8n runs one Gmail trigger per address and
+// stamps the `mailbox` field so items are filterable by which inbox they hit.
+export const MAX_INTAKE_MAILBOXES = 3;
+export interface IntakeMailbox {
+  address: string;     // e.g. accounting@skyelinehomes.com
+  label: string;       // human label e.g. "Accounting"
+  enabled: boolean;
+}
 
 export type AiInboxReviewStatus =
   | 'pending'
@@ -77,6 +90,11 @@ export interface AiInboxExtraction {
   // Project match (against live `projects`). projectId is the Firestore doc id.
   projectId: string | null;
   projectName: string | null;
+  // "Invoice is behind a login link" — common with vendor portals (Bill.com,
+  // Home Depot Pro). We never auto-fetch authenticated portals; instead we flag
+  // it so a human opens the link, downloads the PDF, and attaches it.
+  hasInvoiceLink: boolean;
+  invoiceLinkUrl: string | null;
   summary: string;
   confidence: number;          // 0..1
   confidenceReason: string;
@@ -94,8 +112,13 @@ export function resolveAiInboxLane(x: {
   confidence: number;
   needsClarification: boolean;
 }): AiInboxLane {
+  // Clearly-irrelevant mail (spam/marketing) is triaged out of the review
+  // queue entirely. High confidence → silently ignored; low confidence →
+  // still ignored but a human can find it in the Ignored tab if needed.
+  if (x.category === 'not_relevant' && x.confidence >= 0.7) return 'ignored';
   if (x.needsClarification) return 'ask';
   if (x.confidence < 0.5) return 'ask';
+  if (x.category === 'not_relevant') return 'ignored';
   // Money is never auto-filed — a human approves before QBO.
   if (FINANCIAL_CATEGORIES.has(x.category)) return 'needs_review';
   if (x.confidence >= AUTO_FILE_CONFIDENCE_THRESHOLD) return 'auto_filed';

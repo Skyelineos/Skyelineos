@@ -20,6 +20,57 @@ then run `npm run deploy*` to deploy to the `skyelineos` Firebase project so the
 actually reaches users. A GitHub push alone does **not** update the live site. See the
 "How work ships" section in `CLAUDE.md`.
 
+## Session 21 — AI Inbox Phase A (PDF intake · multi-mailbox · spam triage · link-flag)
+
+Hardened the AI Inbox email path. All additive to Session 19; no schema break.
+
+### PDF + image extraction
+- Ingest endpoint accepts `attachments[].content` (base64). `functions/src/aiInbox/
+  attachments.ts` decodes them, stores to Cloud Storage (`ai_inbox/{itemId}/...`
+  with a Firebase download token → viewable URL on the item), and hands the
+  PDF/image subset to Claude as `document`/`image` content blocks (`buildMessages`
+  in `extractionPrompt.ts`). Claude reads the invoice/receipt itself, not just
+  the email body. Caps: 25 MB/PDF, 5 MB/image, 28 MB total to the model.
+- `express.json()` limit raised 100kb → **30mb** in `index.ts` so base64 PDFs fit.
+- `/reprocess` re-fetches stored attachments (`rehydrateAttachments`) so a re-run
+  keeps the PDF context (base64 isn't kept in Firestore — only the Storage URL).
+- **No storage.rules change**: writes are Admin-SDK (bypass rules); reads use the
+  unguessable download-token URL (bypass rules). Admin-only page surfaces it.
+
+### Up to 3 intake mailboxes
+- `ai_inbox_config/global.mailboxes` = `[{address,label,enabled}]`, max 3
+  (`MAX_INTAKE_MAILBOXES`). Edited via **`POST /api/ai-inbox/mailboxes`** (admin;
+  config is otherwise CF-write-only). UI reads them back via the existing
+  onSnapshot. Setup tab has a mailbox editor (add/remove/save).
+- Ingest accepts a `mailbox` field; items are stamped + show a mailbox chip. n8n
+  runs one Gmail trigger per address, each sending `"mailbox": "<addr>"`.
+
+### Spam triage (catch-all friendly)
+- New category `not_relevant` + new lane `ignored`. `resolveAiInboxLane` routes
+  spam/marketing to Ignored (out of Needs Review) so an accounting@ catch-all
+  doesn't bury invoices. New **Ignored** tab. Prompt told to prefer `general`
+  when unsure (fail toward human review, not silent ignore).
+
+### Invoice-behind-a-link
+- Extraction adds `hasInvoiceLink` + `invoiceLinkUrl`. When a vendor-portal link
+  is detected and no amount is present, the card shows an amber "open the link,
+  download the PDF, attach + reprocess" callout with an Open button. We never
+  auto-scrape authenticated portals (deliberate).
+
+### Validation
+- `functions` tsc 0 errors; `vite build` green; `scripts/probe-ai-inbox.mjs`
+  passes (now also asserts Ignored tab + mailbox editor). Live extraction still
+  needs a valid **`ANTHROPIC_API_KEY`** — the shared key was invalid (401
+  `invalid x-api-key`) during testing, which also breaks bill-OCR / estimate
+  extraction / ingestion-lab. Replace it in Secret Manager + redeploy functions.
+
+### Deferred (Phase B/C)
+- Sub-portal "Submit Invoice" (structured, pre-linked to awarded trade/bid line).
+- Bid-vs-actual job costing: overage/savings (client-visible) + profit (admin-only).
+- A UI "attach PDF to this item + reprocess" upload (the link-flag flow currently
+  assumes the human re-sends through n8n or re-ingests; an in-portal upload-attach
+  endpoint is the natural next add).
+
 ## Session 20 — Communication Center Phase 3 (AI extraction + summaries)
 
 Approved slice: **extraction + summaries · manual trigger · review-queue gating ·
