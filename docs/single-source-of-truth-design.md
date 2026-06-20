@@ -126,6 +126,40 @@ with a clear reason.
   selections. We extend it to render the SSOT view + the addenda acknowledgement gate.
 - Compliance stays **advisory at submit, hard gate at award** (D-016 unchanged).
 
+## 6a. Bid lifecycle & change-notification model (decided)
+
+The fix for notification fatigue: **decouple recording a change from notifying a
+sub.** Changes accumulate silently in the SSOT during design; subs are pulled in only
+at milestones, and only the affected ones.
+
+**Stage 1 — Preliminary bids.** Subs bid the base plans for rough numbers.
+(`bidRequest.stage = 'rough'`.)
+
+**Award (early).** Each trade is **awarded off the preliminary bid** — the winner
+becomes the committed partner through design. (Tradeoff accepted: less price
+competition on the final number, in exchange for a partner during design.) Award also
+triggers the Phase-2 roster reveal, so awarded trades can coordinate during design.
+
+**Design phase — silent.** Client makes all selections; designer/GC finalize. Every
+change is logged as an **Addendum tagged with the affected trades** (targeting is
+**by trade**). **No sub notifications fire during this phase** — addenda just
+accumulate in the SSOT.
+- **Escape hatch:** the GC may flag an individual addendum **"notify now"** to push it
+  immediately to the affected awarded sub when a change is big enough to warrant it.
+  Default is batch; this is the deliberate exception.
+
+**Stage 2 — Final bid update.** At design close, **only awarded subs** get **one**
+request to update their bid against the finalized design (`stage = 'final'`,
+`parentBidRequestId` → the rough bid). Each sub sees the grouped addenda affecting
+**their trade**, acknowledges them, and submits final pricing + timeline → contract
+basis.
+
+Net: a sub is touched at most twice (initial invite, final update) plus rare
+GC-pushed urgent items — never drip-pinged, and only when their trade is affected.
+
+> Post-final changes (during construction) are **change orders**, a separate concept —
+> out of scope for this design.
+
 ## 7. Phasing
 
 - **Phase 1 (this doc):** SSOT data model + `inSsot`/approval flags + sub-portal
@@ -158,6 +192,10 @@ from the bid-requests fix apply: scope queries to keys the rules can evaluate.
 - **Folder layout:** fixed categories (Plans / Design / Selections / Permits / Addenda / Scopes).
 - **Pre-bid gate:** client must approve the bid set before any sub is invited.
 - **Addenda:** authored by GC/designer, published to subs only after Approval Quorum.
+- **Bid lifecycle:** preliminary bids → **award early** → silent design phase →
+  final-bid update from awarded subs only. Stage 1 `rough` / Stage 2 `final`.
+- **Change targeting:** by **trade**; silent accumulation during design with a GC
+  **"notify now"** escape hatch for urgent mid-design changes.
 
 ## 10. Open questions
 
