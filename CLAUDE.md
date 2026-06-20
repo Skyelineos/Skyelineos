@@ -24,6 +24,12 @@ Skyeline OS is a **single-tenant construction management app** built for Skyelin
    site — a Firebase deploy does. Use the `npm run deploy*` commands below.
 So the flow is: **edit → commit + push to GitHub → (review/merge) → `npm run deploy` to Firebase to go live.**
 
+## Working across devices (GitHub is the sync layer — no iCloud)
+Tyler works across a **Mac mini, MacBook Pro, iPad, iPhone, and occasionally a Windows desktop**. The standing direction: **keep everything in GitHub — it is the single cross-device source for all SkyelineOS files, and it covers every device including the desktop.** Do NOT use iCloud (or Dropbox/etc.) for project files.
+- On any device, **`git pull origin main` before starting** so you're working from current; push through GitHub when done. The branch can drift dozens of commits behind between sessions — always sync first.
+- **Never put the git working copy inside an iCloud/Dropbox-synced folder** — cloud sync corrupts `.git` and chokes on `node_modules`. The local clone lives in a plain local folder; GitHub does the syncing.
+- Anything worth keeping belongs **in the repo** (code in its module; reference docs/notes under `docs/`). Don't leave necessary files only on one machine. One-off artifacts a session produces for Tyler are delivered to him directly rather than parked on a single device.
+
 ## Recent sessions
 - **Session 12 (Ingestion Lab spike):** Built the admin-only AI ingestion pipeline at `/admin/ingestion-lab`. Gmail (label-filtered) + Google Drive (two hardcoded folders) + a generic upload endpoint (future iMessage / iCloud scripts) → Claude Sonnet 4.6 extraction via tool_use → three-lane review (Auto-Filed / Review Queue / Ask Queue). Entirely isolated under the `ingestion_lab/` Firestore namespace; production collections untouched. See `docs/ingestion-lab-schema.md` for the durable reference and `SESSION_NOTES.md` Session 12 entry for operator prerequisites + deliberate deferrals.
 - **Session 10 (cleanup):** Removed dead `server/` directory (102 files, ~37k lines) and 11 stale bid components (~8k lines). Total ~45k lines deleted. `PortalBidsPanel` confirmed as canonical bid system. CLAUDE.md corrected. Three pre-existing TypeScript errors in `ModernTimelineBuilder.tsx` (lines 815, 816, 1342) remain — out of scope for this session.
