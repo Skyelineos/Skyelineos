@@ -124,6 +124,12 @@ registerBrainPass(app, db);          // POST /api/ingestionLab/brain/process
 import { registerAiInboxReviewRoutes } from './aiInbox/reviewRoutes';
 registerAiInboxReviewRoutes(app, db); // /api/ai-inbox/{status,:id/approve,:id/reject,:id/reprocess}
 
+// Communication Center AI (Phase 3) — staff-triggered extraction + summaries.
+// Suggestions land in a review queue; humans confirm before they become real
+// action items / decisions. ANTHROPIC_API_KEY is already bound to `api`.
+import { registerCommunicationAiRoutes } from './communications/routes';
+registerCommunicationAiRoutes(app, db); // /api/communications/threads/:id/{analyze,summarize} + /summarize-project
+
 // Google Places proxy — address autocomplete for the jobsite "Set pin" flow.
 // Key stays server-side (Secret Manager); see places/placesRoutes.ts.
 registerPlacesRoutes(app);           // GET /api/places/{autocomplete,details}

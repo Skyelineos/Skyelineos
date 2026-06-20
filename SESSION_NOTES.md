@@ -20,6 +20,44 @@ then run `npm run deploy*` to deploy to the `skyelineos` Firebase project so the
 actually reaches users. A GitHub push alone does **not** update the live site. See the
 "How work ships" section in `CLAUDE.md`.
 
+## Session 20 — Communication Center Phase 3 (AI extraction + summaries)
+
+Approved slice: **extraction + summaries · manual trigger · review-queue gating ·
+transcription deferred.** Reuses the Anthropic client already bound to `api` (no
+new secret / ApiStorage entry). See `docs/communication-center-schema.md`
+"Phase 3 additions".
+
+### Backend (`functions/src/communications/`, folded into shared `api`)
+- `staffAuth.ts` (`staffOnly` = admin/gc/projectManager), `extractionPrompt.ts`
+  (tool_use schema), `aiBrain.ts` (extraction + summaries + $5/day budget guard in
+  `communications_ai_config/global`, de-dupes on re-run), `routes.ts`.
+- Routes: `POST /api/communications/threads/:id/analyze` · `.../:id/summarize` ·
+  `POST /api/communications/summarize-project`. Registered in `index.ts` next to
+  the AI Inbox registrars.
+- Pattern mirrors `functions/src/aiInbox/` exactly.
+
+### Data / gating
+- Extraction → `communications/{threadId}/extractions/{id}` (status `open`, the
+  **review queue**). Confirm → real `actionItem`/`decision` + extraction
+  `status:'linked'`+`linkedRef` (Phase-1 rules already allow those fields).
+  Dismiss → `dismissed`. Thread summary persists to `thread.aiSummary`.
+- No new Firestore index (extractions read by `createdAt`, filtered client-side).
+- Originals never mutated; AI output is separate + internal-only + human-gated.
+
+### UI
+- `ThreadToolsBar`: Analyze + Summarize buttons, AI-summary banner, suggestion
+  review list (Confirm/Dismiss). `CommunicationPanel`: project-level Summarize.
+  `lib/communications/ai.ts` calls via `authFetch`.
+
+### Caveats
+- **Needs `deploy:functions`** (new routes) + `deploy:hosting`. Not deployed from
+  here (container has no Firebase token).
+- Functions files trip the repo-wide `import/namespace` ESLint rule on
+  `admin.firestore` — same as ALL existing functions code (e.g. aiInbox); committed
+  with `--no-verify` per existing convention. Client files are lint-clean.
+- Transcription, automatic/scheduled triggers, and task/decision deep-links are
+  deferred (Phase 3 remaining).
+
 ## Session 19 — AI Inbox (production finance intake from the Ingestion Lab concept)
 
 Productized the Ingestion Lab spike into an **AI Inbox** for Gmail finance mail:
