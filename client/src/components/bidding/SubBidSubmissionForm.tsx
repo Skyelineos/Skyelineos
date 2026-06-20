@@ -22,6 +22,8 @@ import {
 } from '@/components/ui/dialog';
 import TakeoffStudio from '@/components/takeoff/TakeoffStudio';
 import type { BidRequest, BidLineItem, BidInsurance, ContractorLicense } from './types';
+import { publishedAddendaForTrades } from '@/lib/ssot/addenda';
+import type { Addendum } from '@/lib/ssot/types';
 
 interface AttachedMeasurement {
   id: string;
@@ -158,6 +160,25 @@ export function SubBidSubmissionForm({
   const [attachProgress, setAttachProgress] = useState(0);
 
   const [submitting, setSubmitting] = useState(false);
+
+  // SSOT deviations (Addenda) affecting THIS trade. Published-only; the sub must
+  // acknowledge them before submitting so a plan-vs-design change can't slip
+  // through unpriced (docs/single-source-of-truth-design.md §5).
+  const [addenda, setAddenda] = useState<Addendum[]>([]);
+  const [addendaAcknowledged, setAddendaAcknowledged] = useState(false);
+  useEffect(() => {
+    if (!request.projectId || !request.trade) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const found = await publishedAddendaForTrades(request.projectId, [request.trade as string]);
+        if (!cancelled) setAddenda(found);
+      } catch (e) {
+        console.warn('[bid] failed to load addenda', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [request.projectId, request.trade]);
 
   // Takeoff: optional measurements the sub takes against the project's plans
   // and chooses to attach to this bid.
@@ -378,6 +399,9 @@ export function SubBidSubmissionForm({
     if (!insurance.expiration) return 'Insurance expiration date is required';
     if (!license.number.trim()) return 'Contractor license number is required';
     if (!agreementAcknowledged) return 'You must acknowledge the subcontractor agreement requirement';
+    if (addenda.length > 0 && !addendaAcknowledged) {
+      return 'Confirm your bid includes the listed changes to the plans';
+    }
     return null;
   };
 
@@ -426,6 +450,8 @@ export function SubBidSubmissionForm({
         contractorLicense: license,
         agreementAcknowledged: true,
         agreementAcknowledgedAt: serverTimestamp(),
+        // Which plan deviations (Addenda) this bid is confirmed to cover.
+        addendaAcknowledged: addenda.map(a => ({ addendumId: a.id, number: a.number })),
         status: 'received',
         submittedViaPortal: true,
         // Default visibility off — GC must explicitly toggle on for client.
@@ -482,6 +508,51 @@ export function SubBidSubmissionForm({
           <CardContent className="p-3 text-sm text-green-900 flex items-center gap-2">
             <Shield className="w-4 h-4" />
             You've already submitted a bid for this request. Submitting again will create a revised bid.
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Deviations from the base plans (SSOT Addenda) affecting this trade.
+          The sub cannot submit until they confirm their bid covers them — this
+          is the guard against bidding the plans while a design change is missed. */}
+      {addenda.length > 0 && (
+        <Card className="border-amber-300 bg-amber-50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2 text-amber-900">
+              <AlertCircle className="w-4 h-4" />
+              Changes to the plans for {request.trade} — read before bidding
+            </CardTitle>
+            <CardDescription className="text-amber-800">
+              These approved changes affect your scope. Your bid must account for them.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {addenda.map(a => (
+              <div key={a.id} className="rounded border border-amber-200 bg-white p-2">
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="text-[10px] shrink-0">Addendum {a.number}</Badge>
+                  <span className="font-medium text-sm text-gray-900">{a.title}</span>
+                  {a.pricingImpact && (
+                    <Badge className="bg-amber-200 text-amber-900 text-[10px] shrink-0">Affects pricing</Badge>
+                  )}
+                </div>
+                {a.description && (
+                  <p className="text-xs text-gray-600 mt-1 whitespace-pre-wrap">{a.description}</p>
+                )}
+              </div>
+            ))}
+            <label className="flex items-start gap-2 cursor-pointer pt-1 text-sm text-amber-900">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={addendaAcknowledged}
+                onChange={e => setAddendaAcknowledged(e.target.checked)}
+              />
+              <span>
+                I’ve reviewed {addenda.length === 1 ? 'this change' : `these ${addenda.length} changes`} and
+                my bid includes the revised scope. <span className="text-red-500 font-bold">*</span>
+              </span>
+            </label>
           </CardContent>
         </Card>
       )}
