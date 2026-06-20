@@ -1082,6 +1082,36 @@ service cloud.firestore {
              ]);
     }
 
+    // AI Inbox (production finance intake) — separate from the ingestion_lab
+    // spike. Items are CREATED only by the n8n ingest Cloud Function and the
+    // QBO sync happens server-side on approval (Admin SDK bypasses these rules).
+    // Admins read everything; the UI may update only the human-review fields.
+    // No create/delete from the client — the brain owns the data.
+    match /ai_inbox_items/{itemId} {
+      allow read: if isAdmin();
+      // The admin UI flips review state + can stash a correction/answer. The
+      // actual approve→QBO write goes through the Cloud Function (which also
+      // sets qboSyncStatus/qboEntityId), so those stay server-only here.
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly([
+               'reviewStatus',
+               'reviewedAt',
+               'reviewedByUid',
+               'correction',
+               'clarificationAnswer',
+               'rejectReason'
+             ]);
+      allow create, delete: if false; // Cloud Function only
+    }
+
+    // AI Inbox config — rolling daily AI-spend guardrail + budget. Read by the
+    // admin UI; written only by the Cloud Function (Admin SDK).
+    match /ai_inbox_config/{docId} {
+      allow read: if isAdmin();
+      allow write: if false; // Cloud Function only
+    }
+
     // Notification automation job queue — delayed/multi-step notification steps
     // enqueued by fireTrigger and executed by the scheduled sweeper. Written and
     // read exclusively by Cloud Functions (Admin SDK bypasses these rules).

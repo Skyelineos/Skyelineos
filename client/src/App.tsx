@@ -102,6 +102,7 @@ const Tools = lazy(() => import('@/pages/Tools'));
 const LumberTakeoff = lazy(() => import('@/pages/LumberTakeoff'));
 const BidCompareTool = lazy(() => import('@/pages/BidCompareTool'));
 const IngestionLab = lazy(() => import('@/pages/IngestionLab'));
+const AiInbox = lazy(() => import('@/pages/AiInbox'));
 
 function Router() {
   // Initialize performance optimizations for faster loading
@@ -398,6 +399,18 @@ function Router() {
               fallback={<MinimalSpinner title="Loading Ingestion Lab" />}
             >
               <IngestionLab />
+            </Suspense>
+          </RoleGuard>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/admin/ai-inbox">
+        <ProtectedRoute>
+          <RoleGuard allowedRoles={['admin']} showNotAuthorized>
+            <Suspense
+              fallback={<MinimalSpinner title="Loading AI Inbox" />}
+            >
+              <AiInbox />
             </Suspense>
           </RoleGuard>
         </ProtectedRoute>

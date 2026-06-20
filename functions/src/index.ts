@@ -60,9 +60,14 @@ async function authMiddleware(req: any, res: any, next: any) {
 import { registerSmsInboundRoute }      from './notifications/smsInboundRoute';
 import { registerBidTokenEndpoint }     from './bids/bidTokenEndpoint';
 import { registerLeadIntakeRoute }      from './leads/intakeRoute';
+import { registerAiInboxIngest }        from './aiInbox/ingestRoute';
 registerSmsInboundRoute(app, admin.firestore());
 registerBidTokenEndpoint(app, admin.firestore());
 registerLeadIntakeRoute(app, admin.firestore());
+// AI Inbox n8n ingestion — authed by the N8N_INGEST_SECRET shared-secret
+// header (not a Firebase token), so it lives in the public allowlist. The
+// route itself rejects any call without the correct secret.
+registerAiInboxIngest(app, admin.firestore()); // POST /api/ai-inbox/ingest
 
 // /api/health stays public (liveness probe).
 app.get('/api/health', async (_req: any, res: any) => {
@@ -112,6 +117,12 @@ registerGmailIngester(app, db);      // POST /api/ingestionLab/ingest/gmail
 registerDriveIngester(app, db);      // POST /api/ingestionLab/ingest/drive
 registerUploadEndpoint(app, db);     // POST /api/ingestionLab/upload
 registerBrainPass(app, db);          // POST /api/ingestionLab/brain/process
+
+// AI Inbox — admin review/approval routes (the n8n ingest route is registered
+// above the gate). Approve is the only path that writes to QuickBooks, and only
+// after a human confirms. See functions/src/aiInbox/.
+import { registerAiInboxReviewRoutes } from './aiInbox/reviewRoutes';
+registerAiInboxReviewRoutes(app, db); // /api/ai-inbox/{status,:id/approve,:id/reject,:id/reprocess}
 
 // Google Places proxy — address autocomplete for the jobsite "Set pin" flow.
 // Key stays server-side (Secret Manager); see places/placesRoutes.ts.
@@ -2260,6 +2271,9 @@ exports.api = onRequest(
       'APP_BASE_URL',
       // Crestview Solace lead-intake form (/api/leads/intake) shared secret.
       'LEAD_INTAKE_SECRET',
+      // AI Inbox: shared secret the n8n Gmail workflow presents to
+      // POST /api/ai-inbox/ingest (n8n can't carry a Firebase ID token).
+      'N8N_INGEST_SECRET',
       // QA harness: GitHub PAT (actions:write) to dispatch the qa-suite workflow,
       // and the shared bearer the workflow uses to post results back.
       'GH_DISPATCH_TOKEN',
