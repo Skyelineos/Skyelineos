@@ -9,6 +9,30 @@
       ]
     },
     {
+      "collectionGroup": "documents",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "projectId", "order": "ASCENDING" },
+        { "fieldPath": "inSsot", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "moodBoards",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "inSsot", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "addenda",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "affectsTrades", "arrayConfig": "CONTAINS" }
+      ]
+    },
+    {
       "collectionGroup": "communications",
       "queryScope": "COLLECTION",
       "fields": [

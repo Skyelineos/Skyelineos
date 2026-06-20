@@ -13,14 +13,6 @@ import { SubBidSubmissionForm } from './SubBidSubmissionForm';
 import { ClaimContactDialog } from './ClaimContactDialog';
 import type { BidRequest } from './types';
 
-// Order identifiers so the most specific invite keys (Firebase UID + contact
-// document IDs — none contain '@') come before email variants. Firestore caps
-// array-contains-any / in queries at 10 values, and the GC overwhelmingly
-// invites subs by contact ID + linkedUserId, so these must survive truncation.
-function prioritize(ids: string[]): string[] {
-  return [...ids].sort((a, b) => (a.includes('@') ? 1 : 0) - (b.includes('@') ? 1 : 0));
-}
-
 export function SubBidRequestsTab() {
   const { user } = useAuth();
   // Admin impersonation: when an admin is "viewing as" a specific sub, the
@@ -38,6 +30,17 @@ export function SubBidRequestsTab() {
   // linkedUserId or email matches them) and let the bidRequest query do an
   // array-contains-any over the full set.
   const [subIds, setSubIds] = useState<string[]>([]);
+  // Rule-safe keys for the collection-group queries. Firestore evaluates
+  // security rules for collectionGroup LIST queries WITHOUT reliable get(), so
+  // role checks (isGC/isAdmin/isSub) can't authorize them — only the SIGNED-IN
+  // user's own request.auth.uid + lowercased email can. Querying bidRequests by
+  // contactIds the rule can't verify makes the WHOLE query fail with
+  // permission-denied (the bug behind "No open bid requests" + the retry loop).
+  // These are always the REAL authenticated user's keys: in admin "view as"
+  // they're the admin's (who isn't on any invite), so the query returns empty
+  // instead of looping — sign in as the sub to see their bids.
+  const [selfUid, setSelfUid] = useState<string>('');
+  const [selfEmail, setSelfEmail] = useState<string>('');
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -159,9 +162,18 @@ export function SubBidRequestsTab() {
         }
       }
       const arr = Array.from(ids).filter(Boolean);
-      console.log('[bidRequests] searching invitedSubIds for any of:', arr,
-        impersonatingSub ? `(impersonating ${viewedUser?.name || viewedUser?.id})` : '');
-      if (!cancelled) setSubIds(arr);
+      // Capture the REAL signed-in user's auth keys (not the impersonated sub's)
+      // — these are the only values Firestore can use to authorize the
+      // collection-group bidRequests/bids queries (see selfUid/selfEmail notes).
+      const realAuth = auth.currentUser;
+      const rUid = realAuth?.uid || '';
+      const rEmail = (realAuth?.email || '').toLowerCase().trim();
+      console.log('[bidRequests] querying by auth keys:', [rUid, rEmail].filter(Boolean),
+        '· resolved sub identifiers:', arr,
+        impersonatingSub
+          ? `(impersonating ${viewedUser?.name || viewedUser?.id} — rules gate the list on the signed-in admin, not the sub; sign in as the sub to see their bids)`
+          : '');
+      if (!cancelled) { setSubIds(arr); setSelfUid(rUid); setSelfEmail(rEmail); }
     })();
     return () => { cancelled = true; };
   }, [user, impersonatingSub, viewedUser?.id]);
@@ -175,13 +187,14 @@ export function SubBidRequestsTab() {
   // caps array-contains-any at 10 values per query, so we truncate (rare to
   // hit in practice — a sub usually has 1–3 identifiers).
   useEffect(() => {
-    if (subIds.length === 0) return;
-    // Firestore caps array-contains-any at 10 values. The GC invites by contact
-    // ID + linkedUserId far more often than by raw email, so order the most
-    // specific keys (uid / contact IDs — no '@') ahead of email variants before
-    // truncating, otherwise a sub with many email aliases could lose the very ID
-    // that matches their invitation.
-    const search = prioritize(subIds).slice(0, 10);
+    // Query ONLY by the signed-in user's own uid + lowercased email — the keys
+    // the security rule (request.auth.uid / request.auth.token.email.lower() in
+    // invitedSubIds) can authorize for a collection-group LIST. Searching the
+    // broader resolved set (contactIds, etc.) makes Firestore reject the whole
+    // query with permission-denied. The GC's send path writes linkedUserId +
+    // lowercased email into invitedSubIds, so a linked sub still resolves.
+    const search = Array.from(new Set([selfUid, selfEmail].filter(Boolean)));
+    if (search.length === 0) return;
     const q = query(
       collectionGroup(db, 'bidRequests'),
       where('invitedSubIds', 'array-contains-any', search),
@@ -190,21 +203,25 @@ export function SubBidRequestsTab() {
     const unsub = onSnapshot(q, snap => {
       console.log(`[bidRequests] query returned ${snap.docs.length} doc(s)`);
       setRequests(snap.docs.map(d => ({ id: d.id, ...d.data() } as BidRequest)));
-    }, (err) => {
-      // Index might not exist yet — surface clearly so the missing-index
-      // link in the error message is easy to spot in DevTools.
-      console.warn('[bidRequests] query failed (likely missing Firestore index):', err);
+    }, (err: any) => {
+      // Distinguish the two failure modes so this isn't a debugging goose chase:
+      // permission-denied = rules/query-key mismatch; failed-precondition = a
+      // genuinely missing composite index (its message carries a create link).
+      const code = err?.code || '(unknown)';
+      console.warn(`[bidRequests] query failed [${code}]:`, err?.message || err);
     });
     return () => unsub();
-  }, [subIds]);
+  }, [selfUid, selfEmail]);
 
   // Subscribe to my own submitted bids (same union of identifiers).
   useEffect(() => {
-    if (subIds.length === 0) return;
-    const search = prioritize(subIds).slice(0, 10);
+    // The bids rule only authorizes subContactId == request.auth.uid for a sub,
+    // so a collection-group list must query by the signed-in uid alone (anything
+    // broader is rejected wholesale, same as bidRequests above).
+    if (!selfUid) return;
     const q = query(
       collectionGroup(db, 'bids'),
-      where('subContactId', 'in', search),
+      where('subContactId', 'in', [selfUid]),
     );
     const unsub = onSnapshot(q, snap => {
       const ids = new Set<string>();
@@ -215,7 +232,7 @@ export function SubBidRequestsTab() {
       setSubmittedBidIds(ids);
     }, () => {});
     return () => unsub();
-  }, [subIds]);
+  }, [selfUid]);
 
   if (activeRequest) {
     return (
@@ -247,6 +264,14 @@ export function SubBidRequestsTab() {
         </Button>
       </div>
       <ClaimContactDialog open={claimOpen} onClose={() => setClaimOpen(false)} />
+
+      {impersonatingSub && (
+        <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          <strong>Admin view:</strong> Firestore rules gate this list on the signed-in user's own
+          identity, so a sub's bid requests can't be listed while impersonating. Sign in as the
+          sub directly to see and submit their bids.
+        </div>
+      )}
 
       {open.length === 0 ? (
         <Card>
