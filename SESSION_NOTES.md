@@ -20,6 +20,135 @@ then run `npm run deploy*` to deploy to the `skyelineos` Firebase project so the
 actually reaches users. A GitHub push alone does **not** update the live site. See the
 "How work ships" section in `CLAUDE.md`.
 
+## Session 20 — Communication Center Phase 3 (AI extraction + summaries)
+
+Approved slice: **extraction + summaries · manual trigger · review-queue gating ·
+transcription deferred.** Reuses the Anthropic client already bound to `api` (no
+new secret / ApiStorage entry). See `docs/communication-center-schema.md`
+"Phase 3 additions".
+
+### Backend (`functions/src/communications/`, folded into shared `api`)
+- `staffAuth.ts` (`staffOnly` = admin/gc/projectManager), `extractionPrompt.ts`
+  (tool_use schema), `aiBrain.ts` (extraction + summaries + $5/day budget guard in
+  `communications_ai_config/global`, de-dupes on re-run), `routes.ts`.
+- Routes: `POST /api/communications/threads/:id/analyze` · `.../:id/summarize` ·
+  `POST /api/communications/summarize-project`. Registered in `index.ts` next to
+  the AI Inbox registrars.
+- Pattern mirrors `functions/src/aiInbox/` exactly.
+
+### Data / gating
+- Extraction → `communications/{threadId}/extractions/{id}` (status `open`, the
+  **review queue**). Confirm → real `actionItem`/`decision` + extraction
+  `status:'linked'`+`linkedRef` (Phase-1 rules already allow those fields).
+  Dismiss → `dismissed`. Thread summary persists to `thread.aiSummary`.
+- No new Firestore index (extractions read by `createdAt`, filtered client-side).
+- Originals never mutated; AI output is separate + internal-only + human-gated.
+
+### UI
+- `ThreadToolsBar`: Analyze + Summarize buttons, AI-summary banner, suggestion
+  review list (Confirm/Dismiss). `CommunicationPanel`: project-level Summarize.
+  `lib/communications/ai.ts` calls via `authFetch`.
+
+### Slice 2 (same session) — roll-up + schedule loop
+- `CommDigest` — aggregated Action Items + Decision Log per subject (reuses the
+  Phase-2 `listen*ForSubject` + indexes). Wired into `ProjectCommunications` as a
+  Conversations / Action Items & Decisions tab toggle.
+- `pushActionItemToTasks()` (in `lib/communications/actionItems.ts`) — a
+  project-scoped action item becomes a real `tasks` doc (same shape as
+  `applyJobTemplate`) + records `linkedTaskId`. **Additive only** — no change to
+  Tasks/Schedule code; `tasks` rule already allows staff create; no new index.
+  Client/lead-scoped action items can't push (no projectId) — button hidden.
+
+### Caveats
+- **Needs `deploy:functions`** (slice 1 routes) + `deploy:hosting` (all UI). Not
+  deployed from here (container has no Firebase token). Slice 2 is hosting-only.
+- Functions files trip the repo-wide `import/namespace` ESLint rule on
+  `admin.firestore` — same as ALL existing functions code (e.g. aiInbox); committed
+  with `--no-verify` per existing convention. Client files are lint-clean.
+- Transcription, automatic/scheduled triggers, and task/decision deep-links are
+  deferred (Phase 3 remaining).
+
+## Session 19 — AI Inbox (production finance intake from the Ingestion Lab concept)
+
+Productized the Ingestion Lab spike into an **AI Inbox** for Gmail finance mail:
+vendor invoices, receipts (incl. Home Depot), bank alerts, and sub/client email
+→ Claude extraction → project match + QuickBooks categorization → human review →
+QBO write on approval. **Built as an extension of the Firebase architecture — no
+new backend service, no Postgres/Drizzle. The `ingestion_lab/` spike is untouched
+and still runs; this is a separate namespace.**
+
+### Namespaces (new, isolated)
+- Firestore: top-level `ai_inbox_items` (one doc per ingested item) +
+  `ai_inbox_config/global` (rolling daily AI-spend guard, default $10/day).
+- Functions: `functions/src/aiInbox/` (types, extractionPrompt, projectMatcher,
+  extract, ingestRoute, qboSync, reviewRoutes) + shared `functions/src/qbo/client.ts`
+  (extracted token-refresh + REST helper; `qbo/paymentLink.ts` left untouched).
+- Client: `client/src/pages/AiInbox.tsx` + `client/src/components/aiInbox/`
+  (InboxItemCard, types). Route `/admin/ai-inbox`, `RoleGuard(['admin'])`,
+  Sidebar → Management → "AI Inbox". Brand black/gold.
+
+### Routes (folded into the shared `api` Express app — no new Cloud Run service)
+- `POST /api/ai-inbox/ingest` — **n8n endpoint**, registered ABOVE the `/api`
+  auth gate (n8n can't carry a Firebase token). Authed by `X-N8N-Secret` header
+  vs Secret Manager `N8N_INGEST_SECRET` (constant-time compare; fails closed if
+  unset). Idempotent on Gmail `messageId`. Runs the brain inline; if the AI
+  budget is spent or extraction fails, the raw item is still persisted as
+  `status: needs_processing` for later `/reprocess` — inbound mail is never dropped.
+- `GET /api/ai-inbox/status` — `{ qboConnected, qboEnv }` for the UI.
+- `POST /api/ai-inbox/:id/approve` — admin-only. Applies any human correction,
+  then writes to QBO: **vendor_invoice → A/P Bill; receipt/home_depot_receipt/
+  bank_alert → Purchase/Expense** (Tyler's decision). Idempotent on the cached
+  `qboEntityId`. **This is the ONLY path that writes to QuickBooks** — nothing
+  auto-syncs.
+- `POST /api/ai-inbox/:id/reject` and `/reprocess` — admin-only.
+
+### Rules
+- `firestore.rules`: `ai_inbox_items` (admin read; UI may update only
+  reviewStatus/reviewedAt/reviewedByUid/correction/clarificationAnswer/rejectReason;
+  create+delete CF-only) and `ai_inbox_config` (admin read, CF-only write).
+  Mirrors the ingestion_lab processed_items carve-out shape.
+
+### Project matching
+`projectMatcher.ts` loads a lightweight live `projects` index (id/name/client/
+address, read-only) into the prompt; `deterministicMatch()` is a token-overlap
+fallback that backfills/validates Claude's `projectId` against real ids.
+
+### Operator prerequisites (REQUIRED before first run)
+1. **`N8N_INGEST_SECRET`** — `firebase functions:secrets:set N8N_INGEST_SECRET`
+   (already added to the `api` `secrets:` array). Put the same value in the n8n
+   HTTP node header `X-N8N-Secret`.
+2. **n8n workflow** — Gmail trigger → HTTP POST to
+   `https://skyelineos.web.app/api/ai-inbox/ingest` with the JSON shape shown on
+   the page's Setup tab (`messageId`, `from`, `subject`, `text`, `gmailLabels`,
+   `attachments`). The response returns the recommended Gmail label so n8n can
+   apply it back. `ANTHROPIC_API_KEY` is already bound.
+3. **QuickBooks** — connect via Settings (existing `qboConnections/global` OAuth,
+   sandbox or production). Until connected, financial approvals are blocked in
+   the UI (the Approve button is disabled with a hint). Non-financial items
+   approve fine without QBO.
+4. **Deploy** — `npm run deploy:functions` (routes + secret), `deploy:rules`
+   (new ai_inbox blocks), `deploy:hosting` (page).
+
+### Validation
+`functions` `tsc --noEmit` → 0 errors. Client `vite build` → green (AiInbox
+code-splits to its own chunk). Headless render smoke probe
+`scripts/probe-ai-inbox.mjs` → PASS against the Vite **dev** server (the test-mode
+admin bypass is `import.meta.env.DEV`-gated, so it no-ops on a preview/prod build
+— run the dev server for the local check). Live QBO write path needs a connected
+company to exercise end-to-end — not reachable from the build sandbox.
+
+### Deliberate deferrals
+- No Gmail **write-back** of the recommended label from our side — n8n owns that
+  (we return the label in the ingest + approve responses). A `/apply-label`
+  endpoint would need Gmail write scope; out of scope.
+- No batch/scheduled brain sweep — extraction is inline at ingest, with a manual
+  `/reprocess` for budget-deferred or failed items. Add a sweep if n8n ever
+  outpaces the daily budget.
+- QBO account resolution falls back to the first active expense account when the
+  suggested account name isn't found; admin can correct the account before approving.
+- Accountant-role access not added (role taxonomy refactor still pending per
+  ROLE_AUDIT.md) — gated to `admin` like the Ingestion Lab + API Storage pages.
+
 ## Session 18 — Project Designer Portal (room-by-room design collaboration)
 
 New **project-scoped** Designer Portal at `/projects/:id/designer` (distinct from

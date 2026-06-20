@@ -167,8 +167,60 @@ sourceThread. Messages gained `senderType` + `sourceType`.
 - **Phase 2 (done):** client messenger · per-project / per-client / per-lead
   surfaces · phone-call + meeting records · action items + decision log · trade
   tagging · search over threads/calls/meetings · visibility enforcement.
-- **Phase 3:** generalize Ingestion-Lab brain → communications extractor; AI
-  summaries / extraction / search; meeting transcription; auto re-point Cloud
-  Function on lead→project conversion; action-item→task / decision deep-links.
+- **Phase 3 (done — AI layer, slice 1):** staff-triggered **extraction** +
+  **summaries** that reuse the Anthropic client already bound to `api`.
+- **Phase 3 (done — slice 2):** aggregated **Action Items + Decision Log** roll-up
+  per subject, and **action-item → Schedule/Task deep-link** (`linkedTaskId`).
+- **Phase 3 (remaining):** meeting transcription (needs an STT vendor — deferred);
+  automatic / scheduled triggers; auto re-point Cloud Function on lead→project
+  conversion; decision→selection deep-links; semantic search.
 - **Phase 4:** trade notification workflows · approval requests · project-memory
   AI · SMS/email inbound into threads.
+
+## Phase 3 additions (done)
+
+**Decisions:** extraction + summaries first · **manual** "Analyze"/"Summarize"
+trigger · **review-queue gating** (AI never auto-applies) · transcription deferred.
+
+**Backend** (`functions/src/communications/`, folded into the shared `api` Express
+app — no new Cloud Run; `ANTHROPIC_API_KEY` already bound, so no new secret /
+ApiStorage entry):
+- `staffAuth.ts` — `staffOnly` middleware (admin/gc/projectManager via Firestore role).
+- `extractionPrompt.ts` — system prompt + `extract_communications` tool (entity
+  types: action_item, commitment, decision_made/needed, change_order_signal,
+  issue, schedule_change, vendor_mention) + transcript builder.
+- `aiBrain.ts` — Claude `claude-sonnet-4-6` tool_use extraction + plain summaries;
+  rolling **daily budget guard** ($5 default) in `communications_ai_config/global`;
+  de-dupes against open suggestions on re-run.
+- `routes.ts` → `POST /api/communications/threads/:id/analyze`,
+  `.../:id/summarize`, `POST /api/communications/summarize-project`.
+
+**Data:** extraction writes land in the Phase-1-reserved
+`communications/{threadId}/extractions/{id}` with `status:'open'`, `lane:'review'`,
+`createdViaAi:true` — the **review queue**. Confirm → creates a real `actionItem`
+or `decision` (reusing the Phase-2 libs) + marks the extraction `status:'linked'`
+with `linkedRef` (rules already permit those exact fields). Dismiss → `dismissed`.
+Thread summaries persist to `thread.aiSummary` (internal-only). No new index
+(extractions queried by `createdAt` only, filtered to `open` client-side).
+
+**UI:** `ThreadToolsBar` gains **Analyze** + **Summarize** buttons, the AI-summary
+banner (internal-only), and the suggestion **review list** (Confirm / Dismiss per
+item). `CommunicationPanel` gains a project-level **Summarize** for project subjects.
+Client calls go through `lib/communications/ai.ts` via `authFetch` (ID token);
+Claude runs server-side only.
+
+**Safety:** original messages never mutated; AI output is separate records,
+internal-only, and gated behind human confirmation.
+
+**Slice 2 (roll-up + schedule loop):**
+- `CommDigest` component — aggregated **Action Items** + **Decision Log** for a
+  subject (reuses `listenActionItemsForSubject` / `listenDecisionsForSubject` +
+  their Phase-2 indexes). Wired into `ProjectCommunications` as a
+  "Conversations / Action Items & Decisions" tab toggle. Source-thread deep-links
+  back to `/communications?thread=…`.
+- `pushActionItemToTasks()` — closes the loop: a project-scoped action item becomes
+  a real task in the existing `tasks` collection (same shape `applyJobTemplate`
+  uses) with provenance (`source:'communication'`, `sourceActionItemId`,
+  `sourceThreadId`); the action item records `linkedTaskId` and shows "In schedule".
+  Purely additive — never touches the Tasks/Schedule code. No rule change (`tasks`
+  already allows staff create); no new index.

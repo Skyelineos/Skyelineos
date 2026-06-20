@@ -10,13 +10,25 @@ import {
 } from '@/lib/communications/firestore';
 import { listenActionItemsForThread, updateActionItem, type ActionItem } from '@/lib/communications/actionItems';
 import { listenDecisionsForThread, type ClientDecision } from '@/lib/communications/decisions';
+import {
+  analyzeThread, summarizeThread, listenOpenExtractions, confirmExtraction, dismissExtraction,
+  type AiExtraction,
+} from '@/lib/communications/ai';
 import { CreateActionItemModal } from './CreateActionItemModal';
 import { CreateDecisionModal } from './CreateDecisionModal';
-import { Hammer, CheckSquare, Gavel, Plus, X, Check } from 'lucide-react';
+import { Hammer, CheckSquare, Gavel, Plus, X, Check, Sparkles, FileText, Loader2 } from 'lucide-react';
+
+const ENTITY_LABEL: Record<string, string> = {
+  action_item: 'Action', commitment: 'Commitment', decision_made: 'Decision',
+  decision_needed: 'Decision needed', change_order_signal: 'Change order?',
+  issue: 'Issue', schedule_change: 'Schedule', vendor_mention: 'Trade',
+};
 
 export function ThreadToolsBar({ thread }: { thread: CommThread }) {
   const { user } = useAuth();
   const role = (user as any)?.role;
+  const uid = (user as any)?.firebaseUid || (user as any)?.id?.toString() || '';
+  const myName = (user as any)?.name || (user as any)?.email || 'Staff';
   const isStaff = role === 'gc' || role === 'admin' || role === 'projectManager';
 
   const [vendors, setVendors] = useState<VendorOption[]>([]);
@@ -25,11 +37,19 @@ export function ThreadToolsBar({ thread }: { thread: CommThread }) {
   const [items, setItems] = useState<ActionItem[]>([]);
   const [decisions, setDecisions] = useState<ClientDecision[]>([]);
   const [modal, setModal] = useState<null | 'action' | 'decision'>(null);
+  // AI (Phase 3)
+  const [suggestions, setSuggestions] = useState<AiExtraction[]>([]);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [summarizing, setSummarizing] = useState(false);
+  const [summary, setSummary] = useState<string>('');
+  const [aiMsg, setAiMsg] = useState<string>('');
 
   useEffect(() => { setTagged(thread.tradeIds || []); }, [thread.id, thread.tradeIds]);
+  useEffect(() => { setSummary(thread.aiSummary || ''); }, [thread.id, thread.aiSummary]);
   useEffect(() => { if (isStaff) loadTaggableVendors().then(setVendors).catch(() => {}); }, [isStaff]);
   useEffect(() => { if (!isStaff) return; return listenActionItemsForThread(thread.id, setItems); }, [thread.id, isStaff]);
   useEffect(() => { if (!isStaff) return; return listenDecisionsForThread(thread.id, setDecisions); }, [thread.id, isStaff]);
+  useEffect(() => { if (!isStaff) return; return listenOpenExtractions(thread.id, setSuggestions); }, [thread.id, isStaff]);
 
   const vendorById = useMemo(() => Object.fromEntries(vendors.map(v => [v.id, v])), [vendors]);
 
@@ -39,6 +59,24 @@ export function ThreadToolsBar({ thread }: { thread: CommThread }) {
     const next = tagged.includes(id) ? tagged.filter(x => x !== id) : [...tagged, id];
     setTagged(next);
     await setThreadTrades(thread.id, next).catch(() => {});
+  };
+
+  const runAnalyze = async () => {
+    if (analyzing) return;
+    setAnalyzing(true); setAiMsg('');
+    try {
+      const r = await analyzeThread(thread.id);
+      setAiMsg(r.created > 0 ? `${r.created} suggestion${r.created === 1 ? '' : 's'} to review` : 'Nothing new to suggest');
+    } catch (e: any) { setAiMsg(e?.message || 'Analyze failed'); }
+    finally { setAnalyzing(false); }
+  };
+
+  const runSummarize = async () => {
+    if (summarizing) return;
+    setSummarizing(true); setAiMsg('');
+    try { setSummary((await summarizeThread(thread.id)).summary || ''); }
+    catch (e: any) { setAiMsg(e?.message || 'Summarize failed'); }
+    finally { setSummarizing(false); }
   };
 
   return (
@@ -70,6 +108,14 @@ export function ThreadToolsBar({ thread }: { thread: CommThread }) {
         </div>
 
         <div className="ml-auto flex items-center gap-2">
+          <button onClick={runAnalyze} disabled={analyzing} title="Let AI suggest action items & decisions from this conversation"
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs text-[#7a5c1e] bg-[#C9A96E]/15 hover:bg-[#C9A96E]/25 disabled:opacity-50">
+            {analyzing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />} Analyze
+          </button>
+          <button onClick={runSummarize} disabled={summarizing}
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs text-gray-600 hover:bg-white border border-gray-200 disabled:opacity-50">
+            {summarizing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />} Summarize
+          </button>
           <button onClick={() => setModal('action')}
                   className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs text-gray-600 hover:bg-white border border-gray-200">
             <CheckSquare className="h-3.5 w-3.5" /> Action item
@@ -80,6 +126,55 @@ export function ThreadToolsBar({ thread }: { thread: CommThread }) {
           </button>
         </div>
       </div>
+
+      {aiMsg && <p className="text-[11px] text-gray-400">{aiMsg}</p>}
+
+      {/* AI summary (internal-only) */}
+      {summary && (
+        <div className="rounded-md bg-[#C9A96E]/10 border border-[#C9A96E]/20 px-3 py-2">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-[#7a5c1e] flex items-center gap-1 mb-0.5">
+            <Sparkles className="h-3 w-3" /> AI summary · internal only
+          </p>
+          <p className="text-xs text-gray-700 whitespace-pre-wrap">{summary}</p>
+        </div>
+      )}
+
+      {/* AI suggestions — review queue (nothing is real until confirmed) */}
+      {suggestions.length > 0 && (
+        <div className="rounded-md border border-[#C9A96E]/30 bg-white">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-[#7a5c1e] flex items-center gap-1 px-3 pt-2">
+            <Sparkles className="h-3 w-3" /> AI suggestions — review before saving
+          </p>
+          <div className="divide-y divide-gray-100">
+            {suggestions.map(s => (
+              <div key={s.id} className="flex items-start gap-2 px-3 py-2">
+                <span className="mt-0.5 text-[9px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 flex-shrink-0">
+                  {ENTITY_LABEL[s.entityType] || s.entityType}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-gray-700">{s.payload.summary}</p>
+                  <p className="text-[10px] text-gray-400">
+                    {s.payload.ownerName ? `→ ${s.payload.ownerName} ` : ''}
+                    {s.payload.dueDate ? `· due ${s.payload.dueDate} ` : ''}
+                    · {Math.round((s.confidence || 0) * 100)}% confident
+                    {s.needsClarification ? ' · needs clarification' : ''}
+                  </p>
+                </div>
+                <button onClick={() => confirmExtraction(thread, s, uid, myName).catch(() => {})}
+                        title="Confirm — create the real action item / decision"
+                        className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] bg-[#C9A96E] text-white hover:bg-[#b8924a]">
+                  <Check className="h-3 w-3" /> Confirm
+                </button>
+                <button onClick={() => dismissExtraction(thread.id, s.id, uid).catch(() => {})}
+                        title="Dismiss"
+                        className="flex-shrink-0 inline-flex items-center px-1.5 py-1 rounded text-gray-400 hover:bg-gray-100">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Inline captured items */}
       {(items.length > 0 || decisions.length > 0) && (

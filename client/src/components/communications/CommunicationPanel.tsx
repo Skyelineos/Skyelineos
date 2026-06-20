@@ -9,10 +9,11 @@ import {
   listenThreads, listenThreadsForSubject, CATEGORY_LABELS, COMM_CATEGORIES,
   type CommThread, type CommCategory, type SubjectRef,
 } from '@/lib/communications/firestore';
+import { summarizeProject } from '@/lib/communications/ai';
 import { CommThreadView } from './CommThreadView';
 import { NewThreadModal } from './NewThreadModal';
 import { LogPhoneCallModal, LogMeetingModal } from './LogActivityModals';
-import { MessageSquarePlus, Search, Loader2, Filter, Phone, Video } from 'lucide-react';
+import { MessageSquarePlus, Search, Loader2, Filter, Phone, Video, Sparkles, X } from 'lucide-react';
 
 function fmtAgo(ts: any): string {
   const d = ts?.toDate ? ts.toDate() : (ts ? new Date(ts) : null);
@@ -43,6 +44,17 @@ export function CommunicationPanel({ subjectFilter, initialThreadId, height = 'h
   const [q, setQ] = useState('');
   const [cat, setCat] = useState<CommCategory | 'all'>('all');
   const [modal, setModal] = useState<null | 'new' | 'call' | 'meeting'>(null);
+  const isProject = subjectFilter?.type === 'project';
+  const [projSummary, setProjSummary] = useState('');
+  const [projSummarizing, setProjSummarizing] = useState(false);
+
+  const runProjectSummary = async () => {
+    if (!isProject || projSummarizing) return;
+    setProjSummarizing(true);
+    try { setProjSummary((await summarizeProject(subjectFilter!.id)).summary || 'No communication to summarize yet.'); }
+    catch (e: any) { setProjSummary(e?.message || 'Summarize failed'); }
+    finally { setProjSummarizing(false); }
+  };
 
   useEffect(() => {
     setLoading(true);
@@ -69,6 +81,26 @@ export function CommunicationPanel({ subjectFilter, initialThreadId, height = 'h
   const active = useMemo(() => threads.find(t => t.id === activeId), [threads, activeId]);
 
   return (
+    <div className="space-y-3">
+    {/* Project-level AI summary (staff only, internal) */}
+    {isProject && isStaff && (
+      <div>
+        {!projSummary ? (
+          <button onClick={runProjectSummary} disabled={projSummarizing}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs text-[#7a5c1e] bg-[#C9A96E]/15 hover:bg-[#C9A96E]/25 disabled:opacity-50">
+            {projSummarizing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />} Summarize this project's communication
+          </button>
+        ) : (
+          <div className="rounded-md bg-[#C9A96E]/10 border border-[#C9A96E]/20 px-3 py-2 relative">
+            <button onClick={() => setProjSummary('')} className="absolute top-2 right-2 text-gray-400 hover:text-gray-600"><X className="h-3.5 w-3.5" /></button>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-[#7a5c1e] flex items-center gap-1 mb-0.5">
+              <Sparkles className="h-3 w-3" /> AI project summary · internal only
+            </p>
+            <p className="text-xs text-gray-700 whitespace-pre-wrap pr-5">{projSummary}</p>
+          </div>
+        )}
+      </div>
+    )}
     <div className={`flex ${height} rounded-xl border border-gray-200 overflow-hidden bg-white`}>
       {/* Thread list */}
       <div className="w-80 border-r border-gray-200 flex flex-col flex-shrink-0">
@@ -139,6 +171,7 @@ export function CommunicationPanel({ subjectFilter, initialThreadId, height = 'h
       {modal === 'new' && <NewThreadModal defaultSubject={subjectFilter} onClose={() => setModal(null)} onCreated={id => { setModal(null); setActiveId(id); }} />}
       {modal === 'call' && <LogPhoneCallModal defaultSubject={subjectFilter} onClose={() => setModal(null)} onCreated={id => { setModal(null); setActiveId(id); }} />}
       {modal === 'meeting' && <LogMeetingModal defaultSubject={subjectFilter} onClose={() => setModal(null)} onCreated={id => { setModal(null); setActiveId(id); }} />}
+    </div>
     </div>
   );
 }
