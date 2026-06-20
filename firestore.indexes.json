@@ -9,6 +9,22 @@
       ]
     },
     {
+      "collectionGroup": "documents",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "projectId", "order": "ASCENDING" },
+        { "fieldPath": "inSsot", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "moodBoards",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "inSsot", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "communications",
       "queryScope": "COLLECTION",
       "fields": [
