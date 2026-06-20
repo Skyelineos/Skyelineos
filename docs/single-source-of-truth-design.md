@@ -169,16 +169,19 @@ GC-pushed urgent items — never drip-pinged, and only when their trade is affec
   sub's trade, requires acknowledgement before submit, stores acks on the bid.
 - ✅ **Slice 3 — GC Addenda manager.** `AddendaManager.tsx` create → quorum approve → publish;
   wired into `ProjectBids`.
-- ⬜ **Slice 4** — sub-portal "Project Files" read-only browser (`listSsotItems`) + GC
-  promote-into-SSOT affordances on documents/selections/mood boards.
-- ⬜ **Slice 5** — pre-bid client approval gate (block "Send bid package" until the client
-  approves the bid set).
+- ✅ **Slice 4 — curation + sub file browser.** `listCurationCandidates()`; `SsotCurationPanel`
+  (GC promote/demote via inSsot) on the bids page; `SsotFileBrowser` (read-only, category-grouped)
+  in the sub bid form.
+- ✅ **Slice 5 — pre-bid client approval gate.** `lib/ssot/bidSet.ts` (quorum on the project
+  doc); `BidSetGatePanel` (GC records sign-offs); `SendBidPackageModal` blocks Send until
+  approved with a clear "waiting on …" banner.
 - ⬜ **Later** — bid lifecycle rough→final re-bid request; Phase 2 roster; Phase 3 Q&A.
 
-> Not yet runtime-tested or deployed. Deploy needs `firestore:rules` +
-> `firestore:indexes` + `hosting`, and the rules changes should be checked against the
-> emulator first. Client/designer addendum approvals are currently recorded staff-side
-> in AddendaManager; dedicated client/designer approval surfaces come with their portals.
+> **Phase 1 is feature-complete and passes a full `vite build`, but is not yet
+> runtime-tested or deployed.** Deploy needs `firestore:rules` + `firestore:indexes` +
+> `hosting`, and the rules changes should be checked against the emulator first.
+> Client/designer approvals (addenda + bid set) are currently recorded **staff-side**;
+> dedicated client/designer approval surfaces come with their portals.
 
 ## 7. Phasing
 
