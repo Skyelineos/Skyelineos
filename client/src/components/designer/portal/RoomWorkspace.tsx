@@ -30,6 +30,7 @@ type WorkspaceTab =
 
 interface Props {
   projectId: string;
+  projectName: string;
   roomId: string;
   roomName: string;
   rooms: DesignerRoom[];
@@ -54,6 +55,7 @@ const TABS: { value: WorkspaceTab; label: string; icon: React.ElementType }[] =
 export function RoomWorkspace(props: Props) {
   const {
     projectId,
+    projectName,
     roomId,
     roomName,
     rooms,
@@ -115,6 +117,7 @@ export function RoomWorkspace(props: Props) {
         {tab === 'moodboard' && (
           <MoodBoardPanel
             projectId={projectId}
+            projectName={projectName}
             roomId={roomId}
             roomName={roomName}
             boards={roomBoards}
@@ -125,6 +128,7 @@ export function RoomWorkspace(props: Props) {
         {tab === 'selections' && (
           <SelectionTrackerPanel
             projectId={projectId}
+            projectName={projectName}
             roomId={roomId}
             roomName={roomName}
             selections={roomSelections}
@@ -144,6 +148,7 @@ export function RoomWorkspace(props: Props) {
         {tab === 'decisions' && (
           <DecisionTrackerPanel
             projectId={projectId}
+            projectName={projectName}
             roomId={roomId}
             roomName={roomName}
             decisions={roomDecisions}

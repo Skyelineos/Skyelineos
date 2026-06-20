@@ -37,6 +37,7 @@ import { SalesPitchSection } from '@/components/client-portal/SalesPitchSection'
 import { InspirationBoard } from '@/components/client-portal/InspirationBoard';
 import SelectionsBoard from '@/components/client-portal/SelectionsBoard';
 import DesignStudio from '@/components/client-portal/DesignStudio';
+import ClientDesignReview from '@/components/client-portal/ClientDesignReview';
 import StyleDiscovery from '@/components/client-portal/StyleDiscovery';
 import ClientSelectionsTimeline from '@/components/client/ClientSelectionsTimeline';
 import ChangeOrdersTab from '@/components/client-portal/ChangeOrdersTab';
@@ -64,6 +65,7 @@ import {
   FileSignature,
   Wrench,
   ShieldCheck,
+  PencilRuler,
 } from 'lucide-react';
 
 interface FirestoreProject {
@@ -91,6 +93,7 @@ const TABS = [
   { key: 'schedule', label: 'Schedule', icon: CalendarClock },
   { key: 'financials', label: 'Financials', icon: DollarSign },
   { key: 'design', label: 'Design Studio', icon: Sparkles },
+  { key: 'design-review', label: 'Design Review', icon: PencilRuler },
   { key: 'selections', label: 'Selections', icon: Palette },
   { key: 'change-orders', label: 'Change Orders', icon: ClipboardList },
   { key: 'site-log', label: 'Site Log', icon: ClipboardCheck },
@@ -497,7 +500,10 @@ export default function SkyelineClientPortal() {
             {/* Live phase progress — what's done, what's now, what's next.
                 Client audience hides assignee names + condenses task lists. */}
             {selectedProjectId && (
-              <ProjectProgressView projectId={selectedProjectId} audience="client" />
+              <ProjectProgressView
+                projectId={selectedProjectId}
+                audience="client"
+              />
             )}
             {selectedProject?.estimatedSchedule ? (
               <div className="rounded-xl border border-gray-200 bg-white p-5">
@@ -552,6 +558,17 @@ export default function SkyelineClientPortal() {
             clientContactId={primaryClientId}
             clientName={clientFullName}
             onNavigate={handleNavigate}
+          />
+        );
+
+      case 'design-review':
+        return (
+          <ClientDesignReview
+            projectId={selectedProjectId}
+            projectName={selectedProject?.name || 'Your Home'}
+            clientName={clientFullName}
+            designerName={(selectedProject as any)?.designerName}
+            storedDesignStatus={(selectedProject as any)?.designStatus}
           />
         );
 
@@ -612,9 +629,16 @@ export default function SkyelineClientPortal() {
       case 'messages':
         return (
           <div className="p-3 sm:p-6">
-            {selectedProjectId
-              ? <ClientMessenger projectId={selectedProjectId} projectName={selectedProject?.name} />
-              : <p className="text-sm text-gray-500">Select a project to see its messages.</p>}
+            {selectedProjectId ? (
+              <ClientMessenger
+                projectId={selectedProjectId}
+                projectName={selectedProject?.name}
+              />
+            ) : (
+              <p className="text-sm text-gray-500">
+                Select a project to see its messages.
+              </p>
+            )}
           </div>
         );
 

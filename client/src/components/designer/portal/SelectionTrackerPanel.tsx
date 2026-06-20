@@ -43,6 +43,8 @@ import {
 } from '@/lib/designer/portalTypes';
 import {
   createSelection,
+  notifyClientDecided,
+  notifyDesignReviewRequested,
   setSelectionStatus,
   updateSelection,
   verifySelectionLink,
@@ -52,6 +54,7 @@ import { EmptyState, StatusBadge } from './shared';
 
 interface Props {
   projectId: string;
+  projectName: string;
   roomId: string;
   roomName: string;
   selections: DesignSelection[];
@@ -61,6 +64,7 @@ interface Props {
 
 export function SelectionTrackerPanel({
   projectId,
+  projectName,
   roomId,
   roomName,
   selections,
@@ -123,6 +127,8 @@ export function SelectionTrackerPanel({
           <SelectionRow
             key={s.id}
             projectId={projectId}
+            projectName={projectName}
+            roomName={roomName}
             selection={s}
             canEdit={canEdit}
             canReview={canReview}
@@ -167,12 +173,16 @@ function Badge({
 
 function SelectionRow({
   projectId,
+  projectName,
+  roomName,
   selection: s,
   canEdit,
   canReview,
   onEdit,
 }: {
   projectId: string;
+  projectName: string;
+  roomName: string;
   selection: DesignSelection;
   canEdit: boolean;
   canReview: boolean;
@@ -196,6 +206,18 @@ function SelectionRow({
     }
     try {
       await setSelectionStatus(projectId, s, next);
+      const vars = {
+        itemName: s.itemName || s.category || 'a selection',
+        room: roomName,
+        projectName,
+      };
+      if (next === 'inReview' && canEdit) {
+        void notifyDesignReviewRequested(projectId, vars);
+      } else if (canReview && next === 'approved') {
+        void notifyClientDecided(projectId, { ...vars, decision: 'approved' });
+      } else if (canReview && next === 'notStarted') {
+        void notifyClientDecided(projectId, { ...vars, decision: 'rejected' });
+      }
     } catch (e: any) {
       toast({
         title: 'Update failed',

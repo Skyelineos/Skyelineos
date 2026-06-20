@@ -14,7 +14,13 @@
 // Audiences the operator can customize independently.
 export type Audience = 'client' | 'sub' | 'designer' | 'pm' | 'team';
 
-export const AUDIENCES: Audience[] = ['client', 'sub', 'designer', 'pm', 'team'];
+export const AUDIENCES: Audience[] = [
+  'client',
+  'sub',
+  'designer',
+  'pm',
+  'team',
+];
 
 // Map a stored user role → the audience bucket its flows live under.
 export function roleToAudience(role: string | undefined | null): Audience {
@@ -92,19 +98,26 @@ export interface TriggerDef {
   critical?: boolean;
 }
 
-const LINK_VAR: TriggerVariable = { name: 'link', description: 'Deep link into the app for this item' };
+const LINK_VAR: TriggerVariable = {
+  name: 'link',
+  description: 'Deep link into the app for this item',
+};
 
 // ── Phase 1 catalog: the triggers that fire today ──────────────────────────
 export const TRIGGER_CATALOG: TriggerDef[] = [
   {
     key: 'lead_created',
     label: 'New lead',
-    description: 'A new lead arrives from any source (web form, QR, manual entry).',
+    description:
+      'A new lead arrives from any source (web form, QR, manual entry).',
     audiences: ['team'],
     critical: true,
     variables: [
       { name: 'leadName', description: "The lead's name" },
-      { name: 'source', description: 'Lead source (Website, Event, Referral…)' },
+      {
+        name: 'source',
+        description: 'Lead source (Website, Event, Referral…)',
+      },
       { name: 'city', description: 'Lead city / area' },
       { name: 'phone', description: "Lead's phone number" },
       { name: 'email', description: "Lead's email" },
@@ -121,7 +134,10 @@ export const TRIGGER_CATALOG: TriggerDef[] = [
       { name: 'trade', description: 'Trade(s) invited to bid' },
       { name: 'dueDate', description: 'Bid due date' },
       { name: 'requesterName', description: 'Who sent the invite' },
-      { name: 'magicLink', description: 'One-click link to view + submit the bid' },
+      {
+        name: 'magicLink',
+        description: 'One-click link to view + submit the bid',
+      },
       LINK_VAR,
     ],
   },
@@ -151,24 +167,26 @@ export const TRIGGER_CATALOG: TriggerDef[] = [
   {
     key: 'template_applied',
     label: 'Template applied to a project',
-    description: 'A job template was applied to a project — summary of tasks created.',
+    description:
+      'A job template was applied to a project — summary of tasks created.',
     audiences: ['team', 'pm'],
     variables: [
       { name: 'projectName', description: 'Project name' },
       { name: 'taskCount', description: 'Number of tasks created' },
-      { name: 'tasksWithNotify', description: 'Tasks flagged for assign-time notifications' },
+      {
+        name: 'tasksWithNotify',
+        description: 'Tasks flagged for assign-time notifications',
+      },
       LINK_VAR,
     ],
   },
   {
     key: 'schedule_published',
     label: 'Schedule published',
-    description: 'A project schedule was published or updated; notify the homeowners.',
+    description:
+      'A project schedule was published or updated; notify the homeowners.',
     audiences: ['client'],
-    variables: [
-      { name: 'projectName', description: 'Project name' },
-      LINK_VAR,
-    ],
+    variables: [{ name: 'projectName', description: 'Project name' }, LINK_VAR],
   },
   {
     key: 'bid_received',
@@ -239,7 +257,8 @@ export const TRIGGER_CATALOG: TriggerDef[] = [
   {
     key: 'schedule_slip',
     label: 'Schedule slipped',
-    description: 'A project schedule slipped (computeScheduleSlip tone goes red/amber).',
+    description:
+      'A project schedule slipped (computeScheduleSlip tone goes red/amber).',
     audiences: ['team', 'pm'],
     variables: [
       { name: 'projectName', description: 'Project name' },
@@ -251,7 +270,8 @@ export const TRIGGER_CATALOG: TriggerDef[] = [
   {
     key: 'change_order_created',
     label: 'Change order created',
-    description: 'A change order was created and needs the client to approve / reject it.',
+    description:
+      'A change order was created and needs the client to approve / reject it.',
     audiences: ['client'],
     variables: [
       { name: 'projectName', description: 'Project name' },
@@ -263,12 +283,16 @@ export const TRIGGER_CATALOG: TriggerDef[] = [
   {
     key: 'selection_due',
     label: 'Selection due',
-    description: 'A homeowner selection is due (catalog item / finish pick / approval).',
+    description:
+      'A homeowner selection is due (catalog item / finish pick / approval).',
     audiences: ['client'],
     critical: true,
     variables: [
       { name: 'projectName', description: 'Project name' },
-      { name: 'selectionName', description: 'Selection name (Cabinets, Flooring…)' },
+      {
+        name: 'selectionName',
+        description: 'Selection name (Cabinets, Flooring…)',
+      },
       { name: 'dueDate', description: 'Due date' },
       LINK_VAR,
     ],
@@ -276,7 +300,8 @@ export const TRIGGER_CATALOG: TriggerDef[] = [
   {
     key: 'draw_requested',
     label: 'Draw requested',
-    description: 'A construction draw was requested; the client / lender needs to release funds.',
+    description:
+      'A construction draw was requested; the client / lender needs to release funds.',
     audiences: ['client'],
     variables: [
       { name: 'projectName', description: 'Project name' },
@@ -300,7 +325,8 @@ export const TRIGGER_CATALOG: TriggerDef[] = [
   {
     key: 'photo_uploaded',
     label: 'Photo uploaded',
-    description: 'A new project photo was uploaded and made visible to the client.',
+    description:
+      'A new project photo was uploaded and made visible to the client.',
     audiences: ['client'],
     variables: [
       { name: 'projectName', description: 'Project name' },
@@ -311,7 +337,8 @@ export const TRIGGER_CATALOG: TriggerDef[] = [
   {
     key: 'walkthrough_assigned',
     label: 'Walkthrough item assigned',
-    description: 'A walkthrough capture (photo/video + note) was assigned to a sub on the project.',
+    description:
+      'A walkthrough capture (photo/video + note) was assigned to a sub on the project.',
     audiences: ['sub'],
     critical: true,
     variables: [
@@ -335,7 +362,8 @@ export const TRIGGER_CATALOG: TriggerDef[] = [
   {
     key: 'sub_invoice_submitted',
     label: 'Sub invoice submitted',
-    description: 'A sub submitted an invoice via the portal; staff need to review + approve.',
+    description:
+      'A sub submitted an invoice via the portal; staff need to review + approve.',
     audiences: ['team', 'pm'],
     variables: [
       { name: 'subName', description: 'Subcontractor name' },
@@ -347,7 +375,8 @@ export const TRIGGER_CATALOG: TriggerDef[] = [
   {
     key: 'estimate_sent',
     label: 'Estimate sent to client',
-    description: 'GC/PM sent an estimate to the homeowner — open in the portal to review.',
+    description:
+      'GC/PM sent an estimate to the homeowner — open in the portal to review.',
     audiences: ['client'],
     variables: [
       { name: 'projectName', description: 'Project name' },
@@ -359,7 +388,7 @@ export const TRIGGER_CATALOG: TriggerDef[] = [
 ];
 
 export function getTrigger(key: string): TriggerDef | undefined {
-  return TRIGGER_CATALOG.find(t => t.key === key);
+  return TRIGGER_CATALOG.find((t) => t.key === key);
 }
 
 // ── Default flows ──────────────────────────────────────────────────────────
@@ -385,259 +414,371 @@ export function defaultFlow(triggerKey: string, audience: Audience): Flow {
     case 'lead_created':
       return {
         enabled: true,
-        steps: [immediateStep({
-          channels: { inApp: true, email: true, sms: true, push: true },
-          forceSms: true,
-          inAppTitle: 'New lead: {leadName}',
-          inAppBody: 'Source: {source} · {city} · {phone}',
-          emailSubject: 'New lead: {leadName}',
-          emailBody: 'A new lead just came in.\n\nName: {leadName}\nSource: {source}\nCity: {city}\nPhone: {phone}\nEmail: {email}',
-          smsBody: 'New lead: {leadName}. Source: {source} · {city} · {phone}',
-        })],
+        steps: [
+          immediateStep({
+            channels: { inApp: true, email: true, sms: true, push: true },
+            forceSms: true,
+            inAppTitle: 'New lead: {leadName}',
+            inAppBody: 'Source: {source} · {city} · {phone}',
+            emailSubject: 'New lead: {leadName}',
+            emailBody:
+              'A new lead just came in.\n\nName: {leadName}\nSource: {source}\nCity: {city}\nPhone: {phone}\nEmail: {email}',
+            smsBody:
+              'New lead: {leadName}. Source: {source} · {city} · {phone}',
+          }),
+        ],
       };
     case 'bid_invitation':
       return {
         enabled: true,
-        steps: [immediateStep({
-          // SMS on by default — mirrors today's behavior where invited vendors
-          // with a phone get a text. Admin can turn it off in Settings → Triggers.
-          channels: { inApp: true, email: true, sms: true, push: true },
-          inAppTitle: 'New bid request: {trade}',
-          inAppBody: '{projectName} — due {dueDate}',
-          emailSubject: 'New bid request — {projectName}',
-          emailBody: "You're invited to bid on {trade} for {projectName}.\n\nDue: {dueDate}\nFrom: {requesterName}\n\nView and submit: {magicLink}",
-          smsBody: 'Skyeline Homes: New bid request — {projectName} ({trade}). Submit: {magicLink}',
-        })],
+        steps: [
+          immediateStep({
+            // SMS on by default — mirrors today's behavior where invited vendors
+            // with a phone get a text. Admin can turn it off in Settings → Triggers.
+            channels: { inApp: true, email: true, sms: true, push: true },
+            inAppTitle: 'New bid request: {trade}',
+            inAppBody: '{projectName} — due {dueDate}',
+            emailSubject: 'New bid request — {projectName}',
+            emailBody:
+              "You're invited to bid on {trade} for {projectName}.\n\nDue: {dueDate}\nFrom: {requesterName}\n\nView and submit: {magicLink}",
+            smsBody:
+              'Skyeline Homes: New bid request — {projectName} ({trade}). Submit: {magicLink}',
+          }),
+        ],
       };
     case 'bid_awarded':
       return {
         enabled: true,
-        steps: [immediateStep({
-          channels: { inApp: true, email: true, sms: true, push: true },
-          forceSms: true,
-          inAppTitle: 'Bid awarded: {trade}',
-          inAppBody: 'Your bid for {projectName} was awarded.',
-          emailSubject: 'Bid awarded: {trade}',
-          emailBody: 'Congratulations — your bid for {trade} on {projectName} was awarded. Skyeline will follow up with next steps.',
-          smsBody: 'Skyeline Homes: Bid awarded — {trade} for {projectName}. We will follow up with next steps.',
-        })],
+        steps: [
+          immediateStep({
+            channels: { inApp: true, email: true, sms: true, push: true },
+            forceSms: true,
+            inAppTitle: 'Bid awarded: {trade}',
+            inAppBody: 'Your bid for {projectName} was awarded.',
+            emailSubject: 'Bid awarded: {trade}',
+            emailBody:
+              'Congratulations — your bid for {trade} on {projectName} was awarded. Skyeline will follow up with next steps.',
+            smsBody:
+              'Skyeline Homes: Bid awarded — {trade} for {projectName}. We will follow up with next steps.',
+          }),
+        ],
       };
     case 'project_commenced':
       return {
         enabled: true,
-        steps: [immediateStep({
-          channels: { inApp: true, email: true, sms: false, push: true },
-          inAppTitle: "You're on the team: {trade}",
-          inAppBody: '{projectName} is starting.',
-          emailSubject: "You're on the team — {projectName}",
-          emailBody: 'Your bid was accepted and {projectName} is starting. Your trade: {trade}.',
-          smsBody: 'Skyeline Homes: {projectName} is starting — you are on the team for {trade}.',
-        })],
+        steps: [
+          immediateStep({
+            channels: { inApp: true, email: true, sms: false, push: true },
+            inAppTitle: "You're on the team: {trade}",
+            inAppBody: '{projectName} is starting.',
+            emailSubject: "You're on the team — {projectName}",
+            emailBody:
+              'Your bid was accepted and {projectName} is starting. Your trade: {trade}.',
+            smsBody:
+              'Skyeline Homes: {projectName} is starting — you are on the team for {trade}.',
+          }),
+        ],
       };
     case 'template_applied':
       return {
         enabled: true,
-        steps: [immediateStep({
-          channels: { inApp: true, email: false, sms: false, push: true },
-          inAppTitle: 'Template applied to {projectName}',
-          inAppBody: '{taskCount} tasks created ({tasksWithNotify} flagged for assign-time notifications).',
-          emailSubject: 'Template applied to {projectName}',
-          emailBody: '{taskCount} tasks were created on {projectName}.',
-          smsBody: 'Skyeline OS: template applied — {taskCount} tasks on {projectName}.',
-        })],
+        steps: [
+          immediateStep({
+            channels: { inApp: true, email: false, sms: false, push: true },
+            inAppTitle: 'Template applied to {projectName}',
+            inAppBody:
+              '{taskCount} tasks created ({tasksWithNotify} flagged for assign-time notifications).',
+            emailSubject: 'Template applied to {projectName}',
+            emailBody: '{taskCount} tasks were created on {projectName}.',
+            smsBody:
+              'Skyeline OS: template applied — {taskCount} tasks on {projectName}.',
+          }),
+        ],
       };
     case 'schedule_published':
       return {
         enabled: true,
-        steps: [immediateStep({
-          channels: { inApp: true, email: true, sms: false, push: true },
-          inAppTitle: 'Your project schedule was updated',
-          inAppBody: 'The timeline for {projectName} has been updated. Open your portal to see what is next.',
-          emailSubject: 'Your project schedule was updated — {projectName}',
-          emailBody: 'The timeline for {projectName} has been updated. Open your portal to see what is next.',
-          smsBody: 'Skyeline Homes: schedule updated on {projectName}.',
-        })],
+        steps: [
+          immediateStep({
+            channels: { inApp: true, email: true, sms: false, push: true },
+            inAppTitle: 'Your project schedule was updated',
+            inAppBody:
+              'The timeline for {projectName} has been updated. Open your portal to see what is next.',
+            emailSubject: 'Your project schedule was updated — {projectName}',
+            emailBody:
+              'The timeline for {projectName} has been updated. Open your portal to see what is next.',
+            smsBody: 'Skyeline Homes: schedule updated on {projectName}.',
+          }),
+        ],
       };
     case 'bid_received':
       return {
         enabled: true,
-        steps: [immediateStep({
-          channels: { inApp: true, email: true, sms: false, push: true },
-          inAppTitle: 'New bid: {trade} from {subName}',
-          inAppBody: 'Total: ${total} for {projectName}.',
-          emailSubject: 'Bid received — {trade} on {projectName}',
-          emailBody: '{subName} submitted a bid of ${total} for {trade} on {projectName}.',
-          smsBody: 'Skyeline OS: {subName} submitted a bid (${total}) for {trade} on {projectName}.',
-        })],
+        steps: [
+          immediateStep({
+            channels: { inApp: true, email: true, sms: false, push: true },
+            inAppTitle: 'New bid: {trade} from {subName}',
+            inAppBody: 'Total: ${total} for {projectName}.',
+            emailSubject: 'Bid received — {trade} on {projectName}',
+            emailBody:
+              '{subName} submitted a bid of ${total} for {trade} on {projectName}.',
+            smsBody:
+              'Skyeline OS: {subName} submitted a bid (${total}) for {trade} on {projectName}.',
+          }),
+        ],
       };
     case 'bid_reminder':
       return {
         enabled: true,
-        steps: [immediateStep({
-          channels: { inApp: true, email: true, sms: false, push: true },
-          inAppTitle: 'Bid reminder: {trade}',
-          inAppBody: '{projectName} bid is due {dueDate}.',
-          emailSubject: 'Reminder: bid due {dueDate} — {projectName}',
-          emailBody: 'Reminder: please submit your bid for {trade} on {projectName}. Due {dueDate}.',
-          smsBody: 'Skyeline Homes: bid reminder — {projectName} ({trade}) due {dueDate}.',
-        })],
+        steps: [
+          immediateStep({
+            channels: { inApp: true, email: true, sms: false, push: true },
+            inAppTitle: 'Bid reminder: {trade}',
+            inAppBody: '{projectName} bid is due {dueDate}.',
+            emailSubject: 'Reminder: bid due {dueDate} — {projectName}',
+            emailBody:
+              'Reminder: please submit your bid for {trade} on {projectName}. Due {dueDate}.',
+            smsBody:
+              'Skyeline Homes: bid reminder — {projectName} ({trade}) due {dueDate}.',
+          }),
+        ],
       };
     case 'rfi_answered':
       return {
         enabled: true,
-        steps: [immediateStep({
-          channels: { inApp: true, email: true, sms: false, push: true },
-          inAppTitle: '{rfiNumber} answered',
-          inAppBody: '{answererName} answered "{subject}".',
-          emailSubject: '{rfiNumber} answered — {projectName}',
-          emailBody: '{answererName} answered "{subject}" on {projectName}. Open the RFI to read the response.',
-          smsBody: 'Skyeline OS: {rfiNumber} answered on {projectName}.',
-        })],
+        steps: [
+          immediateStep({
+            channels: { inApp: true, email: true, sms: false, push: true },
+            inAppTitle: '{rfiNumber} answered',
+            inAppBody: '{answererName} answered "{subject}".',
+            emailSubject: '{rfiNumber} answered — {projectName}',
+            emailBody:
+              '{answererName} answered "{subject}" on {projectName}. Open the RFI to read the response.',
+            smsBody: 'Skyeline OS: {rfiNumber} answered on {projectName}.',
+          }),
+        ],
       };
     case 'task_assigned':
       return {
         enabled: true,
-        steps: [immediateStep({
-          channels: { inApp: true, email: true, sms: false, push: true },
-          inAppTitle: 'Task assigned: {taskName}',
-          inAppBody: '{fromName} assigned you {taskName} on {projectName}.',
-          emailSubject: 'Task assigned: {taskName}',
-          emailBody: '{fromName} assigned you {taskName} on {projectName}.',
-          smsBody: 'Skyeline OS: {fromName} assigned you {taskName}.',
-        })],
+        steps: [
+          immediateStep({
+            channels: { inApp: true, email: true, sms: false, push: true },
+            inAppTitle: 'Task assigned: {taskName}',
+            inAppBody: '{fromName} assigned you {taskName} on {projectName}.',
+            emailSubject: 'Task assigned: {taskName}',
+            emailBody: '{fromName} assigned you {taskName} on {projectName}.',
+            smsBody: 'Skyeline OS: {fromName} assigned you {taskName}.',
+          }),
+        ],
       };
     case 'task_due':
       return {
         enabled: audience !== 'client', // clients usually don't want task pings by default
-        steps: [immediateStep({
-          channels: { inApp: true, email: true, sms: false, push: true },
-          inAppTitle: 'Due today: {taskName}',
-          inAppBody: '{taskName} is due {dueDate}.',
-          emailSubject: 'Due today: {taskName}',
-          emailBody: '{taskName} is due {dueDate} on {projectName}.',
-          smsBody: 'Skyeline Homes: {taskName} is due {dueDate}.',
-        })],
+        steps: [
+          immediateStep({
+            channels: { inApp: true, email: true, sms: false, push: true },
+            inAppTitle: 'Due today: {taskName}',
+            inAppBody: '{taskName} is due {dueDate}.',
+            emailSubject: 'Due today: {taskName}',
+            emailBody: '{taskName} is due {dueDate} on {projectName}.',
+            smsBody: 'Skyeline Homes: {taskName} is due {dueDate}.',
+          }),
+        ],
       };
     case 'schedule_slip':
       return {
         enabled: true,
-        steps: [immediateStep({
-          channels: { inApp: true, email: false, sms: false, push: true },
-          inAppTitle: 'Schedule slip: {projectName}',
-          inAppBody: '{projectName} is now {days} day(s) behind target ({tone}).',
-          emailSubject: 'Schedule slip: {projectName}',
-          emailBody: '{projectName} is {days} day(s) behind target completion ({tone}).',
-          smsBody: 'Skyeline OS: {projectName} schedule slipped {days}d ({tone}).',
-        })],
+        steps: [
+          immediateStep({
+            channels: { inApp: true, email: false, sms: false, push: true },
+            inAppTitle: 'Schedule slip: {projectName}',
+            inAppBody:
+              '{projectName} is now {days} day(s) behind target ({tone}).',
+            emailSubject: 'Schedule slip: {projectName}',
+            emailBody:
+              '{projectName} is {days} day(s) behind target completion ({tone}).',
+            smsBody:
+              'Skyeline OS: {projectName} schedule slipped {days}d ({tone}).',
+          }),
+        ],
       };
     case 'change_order_created':
       return {
         enabled: true,
-        steps: [immediateStep({
-          channels: { inApp: true, email: true, sms: false, push: true },
-          inAppTitle: 'Change order needs your approval',
-          inAppBody: '{title} (${amount}) on {projectName}.',
-          emailSubject: 'Change order ready for review — {projectName}',
-          emailBody: 'A new change order is ready for your review on {projectName}.\n\n{title} — ${amount}\n\nOpen your portal to approve or decline.',
-          smsBody: 'Skyeline Homes: change order ready for review on {projectName}. Open your portal.',
-        })],
+        steps: [
+          immediateStep({
+            channels: { inApp: true, email: true, sms: false, push: true },
+            inAppTitle: 'Change order needs your approval',
+            inAppBody: '{title} (${amount}) on {projectName}.',
+            emailSubject: 'Change order ready for review — {projectName}',
+            emailBody:
+              'A new change order is ready for your review on {projectName}.\n\n{title} — ${amount}\n\nOpen your portal to approve or decline.',
+            smsBody:
+              'Skyeline Homes: change order ready for review on {projectName}. Open your portal.',
+          }),
+        ],
       };
     case 'selection_due':
       return {
         enabled: true,
-        steps: [immediateStep({
-          channels: { inApp: true, email: true, sms: false, push: true },
-          inAppTitle: 'Selection due: {selectionName}',
-          inAppBody: '{selectionName} is due {dueDate} on {projectName}.',
-          emailSubject: 'Selection due — {selectionName}',
-          emailBody: 'Your {selectionName} selection is due {dueDate} on {projectName}. Open your portal to make your pick.',
-          smsBody: 'Skyeline Homes: {selectionName} is due {dueDate} on {projectName}.',
-        })],
+        steps: [
+          immediateStep({
+            channels: { inApp: true, email: true, sms: false, push: true },
+            inAppTitle: 'Selection due: {selectionName}',
+            inAppBody: '{selectionName} is due {dueDate} on {projectName}.',
+            emailSubject: 'Selection due — {selectionName}',
+            emailBody:
+              'Your {selectionName} selection is due {dueDate} on {projectName}. Open your portal to make your pick.',
+            smsBody:
+              'Skyeline Homes: {selectionName} is due {dueDate} on {projectName}.',
+          }),
+        ],
       };
     case 'draw_requested':
       return {
         enabled: true,
-        steps: [immediateStep({
-          channels: { inApp: true, email: true, sms: false, push: true },
-          inAppTitle: 'Draw requested: {drawName}',
-          inAppBody: '${amount} requested on {projectName}.',
-          emailSubject: 'Draw requested — {projectName}',
-          emailBody: 'A draw has been requested on {projectName}.\n\n{drawName} — ${amount}\n\nOpen your portal to review and release funds.',
-          smsBody: 'Skyeline Homes: draw requested on {projectName} — {drawName} (${amount}).',
-        })],
+        steps: [
+          immediateStep({
+            channels: { inApp: true, email: true, sms: false, push: true },
+            inAppTitle: 'Draw requested: {drawName}',
+            inAppBody: '${amount} requested on {projectName}.',
+            emailSubject: 'Draw requested — {projectName}',
+            emailBody:
+              'A draw has been requested on {projectName}.\n\n{drawName} — ${amount}\n\nOpen your portal to review and release funds.',
+            smsBody:
+              'Skyeline Homes: draw requested on {projectName} — {drawName} (${amount}).',
+          }),
+        ],
       };
     case 'invoice_received':
       return {
         enabled: true,
-        steps: [immediateStep({
-          channels: { inApp: true, email: false, sms: false, push: true },
-          inAppTitle: 'Bill received: {vendor}',
-          inAppBody: '${amount} for {projectName}.',
-          emailSubject: 'Bill received: {vendor}',
-          emailBody: 'A new vendor bill was logged.\n\nVendor: {vendor}\nAmount: ${amount}\nProject: {projectName}',
-          smsBody: 'Skyeline OS: bill received from {vendor} — ${amount} on {projectName}.',
-        })],
+        steps: [
+          immediateStep({
+            channels: { inApp: true, email: false, sms: false, push: true },
+            inAppTitle: 'Bill received: {vendor}',
+            inAppBody: '${amount} for {projectName}.',
+            emailSubject: 'Bill received: {vendor}',
+            emailBody:
+              'A new vendor bill was logged.\n\nVendor: {vendor}\nAmount: ${amount}\nProject: {projectName}',
+            smsBody:
+              'Skyeline OS: bill received from {vendor} — ${amount} on {projectName}.',
+          }),
+        ],
       };
     case 'photo_uploaded':
       return {
         enabled: audience === 'client',
-        steps: [immediateStep({
-          channels: { inApp: true, email: false, sms: false, push: true },
-          inAppTitle: 'New photo: {projectName}',
-          inAppBody: '{caption}',
-          emailSubject: 'New photo on {projectName}',
-          emailBody: 'A new photo was added to {projectName}.\n\n{caption}',
-          smsBody: 'Skyeline Homes: new photo on {projectName}.',
-        })],
+        steps: [
+          immediateStep({
+            channels: { inApp: true, email: false, sms: false, push: true },
+            inAppTitle: 'New photo: {projectName}',
+            inAppBody: '{caption}',
+            emailSubject: 'New photo on {projectName}',
+            emailBody: 'A new photo was added to {projectName}.\n\n{caption}',
+            smsBody: 'Skyeline Homes: new photo on {projectName}.',
+          }),
+        ],
       };
     case 'walkthrough_assigned':
       return {
         enabled: true,
-        steps: [immediateStep({
-          channels: { inApp: true, email: false, sms: true, push: true },
-          forceSms: true,
-          inAppTitle: 'Walkthrough item assigned',
-          inAppBody: '{fromName} sent you a walkthrough item: {note}',
-          emailSubject: 'New walkthrough item — {projectName}',
-          emailBody: '{fromName} captured a walkthrough item for you on {projectName}.\n\n{note}',
-          smsBody: 'Skyeline Homes: {fromName} assigned you a walkthrough item on {projectName}.',
-        })],
+        steps: [
+          immediateStep({
+            channels: { inApp: true, email: false, sms: true, push: true },
+            forceSms: true,
+            inAppTitle: 'Walkthrough item assigned',
+            inAppBody: '{fromName} sent you a walkthrough item: {note}',
+            emailSubject: 'New walkthrough item — {projectName}',
+            emailBody:
+              '{fromName} captured a walkthrough item for you on {projectName}.\n\n{note}',
+            smsBody:
+              'Skyeline Homes: {fromName} assigned you a walkthrough item on {projectName}.',
+          }),
+        ],
       };
     case 'compliance_doc_uploaded':
       return {
         enabled: true,
-        steps: [immediateStep({
-          channels: { inApp: true, email: false, sms: false, push: true },
-          inAppTitle: 'Compliance doc: {subName}',
-          inAppBody: '{subName} uploaded a {docKind}.',
-          emailSubject: 'Compliance doc — {subName}',
-          emailBody: '{subName} uploaded a {docKind}. Open Skyeline OS to review.',
-          smsBody: 'Skyeline OS: {subName} uploaded a {docKind}.',
-        })],
+        steps: [
+          immediateStep({
+            channels: { inApp: true, email: false, sms: false, push: true },
+            inAppTitle: 'Compliance doc: {subName}',
+            inAppBody: '{subName} uploaded a {docKind}.',
+            emailSubject: 'Compliance doc — {subName}',
+            emailBody:
+              '{subName} uploaded a {docKind}. Open Skyeline OS to review.',
+            smsBody: 'Skyeline OS: {subName} uploaded a {docKind}.',
+          }),
+        ],
       };
     case 'sub_invoice_submitted':
       return {
         enabled: true,
-        steps: [immediateStep({
-          channels: { inApp: true, email: false, sms: false, push: true },
-          inAppTitle: 'Sub invoice: {subName}',
-          inAppBody: '${amount} on {projectName}.',
-          emailSubject: 'Sub invoice — {subName} on {projectName}',
-          emailBody: '{subName} submitted an invoice for ${amount} on {projectName}. Open Skyeline OS to review.',
-          smsBody: 'Skyeline OS: {subName} submitted an invoice (${amount}) on {projectName}.',
-        })],
+        steps: [
+          immediateStep({
+            channels: { inApp: true, email: false, sms: false, push: true },
+            inAppTitle: 'Sub invoice: {subName}',
+            inAppBody: '${amount} on {projectName}.',
+            emailSubject: 'Sub invoice — {subName} on {projectName}',
+            emailBody:
+              '{subName} submitted an invoice for ${amount} on {projectName}. Open Skyeline OS to review.',
+            smsBody:
+              'Skyeline OS: {subName} submitted an invoice (${amount}) on {projectName}.',
+          }),
+        ],
       };
     case 'estimate_sent':
       return {
         enabled: true,
-        steps: [immediateStep({
-          channels: { inApp: true, email: true, sms: false, push: true },
-          inAppTitle: 'Estimate ready: {title}',
-          inAppBody: '{title} ({amount}) for {projectName} — open your portal to review.',
-          emailSubject: 'Your estimate is ready — {projectName}',
-          emailBody: 'Your estimate "{title}" ({amount}) for {projectName} is ready. Open your Skyeline portal to review, approve, or request changes.',
-          smsBody: 'Skyeline Homes: estimate ready for {projectName} ({amount}). Open your portal.',
-        })],
+        steps: [
+          immediateStep({
+            channels: { inApp: true, email: true, sms: false, push: true },
+            inAppTitle: 'Estimate ready: {title}',
+            inAppBody:
+              '{title} ({amount}) for {projectName} — open your portal to review.',
+            emailSubject: 'Your estimate is ready — {projectName}',
+            emailBody:
+              'Your estimate "{title}" ({amount}) for {projectName} is ready. Open your Skyeline portal to review, approve, or request changes.',
+            smsBody:
+              'Skyeline Homes: estimate ready for {projectName} ({amount}). Open your portal.',
+          }),
+        ],
+      };
+    case 'design_review_requested':
+      return {
+        enabled: audience === 'client',
+        steps: [
+          immediateStep({
+            channels: { inApp: true, email: true, sms: false, push: true },
+            inAppTitle: 'Design ready for review: {itemName}',
+            inAppBody:
+              '{itemName} for {room} on {projectName} is ready for your approval.',
+            emailSubject: 'Design ready for your review — {projectName}',
+            emailBody:
+              '{designerName} shared "{itemName}" ({room}) on {projectName} for your review.\n\nOpen your Skyeline portal to approve or request changes.',
+            smsBody:
+              'Skyeline Homes: {itemName} is ready for your review on {projectName}. Open your portal.',
+          }),
+        ],
+      };
+    case 'design_client_decided':
+      return {
+        enabled: true,
+        steps: [
+          immediateStep({
+            channels: { inApp: true, email: false, sms: false, push: true },
+            inAppTitle: 'Client {decision}: {itemName}',
+            inAppBody:
+              '{clientName} {decision} "{itemName}" ({room}) on {projectName}.',
+            emailSubject: 'Client {decision} — {itemName} on {projectName}',
+            emailBody:
+              '{clientName} {decision} "{itemName}" ({room}) on {projectName}.',
+            smsBody:
+              'Skyeline OS: client {decision} {itemName} on {projectName}.',
+          }),
+        ],
       };
     default:
       return {
