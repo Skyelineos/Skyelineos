@@ -121,7 +121,7 @@ There are 20 historical role-string variants scattered across the codebase plus 
 - When you add/remove a secret in `functions/src/index.ts`, update `ApiStorage.tsx` in the same change so the two stay in sync.
 
 ## Conventions
-- **Test before shipping.** Smoke-test the page in a headless browser before deploy — `tsc` + `vite build` miss runtime errors. Pattern: write a quick Playwright probe in `scripts/probe-*.mjs`.
+- **Test before every deploy — automatically, in the background.** A green `tsc` + `vite build` is never enough on its own (they miss runtime errors). Before shipping any change, the session verifies the app's **actual behavior** on its own initiative — no manual trigger, no button. Run the self-cleaning E2E suite (`npm run test:e2e` / `test:e2e:all` — it creates `__e2e`-tagged data and tears it down even on failure) where the test-admin creds are configured; otherwise at minimum a headless Playwright probe of the touched page(s) (`scripts/probe-*.mjs` pattern; `npm run test:tour` sweeps every route). Deploy only after the behavior check passes. (The old dashboard "Test app" button + `qa-suite` workflow were removed — testing is now a standing pre-deploy step the session runs itself, not something Tyler triggers.)
 - **No time-of-day assumptions** in user-facing copy or replies — sessions span time zones; don't say "good evening" or assume the user should sleep.
 - **Cost-plus pricing model** on estimates: `Owner Price + Contractor Fee = Total Cost`. `Sell/unit` is an independent input the user controls.
 - **Brand colors:** `#C9A96E` (gold accent), `#141414` (brand black for sidebars).

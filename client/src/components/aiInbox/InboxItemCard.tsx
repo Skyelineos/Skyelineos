@@ -14,7 +14,7 @@ import { useAuth } from '@/auth/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import {
   Check, X, RefreshCw, ChevronDown, ChevronUp, Building2, Tag, DollarSign,
-  CircleAlert, FileText, Mail,
+  CircleAlert, FileText, Mail, Link2, Paperclip, ExternalLink, Inbox,
 } from 'lucide-react';
 import {
   AiInboxItem, CATEGORY_LABELS, CATEGORY_OPTIONS, FINANCIAL_CATEGORIES,
@@ -157,10 +157,38 @@ export function InboxItemCard({ item, projects, qboConnected }: Props) {
             <p className="font-medium text-gray-900 mt-1 truncate">{item.subject || x?.summary || '(no subject)'}</p>
             <p className="text-sm text-gray-500 truncate">
               {item.from?.name ? `${item.from.name} · ` : ''}{item.from?.email || ''}
+              {item.mailbox ? <span className="inline-flex items-center gap-1 ml-2 text-gray-400"><Inbox className="w-3 h-3" />{item.mailbox}</span> : null}
             </p>
             {x?.summary && <p className="text-sm text-gray-600 mt-1">{x.summary}</p>}
           </div>
         </div>
+
+        {/* Invoice-behind-a-link callout — needs a human to fetch the PDF */}
+        {item.hasInvoiceLink && (
+          <div className="flex items-center gap-2 text-xs bg-amber-50 border border-amber-200 rounded px-2 py-1.5 text-amber-800">
+            <Link2 className="w-3.5 h-3.5 flex-shrink-0" />
+            <span>Invoice is behind a link — open it, download the PDF, then attach + reprocess.</span>
+            {item.invoiceLinkUrl && (
+              <a href={item.invoiceLinkUrl} target="_blank" rel="noreferrer"
+                className="ml-auto inline-flex items-center gap-1 font-medium underline shrink-0">
+                Open <ExternalLink className="w-3 h-3" />
+              </a>
+            )}
+          </div>
+        )}
+
+        {/* Attachments — view the actual invoice/receipt */}
+        {Array.isArray(item.attachments) && item.attachments.filter((a) => a.url).length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            {item.attachments.filter((a) => a.url).map((a, i) => (
+              <a key={i} href={a.url || undefined} target="_blank" rel="noreferrer"
+                className="inline-flex items-center gap-1 border border-gray-200 rounded px-2 py-1 text-gray-700 hover:bg-gray-50">
+                <Paperclip className="w-3 h-3" /> {a.filename}
+                {a.sentToClaude ? <span className="text-green-600" title="Read by AI">·✓read</span> : null}
+              </a>
+            ))}
+          </div>
+        )}
 
         {/* Brain signals: gmail label rec + clarification + qbo sync state */}
         <div className="flex flex-wrap items-center gap-2 text-xs">

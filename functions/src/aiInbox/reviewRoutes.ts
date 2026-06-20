@@ -15,12 +15,41 @@ import type { firestore as adminFirestore } from 'firebase-admin';
 import * as admin from 'firebase-admin';
 import { adminOnly } from '../ingestionLab/adminAuth';
 import { extractInboxItem } from './extract';
-import { resolveAiInboxLane, AiInboxExtraction } from './types';
+import { resolveAiInboxLane, AiInboxExtraction, IntakeMailbox, MAX_INTAKE_MAILBOXES } from './types';
 import { syncApprovedItemToQbo } from './qboSync';
 import { qboConnectionStatus } from '../qbo/client';
+import { rehydrateAttachments } from './attachments';
 
 function itemsRef(db: adminFirestore.Firestore) {
   return db.collection('ai_inbox_items');
+}
+
+function configRef(db: adminFirestore.Firestore) {
+  return db.collection('ai_inbox_config').doc('global');
+}
+
+// Validate + normalize the up-to-3 intake mailboxes from the request body.
+function normalizeMailboxes(input: any): IntakeMailbox[] {
+  if (!Array.isArray(input)) {
+    throw Object.assign(new Error('mailboxes must be an array'), { code: 'bad_request' });
+  }
+  const seen = new Set<string>();
+  const out: IntakeMailbox[] = [];
+  for (const m of input.slice(0, MAX_INTAKE_MAILBOXES)) {
+    const address = String(m?.address || '').toLowerCase().trim();
+    if (!address) continue;
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(address)) {
+      throw Object.assign(new Error(`"${address}" is not a valid email address`), { code: 'bad_request' });
+    }
+    if (seen.has(address)) continue;
+    seen.add(address);
+    out.push({
+      address,
+      label: String(m?.label || '').trim().slice(0, 60) || address.split('@')[0],
+      enabled: m?.enabled !== false,
+    });
+  }
+  return out;
 }
 
 // Fields a human may override on approve. We merge these over the brain's
@@ -54,6 +83,28 @@ export function registerAiInboxReviewRoutes(app: Express, db: adminFirestore.Fir
   app.get('/api/ai-inbox/status', adminOnly, async (_req: Request, res: Response) => {
     const qbo = await qboConnectionStatus(db);
     res.json({ qboConnected: qbo.connected, qboEnv: qbo.env });
+  });
+
+  // Set the up-to-3 intake mailboxes (config doc is otherwise CF-write-only, so
+  // this admin route is how the portal edits them). The UI reads them back via
+  // its onSnapshot on ai_inbox_config/global.
+  app.post('/api/ai-inbox/mailboxes', adminOnly, async (req: any, res: Response) => {
+    try {
+      const mailboxes = normalizeMailboxes(req.body?.mailboxes);
+      await configRef(db).set(
+        {
+          mailboxes,
+          mailboxesUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          mailboxesUpdatedByUid: req.user.uid,
+        },
+        { merge: true },
+      );
+      return res.json({ ok: true, mailboxes });
+    } catch (e: any) {
+      if (e?.code === 'bad_request') return res.status(400).json({ error: e.message });
+      console.error('[ai-inbox/mailboxes] failed:', e);
+      return res.status(500).json({ error: e?.message || 'unknown' });
+    }
   });
 
   // Approve → (optional correction) → QBO sync.
@@ -160,13 +211,16 @@ export function registerAiInboxReviewRoutes(app: Express, db: adminFirestore.Fir
         fromName: item.from?.name || null,
         subject: item.subject || null,
         gmailLabels: item.gmailLabels || [],
-        attachments: item.attachments || [],
+        mailbox: item.mailbox || null,
+        attachments: (item.attachments || []).map((a: any) => ({ filename: a.filename, mime: a.mimeType, size: a.size })),
         threadId: item.threadId || null,
       };
+      // Re-feed any stored PDF/image attachments so reprocessing is faithful.
+      const attachments = await rehydrateAttachments(item.attachments || []);
       const result = await extractInboxItem(
         db,
         { source: item.source, sourceMeta, content: item.bodyText || '' },
-        { extraHint: req.body?.clarificationAnswer || undefined },
+        { extraHint: req.body?.clarificationAnswer || undefined, attachments },
       );
       const x = result.extraction;
       const lane = resolveAiInboxLane({
@@ -183,6 +237,8 @@ export function registerAiInboxReviewRoutes(app: Express, db: adminFirestore.Fir
         amountUsd: x.amountUsd,
         vendorName: x.vendorName,
         gmailLabelRecommendation: x.gmailLabelRecommendation,
+        hasInvoiceLink: x.hasInvoiceLink,
+        invoiceLinkUrl: x.invoiceLinkUrl,
         confidence: x.confidence,
         lane,
         reviewStatus: 'pending',

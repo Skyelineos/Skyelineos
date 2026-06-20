@@ -7,7 +7,8 @@ export type AiInboxCategory =
   | 'bank_alert'
   | 'subcontractor_email'
   | 'client_email'
-  | 'general';
+  | 'general'
+  | 'not_relevant';
 
 export const CATEGORY_LABELS: Record<string, string> = {
   vendor_invoice: 'Vendor Invoice',
@@ -17,6 +18,7 @@ export const CATEGORY_LABELS: Record<string, string> = {
   subcontractor_email: 'Subcontractor Email',
   client_email: 'Client Email',
   general: 'General',
+  not_relevant: 'Not Relevant',
 };
 
 export const CATEGORY_OPTIONS: AiInboxCategory[] = [
@@ -27,7 +29,24 @@ export const CATEGORY_OPTIONS: AiInboxCategory[] = [
   'subcontractor_email',
   'client_email',
   'general',
+  'not_relevant',
 ];
+
+export const MAX_INTAKE_MAILBOXES = 3;
+
+export interface IntakeMailbox {
+  address: string;
+  label: string;
+  enabled: boolean;
+}
+
+export interface StoredAttachment {
+  filename: string;
+  mimeType: string;
+  size: number;
+  url: string | null;
+  sentToClaude?: boolean;
+}
 
 export const FINANCIAL_CATEGORIES = new Set([
   'vendor_invoice',
@@ -36,7 +55,7 @@ export const FINANCIAL_CATEGORIES = new Set([
   'bank_alert',
 ]);
 
-export type AiInboxLane = 'needs_review' | 'auto_filed' | 'ask';
+export type AiInboxLane = 'needs_review' | 'auto_filed' | 'ask' | 'ignored';
 export type AiInboxReviewStatus = 'pending' | 'approved' | 'rejected' | 'corrected';
 export type AiInboxQboSyncStatus = 'not_synced' | 'synced' | 'skipped' | 'error';
 
@@ -52,6 +71,8 @@ export interface AiInboxExtraction {
   gmailLabelRecommendation: string | null;
   projectId: string | null;
   projectName: string | null;
+  hasInvoiceLink: boolean;
+  invoiceLinkUrl: string | null;
   summary: string;
   confidence: number;
   confidenceReason: string;
@@ -64,11 +85,12 @@ export interface AiInboxItem {
   source: string;
   messageId: string | null;
   threadId: string | null;
+  mailbox?: string | null;
   from: { email: string | null; name: string | null };
   subject: string | null;
   bodyText?: string;
   gmailLabels?: string[];
-  attachments?: Array<{ filename?: string; mimeType?: string; size?: number } | string>;
+  attachments?: StoredAttachment[];
   status?: string;
   extraction?: AiInboxExtraction;
   category?: string;
@@ -77,6 +99,8 @@ export interface AiInboxItem {
   amountUsd?: number | null;
   vendorName?: string | null;
   gmailLabelRecommendation?: string | null;
+  hasInvoiceLink?: boolean;
+  invoiceLinkUrl?: string | null;
   confidence?: number;
   lane?: AiInboxLane;
   reviewStatus?: AiInboxReviewStatus;
@@ -95,4 +119,5 @@ export interface AiInboxConfig {
   spendTodayUsd?: number;
   spendDate?: string;
   lastBrainPassAt?: any;
+  mailboxes?: IntakeMailbox[];
 }

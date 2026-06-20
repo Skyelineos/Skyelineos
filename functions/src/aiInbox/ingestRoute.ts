@@ -22,6 +22,7 @@ import * as admin from 'firebase-admin';
 import * as crypto from 'crypto';
 import { extractInboxItem, BudgetExceededError } from './extract';
 import { resolveAiInboxLane } from './types';
+import { processAttachments } from './attachments';
 
 function itemsRef(db: adminFirestore.Firestore) {
   return db.collection('ai_inbox_items');
@@ -63,10 +64,14 @@ export function registerAiInboxIngest(app: Express, db: adminFirestore.Firestore
       const subject = b.subject || null;
       const content = b.text || b.body || b.snippet || b.html || '';
       const gmailLabels = Array.isArray(b.gmailLabels) ? b.gmailLabels : (Array.isArray(b.labels) ? b.labels : []);
-      const attachments = Array.isArray(b.attachments) ? b.attachments : [];
+      const rawAttachments = Array.isArray(b.attachments) ? b.attachments : [];
+      // Which intake mailbox did this hit (e.g. accounting@…). n8n sends one
+      // trigger per connected address and stamps `mailbox` so items are
+      // filterable by inbox. Fall back to the To: address if provided.
+      const mailbox = (b.mailbox || b.to || '').toString().toLowerCase().trim() || null;
 
-      if (!content && !subject) {
-        res.status(400).json({ error: 'Item has no subject or body to process' });
+      if (!content && !subject && rawAttachments.length === 0) {
+        res.status(400).json({ error: 'Item has no subject, body, or attachment to process' });
         return;
       }
 
@@ -86,12 +91,17 @@ export function registerAiInboxIngest(app: Express, db: adminFirestore.Firestore
         return;
       }
 
+      // Decode + store attachments (PDF invoices, receipt images). The PDF/image
+      // subset is handed to Claude; all are stored for viewing in the portal.
+      const { claudeAttachments, stored } = await processAttachments(docRef.id, rawAttachments);
+
       const sourceMeta = {
         fromEmail,
         fromName,
         subject,
         gmailLabels,
-        attachments,
+        mailbox,
+        attachments: stored.map((a) => ({ filename: a.filename, mime: a.mimeType, size: a.size })),
         threadId: b.threadId || null,
         date: b.receivedAt || b.date || null,
       };
@@ -100,11 +110,12 @@ export function registerAiInboxIngest(app: Express, db: adminFirestore.Firestore
         source,
         messageId: messageId ? String(messageId) : null,
         threadId: b.threadId || null,
+        mailbox,
         from: { email: fromEmail, name: fromName },
         subject,
         bodyText: String(content).slice(0, 20000),
         gmailLabels,
-        attachments,
+        attachments: stored,
         receivedAt: b.receivedAt ? new Date(b.receivedAt) : null,
         ingestedAt: admin.firestore.FieldValue.serverTimestamp(),
         ingestedVia: 'n8n',
@@ -116,7 +127,11 @@ export function registerAiInboxIngest(app: Express, db: adminFirestore.Firestore
       // item as needs_processing so it can be picked up by /reprocess later —
       // we never drop an inbound item just because the AI budget is spent.
       try {
-        const result = await extractInboxItem(db, { source, sourceMeta, content }, {});
+        const result = await extractInboxItem(
+          db,
+          { source, sourceMeta, content },
+          { attachments: claudeAttachments },
+        );
         const x = result.extraction;
         const lane = resolveAiInboxLane({
           category: x.category,
@@ -134,6 +149,8 @@ export function registerAiInboxIngest(app: Express, db: adminFirestore.Firestore
           amountUsd: x.amountUsd,
           vendorName: x.vendorName,
           gmailLabelRecommendation: x.gmailLabelRecommendation,
+          hasInvoiceLink: x.hasInvoiceLink,
+          invoiceLinkUrl: x.invoiceLinkUrl,
           confidence: x.confidence,
           lane,
           modelUsed: result.modelUsed,
@@ -149,6 +166,8 @@ export function registerAiInboxIngest(app: Express, db: adminFirestore.Firestore
           category: x.category,
           projectId: x.projectId,
           gmailLabelRecommendation: x.gmailLabelRecommendation,
+          attachmentsStored: stored.length,
+          attachmentsRead: claudeAttachments.length,
         });
         return;
       } catch (e: any) {

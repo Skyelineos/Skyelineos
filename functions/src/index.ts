@@ -21,7 +21,10 @@ const db = admin.firestore();
 const app = express();
 
 app.use(cors({ origin: true }));
-app.use(express.json());
+// Raised from the 100kb default so the AI Inbox ingest route can accept
+// base64-encoded invoice PDFs / receipt images inline (a ~20MB PDF is ~27MB
+// base64). Other routes are unaffected — this is just an upper bound.
+app.use(express.json({ limit: '30mb' }));
 // Twilio inbound webhooks (STOP/HELP) post application/x-www-form-urlencoded.
 app.use(express.urlencoded({ extended: false }));
 

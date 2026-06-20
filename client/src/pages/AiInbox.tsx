@@ -16,11 +16,16 @@ import { useAuth } from '@/auth/AuthContext';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Inbox, Brain, DollarSign, CheckCircle2, AlertCircle, Plug, Zap } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { useToast } from '@/hooks/use-toast';
+import { Inbox, Brain, DollarSign, CheckCircle2, AlertCircle, Plug, Zap, Mail, Plus, Trash2, Save } from 'lucide-react';
 import { InboxItemCard } from '@/components/aiInbox/InboxItemCard';
-import type { AiInboxItem, AiInboxConfig } from '@/components/aiInbox/types';
+import type { AiInboxItem, AiInboxConfig, IntakeMailbox } from '@/components/aiInbox/types';
+import { MAX_INTAKE_MAILBOXES } from '@/components/aiInbox/types';
 
 const GOLD = '#C9A96E';
+const BLACK = '#141414';
 
 export default function AiInbox() {
   const { getIdToken } = useAuth();
@@ -83,20 +88,22 @@ export default function AiInbox() {
   const buckets = useMemo(() => {
     const needsReview: AiInboxItem[] = [];
     const autoFiled: AiInboxItem[] = [];
+    const ignored: AiInboxItem[] = [];
     const approved: AiInboxItem[] = [];
     const rejected: AiInboxItem[] = [];
     for (const it of items) {
       const status = it.reviewStatus;
       if (status === 'rejected') { rejected.push(it); continue; }
       if (status === 'approved' || status === 'corrected') { approved.push(it); continue; }
+      if (it.lane === 'ignored') { ignored.push(it); continue; }
       if (it.lane === 'auto_filed') { autoFiled.push(it); continue; }
       needsReview.push(it);
     }
     const sortByTime = (a: AiInboxItem, b: AiInboxItem) =>
       tsMillis(b.ingestedAt) - tsMillis(a.ingestedAt);
-    needsReview.sort(sortByTime); autoFiled.sort(sortByTime);
+    needsReview.sort(sortByTime); autoFiled.sort(sortByTime); ignored.sort(sortByTime);
     approved.sort(sortByTime); rejected.sort(sortByTime);
-    return { needsReview, autoFiled, approved, rejected };
+    return { needsReview, autoFiled, ignored, approved, rejected };
   }, [items]);
 
   const moneyPending = useMemo(
@@ -161,6 +168,7 @@ export default function AiInbox() {
           <TabsList>
             <TabsTrigger value="review">Needs Review ({buckets.needsReview.length})</TabsTrigger>
             <TabsTrigger value="autofiled">Auto-Filed ({buckets.autoFiled.length})</TabsTrigger>
+            <TabsTrigger value="ignored">Ignored ({buckets.ignored.length})</TabsTrigger>
             <TabsTrigger value="approved">Approved ({buckets.approved.length})</TabsTrigger>
             <TabsTrigger value="rejected">Rejected ({buckets.rejected.length})</TabsTrigger>
             <TabsTrigger value="setup">Setup</TabsTrigger>
@@ -172,13 +180,21 @@ export default function AiInbox() {
           <TabsContent value="autofiled" className="mt-4">
             <ItemList items={buckets.autoFiled} projects={projects} qboConnected={qbo.connected} loaded={loaded} emptyLabel="No auto-filed items yet." />
           </TabsContent>
+          <TabsContent value="ignored" className="mt-4">
+            <p className="text-xs text-gray-400 mb-3">
+              Marketing, newsletters, and spam the AI triaged out of your review queue. Nothing here touches QuickBooks.
+              If something real landed here by mistake, change its Category and Approve it.
+            </p>
+            <ItemList items={buckets.ignored} projects={projects} qboConnected={qbo.connected} loaded={loaded} emptyLabel="Nothing ignored." />
+          </TabsContent>
           <TabsContent value="approved" className="mt-4">
             <ItemList items={buckets.approved} projects={projects} qboConnected={qbo.connected} loaded={loaded} emptyLabel="No approved items yet." />
           </TabsContent>
           <TabsContent value="rejected" className="mt-4">
             <ItemList items={buckets.rejected} projects={projects} qboConnected={qbo.connected} loaded={loaded} emptyLabel="No rejected items." />
           </TabsContent>
-          <TabsContent value="setup" className="mt-4">
+          <TabsContent value="setup" className="mt-4 space-y-4">
+            <MailboxEditor mailboxes={config?.mailboxes || []} getIdToken={getIdToken} />
             <SetupCard qbo={qbo} />
           </TabsContent>
         </Tabs>
@@ -207,6 +223,113 @@ function ItemList({
   );
 }
 
+function MailboxEditor({
+  mailboxes,
+  getIdToken,
+}: {
+  mailboxes: IntakeMailbox[];
+  getIdToken: () => Promise<string | null>;
+}) {
+  const { toast } = useToast();
+  const [rows, setRows] = useState<IntakeMailbox[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [dirty, setDirty] = useState(false);
+
+  // Seed from config whenever it changes (and we're not mid-edit).
+  useEffect(() => {
+    if (!dirty) setRows(mailboxes.length ? mailboxes : []);
+  }, [mailboxes, dirty]);
+
+  function update(i: number, patch: Partial<IntakeMailbox>) {
+    setRows((r) => r.map((m, idx) => (idx === i ? { ...m, ...patch } : m)));
+    setDirty(true);
+  }
+  function add() {
+    if (rows.length >= MAX_INTAKE_MAILBOXES) return;
+    setRows((r) => [...r, { address: '', label: '', enabled: true }]);
+    setDirty(true);
+  }
+  function remove(i: number) {
+    setRows((r) => r.filter((_, idx) => idx !== i));
+    setDirty(true);
+  }
+
+  async function save() {
+    setSaving(true);
+    try {
+      const token = await getIdToken();
+      if (!token) throw new Error('Not signed in');
+      const cleaned = rows.filter((m) => m.address.trim());
+      const r = await fetch('/api/ai-inbox/mailboxes', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mailboxes: cleaned }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+      setRows(data.mailboxes || cleaned);
+      setDirty(false);
+      toast({ title: 'Intake mailboxes saved', description: `${(data.mailboxes || cleaned).length} mailbox(es) connected.` });
+    } catch (e: any) {
+      toast({ title: 'Save failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-2">
+          <Mail className="w-5 h-5" style={{ color: GOLD }} />
+          <CardTitle>Intake mailboxes</CardTitle>
+        </div>
+        <CardDescription>
+          Connect up to {MAX_INTAKE_MAILBOXES} email addresses that feed this inbox (e.g. accounting@, your inbox, a shared box).
+          Add one n8n Gmail trigger per address, each sending <code>"mailbox": "&lt;address&gt;"</code> so items are tagged by which inbox they hit.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {rows.length === 0 && <p className="text-sm text-gray-500">No mailboxes connected yet.</p>}
+        {rows.map((m, i) => (
+          <div key={i} className="flex flex-wrap items-center gap-2">
+            <Input
+              value={m.label}
+              onChange={(e) => update(i, { label: e.target.value })}
+              placeholder="Label (e.g. Accounting)"
+              className="h-9 w-40"
+            />
+            <Input
+              value={m.address}
+              onChange={(e) => update(i, { address: e.target.value })}
+              placeholder="address@skyelinehomes.com"
+              className="h-9 flex-1 min-w-[220px]"
+            />
+            <label className="text-xs text-gray-600 inline-flex items-center gap-1">
+              <input type="checkbox" checked={m.enabled} onChange={(e) => update(i, { enabled: e.target.checked })} />
+              enabled
+            </label>
+            <Button variant="ghost" size="sm" onClick={() => remove(i)} className="text-gray-400 hover:text-red-600">
+              <Trash2 className="w-4 h-4" />
+            </Button>
+          </div>
+        ))}
+        <div className="flex items-center gap-2 pt-1">
+          <Button variant="outline" size="sm" onClick={add} disabled={rows.length >= MAX_INTAKE_MAILBOXES} className="gap-1">
+            <Plus className="w-4 h-4" /> Add mailbox
+          </Button>
+          <Button onClick={save} disabled={saving || !dirty} className="gap-1 text-white" style={{ backgroundColor: BLACK }}>
+            <Save className="w-4 h-4" /> {saving ? 'Saving…' : 'Save'}
+          </Button>
+          {rows.length >= MAX_INTAKE_MAILBOXES && (
+            <span className="text-xs text-gray-400">Max {MAX_INTAKE_MAILBOXES} reached.</span>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function SetupCard({ qbo }: { qbo: { connected: boolean; env: string } }) {
   return (
     <Card>
@@ -231,19 +354,28 @@ Content-Type: application/json
 {
   "messageId": "<gmail message id>",      // for idempotency
   "threadId": "<gmail thread id>",
+  "mailbox": "accounting@skyelinehomes.com", // which intake inbox this hit
   "from": { "email": "vendor@acme.com", "name": "Acme Supply" },
   "subject": "Invoice #1234",
   "text": "<plain-text email body>",
   "gmailLabels": ["INBOX", "Invoices"],
-  "attachments": [{ "filename": "inv.pdf", "mimeType": "application/pdf" }],
+  "attachments": [
+    {
+      "filename": "invoice.pdf",
+      "mimeType": "application/pdf",
+      "content": "<base64 of the file>"     // PDFs + images are read by the AI
+    }
+  ],
   "receivedAt": "2026-06-20T15:00:00Z"
 }`}
           </pre>
         </div>
         <ul className="list-disc pl-5 space-y-1 text-gray-600">
           <li>Items are deduplicated on <code>messageId</code> — n8n can retry safely.</li>
+          <li>Send the attachment <strong>bytes</strong> as base64 in <code>content</code> — Claude reads the PDF/receipt image directly (amount, vendor, line items). Each file ≤ 25&nbsp;MB.</li>
+          <li>Set <code>mailbox</code> per Gmail trigger so items are tagged by which of your connected inboxes they arrived on.</li>
           <li>The brain runs inline; the response includes the recommended Gmail label so n8n can apply it back in Gmail.</li>
-          <li>Financial items always land in <strong>Needs Review</strong>; nothing syncs to QuickBooks without your approval here.</li>
+          <li>Spam/marketing is auto-triaged to the <strong>Ignored</strong> tab; financial items always land in <strong>Needs Review</strong>. Nothing syncs to QuickBooks without your approval.</li>
           <li>QuickBooks is currently <strong>{qbo.connected ? `connected (${qbo.env})` : 'not connected'}</strong> — connect it in Settings to enable approve-and-sync.</li>
         </ul>
       </CardContent>

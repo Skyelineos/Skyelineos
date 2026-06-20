@@ -10,6 +10,7 @@ import {
   SYSTEM_PROMPT,
   EXTRACTION_TOOL,
   buildMessages,
+  ClaudeAttachment,
 } from './extractionPrompt';
 import {
   loadProjectIndex,
@@ -86,7 +87,11 @@ export async function extractInboxItem(
     sourceMeta?: any;
     content?: string;
   },
-  opts: { extraHint?: string; projectIndex?: ProjectIndexEntry[] } = {},
+  opts: {
+    extraHint?: string;
+    projectIndex?: ProjectIndexEntry[];
+    attachments?: ClaudeAttachment[];
+  } = {},
 ): Promise<ExtractResult> {
   const apiKey = (process.env.ANTHROPIC_API_KEY || '').trim();
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY not bound to this function.');
@@ -106,6 +111,7 @@ export async function extractInboxItem(
     source: raw.source || 'gmail',
     metadata: raw.sourceMeta || {},
     content,
+    attachments: opts.attachments,
   });
 
   const anthropic = new Anthropic({ apiKey });
@@ -175,6 +181,8 @@ function normalizeExtraction(
     gmailLabelRecommendation: out.gmailLabelRecommendation ? String(out.gmailLabelRecommendation) : null,
     projectId,
     projectName,
+    hasInvoiceLink: !!out.hasInvoiceLink,
+    invoiceLinkUrl: out.invoiceLinkUrl ? String(out.invoiceLinkUrl) : null,
     summary: String(out.summary || meta.subject || '').slice(0, 500),
     confidence,
     confidenceReason: String(out.confidenceReason || ''),
