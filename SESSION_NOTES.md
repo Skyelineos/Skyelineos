@@ -20,13 +20,56 @@ then run `npm run deploy*` to deploy to the `skyelineos` Firebase project so the
 actually reaches users. A GitHub push alone does **not** update the live site. See the
 "How work ships" section in `CLAUDE.md`.
 
+## Session 22 — Designer Portal: client review loop (notifications + client entry point)
+
+Closed the two biggest gaps that kept the Designer Portal from being a real
+designer↔client workflow. Both build on existing infra; no new storage systems.
+
+### Step 1 — Approval-loop notifications
+
+- Two new catalog trigger kinds in `shared/notifications-catalog.ts`:
+  `design_review_requested` (audience `client_of_project`, "Decisions you owe")
+  and `design_client_decided` (audience `staff_on_project`). Mirrored into
+  `functions/src/notifications/fireTriggerRoute.ts` `KIND_AUDIENCE` and given
+  message templates in `functions/src/notifications/triggerCatalog.ts`
+  `defaultFlow()` (the established wave-2 pattern — not in the v1 TRIGGER_CATALOG).
+- Fired client-side via the existing `fireTrigger()` helper (`client/src/lib/
+notifications.ts` → `POST /api/notifications/fire`, audience resolved
+  server-side, per-user prefs + email/SMS/push fan-out). Two thin wrappers added
+  to `portalService.ts`: `notifyDesignReviewRequested` / `notifyClientDecided`.
+- Wired into the panels: MoodBoardPanel (send-to-client → notify client; client
+  approve/revision → notify staff), SelectionTrackerPanel (designer → inReview
+  notifies client; client approve/reject notifies staff), DecisionTrackerPanel
+  (client decision notifies staff). All best-effort (fireTrigger never throws).
+
+### Step 2 — Client entry point
+
+- Extracted the room-by-room workspace body into a reusable
+  `client/src/components/designer/portal/DesignerWorkspace.tsx` container (owns
+  the 5 collection listeners + header + dashboard + room nav + workspace). Prop
+  is `viewerRole` (NOT `role` — `role="client"` trips jsx-a11y/aria-role).
+- `ProjectDesigner.tsx` (the `/projects/:id/designer` route) now just loads the
+  project + gates access, then renders `<DesignerWorkspace>` in ProjectLayout.
+- New `client/src/components/client-portal/ClientDesignReview.tsx` renders the
+  same container in client review mode, wired as a **"Design Review" tab** in
+  `SkyelineClientPortal.tsx` (between Design Studio and Selections). The
+  homeowner now reaches the mood-board/selection approval UI inside their own
+  portal shell — no GC-style ProjectLayout.
+
+### Still open (the remaining gap list)
+
+- Budget integration (selection allowances still manual, not sourced from the
+  estimate), schedule-milestone wiring (data fields only), AI actions
+  (placeholders by design), and a live headless smoke test (needs real auth).
+
 ## Session 21 — AI Inbox Phase A (PDF intake · multi-mailbox · spam triage · link-flag)
 
 Hardened the AI Inbox email path. All additive to Session 19; no schema break.
 
 ### PDF + image extraction
+
 - Ingest endpoint accepts `attachments[].content` (base64). `functions/src/aiInbox/
-  attachments.ts` decodes them, stores to Cloud Storage (`ai_inbox/{itemId}/...`
+attachments.ts` decodes them, stores to Cloud Storage (`ai_inbox/{itemId}/...`
   with a Firebase download token → viewable URL on the item), and hands the
   PDF/image subset to Claude as `document`/`image` content blocks (`buildMessages`
   in `extractionPrompt.ts`). Claude reads the invoice/receipt itself, not just
@@ -38,6 +81,7 @@ Hardened the AI Inbox email path. All additive to Session 19; no schema break.
   unguessable download-token URL (bypass rules). Admin-only page surfaces it.
 
 ### Up to 3 intake mailboxes
+
 - `ai_inbox_config/global.mailboxes` = `[{address,label,enabled}]`, max 3
   (`MAX_INTAKE_MAILBOXES`). Edited via **`POST /api/ai-inbox/mailboxes`** (admin;
   config is otherwise CF-write-only). UI reads them back via the existing
@@ -46,18 +90,21 @@ Hardened the AI Inbox email path. All additive to Session 19; no schema break.
   runs one Gmail trigger per address, each sending `"mailbox": "<addr>"`.
 
 ### Spam triage (catch-all friendly)
+
 - New category `not_relevant` + new lane `ignored`. `resolveAiInboxLane` routes
   spam/marketing to Ignored (out of Needs Review) so an accounting@ catch-all
   doesn't bury invoices. New **Ignored** tab. Prompt told to prefer `general`
   when unsure (fail toward human review, not silent ignore).
 
 ### Invoice-behind-a-link
+
 - Extraction adds `hasInvoiceLink` + `invoiceLinkUrl`. When a vendor-portal link
   is detected and no amount is present, the card shows an amber "open the link,
   download the PDF, attach + reprocess" callout with an Open button. We never
   auto-scrape authenticated portals (deliberate).
 
 ### Validation
+
 - `functions` tsc 0 errors; `vite build` green; `scripts/probe-ai-inbox.mjs`
   passes (now also asserts Ignored tab + mailbox editor). Live extraction still
   needs a valid **`ANTHROPIC_API_KEY`** — the shared key was invalid (401
@@ -65,6 +112,7 @@ Hardened the AI Inbox email path. All additive to Session 19; no schema break.
   extraction / ingestion-lab. Replace it in Secret Manager + redeploy functions.
 
 ### Deferred (Phase B/C)
+
 - Sub-portal "Submit Invoice" (structured, pre-linked to awarded trade/bid line).
 - Bid-vs-actual job costing: overage/savings (client-visible) + profit (admin-only).
 - A UI "attach PDF to this item + reprocess" upload (the link-flag flow currently
@@ -79,6 +127,7 @@ new secret / ApiStorage entry). See `docs/communication-center-schema.md`
 "Phase 3 additions".
 
 ### Backend (`functions/src/communications/`, folded into shared `api`)
+
 - `staffAuth.ts` (`staffOnly` = admin/gc/projectManager), `extractionPrompt.ts`
   (tool_use schema), `aiBrain.ts` (extraction + summaries + $5/day budget guard in
   `communications_ai_config/global`, de-dupes on re-run), `routes.ts`.
@@ -88,6 +137,7 @@ new secret / ApiStorage entry). See `docs/communication-center-schema.md`
 - Pattern mirrors `functions/src/aiInbox/` exactly.
 
 ### Data / gating
+
 - Extraction → `communications/{threadId}/extractions/{id}` (status `open`, the
   **review queue**). Confirm → real `actionItem`/`decision` + extraction
   `status:'linked'`+`linkedRef` (Phase-1 rules already allow those fields).
@@ -96,11 +146,13 @@ new secret / ApiStorage entry). See `docs/communication-center-schema.md`
 - Originals never mutated; AI output is separate + internal-only + human-gated.
 
 ### UI
+
 - `ThreadToolsBar`: Analyze + Summarize buttons, AI-summary banner, suggestion
   review list (Confirm/Dismiss). `CommunicationPanel`: project-level Summarize.
   `lib/communications/ai.ts` calls via `authFetch`.
 
 ### Slice 2 (same session) — roll-up + schedule loop
+
 - `CommDigest` — aggregated Action Items + Decision Log per subject (reuses the
   Phase-2 `listen*ForSubject` + indexes). Wired into `ProjectCommunications` as a
   Conversations / Action Items & Decisions tab toggle.
@@ -111,6 +163,7 @@ new secret / ApiStorage entry). See `docs/communication-center-schema.md`
   Client/lead-scoped action items can't push (no projectId) — button hidden.
 
 ### Caveats
+
 - **Needs `deploy:functions`** (slice 1 routes) + `deploy:hosting` (all UI). Not
   deployed from here (container has no Firebase token). Slice 2 is hosting-only.
 - Functions files trip the repo-wide `import/namespace` ESLint rule on
@@ -129,6 +182,7 @@ new backend service, no Postgres/Drizzle. The `ingestion_lab/` spike is untouche
 and still runs; this is a separate namespace.**
 
 ### Namespaces (new, isolated)
+
 - Firestore: top-level `ai_inbox_items` (one doc per ingested item) +
   `ai_inbox_config/global` (rolling daily AI-spend guard, default $10/day).
 - Functions: `functions/src/aiInbox/` (types, extractionPrompt, projectMatcher,
@@ -139,6 +193,7 @@ and still runs; this is a separate namespace.**
   Sidebar → Management → "AI Inbox". Brand black/gold.
 
 ### Routes (folded into the shared `api` Express app — no new Cloud Run service)
+
 - `POST /api/ai-inbox/ingest` — **n8n endpoint**, registered ABOVE the `/api`
   auth gate (n8n can't carry a Firebase token). Authed by `X-N8N-Secret` header
   vs Secret Manager `N8N_INGEST_SECRET` (constant-time compare; fails closed if
@@ -154,17 +209,20 @@ and still runs; this is a separate namespace.**
 - `POST /api/ai-inbox/:id/reject` and `/reprocess` — admin-only.
 
 ### Rules
+
 - `firestore.rules`: `ai_inbox_items` (admin read; UI may update only
   reviewStatus/reviewedAt/reviewedByUid/correction/clarificationAnswer/rejectReason;
   create+delete CF-only) and `ai_inbox_config` (admin read, CF-only write).
   Mirrors the ingestion_lab processed_items carve-out shape.
 
 ### Project matching
+
 `projectMatcher.ts` loads a lightweight live `projects` index (id/name/client/
 address, read-only) into the prompt; `deterministicMatch()` is a token-overlap
 fallback that backfills/validates Claude's `projectId` against real ids.
 
 ### Operator prerequisites (REQUIRED before first run)
+
 1. **`N8N_INGEST_SECRET`** — `firebase functions:secrets:set N8N_INGEST_SECRET`
    (already added to the `api` `secrets:` array). Put the same value in the n8n
    HTTP node header `X-N8N-Secret`.
@@ -181,6 +239,7 @@ fallback that backfills/validates Claude's `projectId` against real ids.
    (new ai_inbox blocks), `deploy:hosting` (page).
 
 ### Validation
+
 `functions` `tsc --noEmit` → 0 errors. Client `vite build` → green (AiInbox
 code-splits to its own chunk). Headless render smoke probe
 `scripts/probe-ai-inbox.mjs` → PASS against the Vite **dev** server (the test-mode
@@ -189,6 +248,7 @@ admin bypass is `import.meta.env.DEV`-gated, so it no-ops on a preview/prod buil
 company to exercise end-to-end — not reachable from the build sandbox.
 
 ### Deliberate deferrals
+
 - No Gmail **write-back** of the recommended label from our side — n8n owns that
   (we return the label in the ingest + approve responses). A `/apply-label`
   endpoint would need Gmail write scope; out of scope.
@@ -265,18 +325,20 @@ isNotApplicable`, `linkVerified`, `linkedScheduleMilestone`, etc. — legacy
   fields (`originalMessageId`, `originalRoomId`, `movedBy`, `movedAt`).
 - Per-room design channel read assumes the designer/client is in the project's
   `assignedUserIds`/`clientId` (normal case) since channel reads gate on `memberUids`.
+
 ## Session 17 — Communication Center Phase 2
 
 Built the communication backbone on top of Phase 1 (extend, not rebuild). See
 `docs/communication-center-schema.md` "Phase 2 additions".
 
 ### Highlights
+
 - **Client messenger (priority):** `ClientMessenger` replaced the client portal
   Messages tab (`SkyelineClientPortal.tsx`) — iMessage-style, mobile-first, one
   thread (project General, `client`-visible) auto-created via `ensureSubjectThread`.
   Uses the Firebase **auth uid** (not the contact id `effectiveUid`) for thread
   membership so the Firestore rules pass. `ProjectChat` is retained for /messages
-  + sub/designer portals; only the CLIENT portal tab changed.
+  - sub/designer portals; only the CLIENT portal tab changed.
 - **One reusable panel:** `CommunicationPanel` powers the hub, the project page
   (`/projects/:id/communications`, ProjectSidebar → Field), the contact detail
   drawer, and Sales lead cards (kebab → Messages). `CommunicationCenter` is now a
@@ -291,6 +353,7 @@ Built the communication backbone on top of Phase 1 (extend, not rebuild). See
   from contacts directory.
 
 ### Rules / data
+
 - `firestore.rules`: added `actionItems` + `decisions` (staff CRUD, admin delete);
   **relaxed `communications` thread create** so a portal member can start a
   client/trade-visible thread (required for the client messenger). Internal/
@@ -299,6 +362,7 @@ Built the communication backbone on top of Phase 1 (extend, not rebuild). See
 - Messages gained `senderType` + `sourceType`.
 
 ### Caveats / assumptions
+
 - **Subject-id spaces:** project subjects → `projects` ids; lead/client subjects →
   `clients` (CRM) ids from the hub, BUT the contact-detail drawer scopes by the
   `contacts` doc id (type 'client'). Contacts vs CRM-clients are separate id
@@ -320,6 +384,7 @@ the lifecycle-spanning conversation store (lead → warranty). See
 `docs/communication-center-schema.md` for the durable reference.
 
 ### Cleanup (do not resurrect)
+
 Deleted the **dead legacy messaging stack** wired to the removed `/api/messaging`:
 `MessagingModule`, `MobileMessagingModule`, `MobileMessagingInterface`,
 `ThreadSettings`, `ThreadSearchModal`, `FileUploadDialog`, `FilePreviewModal`,
@@ -330,6 +395,7 @@ dead root-level `/messages` + `/threads` rules. **Live chat is untouched:**
 `messaging/NotificationCenter.tsx` (used by `TopNavbar`).
 
 ### What Phase 1 added
+
 - Top-level `communications/{threadId}` (+`messages`, +`extractions`) keyed by
   `subjectRef` (lead|client|project) with `subjectChain` for lifecycle continuity.
 - Hub page `client/src/pages/CommunicationCenter.tsx` at route **`/communications`**
@@ -342,6 +408,7 @@ dead root-level `/messages` + `/threads` rules. **Live chat is untouched:**
 - @mentions reuse the `notifications/{id}` → `dispatch` fan-out (no new infra).
 
 ### Caveats / deferrals
+
 - **Not deployed.** Pushed to branch `claude/practical-goldberg-l9sxn8` only. To go
   live needs `npm run deploy:rules` (rules+indexes), `deploy:hosting`, and the new
   storage rule. New composite indexes must build in Firestore before the subject/
