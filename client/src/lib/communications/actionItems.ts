@@ -76,3 +76,38 @@ export function listenActionItemsForThread(threadId: string, cb: (rows: ActionIt
   const q = query(col(), where('sourceThreadId', '==', threadId), orderBy('createdAt', 'desc'));
   return onSnapshot(q, snap => cb(snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }))), () => cb([]));
 }
+
+/**
+ * Push an action item into the real Schedule/Tasks system. This is the Phase-3
+ * deep-link that closes the loop: a conversation → action item → an actual task
+ * the team works. It is purely ADDITIVE — it writes a new doc into the existing
+ * `tasks` collection (the shape applyJobTemplate uses) and stamps the action
+ * item's `linkedTaskId`. It never modifies the Tasks system's own code/logic.
+ * Requires a project-scoped action item (tasks belong to a project). Idempotent.
+ */
+export async function pushActionItemToTasks(item: ActionItem, byUid: string): Promise<string> {
+  if (item.linkedTaskId) return item.linkedTaskId;
+  if (!item.projectId) throw new Error('This action item is not tied to a project, so it can\'t become a schedule task.');
+  const ref = await addDoc(collection(db, 'tasks'), {
+    title: item.title,
+    name: item.title,
+    description: item.description || '',
+    projectId: item.projectId,
+    category: 'Communication',
+    assigneeRole: '',
+    tags: ['communication'],
+    ...(item.dueDate ? { dueDate: item.dueDate } : {}),
+    status: 'todo',
+    priority: 'medium',
+    checklist: [],
+    visibleToClient: false,
+    // Provenance — traceable back to the conversation it came from.
+    source: 'communication',
+    sourceActionItemId: item.id,
+    ...(item.sourceThreadId ? { sourceThreadId: item.sourceThreadId } : {}),
+    createdAt: serverTimestamp(),
+    createdBy: byUid,
+  });
+  await updateActionItem(item.id, { linkedTaskId: ref.id });
+  return ref.id;
+}

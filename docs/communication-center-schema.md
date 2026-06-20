@@ -169,9 +169,11 @@ sourceThread. Messages gained `senderType` + `sourceType`.
   tagging · search over threads/calls/meetings · visibility enforcement.
 - **Phase 3 (done — AI layer, slice 1):** staff-triggered **extraction** +
   **summaries** that reuse the Anthropic client already bound to `api`.
+- **Phase 3 (done — slice 2):** aggregated **Action Items + Decision Log** roll-up
+  per subject, and **action-item → Schedule/Task deep-link** (`linkedTaskId`).
 - **Phase 3 (remaining):** meeting transcription (needs an STT vendor — deferred);
   automatic / scheduled triggers; auto re-point Cloud Function on lead→project
-  conversion; action-item→task / decision deep-links; semantic search.
+  conversion; decision→selection deep-links; semantic search.
 - **Phase 4:** trade notification workflows · approval requests · project-memory
   AI · SMS/email inbound into threads.
 
@@ -209,3 +211,16 @@ Claude runs server-side only.
 
 **Safety:** original messages never mutated; AI output is separate records,
 internal-only, and gated behind human confirmation.
+
+**Slice 2 (roll-up + schedule loop):**
+- `CommDigest` component — aggregated **Action Items** + **Decision Log** for a
+  subject (reuses `listenActionItemsForSubject` / `listenDecisionsForSubject` +
+  their Phase-2 indexes). Wired into `ProjectCommunications` as a
+  "Conversations / Action Items & Decisions" tab toggle. Source-thread deep-links
+  back to `/communications?thread=…`.
+- `pushActionItemToTasks()` — closes the loop: a project-scoped action item becomes
+  a real task in the existing `tasks` collection (same shape `applyJobTemplate`
+  uses) with provenance (`source:'communication'`, `sourceActionItemId`,
+  `sourceThreadId`); the action item records `linkedTaskId` and shows "In schedule".
+  Purely additive — never touches the Tasks/Schedule code. No rule change (`tasks`
+  already allows staff create); no new index.

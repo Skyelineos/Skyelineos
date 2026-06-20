@@ -49,9 +49,19 @@ new secret / ApiStorage entry). See `docs/communication-center-schema.md`
   review list (Confirm/Dismiss). `CommunicationPanel`: project-level Summarize.
   `lib/communications/ai.ts` calls via `authFetch`.
 
+### Slice 2 (same session) — roll-up + schedule loop
+- `CommDigest` — aggregated Action Items + Decision Log per subject (reuses the
+  Phase-2 `listen*ForSubject` + indexes). Wired into `ProjectCommunications` as a
+  Conversations / Action Items & Decisions tab toggle.
+- `pushActionItemToTasks()` (in `lib/communications/actionItems.ts`) — a
+  project-scoped action item becomes a real `tasks` doc (same shape as
+  `applyJobTemplate`) + records `linkedTaskId`. **Additive only** — no change to
+  Tasks/Schedule code; `tasks` rule already allows staff create; no new index.
+  Client/lead-scoped action items can't push (no projectId) — button hidden.
+
 ### Caveats
-- **Needs `deploy:functions`** (new routes) + `deploy:hosting`. Not deployed from
-  here (container has no Firebase token).
+- **Needs `deploy:functions`** (slice 1 routes) + `deploy:hosting` (all UI). Not
+  deployed from here (container has no Firebase token). Slice 2 is hosting-only.
 - Functions files trip the repo-wide `import/namespace` ESLint rule on
   `admin.firestore` — same as ALL existing functions code (e.g. aiInbox); committed
   with `--no-verify` per existing convention. Client files are lint-clean.
