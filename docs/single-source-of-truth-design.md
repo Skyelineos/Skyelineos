@@ -29,7 +29,12 @@ surfaced so loudly that no bidding sub can miss it.
 1. **One folder, one truth.** Per project, there is exactly one canonical set of
    plans + approved design content + scope. No side channels.
 2. **Approved-only.** Design content (boards, renderings, selections) enters the
-   SSOT **only after client + designer + builder approval**. Drafts stay out.
+   SSOT **only after the Approval Quorum signs off** (see below). Drafts stay out.
+
+   > **Approval Quorum** = **Client + GC (builder)**, **plus the Designer if one is
+   > assigned to the project**. Early-phase builds often have no designer; in that
+   > case the quorum is just Client + GC. This same quorum governs design-content
+   > entry, Addenda publication, and the pre-bid sign-off gate.
 3. **Deviations are first-class and loud.** A change from the base plans is not a
    silent file swap — it's an explicit, acknowledged **Addendum** linked to what it
    changes.
@@ -93,9 +98,23 @@ Borrowed from how construction bid sets actually work (numbered addenda):
 Net effect: a sub literally cannot submit a bid for an affected trade without seeing
 (and acknowledging) the change. The discrepancy is caught at bid time, not build time.
 
-> Open question (O-3): who can *author* an addendum vs. who must *approve* it before
-> it's visible to subs? Proposed: designer or GC authors; becomes visible to subs only
-> after client + designer + builder approval (same gate as design content).
+**Authoring vs. publishing (decided):** Designer or GC may **author** an addendum
+freely. It becomes **visible to subs only after the Approval Quorum** signs off
+(Client + GC, plus Designer if assigned). No publish without that quorum.
+
+## 5a. Folder organization (decided)
+
+Fixed top-level categories, identical on every project (not GC-defined folders):
+**Plans · Design · Selections · Permits · Addenda · Scopes.** Consistent structure
+means every role knows where to look and there's nothing to misfile.
+
+## 5b. Pre-bid client approval gate (decided)
+
+The **client must approve the bid set** (plans + approved design + any addenda) before
+**any sub can be invited** to bid. This forces the plan-vs-design reconciliation to
+happen up front — the exact moment the discrepancy should be caught. Approval uses the
+Approval Quorum. Until the gate is satisfied, the "Send bid package" action is blocked
+with a clear reason.
 
 ## 6. How bidding consumes the SSOT
 
@@ -135,15 +154,17 @@ from the bid-requests fix apply: scope queries to keys the rules can evaluate.
 - Bid file: **any format** with scope + bid (no required PDF).
 - Compliance: **advisory at submit, hard gate at award** (D-016 kept).
 - Subs are **view-only**; bidding subs see **no roster**; awarded subs see each other.
+- **Approval Quorum** = Client + GC, plus Designer **if one is assigned**.
+- **Folder layout:** fixed categories (Plans / Design / Selections / Permits / Addenda / Scopes).
+- **Pre-bid gate:** client must approve the bid set before any sub is invited.
+- **Addenda:** authored by GC/designer, published to subs only after Approval Quorum.
 
 ## 10. Open questions
 
 - **O-1:** Is the SSOT a curated *view* over existing collections (proposed) or a new
   consolidated collection? (Proposed: view, to keep one Storage object per file.)
-- **O-2:** Folder organization — fixed top-level categories (Plans / Design / Permits /
-  Addenda / Scopes) or GC-defined folders?
-- **O-3:** Addenda authoring vs. approval roles (see §5).
 - **O-4:** Do we need versioning of plan sheets (v1 → v2) or is "superseded by Addendum N"
   enough for now?
-- **O-5:** Client walkthrough/sign-off — does the client formally "approve the bid set"
-  before subs can be invited? (Could become a gate.)
+
+_Resolved:_ O-2 → fixed categories · O-3 → author freely, Approval-Quorum to publish ·
+O-5 → yes, client approval gates bidding._
