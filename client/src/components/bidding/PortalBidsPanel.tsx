@@ -9,8 +9,9 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import {
   Hammer, Send, Award, Clock, CheckCircle2, Eye, FileText, Shield, Building2, Trash2, Plus,
-  LayoutList, Columns3,
+  LayoutList, Columns3, FileUp,
 } from 'lucide-react';
+import { useRoleAccess } from '@/hooks/useRoleAccess';
 import { SendBidPackageModal } from './SendBidPackageModal';
 import { AwardBidModal } from './AwardBidModal';
 import { BidRequestDetailModal } from './BidRequestDetailModal';
@@ -33,6 +34,11 @@ export function PortalBidsPanel({ projectId, projectName }: Props) {
   // 'summary' = per-sub rows (default); 'matrix' = side-by-side leveling sheet.
   const [bidView, setBidView] = useState<'summary' | 'matrix'>('summary');
   const { toast } = useToast();
+  // GC / PM / admin can record an emailed quote as a bid. Same gate as the
+  // per-vendor button inside BidRequestDetailModal - the tile-level link just
+  // opens that modal where the per-row affordance lives.
+  const { hasRole } = useRoleAccess();
+  const canRecordManually = hasRole(['admin', 'gc', 'projectManager']);
 
   async function handleDeleteRequest(req: BidRequest) {
     const ok = window.confirm(
@@ -158,6 +164,10 @@ export function PortalBidsPanel({ projectId, projectName }: Props) {
                   const reqDate = (r.createdAt as any)?.toDate?.()?.toLocaleDateString?.() || '—';
                   const submittedCount = bids.filter(b => (b as any).bidRequestId === r.id).length;
                   const isDeleting = deletingId === r.id;
+                  // Only surface the "Record manually" affordance when there's
+                  // at least one vendor who hasn't submitted yet - otherwise
+                  // it's a dead link.
+                  const hasPending = (r.invitedSubIds?.length || 0) > submittedCount;
                   return (
                     <div
                       key={r.id}
@@ -179,6 +189,20 @@ export function PortalBidsPanel({ projectId, projectName }: Props) {
                           <span>Due {r.dueDate}</span>
                         </div>
                       </button>
+                      {canRecordManually && hasPending && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setViewingRequest(r);
+                          }}
+                          className="absolute bottom-1 left-2.5 inline-flex items-center gap-1 text-[10px] text-[#C9A96E] hover:text-[#A8864A] hover:underline"
+                          title="Open this request to record an email-received quote"
+                        >
+                          <FileUp className="w-2.5 h-2.5" />
+                          Record manually
+                        </button>
+                      )}
                       <button
                         type="button"
                         aria-label="Delete bid request"

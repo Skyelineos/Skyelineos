@@ -9,6 +9,10 @@ import { registerUploadEndpoint } from './ingestionLab/uploadEndpoint';
 import { registerBrainPass } from './ingestionLab/brainPass';
 import { registerPlacesRoutes } from './places/placesRoutes';
 import { registerTaskLibrary } from './taskLibrary/routes';
+import { registerExtractEstimateRoute } from './estimates/extractEstimateRoute';
+import { registerBidCompareRoutes } from './bids/analyzeBidsRoute';
+import { registerTaskSignoffRoute } from './tasks/signoffRoute';
+import { registerEstimateRoutes }   from './estimates/estimateRoutes';
 
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -21,8 +25,88 @@ app.use(express.json());
 // Twilio inbound webhooks (STOP/HELP) post application/x-www-form-urlencoded.
 app.use(express.urlencoded({ extended: false }));
 
+// ── Auth middleware helper ────────────────────────────────────────────────────
+// Verifies the caller's Firebase ID token and populates req.user + req.userProfile.
+// Declared up here (rather than inline at first use) so that `app.use('/api', authMiddleware)`
+// below can gate the legacy Express routes wholesale. Closes the unauthed
+// /api/** exposure called out in docs/Security_Exposure_Assessment.md.
+async function authMiddleware(req: any, res: any, next: any) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'No token' });
+  try {
+    const decoded = await admin.auth().verifyIdToken(authHeader.substring(7));
+    req.user = decoded;
+    req.userProfile = await resolveUserProfile(decoded);
+    next();
+  } catch {
+    return res.status(401).json({ error: 'Invalid token' });
+  }
+}
+
+// ── Public route allowlist ────────────────────────────────────────────────────
+// These MUST be registered BEFORE `app.use('/api', authMiddleware)` so they
+// bypass the gate. Each has its own out-of-band gating (Twilio signature,
+// magic-link token, OAuth state nonce, shared secret, honeypot+validation).
+//
+//   POST /api/sms/inbound                         Twilio webhook (signed)
+//   GET  /api/bid-requests/by-token/:token        Magic-link landing (token is auth)
+//   POST /api/leads/intake                        LEAD_INTAKE_SECRET shared secret
+//   POST /api/leads/public-intake                 Honeypot + strict validation
+//   GET  /api/ingestionLab/oauth/{gmail|drive}/callback   Google redirect (state nonce gates)
+//   GET  /api/health                              Liveness probe
+//
+// (The QBO OAuth callback is at /qbo/oauth/callback — not under /api — so it's
+// outside this gate entirely.)
+import { registerSmsInboundRoute }      from './notifications/smsInboundRoute';
+import { registerBidTokenEndpoint }     from './bids/bidTokenEndpoint';
+import { registerLeadIntakeRoute }      from './leads/intakeRoute';
+registerSmsInboundRoute(app, admin.firestore());
+registerBidTokenEndpoint(app, admin.firestore());
+registerLeadIntakeRoute(app, admin.firestore());
+
+// /api/health stays public (liveness probe).
+app.get('/api/health', async (_req: any, res: any) => {
+  try {
+    await db.collection('_health').doc('test').get();
+    res.json({
+      status: 'OK',
+      timestamp: new Date().toISOString(),
+      version: '2.0.0',
+      environment: 'Firebase Functions',
+      database: 'Firestore',
+      endpoints: 'COMPLETE FIREBASE INTEGRATION',
+      services: { firestore: 'connected', functions: 'operational', api: 'all_endpoints_active' },
+    });
+  } catch (error) {
+    console.error('❌ Health check error:', error);
+    res.status(500).json({ status: 'ERROR', timestamp: new Date().toISOString(), error: 'Firestore connection failed' });
+  }
+});
+
+// ── /api auth gate ────────────────────────────────────────────────────────────
+// Everything under /api registered AFTER this line requires a valid Firebase
+// ID token (Bearer header). Module-scoped Route.ts files (bids/, contracts/,
+// notifications/, qa/, etc.) layer their own role checks on top — this is the
+// outer gate that closes the ~46 previously-unauthed legacy routes (lines
+// ~50–1340 below) from anonymous internet traffic.
+//
+// Allowlist for /api paths that MUST stay unauthed even after this gate.
+// These are top-level browser redirects (OAuth callbacks) — they can't carry
+// a Bearer header, so the upstream state nonce is the gate instead.
+const API_AUTH_ALLOWLIST = [
+  /^\/ingestionLab\/oauth\/(gmail|drive)\/callback$/,
+];
+app.use('/api', (req: any, res: any, next: any) => {
+  if (API_AUTH_ALLOWLIST.some((re) => re.test(req.path))) return next();
+  return authMiddleware(req, res, next);
+});
+
 // Ingestion Lab — registered early so the routes sit alongside other /api/**
 // routes and resolve before the catch-all 404 below.
+// (Note: the gmail/drive OAuth /callback paths are registered ABOVE the gate
+// because Google's redirect can't send a Bearer header. The /start paths use
+// adminOnly middleware inside oauthHandlers.ts, so going through the gate
+// here is correct — admin already has an ID token.)
 registerIngestionLabOAuth(app, db);  // /api/ingestionLab/oauth/{gmail|drive}/{start|callback}
 registerGmailIngester(app, db);      // POST /api/ingestionLab/ingest/gmail
 registerDriveIngester(app, db);      // POST /api/ingestionLab/ingest/drive
@@ -37,6 +121,10 @@ registerPlacesRoutes(app);           // GET /api/places/{autocomplete,details}
 // are admin-only; project task generation/editing is GC-level. See
 // taskLibrary/routes.ts for the full route map.
 registerTaskLibrary(app, db);        // /api/taskLibrary/...
+registerExtractEstimateRoute(app, authMiddleware); // POST /api/extract-estimate
+registerBidCompareRoutes(app, authMiddleware);
+registerTaskSignoffRoute(app, db);   // POST /api/tasks/:taskId/signoff  (GC/PM/admin approval flow)
+registerEstimateRoutes(app, db);     // POST /api/estimates/:id/{send-to-client,client-response}
 
 // Real Firestore API endpoints
 app.get('/api/projects', async (req: any, res: any) => {
@@ -777,35 +865,8 @@ app.get('/api/branding', (req: any, res: any) => {
   });
 });
 
-// Comprehensive health check endpoint  
-app.get('/api/health', async (req: any, res: any) => {
-  try {
-    // Test Firestore connection
-    const testDoc = await db.collection('_health').doc('test').get();
-    
-    res.json({ 
-      status: 'OK', 
-      timestamp: new Date().toISOString(),
-      version: '2.0.0',
-      environment: 'Firebase Functions',
-      database: 'Firestore',
-      endpoints: 'COMPLETE FIREBASE INTEGRATION',
-      services: {
-        firestore: 'connected',
-        functions: 'operational',
-        api: 'all_endpoints_active'
-      },
-      updated: 'Complete Firebase deployment with real Firestore integration'
-    });
-  } catch (error) {
-    console.error('❌ Health check error:', error);
-    res.status(500).json({ 
-      status: 'ERROR', 
-      timestamp: new Date().toISOString(),
-      error: 'Firestore connection failed'
-    });
-  }
-});
+// (Comprehensive health check endpoint moved above the /api auth gate so it
+// remains a public liveness probe.)
 
 // Additional Firebase-specific endpoints
 app.post('/api/projects', async (req: any, res: any) => {
@@ -1218,7 +1279,12 @@ app.post('/api/projects/:projectId/selections/:selectionId/approve', async (req:
     const overage = (option.totalCost || 0) - (sel.allowanceAmount || 0);
 
     if (overage > 0) {
-      const coRef = await db.collection('projects').doc(projectId).collection('changeOrders').add({
+      // SOURCE OF TRUTH: top-level `changeOrders/{coId}` keyed by projectId field.
+      // Pre-migration this wrote to projects/{projectId}/changeOrders/ — the
+      // subcollection nobody reads, so selection-overage COs created here were
+      // silently invisible to the client portal. Mirrors T0-4 decision-route fix.
+      const coRef = await db.collection('changeOrders').add({
+        projectId,
         title: `${sel.category} Selection Overage`,
         description: `Approved selection "${option.name}" exceeds the $${sel.allowanceAmount?.toLocaleString()} allowance by $${overage.toLocaleString()}.`,
         amount: overage,
@@ -1249,7 +1315,13 @@ app.post('/api/projects/:projectId/selections/:selectionId/approve', async (req:
 app.get('/api/projects/:projectId/change-orders', async (req: any, res: any) => {
   try {
     const { projectId } = req.params;
-    const snap = await db.collection('projects').doc(projectId).collection('changeOrders').orderBy('createdAt', 'desc').get();
+    // SOURCE OF TRUTH: top-level `changeOrders/` filtered by projectId field
+    // (audit Workflow 7 / Section 6.3). Pre-migration this read from the
+    // subcollection — missing all top-level COs that client.tsx writes.
+    const snap = await db.collection('changeOrders')
+      .where('projectId', '==', projectId)
+      .orderBy('createdAt', 'desc')
+      .get();
     res.json(snap.docs.map(d => ({ id: d.id, ...d.data(), createdAt: d.data().createdAt?.toDate?.()?.toISOString() || null })));
   } catch (e) { res.status(500).json({ error: 'Failed to fetch change orders' }); }
 });
@@ -1257,8 +1329,13 @@ app.get('/api/projects/:projectId/change-orders', async (req: any, res: any) => 
 app.post('/api/projects/:projectId/change-orders', async (req: any, res: any) => {
   try {
     const { projectId } = req.params;
-    const ref = await db.collection('projects').doc(projectId).collection('changeOrders').add({
+    // SOURCE OF TRUTH: top-level `changeOrders/` keyed by projectId field.
+    // Pre-migration this wrote to projects/{projectId}/changeOrders/ —
+    // the subcollection nobody reads. Mirrors T0-4 decision-route fix.
+    // projectId stamped AFTER ...req.body so callers can't spoof it.
+    const ref = await db.collection('changeOrders').add({
       ...req.body,
+      projectId,
       status: 'pending',
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -1273,23 +1350,73 @@ app.patch('/api/projects/:projectId/change-orders/:coId/decision', async (req: a
     const { projectId, coId } = req.params;
     const { decision, decidedBy } = req.body; // decision: 'approved' | 'declined'
     if (!['approved', 'declined'].includes(decision)) return res.status(400).json({ error: 'Invalid decision' });
-    const ref = db.collection('projects').doc(projectId).collection('changeOrders').doc(coId);
-    await ref.update({
-      status: decision,
-      decidedBy,
-      decidedAt: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+
+    // SOURCE OF TRUTH: top-level `changeOrders/{coId}` (audit Workflow 7 / Section 6.3).
+    // The old code wrote to the subcollection `projects/{projectId}/changeOrders/{coId}`,
+    // which nobody reads — so approvals silently no-op'd from the user's perspective.
+    const coRef = db.collection('changeOrders').doc(coId);
+    const projectRef = db.collection('projects').doc(projectId);
+
+    // Run inside a transaction so two simultaneous approvals can't both add
+    // the CO amount to contractAmount (causing double-counting). Firestore
+    // requires ALL reads to happen before ANY writes inside a transaction,
+    // so we read the CO + (conditionally) the project first, then issue
+    // every tx.update at the end.
+    const result = await db.runTransaction(async (tx) => {
+      const coSnap = await tx.get(coRef);
+      if (!coSnap.exists) throw new Error('CO_NOT_FOUND');
+      const co = coSnap.data() as any;
+      // Verify the CO actually belongs to the project in the URL — otherwise a
+      // caller authorised on project A could mutate a CO on project B by id.
+      if (co.projectId && co.projectId !== projectId) throw new Error('CO_PROJECT_MISMATCH');
+
+      const shouldBumpContract = decision === 'approved' && co.status !== 'approved';
+      // Read project doc up front (before any writes) so we satisfy the
+      // Firestore read-before-write constraint.
+      let projSnap: any = null;
+      if (shouldBumpContract) {
+        projSnap = await tx.get(projectRef);
+      }
+
+      // ── writes from here down ────────────────────────────────────────────
+      tx.update(coRef, {
+        status: decision,
+        decidedBy,
+        decidedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      // On approve, atomically bump the project's contractAmount so the
+      // budget cards (ProjectFinancialsCard, ClientFinancials) reflect the
+      // new contract value immediately. Idempotency note: if this route is
+      // somehow called twice on an already-approved CO, the second call
+      // sees status === 'approved' and skips the bump.
+      if (shouldBumpContract && projSnap && projSnap.exists) {
+        const proj = projSnap.data() as any;
+        const base = Number(proj.contractAmount ?? proj.budget ?? 0) || 0;
+        const delta = Number(co.totalAmount ?? co.amount ?? 0) || 0;
+        tx.update(projectRef, {
+          contractAmount: base + delta,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      }
+      return { sourceSelectionId: co.sourceSelectionId || null };
     });
-    // If approved selection change order, mark selection as approved too
-    const co = (await ref.get()).data() as any;
-    if (decision === 'approved' && co?.sourceSelectionId) {
-      await db.collection('projects').doc(projectId).collection('selections').doc(co.sourceSelectionId).update({
+
+    // Selection bookkeeping happens outside the transaction (different doc tree).
+    if (decision === 'approved' && result.sourceSelectionId) {
+      await db.collection('projects').doc(projectId).collection('selections').doc(result.sourceSelectionId).update({
         status: 'approved',
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
     }
     res.json({ success: true, decision });
-  } catch (e) { res.status(500).json({ error: 'Failed to process decision' }); }
+  } catch (e: any) {
+    if (e?.message === 'CO_NOT_FOUND') return res.status(404).json({ error: 'Change order not found' });
+    if (e?.message === 'CO_PROJECT_MISMATCH') return res.status(400).json({ error: 'Change order does not belong to this project' });
+    console.error('CO decision failed', e);
+    res.status(500).json({ error: 'Failed to process decision' });
+  }
 });
 
 // ── AI Rendering ──────────────────────────────────────────────────────────────
@@ -1334,19 +1461,9 @@ app.post('/api/ai/render', async (req: any, res: any) => {
   } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
 
-// ── Auth middleware helper ────────────────────────────────────────────────────
-async function authMiddleware(req: any, res: any, next: any) {
-  const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'No token' });
-  try {
-    const decoded = await admin.auth().verifyIdToken(authHeader.substring(7));
-    req.user = decoded;
-    req.userProfile = await resolveUserProfile(decoded);
-    next();
-  } catch {
-    return res.status(401).json({ error: 'Invalid token' });
-  }
-}
+// (authMiddleware helper hoisted to the top of the file so `app.use('/api', authMiddleware)`
+// can gate the legacy routes block above. Module-scoped Route.ts files import
+// authMiddleware indirectly via the gate.)
 
 // ── Sub portal contact-claim routes ──────────────────────────────────────────
 // Same reason as analyze-bill: org policy blocks new Cloud Run services with
@@ -2032,10 +2149,8 @@ registerBidRequestRoute(app, admin.firestore());
 import { registerQboPaymentLink } from './qbo/paymentLink';
 registerQboPaymentLink(app, admin.firestore());
 
-// Public token-resolution endpoint for the magic-link bid response flow.
-// Route: GET /api/bid-requests/by-token/:token (public, no auth)
-import { registerBidTokenEndpoint } from './bids/bidTokenEndpoint';
-registerBidTokenEndpoint(app, admin.firestore());
+// (Public magic-link bid endpoint /api/bid-requests/by-token/:token is
+// registered at the top of the file in the public allowlist, BEFORE the gate.)
 
 // Post-signup contact linking for new subs (D-012-h).
 // Route: POST /api/sub/post-signup-link
@@ -2067,16 +2182,26 @@ registerAwardBidRoute(app, admin.firestore());
 import { registerCommenceRoute } from './contracts/commenceRoute';
 registerCommenceRoute(app, admin.firestore());
 
-// Public lead intake for the Crestview Solace QR / model-home Google Form.
-// Gated by the LEAD_INTAKE_SECRET shared secret (not Firebase auth).
-// Route: POST /api/leads/intake
-import { registerLeadIntakeRoute } from './leads/intakeRoute';
-registerLeadIntakeRoute(app, admin.firestore());
+// Sub self-service compliance doc registration (Stream 4 — Wave B).
+// Storage upload lands at projects/{projectId}/compliance/{subContactId}/...
+// under Stream 1's isOnProject(projectId) rule; this route writes the
+// Firestore side and mirrors to users/{uid} for the D-016 award gate.
+// Route: POST /api/compliance/upload
+import { registerComplianceUploadRoute } from './compliance/uploadRoute';
+registerComplianceUploadRoute(app, admin.firestore());
 
-// Twilio inbound SMS webhook — STOP/START/HELP keyword handling + opt-out
-// ledger. Route: POST /api/sms/inbound (public; Twilio-signed, no Firebase auth)
-import { registerSmsInboundRoute } from './notifications/smsInboundRoute';
-registerSmsInboundRoute(app, admin.firestore());
+// Sub self-service invoice / pay-application submission (Stream 4 — Wave B).
+// Writes to /financials with submittedBy:'sub' so the GC's existing Bills
+// page surfaces it; server verifies the sub is awarded on the project.
+// Route: POST /api/sub/invoices/submit
+import { registerSubmitInvoiceRoute } from './sub/submitInvoiceRoute';
+registerSubmitInvoiceRoute(app, admin.firestore());
+
+// (Public lead intake /api/leads/intake + /api/leads/public-intake are
+// registered at the top of the file in the public allowlist, BEFORE the gate.)
+
+// (Twilio inbound SMS webhook /api/sms/inbound is registered at the top of the
+// file in the public allowlist, BEFORE the /api auth gate.)
 
 // Portal-invite email — sends a stage-specific template (emailTemplates/{id})
 // to a client's documented address via SendGrid. Route: POST /api/send-portal-invite
@@ -2089,8 +2214,11 @@ registerSendPortalInviteRoute(app, admin.firestore());
 import { registerNotificationRulesRoutes } from './notifications/rulesRoutes';
 registerNotificationRulesRoutes(app, admin.firestore());
 
-import { registerQaRoutes } from './qa/qaRoutes';
-registerQaRoutes(app, admin.firestore());  // /api/qa/{trigger,report,lock}
+// Wave-2 universal fire endpoint — every client-side createNotification call
+// site routes through here so audience resolution, per-user prefs, and
+// SMS/email/push fan-out run server-side. Auth-gated by authMiddleware.
+import { registerFireTriggerRoute } from './notifications/fireTriggerRoute';
+registerFireTriggerRoute(app, admin.firestore());
 
 // Catch-all 404 — must come AFTER all route registrations (QBO routes above included)
 app.use('*', (req: any, res: any) => {
@@ -2163,6 +2291,11 @@ export { newLeadAlert } from './leads/newLeadAlert';
 
 // ── Phase 3: Scheduled due-date sweep (7am MT daily) ─────────────────────────
 export { dueSweep } from './notifications/scheduledDueSweep';
+
+// ── Wave-2: Schedule slip sweep (7:30am MT daily). Fires schedule_slip for any
+//    active project that transitioned into amber/red since yesterday. Idempotent
+//    via projects.scheduleSlipLastFiredOn marker.
+export { scheduleSlipSweep } from './notifications/scheduleSlipSweep';
 
 // ── Auto-create Firebase Auth account for every contact with an email ────────
 // Lets any contact use the "Forgot password" flow without an admin first

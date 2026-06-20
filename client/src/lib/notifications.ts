@@ -129,3 +129,61 @@ export async function markNotificationRead(notificationId: string) {
     console.warn('[notifications] mark read failed', e);
   }
 }
+
+
+// ── Wave-2: route through fireTrigger ───────────────────────────────────────
+// Every notification-producing event in the client should call fireTrigger
+// instead of createNotification so audience resolution + per-user prefs +
+// SMS/email/push fan-out run server-side. See shared/notifications-catalog.ts
+// for the list of kinds and `POST /api/notifications/fire` (functions side)
+// for the auth-gated endpoint that actually fans out.
+import { auth } from './firebase';
+import type { TriggerKind } from '@shared/notifications-catalog';
+
+export interface FireTriggerOptions {
+  /** Catalog trigger kind (e.g. 'walkthrough_assigned'). */
+  kind: TriggerKind;
+  /** Project context for audience resolution (server expands to recipients). */
+  projectId?: string;
+  /** Per-kind template variables: server renders title/body/email/sms. */
+  payload?: Record<string, any>;
+  /** For single_uid kinds: pin the recipient explicitly. */
+  targetUserIds?: string[];
+}
+
+/**
+ * Fire a notification trigger through the server pipeline.
+ * Best-effort: never throws into the caller, so a failure here doesn't break
+ * the surrounding business action (e.g. the doc still gets saved).
+ */
+export async function fireTrigger(opts: FireTriggerOptions): Promise<{ ok: boolean; recipientsCount?: number; error?: string }> {
+  try {
+    const token = await auth.currentUser?.getIdToken();
+    if (!token) return { ok: false, error: 'not signed in' };
+    const res = await fetch('/api/notifications/fire', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        kind: opts.kind,
+        projectId: opts.projectId,
+        payload: opts.payload || {},
+        overrides: opts.targetUserIds && opts.targetUserIds.length
+          ? { targetUserIds: opts.targetUserIds }
+          : undefined,
+      }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      console.warn('[fireTrigger] non-200', res.status, text);
+      return { ok: false, error: `http ${res.status}` };
+    }
+    const json = await res.json().catch(() => ({}));
+    return { ok: true, recipientsCount: json?.recipientsCount };
+  } catch (e: any) {
+    console.warn('[fireTrigger] failed', e);
+    return { ok: false, error: e?.message || 'fetch failed' };
+  }
+}

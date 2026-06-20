@@ -20,10 +20,12 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { useToast } from '@/hooks/use-toast';
 import { useConfirm } from '@/hooks/use-confirm';
 import { GmailBidImporter } from '@/components/estimates/GmailBidImporter';
+import { ImportEstimateModal, type ImportedAttachmentMeta } from '@/components/estimates/ImportEstimateModal';
 import { EstimateCostingsTab } from '@/components/estimates/EstimateCostingsTab';
 import { EstimateScheduleTab } from '@/components/estimates/EstimateScheduleTab';
 import { LineDescriptionButton } from '@/components/estimates/LineDescriptionButton';
 import { SubPickerButton } from '@/components/estimates/SubPickerButton';
+import { SendEstimateModal, type SendEstimateModalEstimate } from '@/components/estimates/SendEstimateModal';
 import {
   Plus, Search, MoreVertical, ChevronDown, ChevronRight,
   Trash2, Edit2, FileText, DollarSign, User, Send,
@@ -31,7 +33,7 @@ import {
   Hammer, Zap, Droplets, Paintbrush, Thermometer, Package,
   TreePine, Layers, Grid3X3, ShieldCheck, Ruler, Scissors,
   Palette, AlertCircle, SlidersHorizontal, Lock, Eye, TrendingUp,
-  Check, FileSignature,
+  Check, FileSignature, Upload,
 } from 'lucide-react';
 import { lazy, Suspense } from 'react';
 import { MinimalSpinner } from '@/components/layout/MinimalSpinner';
@@ -95,6 +97,15 @@ interface LineItem {
   awardedBidId?: string;
 }
 
+interface EstimateAttachment {
+  storagePath: string;
+  url: string;
+  fileName: string;
+  sizeBytes: number;
+  mimeType: string;
+  source: 'pdf' | 'email';
+}
+
 interface Estimate {
   id: string;
   title: string;
@@ -110,10 +121,17 @@ interface Estimate {
   overhead: number;      // percent
   profit: number;        // percent
   totalAmount: number;
+  // Denormalized rollups so the project dashboard does not need to re-sum
+  // every line item on render. Derived in calcTotals on save.
+  subCosts?: number;             // = sum of qty × subCost across billable lines
+  projectedGrossProfit?: number; // = totalAmount − subCosts
+  grossMarginPct?: number;       // = projectedGrossProfit / totalAmount × 100
   markup?: number;       // percent — for JACK-style costings tab
   tax?: number;          // percent — for JACK-style costings tab
   notes?: string;
   validUntil?: string;
+  /** Files attached to this estimate (sub PDFs, emails). Append-only. */
+  attachments?: EstimateAttachment[];
   sentAt?: any;
   createdAt?: any;
   updatedAt?: any;
@@ -890,6 +908,12 @@ function EstimateModal({
   const [notes, setNotes]           = useState('');
   const [validUntil, setValidUntil] = useState('');
   const [items, setItems]           = useState<LineItem[]>(defaultItems());
+  // Files attached via "Import from PDF" inside the Scope of Work table. Stays
+  // append-only — every imported sub PDF stays attached for audit.
+  const [attachments, setAttachments] = useState<EstimateAttachment[]>([]);
+  // Toggles the inline "Import from PDF" modal launched from the Scope of Work
+  // header. Distinct from the outer EstimateBuilder list-level importPdfOpen.
+  const [scopeImportOpen, setScopeImportOpen] = useState(false);
   // Live bids on the current project — surfaces "Apply bid" chips on any
   // line where a project bid matches both trade and one of the assigned subs.
   const [projectBids, setProjectBids] = useState<MatchableBid[]>([]);
@@ -904,6 +928,7 @@ function EstimateModal({
   }, [projectId]);
   const [lineStatusFilter, setLineStatusFilter] = useState<'all' | 'inc' | 'allow' | 'not-incl'>('all');
   const [saving, setSaving]         = useState(false);
+  const [sendModalOpen, setSendModalOpen] = useState(false);
   const [expandedTrades, setExpandedTrades] = useState<Set<string>>(new Set(FALLBACK_TRADES));
   // Live trade list from Firestore (same source as Contacts → Trades)
   const [firestoreTrades, setFirestoreTrades] = useState<string[]>([]);
@@ -937,6 +962,7 @@ function EstimateModal({
       setNotes(editing.notes ?? '');
       setValidUntil(editing.validUntil ?? '');
       setItems(editing.lineItems?.length ? editing.lineItems : defaultItems());
+      setAttachments(editing.attachments ?? []);
     } else {
       setTitle(prefillProject?.name ? `${prefillProject.name} — Estimate` : '');
       setClientId('');
@@ -950,6 +976,7 @@ function EstimateModal({
       setNotes('');
       setValidUntil('');
       setItems(defaultItems());
+      setAttachments([]);
     }
     setActiveTab('details');
     setMeasuringItemId(null);
@@ -976,6 +1003,34 @@ function EstimateModal({
 
   const addItem = (trade: string) =>
     setItems(prev => [...prev, newLineItem(trade)]);
+
+  // Append rows extracted from a sub's PDF. Multiple PDFs aggregate into one
+  // estimate. Attachment metadata persists with the estimate so the source
+  // PDF stays auditable even after rows are edited.
+  const handleAppendImported = (
+    newRows: LineItem[],
+    attachment: ImportedAttachmentMeta,
+  ) => {
+    if (newRows.length) {
+      setItems(prev => [...prev, ...newRows]);
+      // Auto-expand any trades that just got imported so Tyler sees the rows
+      // appear instead of them hiding inside a collapsed group.
+      setExpandedTrades(prev => {
+        const next = new Set(prev);
+        for (const r of newRows) next.add(resolveTradeLabel(r.trade));
+        return next;
+      });
+    }
+    setAttachments(prev => [...prev, attachment]);
+    toast({
+      title: newRows.length
+        ? `Added ${newRows.length} line item${newRows.length === 1 ? '' : 's'} from ${attachment.fileName}`
+        : `Attached ${attachment.fileName}`,
+      description: newRows.length
+        ? 'Review, edit any field that came out wrong, then Save.'
+        : 'No rows could be parsed automatically — add them manually below.',
+    });
+  };
 
   const totals = calcTotals(items, overhead, profit);
 
@@ -1017,6 +1072,7 @@ function EstimateModal({
     const clientName = clients.find(c => c.id === clientId)?.name;
     try {
       await onSave({
+        ...(attachments.length ? { attachments } : {}),
         title: title.trim(),
         clientId: clientId || undefined,
         clientName,
@@ -1029,6 +1085,12 @@ function EstimateModal({
         markup: markupPct,
         tax: taxPct,
         totalAmount: totals.total,
+        // Denormalized rollups — same numbers shown in the Costings tab
+        // tiles. Project dashboard reads subCosts to compute Projected
+        // Gross Profit without re-summing line items.
+        subCosts: totals.internalSubtotal,
+        projectedGrossProfit: totals.grossProfit,
+        grossMarginPct: totals.grossMarginPct,
         notes: notes.trim() || undefined,
         validUntil: validUntil || undefined,
       });
@@ -1237,7 +1299,7 @@ function EstimateModal({
             <div className="rounded-lg border border-green-200 bg-green-50 p-3">
               <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-green-800 font-semibold">
                 <DollarSign className="w-3 h-3" />
-                Gross Profit
+                Projected Gross Profit
               </div>
               <div className="text-lg font-bold text-gray-900 mt-0.5">
                 {fmt(totals.grossProfit)}
@@ -1251,7 +1313,44 @@ function EstimateModal({
           {/* Line items by trade */}
           <div>
             <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
-              <h3 className="font-semibold text-gray-800">Scope of Work</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="font-semibold text-gray-800">Scope of Work</h3>
+                {/* Import sub PDFs directly into this estimate. Multiple PDFs
+                    across trades aggregate into one estimate's lineItems.
+                    Only shown when the estimate has a project — the upload
+                    path is scoped to projects/{projectId}/estimate-imports/
+                    so the PDF can be attached to project files. For a
+                    project-less estimate (legacy or unassigned), the user
+                    should assign a project first via the Edit form, then
+                    return to the Scope of Work. */}
+                {(projectId || editing?.projectId || prefillProject?.id) ? (
+                  <button
+                    type="button"
+                    onClick={() => setScopeImportOpen(true)}
+                    className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-full border border-dashed text-gray-700 hover:bg-amber-50 transition-colors"
+                    style={{ borderColor: 'rgba(201,169,110,0.6)' }}
+                    title="Upload a sub's PDF — Claude will extract rows and append them here"
+                  >
+                    <Upload className="w-3 h-3" />
+                    Import from PDF
+                  </button>
+                ) : (
+                  <span
+                    className="text-[11px] text-gray-400 italic"
+                    title="Assign this estimate to a project to enable PDF import."
+                  >
+                    Assign a project to enable PDF import
+                  </span>
+                )}
+                {attachments.length > 0 && (
+                  <span
+                    className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600"
+                    title={attachments.map(a => a.fileName).join('\n')}
+                  >
+                    {attachments.length} attached
+                  </span>
+                )}
+              </div>
               <div className="flex items-center gap-2 flex-wrap">
                 {/* Status filter chips — show All, only allowances, only excluded/note items. */}
                 {([
@@ -1416,6 +1515,20 @@ function EstimateModal({
 
         <DialogFooter className="px-6 py-4 border-t gap-2 sticky bottom-0 bg-white">
           <Button variant="outline" onClick={onClose}>Cancel</Button>
+          {/* Send to Client — only on existing, un-sent estimates. Hidden for
+              brand-new drafts (no id) and for ones the GC has already sent
+              (status === 'sent'). Clicking opens SendEstimateModal which
+              handles PDF gen, Storage upload, and the server send. */}
+          {editing && editing.id && status !== 'sent' && (
+            <Button
+              type="button"
+              onClick={() => setSendModalOpen(true)}
+              disabled={saving}
+              className="bg-green-600 hover:bg-green-700 text-white"
+            >
+              <Send className="w-4 h-4 mr-1.5" /> Send to Client
+            </Button>
+          )}
           <Button
             onClick={handleSave}
             disabled={saving || !title.trim()}
@@ -1576,6 +1689,53 @@ function EstimateModal({
         </Dialog>
       );
     })()}
+
+    {/* Inline "Import from PDF" launched from the Scope of Work header. Lives
+        here so the modal sits over the open estimate, not the estimates list. */}
+    <ImportEstimateModal
+      open={scopeImportOpen}
+      onClose={() => setScopeImportOpen(false)}
+      projectId={projectId || editing?.projectId || prefillProject?.id}
+      projectName={title || prefillProject?.name}
+      mode="append-to-current"
+      onLineItemsExtracted={handleAppendImported}
+    />
+
+    {/* Send-to-client modal. Mounted alongside the edit dialog so it overlays
+        cleanly. Reads from the current editor state so unsaved field edits to
+        title/total are reflected in the email body + generated PDF. The
+        modal handles PDF generation, Storage upload, and the server call;
+        on success it closes and triggers the parent list snapshot to refresh
+        (status flips to 'sent' on the doc, which hides this button next time). */}
+    <SendEstimateModal
+      open={sendModalOpen}
+      onClose={() => setSendModalOpen(false)}
+      estimate={
+        editing && editing.id
+          ? ({
+              id: editing.id,
+              title: title.trim() || editing.title,
+              projectId: projectId || editing.projectId,
+              projectName: editing.projectName,
+              clientName: editing.clientName || clients.find(c => c.id === clientId)?.name,
+              clientEmail: clients.find(c => c.id === clientId)?.email as string | undefined,
+              totalAmount: totals.total,
+              status,
+              lineItems: items.map(li => ({
+                trade: li.trade,
+                description: li.description,
+                subName: li.subName,
+                qty: li.qty,
+                unit: li.unit,
+                unitCost: li.unitCost,
+                total: li.total,
+              })),
+              notes,
+              validUntil,
+            } satisfies SendEstimateModalEstimate)
+          : null
+      }
+    />
     </>
   );
 }
@@ -1600,6 +1760,7 @@ export function EstimateBuilderContent({ projectId, projectName, embedded = fals
   const [modalOpen, setModalOpen]   = useState(false);
   const [editing, setEditing]       = useState<Estimate | null>(null);
   const [gmailOpen, setGmailOpen]   = useState(false);
+  const [importPdfOpen, setImportPdfOpen] = useState(false);
   const [importTarget, setImportTarget] = useState<Estimate | null>(null);
   const [viewMode, setViewMode]     = useState<'pipeline' | 'list'>('pipeline');
 
@@ -1835,6 +1996,10 @@ export function EstimateBuilderContent({ projectId, projectName, embedded = fals
             {projectName ? `${projectName} — Estimates` : 'Estimates'}
           </h1>
           <div className="flex items-center gap-2 flex-wrap justify-end">
+            <Button variant="outline" onClick={() => setImportPdfOpen(true)}
+              className="hidden sm:flex items-center gap-2 border-gray-300">
+              <Upload className="h-4 w-4 text-[#C9A96E]" /> Import from PDF/Email
+            </Button>
             <Button variant="outline" onClick={() => { setImportTarget(null); setGmailOpen(true); }}
               className="hidden sm:flex items-center gap-2 border-gray-300">
               <Mail className="h-4 w-4 text-red-500" /> Import from Gmail
@@ -2019,6 +2184,13 @@ export function EstimateBuilderContent({ projectId, projectName, embedded = fals
         open={gmailOpen}
         onClose={() => { setGmailOpen(false); setImportTarget(null); }}
         onImport={handleGmailImport}
+      />
+
+      <ImportEstimateModal
+        open={importPdfOpen}
+        onClose={() => setImportPdfOpen(false)}
+        projectId={projectId}
+        projectName={projectName}
       />
     </>
   );

@@ -6,7 +6,7 @@ import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebas
 import { db, storage } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
-import { createNotificationsBatch } from '@/lib/notifications';
+import { fireTrigger } from '@/lib/notifications';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from '@/components/ui/dialog';
@@ -170,21 +170,23 @@ export function RequestBidsModal({ open, projectId, projectName, onClose }: Prop
         },
       );
 
-      // Fire notifications to each invited sub
+      // Wave-2: route through fireTrigger so audience resolution, per-user
+      // prefs, and SMS/email fan-out run server-side.
       const invitedSubs = allSubs.filter(s => selectedSubIds.has(s.id));
-      await createNotificationsBatch(
-        invitedSubs.map(sub => ({
-          userId: sub.id,
-          kind: 'system',
-          title: `New bid request: ${trade} for ${projectName || 'project'}`,
-          body: `Due ${dueDate}. Open the Bid Requests tab in your portal to review and submit.`,
+      await Promise.all(invitedSubs.map(sub => fireTrigger({
+        kind: 'bid_invitation',
+        projectId,
+        targetUserIds: [sub.id],
+        payload: {
+          projectName: projectName || 'project',
+          trade,
+          dueDate,
+          requesterName: user.name || 'Skyeline Homes',
+          magicLink: '/subcontractor-portal/bids',
           link: '/subcontractor-portal/bids',
-          projectId,
-          refType: 'task',
-          refId: requestRef.id,
-          fromUserName: user.name || 'Skyeline Homes',
-        })),
-      );
+          bidRequestId: requestRef.id,
+        },
+      })));
 
       toast({
         title: 'Bid request sent',

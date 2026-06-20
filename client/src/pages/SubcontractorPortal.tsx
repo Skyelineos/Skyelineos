@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import {
-  collection, query, where, onSnapshot, doc, getDoc, orderBy,
+  collection, query, where, onSnapshot, doc, getDoc, getDocs, orderBy,
+  updateDoc, serverTimestamp,
 } from 'firebase/firestore';
+import { createNotification } from '@/lib/notifications';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { SubcontractorLayout } from '@/components/layout/SubcontractorLayout';
@@ -18,7 +20,7 @@ import { useToast } from '@/hooks/use-toast';
 import {
   Calendar, DollarSign, Upload, CheckCircle, AlertTriangle, Clock,
   Briefcase, Shield, FileCheck, Building, MessageSquare, Camera,
-  FileText, ChevronRight, HelpCircle,
+  FileText, ChevronRight, HelpCircle, Award, Send,
 } from 'lucide-react';
 import PhotosTab from '@/components/photos/PhotosTab';
 import { RFIPanel } from '@/components/rfi/RFIPanel';
@@ -30,6 +32,8 @@ import { EnablePushButton } from '@/components/notifications/EnablePushButton';
 import { RecipientMismatchBanner } from '@/components/bidding/RecipientMismatchBanner';
 import { JobsiteLocationCard } from '@/components/common/JobsiteLocationCard';
 import { StatCard } from '@/components/dashboard/StatCard';
+import { ComplianceUploadCard } from '@/components/sub/ComplianceUploadCard';
+import { SubInvoiceForm } from '@/components/sub/SubInvoiceForm';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -46,9 +50,10 @@ interface FSTask {
   name: string;
   projectId?: string;
   projectName?: string;
-  status: 'todo' | 'in_progress' | 'done' | 'blocked';
+  status: 'todo' | 'in_progress' | 'awaiting_signoff' | 'done' | 'blocked';
   dueDate?: string;
   priority?: string;
+  submittedForSignoffAt?: any; // Firestore Timestamp once sub submits ready-for-review
 }
 
 interface FSBid {
@@ -83,12 +88,30 @@ interface FSPO {
 }
 
 interface ComplianceData {
+  // Legacy boolean mirrors written by /api/compliance/upload — these are
+  // what awardBidRoute.ts's D-016 gate reads from users/{uid}.
   w9Filed?: boolean;
   w9ExpiresAt?: string;
   insuranceCurrent?: boolean;
   insuranceExpiresAt?: string;
   agreementSigned?: boolean;
   agreementSignedAt?: string;
+  contractorLicenseNumber?: string;
+}
+
+interface ComplianceEntry {
+  uploadedAt?: any;
+  fileUrl?: string;
+  fileName?: string;
+  expiresAt?: string;
+  contractorLicenseNumber?: string;
+}
+
+interface ContactComplianceMap {
+  w9?: ComplianceEntry;
+  coi?: ComplianceEntry;
+  agreement?: ComplianceEntry;
+  contractorLicense?: ComplianceEntry;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -96,6 +119,7 @@ interface ComplianceData {
 const taskStatusColor: Record<string, string> = {
   todo: 'bg-gray-100 text-gray-600',
   in_progress: 'bg-blue-100 text-blue-700',
+  awaiting_signoff: 'bg-amber-100 text-amber-700',
   done: 'bg-green-100 text-green-700',
   blocked: 'bg-red-100 text-red-700',
 };
@@ -156,6 +180,8 @@ export default function SubcontractorPortal() {
   const [invoices, setInvoices] = useState<FSInvoice[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<FSPO[]>([]);
   const [compliance, setCompliance] = useState<ComplianceData>({});
+  const [subContactId, setSubContactId] = useState<string>('');
+  const [contactCompliance, setContactCompliance] = useState<ContactComplianceMap>({});
   const [loading, setLoading] = useState(true);
   // Which assigned project the RFIs tab is scoped to (subs can be on several).
   const [rfiProjectId, setRfiProjectId] = useState<string>('');
@@ -208,6 +234,21 @@ export default function SubcontractorPortal() {
       if (snap.exists()) setCompliance(snap.data() as ComplianceData);
     }).catch(() => {});
 
+    // Resolve the sub's contact record (sub portal needs this for the
+    // compliance + invoice upload paths under projects/{projectId}/...).
+    // Subs are matched on contacts.linkedUserId === their Firebase UID.
+    (async () => {
+      try {
+        const s = await getDocs(query(collection(db, 'contacts'), where('linkedUserId', '==', effectiveUid)));
+        if (!s.empty) {
+          const doc0 = s.docs[0];
+          setSubContactId(doc0.id);
+          const data = doc0.data() as any;
+          setContactCompliance((data.compliance || {}) as ContactComplianceMap);
+        }
+      } catch { /* non-fatal — UI shows a "not linked" hint */ }
+    })();
+
     return () => unsubs.forEach(u => u());
   }, [effectiveUid]);
 
@@ -233,8 +274,13 @@ export default function SubcontractorPortal() {
     })
     .slice(0, 5);
 
-  const compliantItems = [compliance.w9Filed, compliance.insuranceCurrent, compliance.agreementSigned].filter(Boolean).length;
-  const compliancePct = Math.round((compliantItems / 3) * 100);
+  const compliantItems = [
+    compliance.w9Filed,
+    compliance.insuranceCurrent,
+    compliance.agreementSigned,
+    !!(compliance.contractorLicenseNumber && compliance.contractorLicenseNumber.trim()),
+  ].filter(Boolean).length;
+  const compliancePct = Math.round((compliantItems / 4) * 100);
 
   // ── Render helpers ────────────────────────────────────────────────────────
 
@@ -256,7 +302,7 @@ export default function SubcontractorPortal() {
       </div>
 
       {/* Compliance alert */}
-      {compliantItems < 3 && (
+      {compliantItems < 4 && (
         <Alert className="border-amber-200 bg-amber-50">
           <AlertTriangle className="h-4 w-4 text-amber-600" />
           <AlertDescription className="text-amber-800">
@@ -291,7 +337,7 @@ export default function SubcontractorPortal() {
                     <div className="flex items-center gap-2">
                       {t.dueDate && <span className="text-xs text-gray-400">{fmt(t.dueDate)}</span>}
                       <span className={`text-xs px-2 py-0.5 rounded-full ${taskStatusColor[t.status] || 'bg-gray-100 text-gray-600'}`}>
-                        {t.status.replace('_', ' ')}
+                        {t.status === 'awaiting_signoff' ? 'Awaiting sign-off' : t.status.replace('_', ' ')}
                       </span>
                     </div>
                   </div>
@@ -392,6 +438,57 @@ export default function SubcontractorPortal() {
     </div>
   );
 
+  // Submit a task for GC/PM sign-off. Status flips to 'awaiting_signoff' and
+  // we capture a submittedForSignoffAt timestamp so the GC dashboard queue can
+  // sort oldest-first. Notifies anyone on the project who should approve.
+  //
+  // Sub cannot undo from their side — only GC/PM can approve or reject.
+  async function handleSubmitForSignoff(task: FSTask) {
+    try {
+      await updateDoc(doc(db, 'tasks', task.id), {
+        status: 'awaiting_signoff',
+        submittedForSignoffAt: serverTimestamp(),
+        submittedForSignoffBy: effectiveUid,
+        updatedAt: serverTimestamp(),
+      });
+      // Notify the project owners. Fetch the project doc once to get assignedUserIds.
+      // TODO Dispatch 6: switch to fireTrigger with kind 'task_awaiting_signoff'
+      //   once feat/notifications-engine lands; that branch's catalog will own
+      //   the email/SMS fan-out. Until then, in-app notifications cover it.
+      try {
+        if (task.projectId) {
+          const projSnap = await getDoc(doc(db, 'projects', task.projectId));
+          const assigned: string[] = (projSnap.data() as any)?.assignedUserIds || [];
+          for (const uid of assigned) {
+            if (uid === effectiveUid) continue; // don't notify self
+            await createNotification({
+              userId: uid,
+              kind: 'task_completed', // existing kind — Dispatch 6 will introduce 'task_awaiting_signoff'
+              title: 'Task awaiting sign-off',
+              body: `${userName} submitted "${task.name}" for your review.`,
+              link: `/projects/${task.projectId}/tasks`,
+              projectId: task.projectId,
+              refType: 'task',
+              refId: task.id,
+              fromUserId: effectiveUid,
+              fromUserName: userName,
+            });
+          }
+        }
+      } catch { /* notifications are best-effort */ }
+      toast({
+        title: 'Submitted for review',
+        description: `"${task.name}" is now waiting on the GC's sign-off.`,
+      });
+    } catch (e: any) {
+      toast({
+        title: 'Could not submit',
+        description: e?.message || 'Try again in a moment.',
+        variant: 'destructive',
+      });
+    }
+  }
+
   const renderSchedule = () => (
     <div className="space-y-4">
       <h2 className="text-xl font-bold text-gray-900">Job Schedule</h2>
@@ -412,10 +509,20 @@ export default function SubcontractorPortal() {
           }).map(task => (
             <Card key={task.id}>
               <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-semibold text-gray-900">{task.name}</p>
-                    {task.projectName && <p className="text-sm text-gray-500">{task.projectName}</p>}
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-gray-900 truncate">{task.name}</p>
+                    {task.projectName && <p className="text-sm text-gray-500 truncate">{task.projectName}</p>}
+                    {task.status === 'awaiting_signoff' && task.submittedForSignoffAt ? (
+                      <p className="text-xs text-amber-700 mt-1">
+                        Submitted {(() => {
+                          const at: any = task.submittedForSignoffAt;
+                          const ms = at?.toMillis?.() ?? (at ? Date.parse(at) : NaN);
+                          if (!Number.isFinite(ms)) return 'recently';
+                          return new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                        })()}
+                      </p>
+                    ) : null}
                   </div>
                   <div className="flex items-center gap-3">
                     {task.dueDate && (
@@ -424,9 +531,21 @@ export default function SubcontractorPortal() {
                         {fmt(task.dueDate)}
                       </div>
                     )}
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${taskStatusColor[task.status] || 'bg-gray-100 text-gray-600'}`}>
-                      {task.status.replace('_', ' ')}
+                    <span className={`text-xs px-2 py-0.5 rounded-full whitespace-nowrap ${taskStatusColor[task.status] || 'bg-gray-100 text-gray-600'}`}>
+                      {task.status === 'awaiting_signoff' ? 'Awaiting GC sign-off' : task.status.replace('_', ' ')}
                     </span>
+                    {/* Sub-side action: 'Mark Ready for Review' submits the task to
+                        awaiting_signoff. Once submitted, the sub sees the 'Awaiting GC
+                        sign-off' badge and cannot undo from their side. */}
+                    {(task.status === 'todo' || task.status === 'in_progress') && (
+                      <Button
+                        size="sm"
+                        onClick={() => handleSubmitForSignoff(task)}
+                        className="bg-[#C9A96E] hover:bg-[#b59459] text-white min-h-[44px] md:min-h-0"
+                      >
+                        Mark Ready for Review
+                      </Button>
+                    )}
                   </div>
                 </div>
               </CardContent>
@@ -438,32 +557,69 @@ export default function SubcontractorPortal() {
   );
 
   const renderCompliance = () => {
-    const items = [
+    // The sub's first awarded/assigned project — Storage rules are project-scoped
+    // so compliance uploads need *some* project to live under. If the sub is on
+    // multiple projects, any one works (the same compliance doc covers them all
+    // logically — the file just lives under one).
+    const uploadProjectId = projects[0]?.id || '';
+
+    const items: Array<{
+      key: 'w9' | 'coi' | 'agreement' | 'contractorLicense';
+      label: string;
+      icon: any;
+      onFile: boolean;
+      description: string;
+      entry?: ComplianceEntry;
+    }> = [
       {
         key: 'w9',
         label: 'W-9 Form',
         icon: FileCheck,
-        filed: compliance.w9Filed,
-        expiresAt: compliance.w9ExpiresAt,
-        description: 'Federal tax identification form',
+        onFile: !!compliance.w9Filed,
+        description: 'Federal tax identification form (W-9).',
+        entry: contactCompliance.w9,
       },
       {
-        key: 'insurance',
-        label: 'Insurance Certificate',
+        key: 'coi',
+        label: 'Certificate of Insurance',
         icon: Shield,
-        filed: compliance.insuranceCurrent,
-        expiresAt: compliance.insuranceExpiresAt,
-        description: 'Certificate of insurance (COI)',
+        onFile: !!compliance.insuranceCurrent,
+        description: 'Current general liability / workers\' comp COI.',
+        entry: contactCompliance.coi,
       },
       {
         key: 'agreement',
-        label: 'Subcontractor Agreement',
+        label: 'Signed Subcontractor Agreement',
         icon: FileCheck,
-        filed: compliance.agreementSigned,
-        expiresAt: compliance.agreementSignedAt,
-        description: 'Master subcontractor agreement',
+        onFile: !!compliance.agreementSigned,
+        description: 'Master subcontractor agreement, fully signed.',
+        entry: contactCompliance.agreement,
+      },
+      {
+        key: 'contractorLicense',
+        label: 'Contractor License',
+        icon: Award,
+        onFile: !!(compliance.contractorLicenseNumber && compliance.contractorLicenseNumber.trim()),
+        description: 'Trade license — D-016 requires a license number on file.',
+        entry: {
+          ...(contactCompliance.contractorLicense || {}),
+          contractorLicenseNumber:
+            contactCompliance.contractorLicense?.contractorLicenseNumber
+            || compliance.contractorLicenseNumber,
+        },
       },
     ];
+
+    const refresh = async () => {
+      try {
+        const snap = await getDoc(doc(db, 'users', effectiveUid));
+        if (snap.exists()) setCompliance(snap.data() as ComplianceData);
+        if (subContactId) {
+          const cs = await getDoc(doc(db, 'contacts', subContactId));
+          if (cs.exists()) setContactCompliance(((cs.data() as any).compliance || {}) as ContactComplianceMap);
+        }
+      } catch { /* non-fatal */ }
+    };
 
     return (
       <div className="space-y-4">
@@ -481,49 +637,45 @@ export default function SubcontractorPortal() {
           <Alert className="border-green-200 bg-green-50">
             <CheckCircle className="h-4 w-4 text-green-600" />
             <AlertDescription className="text-green-800">
-              Your compliance profile is fully up to date.
+              Your compliance profile is fully up to date. You're eligible for bid awards.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {!subContactId && (
+          <Alert className="border-amber-200 bg-amber-50">
+            <AlertTriangle className="h-4 w-4 text-amber-600" />
+            <AlertDescription className="text-amber-800">
+              Your login isn't linked to a Skyeline contact record yet — uploads will be
+              disabled until that's resolved. Contact Skyeline to finish onboarding.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {!uploadProjectId && (
+          <Alert className="border-amber-200 bg-amber-50">
+            <AlertTriangle className="h-4 w-4 text-amber-600" />
+            <AlertDescription className="text-amber-800">
+              You'll be able to upload compliance docs once you're assigned to at least one
+              project. (Compliance files live under the project's Storage tree.)
             </AlertDescription>
           </Alert>
         )}
 
         <div className="space-y-3">
           {items.map(item => (
-            <Card key={item.key}>
-              <CardContent className="p-5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className={`p-2 rounded-lg ${item.filed ? 'bg-green-50' : 'bg-red-50'}`}>
-                      <item.icon className={`w-5 h-5 ${item.filed ? 'text-green-600' : 'text-red-500'}`} />
-                    </div>
-                    <div>
-                      <p className="font-semibold text-gray-900">{item.label}</p>
-                      <p className="text-sm text-gray-500">{item.description}</p>
-                      {item.expiresAt && (
-                        <p className="text-xs text-gray-400 mt-0.5">
-                          {item.filed ? 'On file since' : 'Signed'}: {fmt(item.expiresAt)}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
-                      item.filed ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                    }`}>
-                      {item.filed ? 'On File' : 'Missing'}
-                    </span>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="gap-1.5"
-                      onClick={() => toast({ title: 'Upload coming soon', description: 'Document upload will be available shortly.' })}
-                    >
-                      <Upload className="w-3.5 h-3.5" />
-                      Upload
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <ComplianceUploadCard
+              key={item.key}
+              type={item.key}
+              label={item.label}
+              description={item.description}
+              icon={item.icon}
+              entry={item.entry}
+              onFile={item.onFile}
+              subContactId={subContactId}
+              projectId={uploadProjectId}
+              onUploaded={refresh}
+            />
           ))}
         </div>
       </div>
@@ -568,6 +720,40 @@ export default function SubcontractorPortal() {
       )}
     </div>
   );
+
+  // Pay-app / invoice submission — sub picks an awarded project, fills the
+  // invoice form, hits Submit, the GC sees the bill in their existing Bills
+  // page (financials where type='bill') with submittedBy:'sub'.
+  const renderPayApp = () => {
+    // Awarded projects: bids with status 'accepted' or 'awarded' tell us which
+    // projects this sub is contractually billable on.
+    const awardedProjectIds = new Set(
+      bids
+        .filter(b => b.status === 'accepted' || (b.status as any) === 'awarded')
+        .map(b => b.projectId)
+        .filter(Boolean) as string[],
+    );
+    const awardedProjects = projects
+      .filter(p => awardedProjectIds.has(p.id))
+      .map(p => ({ id: p.id, name: p.name }));
+
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <h2 className="text-xl font-bold text-gray-900">Pay Application</h2>
+          <p className="text-[11px] text-gray-500 max-w-md text-right">
+            Submit a pay app or invoice straight to Skyeline — no more emailing PDFs.
+          </p>
+        </div>
+
+        <SubInvoiceForm
+          subContactId={subContactId}
+          awardedProjects={awardedProjects}
+          onSubmitted={() => { /* parent already subscribes via Bills.tsx on the GC side */ }}
+        />
+      </div>
+    );
+  };
 
   const renderPurchaseOrders = () => (
     <div className="space-y-4">
@@ -696,6 +882,7 @@ export default function SubcontractorPortal() {
       case 'schedule': return renderSchedule();
       case 'compliance': return renderCompliance();
       case 'invoices': return renderInvoices();
+      case 'pay-app': return renderPayApp();
       case 'purchase-orders': return renderPurchaseOrders();
       case 'progress-photos': return <PhotosTab />;
       case 'rfis': return renderRFIs();

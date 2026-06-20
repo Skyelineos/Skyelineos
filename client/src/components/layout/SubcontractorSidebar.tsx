@@ -13,6 +13,7 @@ import {
   MessageSquare,
   Camera,
   HelpCircle,
+  Send,
   X,
   Menu,
   LogOut,
@@ -60,6 +61,14 @@ const sidebarItems = [
     label: 'Invoices',
     icon: DollarSign,
     path: 'invoices'
+  },
+  {
+    // Sub-side pay-app submission (Stream 4). Lands as a bill on the GC's Bills
+    // page with submittedBy:'sub' — see SubcontractorPortal's renderPayApp.
+    id: 'pay-app',
+    label: 'Pay App',
+    icon: Send,
+    path: 'pay-app'
   },
   {
     id: 'purchase-orders',

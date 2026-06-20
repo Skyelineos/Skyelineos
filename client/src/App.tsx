@@ -17,6 +17,8 @@ import { RoleBasedRedirect } from '@/components/auth/RoleBasedRedirect';
 import { NavigationHandler } from '@/components/navigation/NavigationHandler';
 import { MinimalSpinner } from '@/components/layout/MinimalSpinner';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
+import { AppErrorBoundary } from '@/components/common/AppErrorBoundary';
+import { PageLoader } from '@/components/common/PageLoader';
 import { useState, Suspense, useEffect, lazy } from 'react';
 import { usePerformanceOptimizations } from '@/hooks/usePerformanceOptimizations';
 
@@ -98,6 +100,7 @@ const ProjectWalkthroughs = lazy(() => import('@/pages/ProjectWalkthroughs'));
 const ProjectMoveInBinder = lazy(() => import('@/pages/ProjectMoveInBinder'));
 const Tools = lazy(() => import('@/pages/Tools'));
 const LumberTakeoff = lazy(() => import('@/pages/LumberTakeoff'));
+const BidCompareTool = lazy(() => import('@/pages/BidCompareTool'));
 const IngestionLab = lazy(() => import('@/pages/IngestionLab'));
 
 function Router() {
@@ -316,6 +319,11 @@ function Router() {
         </ProtectedRoute>
       </Route>
 
+        <Route path="/tools/bid-compare">
+          <Suspense fallback={<MinimalSpinner title="Loading Bid Leveling" />}>
+            <BidCompareTool />
+          </Suspense>
+        </Route>
       <Route path="/tools/lumber">
         <ProtectedRoute>
           <RoleGuard
@@ -737,7 +745,7 @@ function Router() {
       <Route path="/messages">
         <ProtectedRoute>
           <RoleGuard
-            allowedRoles={['admin', 'gc', 'projectManager']}
+            allowedRoles={['admin', 'gc', 'projectManager', 'designer', 'subcontractor', 'client']}
             showNotAuthorized
           >
             <Suspense fallback={<MinimalSpinner title="Loading Messages" />}>
@@ -822,6 +830,22 @@ function Router() {
           </RoleGuard>
         </ProtectedRoute>
       </Route>
+      {/* Explicit single-segment tab route — guaranteed to match the emailed
+          CTA shape '/client-portal/estimates' on wouter 3.x. The portal's
+          internal currentTab derivation reads urlParts[2] regardless of how
+          the route matched, so '/client-portal/<anything>' renders the
+          correct tab inside SkyelineClientPortal. */}
+      <Route path="/client-portal/:tab">
+        <ProtectedRoute>
+          <RoleGuard allowedRoles={['admin', 'client']} showNotAuthorized>
+            <Suspense
+              fallback={<MinimalSpinner title="Loading Client Portal" />}
+            >
+              <SkyelineClientPortal />
+            </Suspense>
+          </RoleGuard>
+        </ProtectedRoute>
+      </Route>
       <Route path="/client-portal/:tab*">
         <ProtectedRoute>
           <RoleGuard allowedRoles={['admin', 'client']} showNotAuthorized>
@@ -863,6 +887,20 @@ function Router() {
         </ProtectedRoute>
       </Route>
 
+      {/* Bare /designer-portal — mirrors the explicit bare routes used
+          by /client-portal and /subcontractor-portal. Without this, wouter's
+          `:tab*` doesn't match the empty path and "My Projects" 404s. */}
+      <Route path="/designer-portal">
+        <ProtectedRoute>
+          <RoleGuard allowedRoles={['admin', 'designer']} showNotAuthorized>
+            <Suspense
+              fallback={<MinimalSpinner title="Loading Designer Portal" />}
+            >
+              <DesignerPortal />
+            </Suspense>
+          </RoleGuard>
+        </ProtectedRoute>
+      </Route>
       <Route path="/designer-portal/:tab*">
         <ProtectedRoute>
           <RoleGuard allowedRoles={['admin', 'designer']} showNotAuthorized>
@@ -962,7 +1000,7 @@ function Router() {
       <Route path="/documents">
         <ProtectedRoute>
           <RoleGuard
-            allowedRoles={['admin', 'gc', 'projectManager']}
+            allowedRoles={['admin', 'gc', 'projectManager', 'designer', 'subcontractor', 'client']}
             showNotAuthorized
           >
             <Suspense fallback={<MinimalSpinner title="Loading Documents" />}>
@@ -1137,7 +1175,7 @@ function AppContent() {
 
   if (loading) {
     if (!stuck) {
-      return <MinimalSpinner title="Loading..." />;
+      return <PageLoader title="Loading Skyeline" />;
     }
     return (
       <div className="flex items-center justify-center min-h-screen p-6">
@@ -1195,19 +1233,26 @@ function AppContent() {
 
 export default function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider>
-        <UserPreferencesProvider>
-          <BrandingProvider>
-            <AdminViewProvider>
-              <ConfirmProvider>
-                <AppContent />
-                <Toaster />
-              </ConfirmProvider>
-            </AdminViewProvider>
-          </BrandingProvider>
-        </UserPreferencesProvider>
-      </ThemeProvider>
-    </QueryClientProvider>
+    // Top-level error boundary. Catches lazy-chunk load failures (stale
+    // bundle hashes after a deploy), runtime exceptions inside any route,
+    // and presents a recoverable UI with Reload + Go home buttons instead
+    // of a blank screen. Per-route ErrorBoundaries continue to live below
+    // for component-level isolation.
+    <AppErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <UserPreferencesProvider>
+            <BrandingProvider>
+              <AdminViewProvider>
+                <ConfirmProvider>
+                  <AppContent />
+                  <Toaster />
+                </ConfirmProvider>
+              </AdminViewProvider>
+            </BrandingProvider>
+          </UserPreferencesProvider>
+        </ThemeProvider>
+      </QueryClientProvider>
+    </AppErrorBoundary>
   );
 }

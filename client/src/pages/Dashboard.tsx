@@ -6,15 +6,18 @@ import { useRoleAccess } from '@/hooks/useRoleAccess';
 import { FastScheduleCard, FastUrgentCard, FastProjectsCard } from '@/components/dashboard/FastDashboardCards';
 import { CashFlowForecastCard } from '@/components/dashboard/CashFlowForecastCard';
 import { FinancialPositionCard } from '@/components/dashboard/FinancialPositionCard';
+import { ArApRollupCard } from '@/components/dashboard/ArApRollupCard';
+import { BidFollowUpCard } from '@/components/dashboard/BidFollowUpCard';
+import { ScheduleSlipAlarmCard } from '@/components/dashboard/ScheduleSlipAlarmCard';
 import { GCTodayFeed } from '@/components/today/GCTodayFeed';
 import { MissingTradeAlertCard } from '@/components/dashboard/MissingTradeAlertCard';
 import { MissingTradeScopesCard } from '@/components/dashboard/MissingTradeScopesCard';
 import { RemindersCard } from '@/components/dashboard/RemindersCard';
 import { PendingReviewsCard } from '@/components/dashboard/PendingReviewsCard';
+import { SignoffQueueCard } from '@/components/dashboard/SignoffQueueCard';
 import { MissingTasksAlertCard } from '@/components/dashboard/MissingTasksAlertCard';
 import { UnsignedSchedulesCard } from '@/components/dashboard/UnsignedSchedulesCard';
 import { TeamAccessRequestsCard } from '@/components/dashboard/TeamAccessRequestsCard';
-import { QaTestPanel } from '@/components/dashboard/QaTestPanel';
 
 export default function Dashboard() {
   const [, setLocation] = useLocation();
@@ -59,10 +62,10 @@ export default function Dashboard() {
         ) : (
           /* GC / admin: Today feed first — what matters today */
           <>
-            {user?.role === 'admin' && <QaTestPanel />}
             <TeamAccessRequestsCard />
             <RemindersCard />
             <PendingReviewsCard />
+            <SignoffQueueCard />
             <UnsignedSchedulesCard />
             <MissingTasksAlertCard />
             <MissingTradeAlertCard />
@@ -88,6 +91,15 @@ export default function Dashboard() {
 
           {/* 5. Cash Flow Forecast — GC/admin only. */}
           {showFinancials && <CashFlowForecastCard />}
+
+          {/* 6. AR/AP Rollup — GC/admin only (Stream 5). */}
+          {showFinancials && <ArApRollupCard />}
+
+          {/* 7. Bid Follow-Up Needed — operational, all team members (Stream 5). */}
+          <BidFollowUpCard />
+
+          {/* 8. Schedule-Slip Alarm — operational, all team members (Stream 5). */}
+          <ScheduleSlipAlarmCard />
 
           {/* Weather card removed pending real API wire-up (was hardcoded mock data) */}
 

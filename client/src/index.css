@@ -149,6 +149,25 @@
     padding-bottom: env(safe-area-inset-bottom);
     padding-left: env(safe-area-inset-left);
     padding-right: env(safe-area-inset-right);
+    /* Mobile Audit Batch 1 — iOS polish:
+       overscroll-behavior-y contains the rubber-band bounce so a vertical
+       drag on a scroll-stuck page doesn't reveal the white "behind" area;
+       -webkit-text-size-adjust pins to 100% so iOS Safari doesn't auto-zoom
+       when an <input> < 16px focuses (the classic "page jumps when typing"
+       bug). */
+    overscroll-behavior-y: contain;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    /* Touch polish — eliminate the legacy 300ms tap delay on phones and
+       prevent unintended pinch-zoom on UI controls. Interactive elements
+       get a tighter tap response without blocking pinch-zoom on content
+       (img, video, canvas, [data-allow-zoom]) — those opt back in below. */
+    touch-action: manipulation;
+  }
+
+  /* Re-enable native zoom on content surfaces that should still allow it. */
+  img, video, canvas, [data-allow-zoom="true"] {
+    touch-action: auto;
   }
 
   /* Text wrapping and hyphenation */
@@ -171,7 +190,16 @@
     overflow-y: auto;
   }
 
-  /* Ensure mobile viewport height handling */
+  /* Ensure mobile viewport height handling.
+     Mobile Audit Batch 1: 100vh + 100dvh fallback chain — older browsers get
+     100vh, modern ones (iOS Safari 15.4+, Chrome 108+) get 100dvh which
+     accounts for the collapsible URL bar so the layout doesn't bounce when
+     the chrome shows/hides. #root also needs the dvh min-height so the
+     react tree itself can grow tall enough for app-shell flex layouts. */
+  html, body, #root {
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
   html, body {
     height: 100%;
   }

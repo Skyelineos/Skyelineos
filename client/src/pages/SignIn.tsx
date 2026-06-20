@@ -15,7 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Building2, Mail, Lock, Loader2, CheckCircle2, User, HardHat, UserCheck, Users, Palette, ChevronRight, ArrowLeft, MapPin, Wrench, Phone, Compass } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -141,7 +141,7 @@ export default function SignIn() {
 
   if (isAuthenticated && user) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'linear-gradient(135deg, #1a1814 0%, #2a2520 50%, #1a1814 100%)' }}>
+      <div className="min-h-screen min-h-[100dvh] flex flex-col items-center justify-start sm:justify-center px-4 py-8 sm:py-12 sm:px-6 lg:px-8 overflow-y-auto pb-[max(2rem,calc(env(safe-area-inset-bottom)+1rem))]" style={{ background: 'linear-gradient(135deg, #1a1814 0%, #2a2520 50%, #1a1814 100%)' }}>
         <Card className="w-full max-w-md border-0 shadow-2xl" style={{ background: 'rgba(250,250,246,0.98)' }}>
           <CardContent className="flex flex-col items-center justify-center p-8 space-y-4">
             <Loader2 className="h-8 w-8 animate-spin" style={{ color: '#C9A96E' }} />
@@ -580,7 +580,7 @@ export default function SignIn() {
   ];
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'linear-gradient(135deg, #1a1814 0%, #2a2520 50%, #1a1814 100%)' }}>
+    <div className="min-h-screen min-h-[100dvh] flex flex-col items-center justify-start sm:justify-center px-4 py-8 sm:py-12 sm:px-6 lg:px-8 overflow-y-auto pb-[max(2rem,calc(env(safe-area-inset-bottom)+1rem))]" style={{ background: 'linear-gradient(135deg, #1a1814 0%, #2a2520 50%, #1a1814 100%)' }}>
       <Card className="w-full max-w-md border-0 shadow-2xl" style={{ background: 'rgba(250,250,246,0.98)' }}>
         <CardHeader className="text-center pb-6 pt-8">
           <div className="flex justify-center mb-2">
@@ -699,13 +699,13 @@ export default function SignIn() {
           </DialogHeader>
 
           {regStep === 1 ? (
-            <div className="space-y-3 pt-2">
+            <div className="space-y-4 sm:space-y-3 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
               {accountTypes.map(({ type, icon: Icon, title, description }) => (
                 <button
                   key={type}
                   onClick={() => { setAccountType(type); setRegStep(2); }}
                   className={cn(
-                    "w-full flex items-start gap-4 p-4 rounded-lg border-2 text-left transition-colors hover:border-blue-400 hover:bg-blue-50",
+                    "w-full flex items-start gap-4 p-4 min-h-[64px] rounded-lg border-2 text-left transition-colors hover:border-blue-400 hover:bg-blue-50 active:bg-blue-100",
                     accountType === type ? "border-blue-500 bg-blue-50" : "border-gray-200"
                   )}
                 >
@@ -876,18 +876,20 @@ export default function SignIn() {
                 </div>
               )}
 
-              <Button
-                onClick={handleRegisterSubmit}
-                className="w-full"
-                disabled={
-                  isLoading || !regName || !regEmail || !regPassword || !regConfirm ||
-                  (accountType === 'sub' && !regTrade) ||
-                  (accountType === 'sub' && regTrade === 'Other...' && !regOtherTrade.trim())
-                }
-              >
-                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                {accountType === 'team' ? 'Submit for Approval' : 'Create Account'}
-              </Button>
+              <DialogFooter>
+                <Button
+                  onClick={handleRegisterSubmit}
+                  className="w-full"
+                  disabled={
+                    isLoading || !regName || !regEmail || !regPassword || !regConfirm ||
+                    (accountType === 'sub' && !regTrade) ||
+                    (accountType === 'sub' && regTrade === 'Other...' && !regOtherTrade.trim())
+                  }
+                >
+                  {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  {accountType === 'team' ? 'Submit for Approval' : 'Create Account'}
+                </Button>
+              </DialogFooter>
             </div>
           )}
         </DialogContent>

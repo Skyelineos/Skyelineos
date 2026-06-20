@@ -88,6 +88,11 @@ interface RequestPayload {
   scope?: string;              // scope of work narrative for this trade
   callouts?: string;           // common notes from the package
   plans?: Array<{ name?: string; url: string; storagePath?: string; size?: number }>;
+  // IA-audit gap #1 + #3: per-trade attachments. Tyler picks docs already on
+  // the project (no re-upload) + selections the client made. The dispatch +
+  // public token endpoint use these IDs to render attachments per trade.
+  attachedPlanIds?: string[];
+  attachedSelectionIds?: string[];
 
   // When true: persist the bidRequest doc and mint tokens, but DO NOT send
   // email or SMS from this endpoint. Used by the bid-package flow which
@@ -163,6 +168,13 @@ function buildGeneralEmailBody({ vendorName, link, data, replyByDate }: BuildBod
 // a consistent Skyeline-branded email regardless of which path sent it.
 // Gold accent: #C9A96E. Header underline + button color + footer all match.
 
+// Bytes → human-readable size for plan download buttons in email bodies.
+function formatBytesLocal(bytes: number): string {
+  if (!bytes || bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, '&amp;')
@@ -233,6 +245,9 @@ function buildItemEmailBody({ vendorName, link, data, replyByDate }: BuildBodyAr
     data.selectionTitle ? `Item: ${data.selectionTitle}` : '',
     data.selectionSpecs ? `Specs:\n${data.selectionSpecs}` : '',
     data.callouts ? `\nNotes: ${data.callouts}` : (data.customMessage ? `\nNotes: ${data.customMessage}` : ''),
+    (Array.isArray(data.plans) && data.plans.length > 0)
+      ? `\nPlans / Documents:\n${data.plans.map(p => `  • ${p.name || 'Plan'} — ${p.url}`).join('\n')}`
+      : '',
     '',
     `Submit your bid through your Skyeline Subcontractor Portal:`,
     `→ ${link}`,
@@ -310,7 +325,18 @@ function buildItemEmailHtml(args: BuildBodyArgs): string {
     ? `<p style="background:#FAFAF6;border-left:3px solid #C9A96E;padding:10px 14px;margin:16px 0;color:#444;">${escapeHtml(note)}</p>`
     : '';
 
-  const inner = opener + detailTable + noteHtml;
+  // Plan download buttons — surfaced inline so subs can grab the PDFs without
+  // opening the portal first. Storage URLs are long-lived; the invite token
+  // remains the auth on the response page.
+  const plans = Array.isArray(data.plans) ? data.plans : [];
+  const plansHtml = plans.length > 0
+    ? `<div style="margin:14px 0 4px 0;">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.6px;color:#8a6a2c;margin-bottom:6px;">Plans / Documents (${plans.length})</div>
+        ${plans.map(p => `<div style="margin:0 0 6px 0;"><a href="${p.url}" style="display:inline-block;background:#ffffff;border:1px solid #C9A96E;color:#141414;text-decoration:none;padding:8px 14px;border-radius:4px;font-size:13px;font-weight:500;">⬇ ${escapeHtml(p.name || 'Plan')}${typeof p.size === 'number' && p.size > 0 ? ` <span style="color:#888;font-weight:400;">(${formatBytesLocal(p.size)})</span>` : ''}</a></div>`).join('')}
+      </div>`
+    : '';
+
+  const inner = opener + detailTable + noteHtml + plansHtml;
 
   // Subject-style title for the header
   let title: string;
@@ -595,6 +621,8 @@ export function registerBidRequestRoute(app: Express, db: admin.firestore.Firest
           scope: data.scope || null,
           callouts: data.callouts || null,
           plans: data.plans || [],
+          attachedPlanIds: Array.isArray(data.attachedPlanIds) ? data.attachedPlanIds : [],
+          attachedSelectionIds: Array.isArray(data.attachedSelectionIds) ? data.attachedSelectionIds : [],
           dueDate: data.dueDate || replyByDate.toISOString().slice(0, 10),
           invitedSubIds,
           invitedSubContactIds,

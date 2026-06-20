@@ -20,8 +20,10 @@ import {
 import {
   ChevronRight, ChevronDown, Plus, Trash2, Pencil,
   IndentIncrease, IndentDecrease, CornerDownRight,
+  ChevronUp,
 } from 'lucide-react';
 import { useGantt } from '../state';
+import { useIsMobile } from '@/hooks/use-mobile';
 import type { WbsTask, Zoom, Link } from '../types';
 
 // ---- layout constants ------------------------------------------------------
@@ -77,10 +79,22 @@ function spanOf(t: WbsTask): { start: Date; end: Date } {
   return { start: min, end: max };
 }
 
+// Sort siblings by explicit sortOrder when present, falling back to the
+// task's natural index in the array. Stable: tasks without sortOrder keep
+// their relative order. Used so the manual ↑/↓ reorder buttons render in
+// the chosen order on next paint.
+function sortSiblings(nodes: WbsTask[]): WbsTask[] {
+  return nodes
+    .map((n, i) => ({ n, i, key: n.sortOrder ?? i }))
+    .sort((a, b) => (a.key === b.key ? a.i - b.i : a.key - b.key))
+    .map((x) => x.n);
+}
+
 function flatten(tasks: WbsTask[], collapsed: Set<string>): Row[] {
   const rows: Row[] = [];
   const walk = (nodes: WbsTask[], depth: number, parentVisible: boolean) => {
-    nodes.forEach((task) => {
+    const ordered = sortSiblings(nodes);
+    ordered.forEach((task) => {
       const parent = !isLeaf(task);
       const { start, end } = spanOf(task);
       const milestone =
@@ -362,7 +376,10 @@ interface SkyelineGanttProps {
 }
 
 export const SkyelineGantt: React.FC<SkyelineGanttProps> = ({ onAddTask, onEditTask }) => {
-  const { tasks, links, zoom, showCritical, showBaseline, showWeekends, metrics, setTasks, setLinks } = useGantt();
+  const { tasks, links, zoom, showCritical, showBaseline, showWeekends, metrics, setTasks, setLinks, moveTaskUp, moveTaskDown } = useGantt();
+  const isMobile = useIsMobile();
+  // Responsive left-pane width: narrower on phone so the timeline can breathe.
+  const leftPaneW = isMobile ? 160 : LEFT_W;
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
@@ -434,6 +451,29 @@ export const SkyelineGantt: React.FC<SkyelineGanttProps> = ({ onAddTask, onEditT
 
   const pxPerDay = PX_PER_DAY[zoom];
   const rows = useMemo(() => flatten(tasks, collapsed), [tasks, collapsed]);
+
+  // For ↑/↓ buttons: figure out a task's position within its sibling group.
+  // We walk the tree so we always honour the same sort order flatten() uses.
+  const siblingPos = useMemo(() => {
+    const map = new Map<string, { index: number; size: number }>();
+    const walk = (nodes: WbsTask[]) => {
+      const ordered = nodes
+        .map((n, i) => ({ n, i, key: n.sortOrder ?? i }))
+        .sort((a, b) => (a.key === b.key ? a.i - b.i : a.key - b.key))
+        .map((x) => x.n);
+      ordered.forEach((n, i) => {
+        map.set(n.id, { index: i, size: ordered.length });
+        if (n.children && n.children.length) walk(n.children);
+      });
+    };
+    walk(tasks);
+    return map;
+  }, [tasks]);
+  const isFirstInSibling = (id: string) => (siblingPos.get(id)?.index ?? 0) === 0;
+  const isLastInSibling = (id: string) => {
+    const p = siblingPos.get(id);
+    return !!p && p.index >= p.size - 1;
+  };
 
   // overall date range across all tasks (+ padding)
   const { rangeStart, rangeEnd } = useMemo(() => {
@@ -660,11 +700,12 @@ export const SkyelineGantt: React.FC<SkyelineGanttProps> = ({ onAddTask, onEditT
     <div
       ref={scrollRef}
       className="relative h-full w-full overflow-auto bg-white select-none"
+      style={{ touchAction: 'pan-x pan-y' }}
       onPointerMove={onPointerMove}
       onPointerUp={(e) => commitDrag(e)}
       onPointerLeave={() => (drag || linkDrag) && commitDrag()}
     >
-      <div style={{ width: LEFT_W + timelineW, position: 'relative' }}>
+      <div style={{ width: leftPaneW + timelineW, position: 'relative' }}>
         {/* ===== Header row (sticky top) ===== */}
         <div
           className="sticky top-0 z-30 flex"
@@ -672,8 +713,8 @@ export const SkyelineGantt: React.FC<SkyelineGanttProps> = ({ onAddTask, onEditT
         >
           {/* left header corner */}
           <div
-            className="sticky left-0 z-40 flex items-end border-b border-r bg-white px-4 pb-2"
-            style={{ width: LEFT_W }}
+            className="sticky left-0 z-40 flex items-end border-b border-r bg-white px-2 pb-2 sm:px-4"
+            style={{ width: leftPaneW }}
           >
             <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
               Task
@@ -707,7 +748,7 @@ export const SkyelineGantt: React.FC<SkyelineGanttProps> = ({ onAddTask, onEditT
           {/* left task panel (sticky left) — editable WBS grid */}
           <div
             className="sticky left-0 z-20 border-r bg-white"
-            style={{ width: LEFT_W }}
+            style={{ width: leftPaneW }}
           >
             {rows.map((row) => {
               const dotColor = row.isMilestone ? BRAND_GOLD : paletteFor(row).bar;
@@ -794,6 +835,32 @@ export const SkyelineGantt: React.FC<SkyelineGanttProps> = ({ onAddTask, onEditT
                       title="Duration (days)"
                     />
                   )}
+
+                  {/* ↑/↓ reorder buttons — always visible (small/gray on
+                      desktop; bigger tap target on mobile). Swap within the
+                      sibling group; disabled at first/last. */}
+                  <div className="flex shrink-0 items-center">
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); moveTaskUp(row.task.id); }}
+                      disabled={isFirstInSibling(row.task.id)}
+                      aria-label="Move task up"
+                      title="Move up"
+                      className="flex h-6 w-6 min-h-[44px] sm:min-h-0 min-w-0 items-center justify-center rounded text-gray-400 hover:bg-gray-100 hover:text-gray-700 active:text-gray-900 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent"
+                    >
+                      <ChevronUp className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); moveTaskDown(row.task.id); }}
+                      disabled={isLastInSibling(row.task.id)}
+                      aria-label="Move task down"
+                      title="Move down"
+                      className="flex h-6 w-6 min-h-[44px] sm:min-h-0 min-w-0 items-center justify-center rounded text-gray-400 hover:bg-gray-100 hover:text-gray-700 active:text-gray-900 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent"
+                    >
+                      <ChevronDown className="h-4 w-4" />
+                    </button>
+                  </div>
 
                   {/* hover row actions — absolutely positioned so they never
                       squeeze the name column. */}
@@ -1010,9 +1077,11 @@ export const SkyelineGantt: React.FC<SkyelineGanttProps> = ({ onAddTask, onEditT
                     top,
                     width,
                     height: BAR_H,
+                    minHeight: isMobile ? 28 : undefined,
                     background: palette.bar,
                     boxShadow: '0 1px 2px rgba(0,0,0,0.12)',
                     opacity: dragging ? 0.85 : 1,
+                    touchAction: 'manipulation',
                   }}
                   title={`${row.task.name}\n${format(start, 'MMM d')} – ${format(end, 'MMM d, yyyy')} · ${progress}%`}
                   onPointerDown={(e) => onBarPointerDown(e, row, 'move')}

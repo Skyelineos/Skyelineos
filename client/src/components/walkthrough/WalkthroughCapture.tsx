@@ -5,7 +5,7 @@ import {
 } from 'firebase/firestore';
 import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '@/lib/firebase';
-import { createNotification } from '@/lib/notifications';
+import { fireTrigger } from '@/lib/notifications';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -25,6 +25,9 @@ interface Sub {
   name: string;
   trade?: string;
   email?: string;
+  /** Firebase Auth uid for the sub's portal account, populated when the sub
+   *  has signed in. Used as the notification recipient key. T0-3. */
+  linkedUserId?: string;
 }
 
 interface Props {
@@ -72,7 +75,13 @@ export function WalkthroughCapture({ projectId, projectName, buttonLabel = 'Capt
         const list: Sub[] = snap.docs
           .map(d => ({ id: d.id, ...d.data() } as any))
           .filter((c: any) => c.role === 'sub' || c.role === 'subcontractor' || c.role === 'employee')
-          .map((c: any) => ({ id: c.id, name: c.name, trade: c.trade, email: c.email }));
+          .map((c: any) => ({
+            id: c.id,
+            name: c.name,
+            trade: c.trade,
+            email: c.email,
+            linkedUserId: c.linkedUserId || undefined,
+          }));
         setSubs(list);
       } catch {}
     })();
@@ -182,20 +191,40 @@ export function WalkthroughCapture({ projectId, projectName, buttonLabel = 'Capt
 
       await batch.commit();
 
-      // Fire notification to the assignee (best-effort, non-blocking)
+      // Combined T0-3 (uid keying) + Dispatch 6 (fireTrigger) resolution.
+      //
+      // T0-3: resolve sub.linkedUserId before firing — assigneeId is a
+      // contacts/{docId}, NOT a Firebase Auth uid. Without this resolution
+      // the trigger's audience resolver can't match the assignee against
+      // notification recipients. If the sub hasn't claimed their portal
+      // account yet (no linkedUserId), warn the GC and skip the fire —
+      // a notification to a non-existent uid is silent failure.
+      //
+      // Dispatch 6: fireTrigger routes through the server pipeline so
+      // SMS/email/push fan-out + per-user prefs + audience resolver all
+      // run server-side. Best-effort, non-blocking.
       if (assigneeId && sub) {
-        await createNotification({
-          userId: assigneeId,
-          kind: 'walkthrough_assigned',
-          title: `New walkthrough item from ${user.name || 'GC'}`,
-          body: note.trim() || 'Photo / video captured on site',
-          link: `/subcontractor-portal`,
-          projectId,
-          refType: 'walkthrough',
-          refId: walkRef.id,
-          fromUserId: user.id?.toString() || user.email || 'unknown',
-          fromUserName: user.name || user.email || 'GC',
-        });
+        const targetUid = sub.linkedUserId?.trim();
+        if (!targetUid) {
+          toast({
+            title: 'Sub has no portal account yet',
+            description: `${sub.name} won't see a notification until they sign into the subcontractor portal.`,
+            variant: 'default',
+          });
+        } else {
+          await fireTrigger({
+            kind: 'walkthrough_assigned',
+            projectId,
+            targetUserIds: [targetUid],
+            payload: {
+              fromName: user.name || user.email || 'GC',
+              note: note.trim() || 'Photo / video captured on site',
+              projectName: projectName || '',
+              link: `/subcontractor-portal`,
+              walkthroughId: walkRef.id,
+            },
+          });
+        }
       }
 
       toast({

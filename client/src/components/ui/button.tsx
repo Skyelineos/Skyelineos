@@ -5,29 +5,40 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+  // Touch polish — adds active:scale-[0.98] for immediate tactile feedback on
+  // first tap (mobile users were reporting "button didn't open the first
+  // time" — the 300ms tap delay was hiding their click on slow devices).
+  // transition swaps from "colors" to "[transform,colors] duration-75" so the
+  // scale animates fast enough not to mask the click handler.
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-[transform,colors] duration-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 active:scale-[0.98] [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/90 focus:bg-primary/80 border border-primary",
+        default: "bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80 focus:bg-primary/80 border border-primary",
         destructive:
-          "bg-destructive text-destructive-foreground hover:bg-destructive/90",
+          "bg-destructive text-destructive-foreground hover:bg-destructive/90 active:bg-destructive/80",
         outline:
-          "border border-primary bg-background text-primary hover:bg-primary hover:text-primary-foreground",
+          "border border-primary bg-background text-primary hover:bg-primary hover:text-primary-foreground active:bg-primary/90 active:text-primary-foreground",
         secondary:
-          "bg-secondary text-secondary-foreground hover:bg-secondary/80 border border-secondary",
-        ghost: "hover:bg-accent hover:text-accent-foreground text-primary",
-        link: "text-primary underline-offset-4 hover:underline",
-        accent: "bg-[var(--accent-color)] text-white hover:opacity-90 border border-[var(--accent-color)]",
-        "accent-outline": "border-2 border-accent text-accent bg-transparent hover:bg-accent hover:text-accent-foreground",
-        brand: "bg-primary text-primary-foreground hover:bg-primary/90 border border-primary",
-        "brand-beige": "bg-secondary text-secondary-foreground hover:bg-secondary/80 border border-secondary",
+          "bg-secondary text-secondary-foreground hover:bg-secondary/80 active:bg-secondary/70 border border-secondary",
+        ghost: "hover:bg-accent hover:text-accent-foreground active:bg-accent/80 active:text-accent-foreground text-primary",
+        link: "text-primary underline-offset-4 hover:underline active:opacity-80",
+        accent: "bg-[var(--accent-color)] text-white hover:opacity-90 active:opacity-80 border border-[var(--accent-color)]",
+        "accent-outline": "border-2 border-accent text-accent bg-transparent hover:bg-accent hover:text-accent-foreground active:bg-accent/90 active:text-accent-foreground",
+        brand: "bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80 border border-primary",
+        "brand-beige": "bg-secondary text-secondary-foreground hover:bg-secondary/80 active:bg-secondary/70 border border-secondary",
       },
       size: {
-        default: "h-10 px-4 py-2",
-        sm: "h-9 rounded-md px-3",
-        lg: "h-11 rounded-md px-8",
-        icon: "h-10 w-10",
+        // Mobile Audit Batch 1 — every size variant now carries a
+        // min-h-[44px] (and min-w-[44px] for icon) floor matching the Apple
+        // HIG touch-target minimum. The existing h-X heights still drive
+        // visual layout on desktop where pointer precision is sub-pixel;
+        // min-h only kicks in on phones where the rendered control would
+        // otherwise be under 44px and miss-tap-prone.
+        default: "h-10 min-h-[44px] px-4 py-2",
+        sm: "h-9 min-h-[44px] rounded-md px-3",
+        lg: "h-11 min-h-[44px] rounded-md px-8",
+        icon: "h-10 w-10 min-h-[44px] min-w-[44px]",
       },
     },
     defaultVariants: {

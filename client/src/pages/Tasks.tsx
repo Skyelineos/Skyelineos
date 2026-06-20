@@ -17,13 +17,18 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { useConfirm } from '@/hooks/use-confirm';
-import { createNotification } from '@/lib/notifications';
+import { fireTrigger } from '@/lib/notifications';
 import { getDefaultAssigneeForTask, inferTaskKindFromTitle } from '@/lib/taskDefaults';
 import {
   Plus, Search, CheckSquare, MoreVertical, Edit, Trash2, Calendar, User, List, LayoutGrid
 } from 'lucide-react';
 
-type TaskStatus = 'todo' | 'in_progress' | 'done' | 'blocked';
+import {
+  type TaskStatus,
+  statusBadgeClass as sharedStatusBadgeClass,
+  TASK_STATUS_LABELS,
+} from '@/lib/taskStatus';
+import { SignoffActions } from '@/components/tasks/SignoffActions';
 type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
 
 interface Task {
@@ -96,17 +101,14 @@ const defaultForm = (): TaskFormData => ({
 const STATUS_COLUMNS: { key: TaskStatus; label: string }[] = [
   { key: 'todo', label: 'To Do' },
   { key: 'in_progress', label: 'In Progress' },
+  { key: 'awaiting_signoff', label: 'Awaiting sign-off' },
   { key: 'done', label: 'Done' },
   { key: 'blocked', label: 'Blocked' }
 ];
 
 function statusBadgeClass(status: TaskStatus): string {
-  switch (status) {
-    case 'todo': return 'bg-gray-100 text-gray-700';
-    case 'in_progress': return 'bg-blue-100 text-blue-700';
-    case 'done': return 'bg-green-100 text-green-700';
-    case 'blocked': return 'bg-red-100 text-red-700';
-  }
+  // Single source of truth lives in @/lib/taskStatus
+  return sharedStatusBadgeClass(status);
 }
 
 function priorityBadgeClass(priority: TaskPriority): string {
@@ -276,17 +278,18 @@ export function TasksContent({ projectId: scopedProjectId }: { projectId?: strin
           updatedAt: serverTimestamp()
         });
         if (reassigned && formData.assignedToId) {
-          await createNotification({
-            userId: formData.assignedToId,
+          // Wave-2: route through fireTrigger so SMS/email + per-user prefs apply.
+          await fireTrigger({
             kind: 'task_assigned',
-            title: `Task assigned to you: ${formData.title}`,
-            body: formData.description || (formData.projectName ? `Project: ${formData.projectName}` : ''),
-            link: '/tasks',
             projectId: formData.projectId || undefined,
-            refType: 'task',
-            refId: editingTask.id,
-            fromUserId: meId,
-            fromUserName: meName,
+            targetUserIds: [formData.assignedToId],
+            payload: {
+              taskName: formData.title,
+              projectName: formData.projectName || '',
+              fromName: meName || 'A teammate',
+              link: '/tasks',
+              taskId: editingTask.id,
+            },
           });
         }
         toast({ title: 'Task updated' });
@@ -300,17 +303,17 @@ export function TasksContent({ projectId: scopedProjectId }: { projectId?: strin
         });
         // Notify the assignee on creation unless self-assigned.
         if (formData.assignedToId && formData.assignedToId !== meId) {
-          await createNotification({
-            userId: formData.assignedToId,
+          await fireTrigger({
             kind: 'task_assigned',
-            title: `Task assigned to you: ${formData.title}`,
-            body: formData.description || (formData.projectName ? `Project: ${formData.projectName}` : ''),
-            link: '/tasks',
             projectId: formData.projectId || undefined,
-            refType: 'task',
-            refId: ref.id,
-            fromUserId: meId,
-            fromUserName: meName,
+            targetUserIds: [formData.assignedToId],
+            payload: {
+              taskName: formData.title,
+              projectName: formData.projectName || '',
+              fromName: meName || 'A teammate',
+              link: '/tasks',
+              taskId: ref.id,
+            },
           });
         }
         toast({ title: 'Task created' });
@@ -466,6 +469,7 @@ export function TasksContent({ projectId: scopedProjectId }: { projectId?: strin
               <SelectItem value="all">All Statuses</SelectItem>
               <SelectItem value="todo">To Do</SelectItem>
               <SelectItem value="in_progress">In Progress</SelectItem>
+              <SelectItem value="awaiting_signoff">Awaiting sign-off</SelectItem>
               <SelectItem value="done">Done</SelectItem>
               <SelectItem value="blocked">Blocked</SelectItem>
             </SelectContent>
@@ -629,7 +633,7 @@ export function TasksContent({ projectId: scopedProjectId }: { projectId?: strin
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-medium truncate">{task.title}</span>
                           <Badge className={`text-xs ${priorityBadgeClass(task.priority)}`}>{task.priority}</Badge>
-                          <Badge className={`text-xs ${statusBadgeClass(task.status)}`}>{task.status.replace('_', ' ')}</Badge>
+                          <Badge className={`text-xs ${statusBadgeClass(task.status)}`}>{TASK_STATUS_LABELS[task.status] || task.status.replace('_', ' ')}</Badge>
                           {task.projectName && (
                             <Badge variant="outline" className="text-xs">{task.projectName}</Badge>
                           )}
@@ -730,6 +734,7 @@ export function TasksContent({ projectId: scopedProjectId }: { projectId?: strin
                     <SelectContent>
                       <SelectItem value="todo">To Do</SelectItem>
                       <SelectItem value="in_progress">In Progress</SelectItem>
+                      <SelectItem value="awaiting_signoff">Awaiting sign-off</SelectItem>
                       <SelectItem value="done">Done</SelectItem>
                       <SelectItem value="blocked">Blocked</SelectItem>
                     </SelectContent>
@@ -829,6 +834,11 @@ function TaskCard({
             {task.dueDate}
           </div>
         )}
+        {task.status === 'awaiting_signoff' && (
+          <div onClick={e => e.stopPropagation()} className="pt-1">
+            <SignoffActions taskId={task.id} taskName={task.title} projectId={task.projectId} />
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -860,6 +870,9 @@ function TaskActions({
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => onStatusChange(task.id, 'in_progress')}>
           Mark In Progress
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onStatusChange(task.id, 'awaiting_signoff')}>
+          Mark Ready for Review
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => onStatusChange(task.id, 'done')}>
           Mark Done

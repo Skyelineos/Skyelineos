@@ -12,6 +12,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
+import { fireTrigger } from '@/lib/notifications';
 import { apiRequest } from '@/lib/queryClient';
 import { 
   Camera, 
@@ -122,6 +123,19 @@ export default function PhotosTab({ projectId }: PhotosTabProps) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/photos`] });
+      // Wave-2: fire photo_uploaded only when the photo is client-visible.
+      // Server resolves client_of_project from projectId.
+      if (visibleToClient) {
+        fireTrigger({
+          kind: 'photo_uploaded',
+          projectId: String(projectId),
+          payload: {
+            caption: uploadCaption || 'A new photo was added to your project.',
+            projectName: '',
+            link: '/portal?tab=photos',
+          },
+        }).catch(() => {});
+      }
       setUploadDialogOpen(false);
       setSelectedFile(null);
       setUploadCaption('');

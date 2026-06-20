@@ -2,13 +2,17 @@
  * Seed Test Data for Skyeline Odyssey E2E Testing
  *
  * Creates three test accounts + a test project in Firebase:
- *   - Test Client:   testclient@skyelineos.com   / SkyeTest2024!
- *   - Test Designer: testdesigner@skyelineos.com / SkyeTest2024!
- *   - Test GC:       testgc@skyelineos.com       / SkyeTest2024!
+ *   - Test Client:   testclient@skyelineos.com
+ *   - Test Designer: testdesigner@skyelineos.com
+ *   - Test GC:       testgc@skyelineos.com
  *   - Test Project:  "Johnson Residence - 123 Oak St"
  *
+ * Required env vars (no defaults — script will refuse to run otherwise):
+ *   - SEED_PASSWORD             pick something random per run; do NOT hardcode.
+ *   - VITE_FIREBASE_PROJECT_ID  must NOT be the prod project id 'skyelineos'.
+ *
  * Usage (run once from project root):
- *   node scripts/seed-test-client.mjs
+ *   SEED_PASSWORD=somethingRandom node scripts/seed-test-client.mjs
  */
 
 import { initializeApp } from 'firebase/app';
@@ -44,10 +48,27 @@ const env = Object.fromEntries(
     .map(l => l.split('=').map(s => s.trim()))
 );
 
+// Allow real process env to override .env.local for the project id we guard on.
+const effectiveProjectId = process.env.VITE_FIREBASE_PROJECT_ID || env.VITE_FIREBASE_PROJECT_ID;
+
+// ── Safety guards ─────────────────────────────────────────────────────────────
+// Refuse to seed test users into the production Firebase project.
+if (effectiveProjectId === 'skyelineos') {
+  console.error('❌ Refusing to seed test users into production. Set VITE_FIREBASE_PROJECT_ID to a staging project name.');
+  process.exit(1);
+}
+
+// Require an explicit per-run password — never hardcode.
+const SEED_PASSWORD = process.env.SEED_PASSWORD;
+if (!SEED_PASSWORD) {
+  console.error("❌ SEED_PASSWORD env var required; pick something random per run, don't hardcode.");
+  process.exit(1);
+}
+
 const firebaseConfig = {
   apiKey:            env.VITE_FIREBASE_API_KEY,
   authDomain:        env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId:         env.VITE_FIREBASE_PROJECT_ID,
+  projectId:         effectiveProjectId,
   storageBucket:     env.VITE_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID,
   appId:             env.VITE_FIREBASE_APP_ID,
@@ -63,21 +84,21 @@ const db   = getFirestore(app);
 const USERS = [
   {
     email:    'testclient@skyelineos.com',
-    password: 'SkyeTest2024!',
+    password: SEED_PASSWORD,
     name:     'Alex Johnson',
     role:     'client',
     label:    'Test Client',
   },
   {
     email:    'testdesigner@skyelineos.com',
-    password: 'SkyeTest2024!',
+    password: SEED_PASSWORD,
     name:     'Morgan Lee',
     role:     'designer',
     label:    'Test Designer',
   },
   {
     email:    'testgc@skyelineos.com',
-    password: 'SkyeTest2024!',
+    password: SEED_PASSWORD,
     name:     'Tyler Test GC',
     role:     'gc',
     label:    'Test GC (Skyeline Team)',
@@ -215,7 +236,7 @@ async function main() {
   // ── Summary ─────────────────────────────────────────────────────────────────
   console.log('\n' + '═'.repeat(60));
   console.log('🎉  TEST DATA READY\n');
-  console.log('Login credentials (password same for all):  SkyeTest2024!\n');
+  console.log('Login credentials (password same for all): use the SEED_PASSWORD you set\n');
   console.log(`  👷 GC / Contractor:  testgc@skyelineos.com`);
   console.log(`     → Goes to /dashboard → Projects → Johnson Residence`);
   console.log(`     → Design tab shows designer's selections\n`);

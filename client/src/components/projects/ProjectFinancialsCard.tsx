@@ -21,8 +21,29 @@ interface Props {
 interface EstimateRow {
   id: string;
   title?: string;
+  // EstimateBuilder.handleSave writes `totalAmount`; the legacy
+  // SimplifiedEstimateForm / EstimateManagement code writes `totalCost`
+  // (+ `estimatedAmount`). Some imported / hand-rolled docs may still
+  // carry a bare `total`. We read all four so a dashboard never shows
+  // $0 just because the writer used a different field name.
+  totalAmount?: number;
+  totalCost?: number;
+  estimatedAmount?: number;
   total?: number;
-  status?: string;
+  // Cost breakdown — EstimateBuilder persists these alongside totalAmount.
+  // Required to compute projected gross profit honestly (we cannot derive
+  // it from contract amount alone).
+  subtotal?: number;          // sum of billable line items before OH + profit
+  overhead?: number;          // percent
+  profit?: number;            // percent — GC's target margin
+  // Denormalized rollups from EstimateBuilder. When persisted we use these
+  // directly; when missing (legacy/imported estimates) we recompute from
+  // lineItems below.
+  subCosts?: number;             // sum of qty × subCost across billable lines
+  projectedGrossProfit?: number; // = totalAmount − subCosts (what Skyeline keeps)
+  grossMarginPct?: number;       // = projectedGrossProfit / totalAmount × 100
+  lineItems?: Array<{ qty?: number; subCost?: number; lineStatus?: string }>;
+  status?: string;            // 'draft' | 'sent' | 'accepted' | 'rejected' | 'revised' | …
   pipelineStage?: string;
   markup?: number;
   createdAt?: any;
@@ -84,7 +105,16 @@ export function ProjectFinancialsCard({ projectId, projectName, spent = 0 }: Pro
     return () => unsub();
   }, [projectId]);
 
-  const estimateTotal = Number(estimate?.total || 0);
+  // Read every field name we've seen estimates persist their total under.
+  // Number(...) coerces string-typed legacy values; `|| 0` guards NaN.
+  const estimateTotal =
+    Number(
+      estimate?.totalAmount ??
+      estimate?.totalCost ??
+      estimate?.estimatedAmount ??
+      estimate?.total ??
+      0,
+    ) || 0;
   // Approved change orders contribute to revenue. Pending/rejected are tracked separately.
   const approvedCOAmount = changeOrders
     .filter(c => String(c.status || '').toLowerCase() === 'approved')
@@ -95,9 +125,58 @@ export function ProjectFinancialsCard({ projectId, projectName, spent = 0 }: Pro
       return s === 'pending' || s === '' || s === 'submitted';
     })
     .reduce((s, c) => s + Number(c.amount || 0), 0);
-  const contractAmount = estimateTotal + approvedCOAmount;
-  const projectedProfit = contractAmount - spent;
-  const profitPct = contractAmount > 0 ? (projectedProfit / contractAmount) * 100 : 0;
+  // Contract amount is ZERO until the client has signed/approved the
+  // estimate. Before signoff, the estimate is just a proposed number —
+  // dropping it into Contract Amount makes the dashboard look like the
+  // GC has $X locked in when they don't. Once the estimate flips to
+  // 'accepted' (set by POST /api/estimates/:id/client-response when the
+  // homeowner approves it in the client portal), contract amount = the
+  // estimate total plus any approved change orders.
+  const estimateStatus = String(estimate?.status || '').toLowerCase();
+  const SIGNED_STATUSES = new Set(['accepted', 'approved', 'signed']);
+  const contractSigned = !!estimate && SIGNED_STATUSES.has(estimateStatus);
+  const contractAmount = contractSigned ? estimateTotal + approvedCOAmount : 0;
+
+  // Projected Gross Profit is what Skyeline keeps on the job — the
+  // EstimateBuilder Costings-tab tile of the same name. From calcTotals:
+  //   grossProfit = totalAmount − internalSubtotal (sum of sub costs)
+  // Captures line markup + overhead % + profit % combined — the full GC
+  // take before non-sub costs and before invoicing settles real numbers.
+  //
+  // Modern estimates persist subCosts + projectedGrossProfit directly.
+  // For legacy / imported estimates (no rollups stored), we recompute the
+  // sub-costs sum from lineItems[].qty × lineItems[].subCost so the
+  // dashboard still shows an honest number — never $0 just because the
+  // writer didn't persist the rollup.
+  const computedSubCostsFromLines = Array.isArray(estimate?.lineItems)
+    ? estimate!.lineItems!.reduce((sum: number, li) => {
+        // Exclude lines explicitly marked 'ex' (excluded from total) /
+        // 'note' (informational) — mirrors EstimateBuilder.calcTotals.
+        const ls = String((li as any)?.lineStatus ?? 'inc');
+        if (ls === 'ex' || ls === 'note') return sum;
+        const qty = Number((li as any)?.qty ?? 0) || 0;
+        const sub = Number((li as any)?.subCost ?? 0) || 0;
+        return sum + qty * sub;
+      }, 0)
+    : 0;
+  const subCostsTotal =
+    Number(estimate?.subCosts ?? 0) > 0
+      ? Number(estimate!.subCosts)
+      : computedSubCostsFromLines;
+  const projectedGrossProfit =
+    Number(estimate?.projectedGrossProfit ?? 0) > 0
+      ? Number(estimate!.projectedGrossProfit)
+      : Math.max(0, estimateTotal - subCostsTotal);
+  const grossMarginPct =
+    estimateTotal > 0 ? (projectedGrossProfit / estimateTotal) * 100 : 0;
+  // Legacy alias so the existing JSX (and any downstream code) keeps
+  // working without renames.
+  const projectedProfit = projectedGrossProfit;
+  const profitPct = grossMarginPct;
+  // Actual profit lives on a future card — comes from invoicing/AP/AR
+  // once the build is moving. We surface a placeholder ribbon below so
+  // Tyler can see where it'll land.
+  const actualProfitAvailable = false; // wire when invoicing surfaces land
 
   return (
     <Card>
@@ -162,8 +241,36 @@ export function ProjectFinancialsCard({ projectId, projectName, spent = 0 }: Pro
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               <Stat label="Estimate" value={fmt(estimateTotal)} sub={estimate.title || 'Active estimate'} />
               <Stat label="Approved COs" value={fmt(approvedCOAmount)} sub={`${changeOrders.filter(c => String(c.status || '').toLowerCase() === 'approved').length} approved`} />
-              <Stat label="Contract Amount" value={fmt(contractAmount)} sub="Estimate + approved COs" tone="primary" />
-              <Stat label="Projected Profit" value={fmt(projectedProfit)} sub={`${profitPct.toFixed(1)}% margin`} tone={projectedProfit >= 0 ? 'good' : 'bad'} />
+              <Stat
+                label={contractSigned ? 'Contract Amount' : 'Contract Amount (pending)'}
+                value={fmt(contractAmount)}
+                sub={contractSigned
+                  ? 'Estimate + approved COs'
+                  : 'Pending client signoff'}
+                tone={contractSigned ? 'primary' : undefined}
+                dimmed={!contractSigned}
+              />
+              <Stat
+                label="Projected Gross Profit"
+                value={fmt(projectedGrossProfit)}
+                sub={projectedGrossProfit > 0
+                  ? `${grossMarginPct.toFixed(1)}% margin — from estimate`
+                  : estimateTotal > 0
+                      ? 'Set sub costs on line items to forecast profit'
+                      : 'Add line items to forecast profit'}
+                tone={projectedGrossProfit > 0 ? 'good' : undefined}
+              />
+            </div>
+
+            {/* Actual profit placeholder — comes from invoicing / AP / AR
+                once the project is moving. Distinct from projected so Tyler
+                can see the difference between the plan and reality. */}
+            <div className="flex items-center justify-between text-xs border border-dashed border-gray-200 rounded-md px-3 py-2 bg-gray-50/50 text-gray-500">
+              <span className="flex items-center gap-1.5">
+                <DollarSign className="w-3.5 h-3.5 text-gray-400" />
+                Actual Profit
+              </span>
+              <span>{actualProfitAvailable ? '' : 'Available after first invoice'}</span>
             </div>
 
             {/* Spent vs contract */}
@@ -172,16 +279,25 @@ export function ProjectFinancialsCard({ projectId, projectName, spent = 0 }: Pro
                 <span className="text-gray-600">Spent to date</span>
                 <span className="font-mono font-medium">{fmt(spent)}</span>
               </div>
-              <div className="h-2 bg-gray-200 rounded mt-2 overflow-hidden">
-                <div
-                  className={`h-full ${spent > contractAmount ? 'bg-red-500' : spent / Math.max(contractAmount, 1) > 0.85 ? 'bg-amber-500' : 'bg-green-500'}`}
-                  style={{ width: `${Math.min(100, contractAmount > 0 ? (spent / contractAmount) * 100 : 0)}%` }}
-                />
-              </div>
+              {(() => {
+                const denom = contractAmount > 0 ? contractAmount : estimateTotal;
+                const pct = denom > 0 ? Math.min(100, (spent / denom) * 100) : 0;
+                const over = denom > 0 && spent > denom;
+                return (
+                  <div className="h-2 bg-gray-200 rounded mt-2 overflow-hidden">
+                    <div
+                      className={`h-full ${over ? 'bg-red-500' : pct > 85 ? 'bg-amber-500' : 'bg-green-500'}`}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                );
+              })()}
               <p className="text-[11px] text-gray-500 mt-1">
                 {contractAmount > 0
                   ? `${((spent / contractAmount) * 100).toFixed(0)}% of contract`
-                  : 'No contract amount yet'}
+                  : estimateTotal > 0
+                    ? `${((spent / estimateTotal) * 100).toFixed(0)}% of estimate (contract not signed yet)`
+                    : 'No contract or estimate to compare against'}
               </p>
             </div>
 
@@ -246,12 +362,13 @@ export function ProjectFinancialsCard({ projectId, projectName, spent = 0 }: Pro
 }
 
 function Stat({
-  label, value, sub, tone,
+  label, value, sub, tone, dimmed,
 }: {
   label: string;
   value: string;
   sub?: string;
   tone?: 'primary' | 'good' | 'bad';
+  dimmed?: boolean;
 }) {
   const toneCls = tone === 'primary'
     ? 'border-[#C9A96E] bg-[#FFF8E7]/60'
@@ -260,8 +377,9 @@ function Stat({
     : tone === 'bad'
     ? 'border-red-200 bg-red-50/60'
     : 'border-gray-200 bg-white';
+  const dimCls = dimmed ? 'opacity-60 grayscale' : '';
   return (
-    <div className={`rounded-lg border p-2.5 ${toneCls}`}>
+    <div className={`rounded-lg border p-2.5 ${toneCls} ${dimCls}`}>
       <p className="text-[10px] uppercase tracking-wide text-gray-500">{label}</p>
       <p className="text-base font-semibold font-mono mt-0.5">{value}</p>
       {sub && <p className="text-[11px] text-gray-500 mt-0.5 truncate">{sub}</p>}

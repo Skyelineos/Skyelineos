@@ -210,8 +210,22 @@ export const BuildTrackerPro: React.FC = () => {
       </div>
 
       {/* ===== Chart ===== */}
-      <div className="min-h-0 flex-1">
+      <div className="relative min-h-0 flex-1">
         <SkyelineGantt onAddTask={() => setShowAddTaskModal(true)} onEditTask={setEditingTask} />
+        {/* Mobile-only floating action button — same callback as the toolbar
+            "+ Add Task" button. Hidden at md and up. */}
+        <button
+          type="button"
+          onClick={() => setShowAddTaskModal(true)}
+          aria-label="Add task"
+          className="fixed right-4 z-20 flex h-14 w-14 items-center justify-center rounded-full text-white shadow-lg active:scale-95 md:hidden"
+          style={{
+            bottom: 'max(1rem, calc(env(safe-area-inset-bottom) + 0.5rem))',
+            backgroundColor: '#C9A96E',
+          }}
+        >
+          <Plus className="h-6 w-6" />
+        </button>
       </div>
 
       {/* ===== Modals ===== */}

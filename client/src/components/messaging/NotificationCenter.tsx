@@ -69,6 +69,12 @@ export function NotificationCenter() {
 
   useEffect(() => {
     if (!user) return;
+    // T0-3 DEPENDENCY: `user.id` is the Firebase Auth uid at runtime — see
+    // client/src/hooks/use-auth.ts where the legacy mapper now prefers
+    // `firebaseUid`. Notification writers (WalkthroughCapture, dispatch
+    // pipelines) MUST key `notifications.userId` to the same uid for this
+    // listener to see them. If that contract regresses, the sub portal goes
+    // silent again.
     const userId = user.id?.toString() || user.email || '';
     if (!userId) return;
     const q = query(

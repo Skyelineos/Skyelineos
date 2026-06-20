@@ -141,6 +141,29 @@ export function AddTaskModal({ open, onClose, selectedTaskIds = [] }: AddTaskMod
         });
       }
 
+      // Find target sibling group so we can land new task at the bottom
+      // (matches user mental model: "add a new step at the end").
+      let siblings: WbsTask[] = tasks;
+      if (data.parentId) {
+        const find = (list: WbsTask[]): WbsTask | null => {
+          for (const t of list) {
+            if (t.id === data.parentId) return t;
+            if (t.children) {
+              const r = find(t.children);
+              if (r) return r;
+            }
+          }
+          return null;
+        };
+        const parent = find(tasks);
+        if (parent && parent.children) siblings = parent.children;
+        else if (parent) siblings = [];
+      }
+      const maxOrder = siblings.reduce(
+        (m, n, i) => Math.max(m, n.sortOrder ?? i),
+        -1,
+      );
+
       // Create new task
       const newTask: WbsTask = {
         id: taskId,
@@ -151,6 +174,7 @@ export function AddTaskModal({ open, onClose, selectedTaskIds = [] }: AddTaskMod
         progress: data.progress,
         locked: data.locked,
         predecessors: predecessors.length > 0 ? predecessors : undefined,
+        sortOrder: maxOrder + 1,
       };
 
       // Add task to the appropriate location

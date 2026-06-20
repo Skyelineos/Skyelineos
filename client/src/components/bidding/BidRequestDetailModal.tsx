@@ -5,7 +5,7 @@ import {
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
-import { createNotificationsBatch } from '@/lib/notifications';
+import { fireTrigger } from '@/lib/notifications';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from '@/components/ui/dialog';
@@ -14,8 +14,10 @@ import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Input } from '@/components/ui/input';
 import {
-  Send, CheckCircle2, Clock, Mail, Phone, Loader2, AlertCircle, FileText, UserPlus, Search,
+  Send, CheckCircle2, Clock, Mail, Phone, Loader2, AlertCircle, FileText, UserPlus, Search, FileUp,
 } from 'lucide-react';
+import { useRoleAccess } from '@/hooks/useRoleAccess';
+import { RecordManualBidModal } from './RecordManualBidModal';
 import type { BidRequest, PortalBid } from './types';
 
 interface SubInfo {
@@ -52,6 +54,11 @@ export function BidRequestDetailModal({ request, projectId, projectName, onClose
   const [addOpen, setAddOpen] = useState(false);
   const [addSearch, setAddSearch] = useState('');
   const [adding, setAdding] = useState<string | null>(null);
+  // Manual-bid recording: opened from per-vendor "Record manually" button.
+  // Only GC / PM / admin can see and use this affordance.
+  const [manuallyRecording, setManuallyRecording] = useState<SubRow | null>(null);
+  const { hasRole } = useRoleAccess();
+  const canRecordManually = hasRole(['admin', 'gc', 'projectManager']);
 
   // Load each invited sub's contact doc once. Contacts are stable so no
   // need for a live listener here — one read per sub on open.
@@ -147,17 +154,18 @@ export function BidRequestDetailModal({ request, projectId, projectName, onClose
     qs.set('bidRequest', request.id);
     if (row.sub.email) qs.set('email', row.sub.email);
     try {
-      await createNotificationsBatch([{
-        userId: recipientId,
-        kind: 'system',
-        title: `Bid reminder — ${request.trade}`,
-        body: `Reminder: please submit your bid for ${projectName || 'this project'} (${request.trade}).${request.dueDate ? ` Due ${request.dueDate}.` : ''}`,
-        link: `/subcontractor-portal/bids?${qs.toString()}`,
+      await fireTrigger({
+        kind: 'bid_reminder',
         projectId,
-        refType: 'task',
-        refId: request.id,
-        fromUserName: user.name || 'Skyeline Homes',
-      }]);
+        targetUserIds: [recipientId],
+        payload: {
+          projectName: projectName || 'this project',
+          trade: request.trade,
+          dueDate: request.dueDate || '',
+          link: `/subcontractor-portal/bids?${qs.toString()}`,
+          bidRequestId: request.id,
+        },
+      });
       return true;
     } catch (e: any) {
       toast({ title: 'Reminder failed', description: e?.message || String(e), variant: 'destructive' });
@@ -233,17 +241,20 @@ export function BidRequestDetailModal({ request, projectId, projectName, onClose
       const qs = new URLSearchParams();
       qs.set('bidRequest', request.id);
       if (sub.email) qs.set('email', sub.email);
-      await createNotificationsBatch([{
-        userId: recipientId,
-        kind: 'system',
-        title: `Bid request — ${request.trade}`,
-        body: `You've been invited to bid on ${projectName || 'this project'} (${request.trade}).${request.dueDate ? ` Due ${request.dueDate}.` : ''} Open Skyeline OS to submit your quote.`,
-        link: `/subcontractor-portal/bids?${qs.toString()}`,
+      await fireTrigger({
+        kind: 'bid_invitation',
         projectId,
-        refType: 'task',
-        refId: request.id,
-        fromUserName: user.name || 'Skyeline Homes',
-      }]);
+        targetUserIds: [recipientId],
+        payload: {
+          projectName: projectName || 'this project',
+          trade: request.trade,
+          dueDate: request.dueDate || '',
+          requesterName: user.name || 'Skyeline Homes',
+          magicLink: `/subcontractor-portal/bids?${qs.toString()}`,
+          link: `/subcontractor-portal/bids?${qs.toString()}`,
+          bidRequestId: request.id,
+        },
+      });
 
       const channels = [sub.email && 'email', sub.phone && 'text'].filter(Boolean).join(' + ');
       toast({
@@ -388,10 +399,21 @@ export function BidRequestDetailModal({ request, projectId, projectName, onClose
             <div className="border rounded-lg divide-y">
               {/* Pending first */}
               {pending.map(r => (
-                <SubRowView key={r.sub.id} row={r} onRemind={() => handleSingleReminder(r)} reminding={reminding.has(r.sub.id)} />
+                <SubRowView
+                  key={r.sub.id}
+                  row={r}
+                  onRemind={() => handleSingleReminder(r)}
+                  reminding={reminding.has(r.sub.id)}
+                  onRecordManually={canRecordManually ? () => setManuallyRecording(r) : undefined}
+                />
               ))}
               {submitted.map(r => (
-                <SubRowView key={r.sub.id} row={r} onRemind={() => handleSingleReminder(r)} reminding={reminding.has(r.sub.id)} />
+                <SubRowView
+                  key={r.sub.id}
+                  row={r}
+                  onRemind={() => handleSingleReminder(r)}
+                  reminding={reminding.has(r.sub.id)}
+                />
               ))}
             </div>
           )}
@@ -408,11 +430,39 @@ export function BidRequestDetailModal({ request, projectId, projectName, onClose
           <Button variant="outline" onClick={onClose}>Close</Button>
         </DialogFooter>
       </DialogContent>
+
+      {manuallyRecording && (
+        <RecordManualBidModal
+          open={true}
+          onClose={() => setManuallyRecording(null)}
+          projectId={projectId}
+          projectName={projectName}
+          bidRequestId={request.id}
+          bidRequestTrade={request.trade}
+          vendor={{
+            vendorName: manuallyRecording.sub.name || '(unknown sub)',
+            email: manuallyRecording.sub.email,
+            phone: manuallyRecording.sub.phone,
+            subContactId: manuallyRecording.sub.id,
+            linkedUserId: manuallyRecording.sub.linkedUserId,
+            // Submitted rows never get the button, so this should always be
+            // a non-submitted status; the modal still hard-guards in case of
+            // a race with the portal listener.
+            bidStatus: manuallyRecording.submittedBid ? 'submitted' : 'pending',
+          }}
+        />
+      )}
     </Dialog>
   );
 }
 
-function SubRowView({ row, onRemind, reminding }: { row: SubRow; onRemind: () => void; reminding: boolean }) {
+function SubRowView({ row, onRemind, reminding, onRecordManually }: {
+  row: SubRow;
+  onRemind: () => void;
+  reminding: boolean;
+  // Optional - only passed for pending rows when the viewer is GC / PM / admin.
+  onRecordManually?: () => void;
+}) {
   const submitted = !!row.submittedBid;
   const submittedAt = (row.submittedBid?.submittedAt as any)?.toDate?.()?.toLocaleDateString?.() || '—';
   return (
@@ -454,18 +504,33 @@ function SubRowView({ row, onRemind, reminding }: { row: SubRow; onRemind: () =>
           )}
         </div>
       </div>
-      {!submitted && (row.sub.email || row.sub.phone) && (
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onRemind}
-          disabled={reminding}
-          className="gap-1.5 flex-shrink-0"
-          title="Send a reminder email + text"
-        >
-          {reminding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-          Send reminder
-        </Button>
+      {!submitted && (
+        <div className="flex flex-col items-end gap-1 flex-shrink-0">
+          {(row.sub.email || row.sub.phone) && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onRemind}
+              disabled={reminding}
+              className="gap-1.5"
+              title="Send a reminder email + text"
+            >
+              {reminding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+              Send reminder
+            </Button>
+          )}
+          {onRecordManually && (
+            <button
+              type="button"
+              onClick={onRecordManually}
+              className="inline-flex items-center gap-1 text-[11px] text-[#C9A96E] hover:text-[#A8864A] hover:underline"
+              title="Record an email-received quote as a bid"
+            >
+              <FileUp className="w-3 h-3" />
+              Record manually
+            </button>
+          )}
+        </div>
       )}
     </div>
   );

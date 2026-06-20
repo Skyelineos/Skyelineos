@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'wouter';
 import { collection, query, orderBy, onSnapshot, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { AppLayout } from '@/components/layout/AppLayout';
@@ -23,6 +24,7 @@ import {
   Ruler,
   HelpCircle,
   MessageSquare,
+  Construction,
 } from 'lucide-react';
 import { RFIPanel } from '@/components/rfi/RFIPanel';
 import { ProjectChat } from '@/components/messaging/ProjectChat';
@@ -100,12 +102,24 @@ export default function DesignerPortal() {
   useAutoAdminView();
   const { user } = useAuth();
   const { toast } = useToast();
+  const [location] = useLocation();
 
   const [rawProjects, setRawProjects] = useState<FirestoreProject[]>([]);
   const [projectsLoading, setProjectsLoading] = useState(true);
   const [selectedProject, setSelectedProject] = useState<FirestoreProject | null>(null);
   const [projectTab, setProjectTab] = useState<'dashboard' | 'rooms' | 'selections' | 'catalog' | 'plans' | 'rfis' | 'messages'>('dashboard');
   const [filterRoomId, setFilterRoomId] = useState<string | undefined>(undefined);
+
+  // URL → global-view sync. Sidebar links from DesignerSidebar and deep
+  // links from DesignerTodayFeed point at /designer-portal/<tab> (e.g.
+  // /selections from the today feed). The page-level Tabs below are
+  // PROJECT-scoped, so when the user lands here without a project picked,
+  // we read the URL segment to decide whether to show the default landing
+  // (project grid) or a coming-soon stub for a global concept that isn't
+  // built yet (gallery, schedule). The bare /designer-portal path falls
+  // through to the project grid.
+  const urlParts = location.split('/').filter(Boolean);
+  const globalViewKey = urlParts[1] || '';
 
   const userRole = user?.role || 'designer';
   const userId = user?.id?.toString() || '';
@@ -137,7 +151,26 @@ export default function DesignerPortal() {
     return unsub;
   }, [isGcOrAdmin, userId]);
 
+  // Sidebar / today-feed keys that aren't project ids. Anything outside this
+  // set is treated as a candidate project id for deep-link selection.
+  const RESERVED_TAB_KEYS = ['projects', 'selections', 'gallery', 'schedule', 'documents', 'messages'];
+
   const projects = useProjectsWithStats(rawProjects);
+
+  // Auto-select a project when the URL is /designer-portal/<projectId> —
+  // fixes DesignerTodayFeed deep links (e.g. clicking a project tile) which
+  // previously left the user on the global grid because the page level
+  // ignored the URL.
+  useEffect(() => {
+    if (!globalViewKey || RESERVED_TAB_KEYS.includes(globalViewKey)) return;
+    if (selectedProject?.id === globalViewKey) return;
+    const match = rawProjects.find(p => p.id === globalViewKey);
+    if (match) {
+      setSelectedProject(match);
+      setProjectTab('dashboard');
+      setFilterRoomId(undefined);
+    }
+  }, [globalViewKey, rawProjects]);
 
   const hasAccess =
     userRole === 'designer' ||
@@ -200,11 +233,42 @@ export default function DesignerPortal() {
             )}
           </div>
 
+          {/* URL-driven coming-soon stubs for sidebar destinations that
+              don't yet have a designer-portal-level view. We render in
+              place of the Today feed + grid so the page reads coherently
+              as 'this is the section you asked for' instead of silently
+              falling through. */}
+          {!selectedProject && (globalViewKey === 'gallery' || globalViewKey === 'schedule') && (
+            <div className="rounded-2xl border border-dashed border-gray-200 p-10 text-center">
+              <Construction className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+              <p className="text-gray-600 font-medium">
+                {globalViewKey === 'gallery' ? 'Design gallery' : 'Designer schedule'} — coming soon
+              </p>
+              <p className="text-sm text-gray-400 mt-1">
+                For now, open a project below to see its design content.
+              </p>
+            </div>
+          )}
+
+          {/* Hint banner when arriving from a deep link like
+              /designer-portal/selections — the page level only handles
+              SELECTIONS within a project, so prompt the designer to pick
+              one. The Today feed below already surfaces the urgent ones. */}
+          {!selectedProject && globalViewKey === 'selections' && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+              <p className="font-medium">Selections live inside each project.</p>
+              <p className="text-amber-800 mt-0.5">
+                Pick a project below to open its full selections board, or use
+                the items in the today feed to jump straight to what needs you.
+              </p>
+            </div>
+          )}
+
           {/* Today feed — what needs my attention right now */}
-          {!selectedProject && <DesignerTodayFeed />}
+          {!selectedProject && globalViewKey !== 'gallery' && globalViewKey !== 'schedule' && <DesignerTodayFeed />}
 
           {/* Global Dashboard + Project Grid */}
-          {!selectedProject && (
+          {!selectedProject && globalViewKey !== 'gallery' && globalViewKey !== 'schedule' && (
             <>
               {projectsLoading ? (
                 <div className="flex items-center justify-center h-40">

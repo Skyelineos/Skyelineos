@@ -330,11 +330,49 @@ service cloud.firestore {
     }
 
     // Schedule tasks
+    //
+    // Sign-off workflow (2026-06): tasks flow
+    //   todo → in_progress → awaiting_signoff → done
+    // with rejects sending awaiting_signoff back to in_progress.
+    //
+    // Most status writes (including the final approve → done) flow through the
+    // Cloud Function POST /api/tasks/:id/signoff (Admin SDK bypasses these
+    // rules). The carve-out we DO need at the rule level is letting the
+    // assigned sub flip in_progress → awaiting_signoff directly from the
+    // browser (the sub portal action). Everything else stays GC-write.
     match /tasks/{taskId} {
       allow read: if isGC()
         || (isClient() && resource.data.visibleToClient == true)
         || (isSub() && resource.data.assignedSubId == request.auth.uid);
+
+      // Assigned sub may flip the task to awaiting_signoff (submit for review)
+      // ONLY when it's currently todo or in_progress, ONLY for their own task,
+      // and ONLY touching the status + the submittedForSignoff* audit fields.
+      // The signedOff* / rejected* fields are write-locked here — they only
+      // get set by the Cloud Function path.
+      allow update: if isSub()
+        && resource.data.assignedSubId == request.auth.uid
+        && request.resource.data.assignedSubId == resource.data.assignedSubId
+        && (resource.data.status == 'todo' || resource.data.status == 'in_progress')
+        && request.resource.data.status == 'awaiting_signoff'
+        // Block clients from writing signoff-trail fields directly — server only.
+        && !('signedOffBy' in request.resource.data.diff(resource.data).affectedKeys())
+        && !('signedOffAt' in request.resource.data.diff(resource.data).affectedKeys())
+        && !('signoffNote' in request.resource.data.diff(resource.data).affectedKeys());
+
+      // GC / PM / admin retain full write access (legacy behavior).
       allow write: if isGC();
+    }
+
+    // Sign-off events — append-only audit trail under each task.
+    // Written exclusively by the Cloud Function (Admin SDK); the rule below
+    // blocks all direct client writes. Reads follow the parent-task read
+    // visibility (staff + assigned sub + client if the task is visibleToClient).
+    match /tasks/{taskId}/signoffEvents/{eventId} {
+      allow read: if isGC()
+        || (isSub() && get(/databases/$(database)/documents/tasks/$(taskId)).data.assignedSubId == request.auth.uid)
+        || (isClient() && get(/databases/$(database)/documents/tasks/$(taskId)).data.visibleToClient == true);
+      allow write: if false;
     }
 
     // ── Master Task Library & Project Task Template system ────────────────────
@@ -467,7 +505,30 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // Change orders
+    // Change orders — SOURCE OF TRUTH (top-level, keyed by projectId field).
+    // All 6 client readers (ChangeOrders.tsx, ChangeOrdersTab.tsx,
+    // ClientDashboard.tsx, ClientFinancials.tsx, SelectionsBoard.tsx,
+    // ProjectFinancialsCard.tsx) read from here. Server route
+    // PATCH /api/projects/:projectId/change-orders/:coId/decision was
+    // migrated 2026-06-16 (T0-4) to also write here.
+    //
+    // DEPRECATED: any docs in `projects/{projectId}/changeOrders/{coId}`
+    // are orphan writes from the pre-T0-4 server route. Safe to delete
+    // after 30 days (post 2026-07-16) once we're sure nothing reads them.
+    // The 3 remaining Cloud Function writers (selection-approve + list +
+    // create routes) were migrated to top-level by the co-migration-finish
+    // branch on 2026-06-16. Until backfill copies orphans out, we keep
+    // reads OPEN one release cycle, but DENY new writes to prevent drift.
+    match /projects/{projectId}/changeOrders/{coId} {
+      // Reads kept open for one release cycle so the backfill script
+      // (scripts/backfill-co-subcollection-to-toplevel.mjs) can copy
+      // orphan docs to the top-level `changeOrders/` collection.
+      allow read: if isStaff() || (isClient() && clientOwnsProject(projectId));
+      // Writes denied — top-level `changeOrders/` is canonical. Delete
+      // this block 30 days after backfill confirms (~2026-07-16).
+      allow write: if false;
+    }
+
     match /changeOrders/{orderId} {
       allow read: if isGC()
         || clientOwns(resource.data)

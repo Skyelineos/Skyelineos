@@ -40,10 +40,12 @@ import DesignStudio from '@/components/client-portal/DesignStudio';
 import StyleDiscovery from '@/components/client-portal/StyleDiscovery';
 import ClientSelectionsTimeline from '@/components/client/ClientSelectionsTimeline';
 import ChangeOrdersTab from '@/components/client-portal/ChangeOrdersTab';
+import EstimatesTab from '@/components/client-portal/EstimatesTab';
 import ClientFinancials from '@/components/client-portal/ClientFinancials';
 import ClientSiteLog from '@/components/site-log/ClientSiteLog';
 import { ClientTodayFeed } from '@/components/today/ClientTodayFeed';
 import { ScheduleTimeline } from '@/components/schedule/ScheduleTimeline';
+import { ProjectProgressView } from '@/components/projects/ProjectProgressView';
 import type { GeneratedSchedule } from '@/lib/schedule/types';
 
 import {
@@ -58,6 +60,10 @@ import {
   ClipboardCheck,
   CalendarClock,
   Sparkles,
+  Construction,
+  FileSignature,
+  Wrench,
+  ShieldCheck,
 } from 'lucide-react';
 
 interface FirestoreProject {
@@ -91,7 +97,34 @@ const TABS = [
   { key: 'documents', label: 'Documents', icon: FileText },
   { key: 'messages', label: 'Messages', icon: MessageSquare },
   { key: 'photos', label: 'Photos', icon: Image },
+  // 'Coming soon' destinations advertised in ClientSidebar (the portal-shell
+  // sidebar component, plus any future GC-facing impersonation surface) but
+  // not yet implemented as full tab content.
+  // They render the ComingSoonTab stub instead of silently falling back to
+  // the dashboard (which previously made the sidebar feel broken).
+  { key: 'contracts', label: 'Contract', icon: FileSignature },
+  { key: 'estimates', label: 'Estimates', icon: DollarSign },
+  { key: 'punch-list', label: 'Punch List', icon: Wrench },
+  { key: 'warranty', label: 'Warranty', icon: ShieldCheck },
 ];
+
+// Small reusable stub for tabs that are advertised in the sidebar but whose
+// page-level surface isn't built yet. Better than a silent fallback to the
+// dashboard — keeps the user's mental model of the portal surface intact
+// and tells them where to go in the meantime.
+function ComingSoonTab({ feature }: { feature: string }) {
+  return (
+    <div className="p-6">
+      <div className="rounded-2xl border border-dashed border-gray-200 p-10 text-center max-w-xl mx-auto">
+        <Construction className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+        <p className="text-gray-600 font-medium">{feature} — coming soon</p>
+        <p className="text-sm text-gray-400 mt-1">
+          Reach out to your GC if you need help in the meantime.
+        </p>
+      </div>
+    </div>
+  );
+}
 
 export default function SkyelineClientPortal() {
   const [location, navigate] = useLocation();
@@ -373,6 +406,20 @@ export default function SkyelineClientPortal() {
               onStartInspiration={goInspiration}
             />
           );
+        // Sidebar-only stubs — same coming-soon treatment whether or not a
+        // project exists. Putting the cases here keeps the no-project state
+        // from silently bouncing back to the welcome screen.
+        case 'contracts':
+          return <ComingSoonTab feature="Your contract" />;
+        case 'estimates':
+          // Real EstimatesTab — subscribes to estimates the GC has sent on
+          // this project, with Approve/Decline/Request changes. Replaces the
+          // ComingSoonTab stub.
+          return <EstimatesTab projectId={selectedProjectId} />;
+        case 'punch-list':
+          return <ComingSoonTab feature="Punch list" />;
+        case 'warranty':
+          return <ComingSoonTab feature="Warranty" />;
         case 'dashboard':
         default:
           return (
@@ -446,9 +493,14 @@ export default function SkyelineClientPortal() {
 
       case 'schedule':
         return (
-          <div className="p-6">
+          <div className="p-6 space-y-6 max-w-3xl">
+            {/* Live phase progress — what's done, what's now, what's next.
+                Client audience hides assignee names + condenses task lists. */}
+            {selectedProjectId && (
+              <ProjectProgressView projectId={selectedProjectId} audience="client" />
+            )}
             {selectedProject?.estimatedSchedule ? (
-              <div className="rounded-xl border border-gray-200 bg-white p-5 max-w-3xl">
+              <div className="rounded-xl border border-gray-200 bg-white p-5">
                 {(() => {
                   const at = (selectedProject as any)
                     .estimatedSchedulePublishedAt;
@@ -573,6 +625,18 @@ export default function SkyelineClientPortal() {
             <PhotosTab projectId={selectedProjectId as any} />
           </div>
         );
+
+      // Stubs for sidebar destinations that haven't been built yet. Render
+      // the ComingSoonTab card so the navigation feels coherent instead of
+      // silently bouncing to dashboard. See TABS comment for context.
+      case 'contracts':
+        return <ComingSoonTab feature="Your contract" />;
+      case 'estimates':
+        return <EstimatesTab projectId={selectedProjectId} />;
+      case 'punch-list':
+        return <ComingSoonTab feature="Punch list" />;
+      case 'warranty':
+        return <ComingSoonTab feature="Warranty" />;
 
       default:
         return (

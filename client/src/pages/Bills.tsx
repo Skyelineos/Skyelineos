@@ -8,6 +8,7 @@ import { getAuth } from 'firebase/auth';
 import { db, storage } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
+import { fireTrigger } from '@/lib/notifications';
 import { useConfirm } from '@/hooks/use-confirm';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -79,6 +80,12 @@ interface Bill {
   description?: string;
   category?: string;
   amount: number;
+  // Stream 4: how this bill landed in the queue.
+  //   'sub' — submitted via the sub portal pay-app form (sub self-service)
+  //   undefined / 'gc' — entered by Skyeline staff via the GC-side Upload card
+  submittedBy?: 'sub' | 'gc';
+  percentComplete?: number;
+  subContactId?: string;
   // Workflow states mirroring the Jack tabbed flow:
   //   draft → awaiting_approval → approved_for_payment → paid
   //   side states: hold_payment, rejected, bank_charge, credit_note
@@ -250,6 +257,20 @@ export function BillsContent({ projectId: scopedProjectId }: { projectId?: strin
         createdAt: serverTimestamp(),
         createdBy: user.id?.toString() || user.email || 'unknown',
       });
+      // Wave-2: fire invoice_received so staff_on_project (admin + gc + PM) get
+      // the in-app alert via the server pipeline.
+      if (project?.id) {
+        await fireTrigger({
+          kind: 'invoice_received',
+          projectId: project.id,
+          payload: {
+            vendor: draft.vendor || 'vendor',
+            amount: (Number(draft.amount) || 0).toLocaleString(),
+            projectName: project.name || draft.projectName || '',
+            link: '/bills',
+          },
+        });
+      }
       toast({ title: 'Bill saved', description: `${draft.vendor} · $${draft.amount}` });
       reset();
     } catch (e: any) {
@@ -297,6 +318,8 @@ export function BillsContent({ projectId: scopedProjectId }: { projectId?: strin
 
   // Workflow tab filter — what's currently in view.
   const [statusTab, setStatusTab] = useState<string>('all');
+  // Stream 4: filter chip — surfaces sub-submitted vs GC-entered bills.
+  const [submittedByTab, setSubmittedByTab] = useState<'all' | 'sub' | 'gc'>('all');
   // Treat legacy 'unpaid'/'pending' as 'draft'/'awaiting_approval' for filter purposes.
   const statusMatch = (b: Bill, key: string) => {
     if (key === 'all') return true;
@@ -304,7 +327,16 @@ export function BillsContent({ projectId: scopedProjectId }: { projectId?: strin
     if (key === 'awaiting_approval') return b.status === 'awaiting_approval' || b.status === 'pending';
     return b.status === key;
   };
-  const filteredByStatus = visibleBills.filter(b => statusMatch(b, statusTab));
+  const submittedByMatch = (b: Bill, key: 'all' | 'sub' | 'gc') => {
+    if (key === 'all') return true;
+    if (key === 'sub') return b.submittedBy === 'sub';
+    // 'gc' = anything that didn't come in through the sub portal (legacy bills
+    // and GC-entered both have no submittedBy field).
+    return !b.submittedBy || b.submittedBy === 'gc';
+  };
+  const filteredByStatus = visibleBills
+    .filter(b => statusMatch(b, statusTab))
+    .filter(b => submittedByMatch(b, submittedByTab));
 
   // Stats — by workflow column
   const totals = {
@@ -557,6 +589,33 @@ export function BillsContent({ projectId: scopedProjectId }: { projectId?: strin
                       isActive
                         ? 'bg-gray-900 border-gray-900 text-white'
                         : 'bg-white border-gray-200 text-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    {t.label} <span className={isActive ? 'opacity-70' : 'text-gray-400'}>· {count}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {/* Stream 4: submittedBy filter — surfaces sub-submitted vs GC-entered. */}
+            <div className="flex flex-wrap gap-1 mt-2">
+              {([
+                { key: 'all', label: 'All sources' },
+                { key: 'sub', label: 'Sub-submitted' },
+                { key: 'gc',  label: 'GC-entered' },
+              ] as Array<{ key: 'all' | 'sub' | 'gc'; label: string }>).map(t => {
+                const count = visibleBills
+                  .filter(b => statusMatch(b, statusTab))
+                  .filter(b => submittedByMatch(b, t.key))
+                  .length;
+                const isActive = submittedByTab === t.key;
+                return (
+                  <button
+                    key={t.key}
+                    onClick={() => setSubmittedByTab(t.key)}
+                    className={`text-[11px] px-2 py-0.5 rounded-full border transition ${
+                      isActive
+                        ? 'bg-[#C9A96E] border-[#C9A96E] text-white'
+                        : 'bg-white border-gray-200 text-gray-600 hover:border-[#C9A96E]'
                     }`}
                   >
                     {t.label} <span className={isActive ? 'opacity-70' : 'text-gray-400'}>· {count}</span>
