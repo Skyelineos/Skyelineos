@@ -310,35 +310,61 @@ export async function notifyThreadMentions(opts: {
 
 export interface CommMember { uid: string; name: string; role?: string; trade?: string }
 
+// Directory caches. loadSubjectMembers / loadTaggableVendors / loadSubjectOptions
+// used to re-download whole collections (contacts, projects, clients) on EVERY
+// thread switch and modal open — that's what made click-through feel sluggish.
+// Cache for a short TTL; the directory rarely changes mid-session and anything
+// new shows on the next load. Call invalidateCommDirectoryCache() after creating
+// a contact/project if you need it fresh immediately.
+const DIR_TTL_MS = 60_000;
+let _contactsCache: { at: number; rows: { id: string; data: any }[] } | null = null;
+let _subjectOptionsCache: { at: number; rows: SubjectOption[] } | null = null;
+let _vendorsCache: { at: number; rows: VendorOption[] } | null = null;
+const _membersCache = new Map<string, { at: number; rows: CommMember[] }>();
+
+async function cachedContacts(): Promise<{ id: string; data: any }[]> {
+  if (_contactsCache && Date.now() - _contactsCache.at < DIR_TTL_MS) return _contactsCache.rows;
+  const snap = await getDocs(collection(db, 'contacts'));
+  _contactsCache = { at: Date.now(), rows: snap.docs.map(d => ({ id: d.id, data: d.data() })) };
+  return _contactsCache.rows;
+}
+
+export function invalidateCommDirectoryCache(): void {
+  _contactsCache = null;
+  _subjectOptionsCache = null;
+  _vendorsCache = null;
+  _membersCache.clear();
+}
+
 /**
  * Resolve a subject (lead/client/project) to the people who can be @-mentioned.
  * For a project this is the assigned team + client; for a lead/client it's the
- * internal team plus the linked contact. Names come from the contacts directory.
+ * internal team plus the linked contact. Cached per subject for the session.
  */
 export async function loadSubjectMembers(ref: SubjectRef): Promise<CommMember[]> {
-  const { getDocs } = await import('firebase/firestore');
+  const key = `${ref.type}:${ref.id}`;
+  const hit = _membersCache.get(key);
+  if (hit && Date.now() - hit.at < DIR_TTL_MS) return hit.rows;
+
   const members: CommMember[] = [];
   const seen = new Set<string>();
   const push = (m: CommMember) => { if (m.uid && !seen.has(m.uid)) { seen.add(m.uid); members.push(m); } };
 
   try {
+    const contacts = await cachedContacts();
     if (ref.type === 'project') {
       const proj = (await getDoc(doc(db, 'projects', ref.id))).data() as any || {};
       const uids = new Set<string>([proj.clientId, ...(Array.isArray(proj.assignedUserIds) ? proj.assignedUserIds : [])].filter(Boolean));
-      const contacts = await getDocs(collection(db, 'contacts'));
-      contacts.forEach(d => {
-        const c = d.data() as any;
+      contacts.forEach(({ data: c }) => {
         if (c.linkedUserId && uids.has(c.linkedUserId)) {
           push({ uid: c.linkedUserId, name: c.name || c.displayName || 'Contact', role: c.role, trade: c.trade || c.tradeCategory });
         }
       });
     } else {
       // lead/client: the linked contact (if any) + internal team members.
-      const contacts = await getDocs(collection(db, 'contacts'));
-      contacts.forEach(d => {
-        const c = d.data() as any;
+      contacts.forEach(({ id, data: c }) => {
         const isTeam = /gc|admin|projectmanager|designer|estimator/i.test(c.role || '');
-        const isThisContact = d.id === ref.id || c.linkedUserId === ref.id;
+        const isThisContact = id === ref.id || c.linkedUserId === ref.id;
         if (c.linkedUserId && (isTeam || isThisContact)) {
           push({ uid: c.linkedUserId, name: c.name || c.displayName || 'Contact', role: c.role, trade: c.trade || c.tradeCategory });
         }
@@ -347,6 +373,7 @@ export async function loadSubjectMembers(ref: SubjectRef): Promise<CommMember[]>
   } catch { /* ignore — names degrade gracefully */ }
 
   members.sort((a, b) => a.name.localeCompare(b.name));
+  _membersCache.set(key, { at: Date.now(), rows: members });
   return members;
 }
 
@@ -502,6 +529,7 @@ export interface SubjectOption { key: string; type: SubjectType; id: string; lab
 
 /** Load all leads/clients/projects as pickable subjects for the modals. */
 export async function loadSubjectOptions(): Promise<SubjectOption[]> {
+  if (_subjectOptionsCache && Date.now() - _subjectOptionsCache.at < DIR_TTL_MS) return _subjectOptionsCache.rows;
   const opts: SubjectOption[] = [];
   try {
     const projs = await getDocs(collection(db, 'projects'));
@@ -521,25 +549,27 @@ export async function loadSubjectOptions(): Promise<SubjectOption[]> {
       opts.push({ key: `${t}:${d.id}`, type: t, id: d.id, label: `${isLead ? '🌱' : '👤'} ${name}` });
     });
   } catch { /* ignore */ }
+  _subjectOptionsCache = { at: Date.now(), rows: opts };
   return opts;
 }
 
 export interface VendorOption { id: string; name: string; trade?: string; company?: string }
 
-/** Load taggable vendors/subs/designers from the contacts directory. */
+/** Load taggable vendors/subs/designers from the contacts directory (cached). */
 export async function loadTaggableVendors(): Promise<VendorOption[]> {
+  if (_vendorsCache && Date.now() - _vendorsCache.at < DIR_TTL_MS) return _vendorsCache.rows;
   const out: VendorOption[] = [];
   try {
-    const contacts = await getDocs(collection(db, 'contacts'));
-    contacts.forEach(d => {
-      const c = d.data() as any;
+    const contacts = await cachedContacts();
+    contacts.forEach(({ id, data: c }) => {
       const role = (c.role || c.type || '').toLowerCase();
       if (/sub|trade|vendor|designer/.test(role)) {
         const trade = c.trade || c.tradeCategory || (Array.isArray(c.trades) ? c.trades[0] : undefined);
-        out.push({ id: d.id, name: c.name || c.displayName || c.company || 'Vendor', trade, company: c.company });
+        out.push({ id, name: c.name || c.displayName || c.company || 'Vendor', trade, company: c.company });
       }
     });
   } catch { /* ignore */ }
   out.sort((a, b) => a.name.localeCompare(b.name));
+  _vendorsCache = { at: Date.now(), rows: out };
   return out;
 }

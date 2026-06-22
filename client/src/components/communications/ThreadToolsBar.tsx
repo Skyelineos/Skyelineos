@@ -16,7 +16,7 @@ import {
 } from '@/lib/communications/ai';
 import { CreateActionItemModal } from './CreateActionItemModal';
 import { CreateDecisionModal } from './CreateDecisionModal';
-import { Hammer, CheckSquare, Gavel, Plus, X, Check, Sparkles, FileText, Loader2 } from 'lucide-react';
+import { Hammer, CheckSquare, Gavel, Plus, X, Check, Sparkles, FileText, Loader2, Search } from 'lucide-react';
 
 const ENTITY_LABEL: Record<string, string> = {
   action_item: 'Action', commitment: 'Commitment', decision_made: 'Decision',
@@ -33,6 +33,7 @@ export function ThreadToolsBar({ thread }: { thread: CommThread }) {
 
   const [vendors, setVendors] = useState<VendorOption[]>([]);
   const [showTrades, setShowTrades] = useState(false);
+  const [tradeQuery, setTradeQuery] = useState('');
   const [tagged, setTagged] = useState<string[]>(thread.tradeIds || []);
   const [items, setItems] = useState<ActionItem[]>([]);
   const [decisions, setDecisions] = useState<ClientDecision[]>([]);
@@ -90,19 +91,40 @@ export function ThreadToolsBar({ thread }: { thread: CommThread }) {
           </span>
         ))}
         <div className="relative">
-          <button onClick={() => setShowTrades(s => !s)}
+          <button onClick={() => { setShowTrades(s => !s); setTradeQuery(''); }}
                   className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-dashed border-gray-300 text-gray-500 text-[11px] hover:bg-white">
             <Plus className="h-3 w-3" /> Tag trade
           </button>
           {showTrades && (
-            <div className="absolute z-50 mt-1 w-60 max-h-60 overflow-auto bg-white border border-gray-200 rounded-md shadow-lg">
-              {vendors.length === 0 ? <p className="px-3 py-2 text-xs text-gray-400">No vendors found.</p> : vendors.map(v => (
-                <button key={v.id} onClick={() => toggleTrade(v.id)}
-                        className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-gray-50">
-                  <span className="flex-1 truncate">{v.name}{v.trade ? <span className="text-gray-400"> · {v.trade}</span> : ''}</span>
-                  {tagged.includes(v.id) && <Check className="h-3.5 w-3.5 text-[#C9A96E]" />}
-                </button>
-              ))}
+            <div className="absolute z-50 mt-1 w-64 bg-white border border-gray-200 rounded-md shadow-lg">
+              <div className="p-2 border-b border-gray-100 sticky top-0 bg-white">
+                <div className="relative">
+                  <Search className="absolute left-2 top-2 h-3.5 w-3.5 text-gray-400" />
+                  <input
+                    value={tradeQuery}
+                    onChange={e => setTradeQuery(e.target.value)}
+                    placeholder="Search trades / vendors…"
+                    className="w-full pl-7 pr-2 py-1.5 border border-gray-200 rounded text-sm focus:outline-none focus:ring-1 focus:ring-[#C9A96E]"
+                  />
+                </div>
+              </div>
+              <div className="max-h-56 overflow-auto">
+                {(() => {
+                  const q = tradeQuery.trim().toLowerCase();
+                  const list = q
+                    ? vendors.filter(v => v.name.toLowerCase().includes(q) || (v.trade || '').toLowerCase().includes(q) || (v.company || '').toLowerCase().includes(q))
+                    : vendors;
+                  if (vendors.length === 0) return <p className="px-3 py-2 text-xs text-gray-400">No vendors found.</p>;
+                  if (list.length === 0) return <p className="px-3 py-2 text-xs text-gray-400">No match for “{tradeQuery}”.</p>;
+                  return list.map(v => (
+                    <button key={v.id} onClick={() => toggleTrade(v.id)}
+                            className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-gray-50">
+                      <span className="flex-1 truncate">{v.name}{v.trade ? <span className="text-gray-400"> · {v.trade}</span> : ''}</span>
+                      {tagged.includes(v.id) && <Check className="h-3.5 w-3.5 text-[#C9A96E]" />}
+                    </button>
+                  ));
+                })()}
+              </div>
             </div>
           )}
         </div>
