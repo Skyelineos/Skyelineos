@@ -58,11 +58,12 @@ Lead-capture pipeline + model-home sign + deploy/infra fixes. Merged via PRs #61
   exist (`index.ts:391, 411`).
 
 ### Real, still-open
-- **`tsc` is 588 errors across live files** and the deploy build (`vite build`) never
-  type-checks — so `tsc` is a dead gate. Greening it (or gating *new* errors) is its
-  own track.
-- **`pending_team` dead role** — contacts of role `team`/`employee` get `pending_team`,
-  which no portal recognizes (normalizes to `client`). Fix inside the role refactor.
+- **`tsc` is ~440 errors across live files** (was 588 in older notes; the 2026-06-23
+  overnight audit measured 477, and TASK-0004 mechanical fixes brought it down further).
+  The deploy build (`vite build`) never type-checks — so `tsc` is a dead gate. Greening
+  it (or gating *new* errors) is its own track.
+- ~~**`pending_team` dead role**~~ — **RESOLVED**; `team`/`employee` contacts now route
+  to `pending_gc` (see Known issues #8 below).
 
 ## Next up (roadmap, in priority order)
 
@@ -141,29 +142,28 @@ New top-level **Tools** section in the sidebar. First tool: Lumber Takeoff Calcu
 
 ### Deploy / live-site blockers
 1. **`api` function redeploy is blocked** until `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` are set in Secret Manager. Per commit `28f9cd0`. Run: `firebase functions:secrets:set GOOGLE_CLIENT_ID` then `…GOOGLE_CLIENT_SECRET`.
-2. **`api` function does NOT bind `SENDGRID_*` / `TWILIO_*` secrets** (`functions/src/index.ts:2011`). `sendBidRequestRoute` reads `process.env.SENDGRID_API_KEY` etc., which will be `undefined` in production. Bid request emails/SMS silently fall through to mailto. **One-line fix** — add the six names (`SENDGRID_API_KEY`, `SENDGRID_FROM_EMAIL`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`, `APP_BASE_URL`) to the secrets array on the `api` onRequest config. (The standalone `dispatchNotification` function already has them via `functions/src/notifications/dispatch.ts:81`.)
+2. ~~**`api` function does NOT bind `SENDGRID_*` / `TWILIO_*` secrets**~~ — **RESOLVED.** The `api` `onRequest` config now binds all six (`SENDGRID_API_KEY`, `SENDGRID_FROM_EMAIL`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`, `APP_BASE_URL`) in its `secrets:` array (`functions/src/index.ts:2273-2281`). Bid request emails/SMS read them via `process.env` and no longer fall through to mailto. Do not re-add this as a blocker.
 3. **Ingestion Lab first-run prerequisites unmet.** Per `SESSION_NOTES.md` Session 12: Google Cloud OAuth client + redirect URIs + Gmail/Drive APIs enabled + OAuth consent screen + contacts cache probe + Gmail label. Until done, ingestion can't run.
 
 ### Stale docs
 4. **`PROJECT_OVERVIEW.md` says the `/designer-portal` route is not wired in `App.tsx`** — it is, at `client/src/App.tsx:515`, behind `RoleGuard(['admin', 'designer'])`. Fix the doc.
 
 ### Known issues (per SESSION_NOTES.md, none of these are new)
-5. **3 pre-existing TS errors** in `client/src/components/timeline/ModernTimelineBuilder.tsx` (lines 815, 816, 1342). Brace mismatch around 815 cascades. `npm run check` will always exit non-zero until fixed. `vite build` succeeds because esbuild is more permissive.
+5. **2 pre-existing TS errors** in `client/src/components/timeline/ModernTimelineBuilder.tsx` (lines 533 and 626) — duplicate block-scoped `availableTrades` declaration (TS2451), not a brace mismatch. The old 815/816/1342 references are stale (those lines are now ordinary JSX). `npm run check` exits non-zero until fixed; `vite build` succeeds because esbuild is more permissive.
 6. **RoleGuard isLoading bug** (`client/src/components/auth/RoleGuard.tsx:45`) — destructures `isLoading` but `useAuth` exposes `loading`. Loading-state guard never short-circuits. Benign in practice.
 7. **`shared/types.ts:240` redefines `UserRole`** identically to `shared/auth-types.ts:16`. Roll into the role-taxonomy refactor.
-8. **Dead role `pending_team`** — written by `ensureContactAuth.ts:34` and `contactAuthBackfill.ts:29`, never recognized by any UI. Users with this role have no portal.
+8. ~~**Dead role `pending_team`**~~ — **RESOLVED.** `ensureContactAuth.ts:40` and `contactAuthBackfill.ts:29` now route `team`/`employee` contacts to `pending_gc` (the existing pending-approval screen), per `docs/decisions.md` §D-001 + `ROLE_AUDIT.md`. No code path writes the literal `pending_team` anymore.
 9. **212 prod deps**, multiple Gantt + PDF libraries, at least one of each unused. Dep audit would shrink the install.
 10. **AuthContext test-mode bypass** at `client/src/auth/AuthContext.tsx:70-95` — `localStorage.testMode === 'true'` injects fake admin. If you're debugging mysterious admin access, check there first.
 
 ### "Coming Soon" placeholders still on screen
 - `Tools.tsx:139` — Tile/Millwork/Concrete calculators
-- `ClientPortal.tsx:436` — design selection interface (this is partially obsoleted by `ClientSelectionsTimeline` in `SkyelineClientPortal.tsx` — confirm which client portal is the live one)
 - `Financials.tsx:305` — financial reporting features
 - `SubcontractorPortal.tsx:502` — document upload
 - `DependencyManager.tsx:522` — interactive network diagram
 - `UltimateTimelineBuilder.tsx:541` — advanced analytics
-- `AIRenderingStudio.tsx:42` — Coming Soon dialog
 - `DocumentTemplateEditor.tsx:182` — PDF export
+- (`ClientPortal.tsx:436` and `AIRenderingStudio.tsx:42` removed from this list — both files have since been deleted; the live client portal is `SkyelineClientPortal.tsx` → `ClientSelectionsTimeline`.)
 
 ---
 
