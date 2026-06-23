@@ -325,7 +325,19 @@ service cloud.firestore {
       // Firestore write and bypass the approval queue. PMs may still update
       // bids (notes, etc.) as long as they don't flip status to 'awarded';
       // their awards go through /api/bids/award → pendingSubAssignments.
-      allow update: if isGCOnly()
+      //
+      // D-016 tripwire (TASK-0001): even a true GC/admin direct browser write
+      // may only land status 'awarded' when it also carries
+      // `complianceVerifiedAt` — the stamp the /api/bids/award endpoint sets
+      // (Admin SDK, after checkSubCompliance) in the same write. This mirrors
+      // the compliance gate at the rule layer so a privileged user can't
+      // self-award around it from the client. Editing an already-awarded bid
+      // still passes: the merged request.resource.data keeps the existing
+      // `complianceVerifiedAt`, so status is unchanged-awarded with the stamp
+      // intact.
+      allow update: if (isGCOnly()
+            && (request.resource.data.status != 'awarded'
+                || request.resource.data.complianceVerifiedAt != null))
         || (isProjectManager() && request.resource.data.status != 'awarded')
         || (isSub() && resource.data.subContactId == request.auth.uid
             && request.resource.data.status != 'awarded'); // sub can revise but not self-award
