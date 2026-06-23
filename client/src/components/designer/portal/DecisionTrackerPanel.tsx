@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
+import { fireTrigger } from '@/lib/notifications';
 import type {
   DecisionStatus,
   DesignDecision,
