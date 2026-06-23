@@ -608,7 +608,7 @@ export default function SelectionsManager({ projectId, projectName, designerId, 
         });
       });
       await batch.commit();
-      toast({ title: `${tolock.length} selection${tolock.length > 1 ? 's' : ''} finalized` });
+      toast({ title: `${toLock.length} selection${toLock.length > 1 ? 's' : ''} finalized` });
       refresh();
     } catch (e: any) {
       toast({ title: 'Error', description: e.message, variant: 'destructive' });

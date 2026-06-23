@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'wouter';
-import { collection, query, where, onSnapshot, orderBy, limit } from 'firebase/firestore';
+import { collection, collectionGroup, query, where, onSnapshot, orderBy, limit } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { useRoleAccess } from '@/hooks/useRoleAccess';
@@ -111,7 +111,7 @@ export function GCTodayFeed() {
     if (!showFinancials) { setDrawsPending([]); return; }
     // Draws live in projects/{id}/draws — collectionGroup query
     const q = query(
-      collection(db, 'draws'),
+      collectionGroup(db, 'draws'),
       where('status', 'in', ['pending', 'requested']),
       orderBy('dueDate', 'asc'),
       limit(10),

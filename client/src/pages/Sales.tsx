@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'wouter';
 import {
   collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot,
-  serverTimestamp, query, orderBy, getDoc, setDoc, writeBatch,
+  serverTimestamp, query, orderBy, getDoc, getDocs, setDoc, writeBatch,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { AppLayout } from '@/components/layout/AppLayout';
