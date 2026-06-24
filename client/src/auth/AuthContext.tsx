@@ -355,29 +355,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   }, [firebaseUser, user, loading, authLoading, isTestMode]);
 
-  // Token refresh function with rotation support
+  // Token refresh — DEAD MECHANISM, intentionally inert.
+  //
+  // This used to POST /api/auth/refresh (a cookie-session rotation endpoint on
+  // the legacy Express `server/`). That server was deleted in Session 10, so the
+  // route no longer exists and the call always 401s. Firebase Auth refreshes its
+  // own ID tokens via the SDK — there is no custom refresh to do here.
+  //
+  // CRITICAL: this MUST NOT sign the user out on "failure". The previous version
+  // called signOut(auth) + setUser(null) whenever the (now non-existent) endpoint
+  // returned non-OK. Paired with the global 401 fetch interceptor below, that
+  // turned ANY single 401 from ANY API call into a full session wipe — so portal
+  // users got logged out seconds after signing in (admin pages happened to avoid
+  // the offending role-gated 401). Kept only to satisfy the context type; it is a
+  // safe no-op that never touches auth state.
   const refreshTokens = useCallback(async (): Promise<boolean> => {
-    try {
-      const response = await fetch('/api/auth/refresh', {
-        method: 'POST',
-        credentials: 'include',
-      });
-
-      if (response.ok) {
-        console.log('✅ Tokens refreshed successfully with rotation');
-        return true;
-      } else {
-        console.warn('⚠️ Token refresh failed, user needs to re-authenticate');
-        // If refresh fails, clear auth state
-        await signOut(auth);
-        setFirebaseUser(null);
-        setUser(null);
-        return false;
-      }
-    } catch (error) {
-      console.error('Token refresh error:', error);
-      return false;
-    }
+    return false;
   }, []);
 
   // Clear authentication function - force logout and clear all cache
@@ -562,30 +555,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const isAuthenticated = Boolean((firebaseUser && user) || isTestMode);
 
-  // Automatic token refresh on API errors (401 responses)
-  useEffect(() => {
-    const originalFetch = window.fetch;
-    
-    window.fetch = async (...args) => {
-      const response = await originalFetch(...args);
-      
-      // If we get 401 and user is authenticated, try refreshing tokens
-      if (response.status === 401 && isAuthenticated && !authLoading) {
-        const refreshed = await refreshTokens();
-        
-        if (refreshed) {
-          // Retry the original request with refreshed tokens
-          return await originalFetch(...args);
-        }
-      }
-      
-      return response;
-    };
-    
-    return () => {
-      window.fetch = originalFetch;
-    };
-  }, [isAuthenticated, authLoading, refreshTokens]);
+  // NOTE: a global window.fetch interceptor used to live here. On ANY 401 it
+  // called refreshTokens() (which hit the dead /api/auth/refresh endpoint) and,
+  // on the inevitable failure, signed the user out. The net effect was that a
+  // single role-gated 401 from any API call destroyed the whole session — the
+  // root cause of portal users being "spit out" a few seconds after login.
+  // It has been removed: Firebase auto-refreshes ID tokens, and individual API
+  // callers handle their own 401s locally without nuking the session. See
+  // refreshTokens() above.
 
   const value: AuthContextType = {
     firebaseUser,
