@@ -37,6 +37,7 @@ Rules:
 - If the content involves money, a decision, a commitment, or a material selection, choose the matching category — those route to human review automatically. Decisions in particular ARE NEVER auto-filed.
 - Use "other" sparingly, only when nothing else fits.
 - Always call the extract_item tool. Do not return prose.
+- Omit optional fields entirely when unknown (do not pass them as null). The schema treats absence as null.
 
 Two examples of correct extractions:
 
@@ -83,10 +84,9 @@ Input:
   CONTENT:
   Hey just checking if the framers are still coming Tuesday or did that move?
 
-Correct extract_item call:
+Correct extract_item call (note: projectId omitted because it's unknown):
   {
     "category": "schedule_question",
-    "projectId": null,
     "structuredPayload": {
       "summary": "Asking whether framers are still scheduled for Tuesday",
       "rawQuestion": "Are the framers still coming Tuesday or did that move?"
@@ -99,15 +99,18 @@ Correct extract_item call:
 
 Now process the actual input below.`;
 
+// NOTE on schema shape: Anthropic recently tightened tool-schema validation
+// and now rejects `type: ['string','null']` plus `null` in `enum`. To keep
+// the "null when unknown" semantic, optional fields are non-required and
+// the model is told (in SYSTEM_PROMPT) to omit them when unknown. The
+// caller (brainPass.ts) coerces missing `projectId` back to null.
 export const EXTRACTION_TOOL = {
   name: 'extract_item',
-  description:
-    'Extract structured data from one construction-business communication. Always invoke this tool — do not return prose.',
+  description: 'Extract structured data from one construction-business communication.',
   input_schema: {
     type: 'object',
     required: [
       'category',
-      'projectId',
       'structuredPayload',
       'confidence',
       'confidenceReason',
@@ -117,37 +120,34 @@ export const EXTRACTION_TOOL = {
       category: {
         type: 'string',
         enum: CATEGORIES_LIST,
-        description: 'The single best category for this item.',
+        description: 'Best-fit category for this item.',
       },
       projectId: {
-        type: ['string', 'null'],
-        enum: ['giboney', 'christensen', null],
-        description: 'Which project, or null if you cannot tell.',
+        type: 'string',
+        enum: ['giboney', 'christensen'],
+        description: 'Project slug. Omit the field entirely if you cannot tell.',
       },
       structuredPayload: {
         type: 'object',
-        description:
-          'Category-shaped extracted data. Free-form; include the fields that matter for this category.',
+        description: 'Category-shaped extracted data; free-form key/values.',
       },
       confidence: {
         type: 'number',
         minimum: 0,
         maximum: 1,
-        description:
-          'Confidence in the classification and project assignment. 0.9+ for "I am sure"; 0.5–0.9 for "probably right"; <0.5 for "guessing".',
+        description: '0..1 confidence in classification + project match.',
       },
       confidenceReason: {
         type: 'string',
-        description: 'One sentence explaining how you arrived at the confidence score.',
+        description: 'One sentence: how you arrived at the confidence score.',
       },
       needsClarification: {
         type: 'boolean',
-        description:
-          'True if a human reviewer needs to answer a question before this item can be filed.',
+        description: 'True if a human must answer something before filing.',
       },
       clarificationQuestion: {
-        type: ['string', 'null'],
-        description: 'The question to ask the human, if needsClarification is true.',
+        type: 'string',
+        description: 'Question for the human; omit if needsClarification is false.',
       },
     },
   },

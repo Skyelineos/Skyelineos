@@ -6,7 +6,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { AlertCircle, Key, Mail, User, Calendar, Clock } from 'lucide-react';
+import { AlertCircle, Key, Mail, User, Calendar, Clock, MessageSquare } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
@@ -37,6 +38,7 @@ export function PortalAccessModal({ contact, open, onClose }: PortalAccessModalP
   );
   const [showPasswordReset, setShowPasswordReset] = useState(false);
   const [newPassword, setNewPassword] = useState('');
+  const [smsConsent, setSmsConsent] = useState(false);
 
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -128,7 +130,8 @@ export function PortalAccessModal({ contact, open, onClose }: PortalAccessModalP
       portalEmail,
       portalPassword,
       portalRole,
-    });
+      smsConsent,
+    } as any);
   };
 
   const handleResetPassword = () => {
@@ -318,6 +321,24 @@ export function PortalAccessModal({ contact, open, onClose }: PortalAccessModalP
                       <SelectItem value="designer">Designer Portal</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+
+                {/* SMS opt-in — admin confirms consent when granting portal access */}
+                <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                  <div className="flex items-start gap-3">
+                    <Checkbox
+                      id="portal-sms-consent"
+                      checked={smsConsent}
+                      onCheckedChange={(checked) => setSmsConsent(Boolean(checked))}
+                      className="mt-0.5"
+                    />
+                    <label htmlFor="portal-sms-consent" className="text-xs text-gray-600 leading-relaxed cursor-pointer">
+                      <span className="flex items-center gap-1 font-medium text-gray-700 mb-0.5">
+                        <MessageSquare className="h-3 w-3" /> SMS Consent (Optional)
+                      </span>
+                      {contact.name} has agreed to receive text messages from Skyeline Homes about scheduling, bids, and project updates. Msg &amp; data rates may apply. They can reply STOP to unsubscribe.
+                    </label>
+                  </div>
                 </div>
 
                 <div>

@@ -53,8 +53,8 @@ export function qboEntityForCategory(category: string): QboEntityType {
 export type AiInboxLane = 'needs_review' | 'auto_filed' | 'ask' | 'ignored';
 
 // One configured intake mailbox. Up to MAX_INTAKE_MAILBOXES are stored on
-// ai_inbox_config/global.mailboxes; n8n runs one Gmail trigger per address and
-// stamps the `mailbox` field so items are filterable by which inbox they hit.
+// ai_inbox_config/global.mailboxes; one ingest call per address stamps the
+// `mailbox` field so items are filterable by which inbox they hit.
 export const MAX_INTAKE_MAILBOXES = 3;
 export interface IntakeMailbox {
   address: string;     // e.g. accounting@skyelinehomes.com
@@ -85,7 +85,7 @@ export interface AiInboxExtraction {
   invoiceNumber: string | null;
   // Suggested QBO expense account NAME (resolved to an account id at sync time).
   qboAccountSuggestion: string | null;
-  // Recommended Gmail label so the n8n flow can file the thread back in Gmail.
+  // Recommended Gmail label so the ingest flow can file the thread back in Gmail.
   gmailLabelRecommendation: string | null;
   // Project match (against live `projects`). projectId is the Firestore doc id.
   projectId: string | null;

@@ -1,5 +1,6 @@
 import { AppLayout } from '@/components/layout/AppLayout';
 import { QboConnectionCard } from '@/components/settings/QboConnectionCard';
+import { CalendarConnectionCard } from '@/components/settings/CalendarConnectionCard';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -35,6 +36,7 @@ import {
 import { useTheme } from '@/contexts/ThemeContext';
 import { ThemeSettings } from '@/components/settings/ThemeSettings';
 import { NotificationTriggersSettings } from '@/components/settings/NotificationTriggersSettings';
+import { useFcmToken } from '@/hooks/useFcmToken';
 import { ProjectDefaultsSettings } from '@/components/settings/ProjectDefaultsSettings';
 import DefaultAgreementUpload from '@/components/admin/DefaultAgreementUpload';
 import { useBranding } from '@/contexts/BrandingContext';
@@ -72,7 +74,7 @@ export default function Settings() {
 
   const createLocationMutation = useMutation({
     mutationFn: async (data: InsertWeatherLocation) => {
-      return apiRequest('POST', '/api/weather/locations', data);
+      return apiRequest('/api/weather/locations', { method: 'POST', body: JSON.stringify(data) });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/weather/locations'] });
@@ -94,7 +96,7 @@ export default function Settings() {
 
   const deleteLocationMutation = useMutation({
     mutationFn: async (id: number) => {
-      return apiRequest('DELETE', `/api/weather/locations/${id}`);
+      return apiRequest(`/api/weather/locations/${id}`, { method: 'DELETE' });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/weather/locations'] });
@@ -114,7 +116,7 @@ export default function Settings() {
 
   const setDefaultMutation = useMutation({
     mutationFn: async (id: number) => {
-      return apiRequest('POST', `/api/weather/locations/${id}/set-default`);
+      return apiRequest(`/api/weather/locations/${id}/set-default`, { method: 'POST' });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/weather/locations'] });
@@ -291,6 +293,7 @@ export default function Settings() {
 
           <TabsContent value="integrations" className="space-y-6">
             <QboConnectionCard />
+            <CalendarConnectionCard />
           </TabsContent>
 
           <TabsContent value="defaults" className="space-y-6">
@@ -497,6 +500,8 @@ export default function Settings() {
                     <Switch />
                   </div>
                 </div>
+                <Separator />
+                <PushNotificationsCard />
                 <Separator />
                 <div className="space-y-2">
                   <Label>Notification Frequency</Label>
@@ -992,5 +997,74 @@ export default function Settings() {
         </Tabs>
       </div>
     </AppLayout>
+  );
+}
+// ─── Push Notifications card ─────────────────────────────────────────────
+// Lives inside the Notifications tab. Surfaces the current browser
+// permission, the on-device token status, and an Enable button when the
+// user hasn't opted in yet. The Settings page is intentionally the place
+// to recover from "Maybe Later" without redeploying or hunting for hidden
+// flags.
+
+function PushNotificationsCard() {
+  const { permission, token, requestPermission } = useFcmToken();
+
+  let permLabel = 'Not set';
+  let permColor = 'text-gray-600';
+  if (permission === 'granted') { permLabel = 'Granted'; permColor = 'text-green-600'; }
+  else if (permission === 'denied') { permLabel = 'Blocked'; permColor = 'text-red-600'; }
+
+  const tokenLabel = token ? 'Active on this device' : (permission === 'granted' ? 'Registering…' : 'Not registered');
+
+  return (
+    <div className="rounded-md border border-gray-200 bg-white p-4 space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <Bell className="h-4 w-4 text-gray-700" />
+            <Label className="text-sm font-semibold">Push Notifications</Label>
+          </div>
+          <p className="text-sm text-gray-500 mt-1">
+            Get instant alerts in your browser for tasks, bids, and project milestones.
+          </p>
+        </div>
+        {permission !== 'granted' ? (
+          <Button
+            size="sm"
+            onClick={requestPermission}
+            disabled={permission === 'denied'}
+            className="text-white"
+            style={{ backgroundColor: '#C9A96E' }}
+            title={permission === 'denied' ? 'Re-enable in your browser site settings first' : undefined}
+          >
+            Enable
+          </Button>
+        ) : !token ? (
+          <Button
+            size="sm"
+            onClick={requestPermission}
+            variant="outline"
+          >
+            Retry
+          </Button>
+        ) : null}
+      </div>
+      <div className="grid grid-cols-2 gap-3 text-xs">
+        <div>
+          <div className="text-gray-500">Permission</div>
+          <div className={`mt-0.5 font-medium ${permColor}`}>{permLabel}</div>
+        </div>
+        <div>
+          <div className="text-gray-500">This device</div>
+          <div className="mt-0.5 font-medium text-gray-800">{tokenLabel}</div>
+        </div>
+      </div>
+      {permission === 'denied' && (
+        <p className="text-xs text-gray-500">
+          Notifications are blocked. To re-enable, open your browser site settings for this domain
+          and allow notifications, then refresh.
+        </p>
+      )}
+    </div>
   );
 }

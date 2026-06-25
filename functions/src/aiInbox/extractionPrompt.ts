@@ -33,18 +33,19 @@ Rules:
 - amountUsd must be a number (e.g. 4820.55) or null. Never a string.
 - Financial items (invoices, receipts, bank alerts) are ALWAYS reviewed by a human before anything is written to QuickBooks — extract carefully but you are not authorizing a payment.
 - Prefer an exact project id from the list. Never invent an id.
-- Always call the extract_inbox_item tool. Do not return prose.`;
+- Always call the extract_inbox_item tool. Do not return prose.
+- Omit optional fields entirely when unknown (do not pass them as null). Absence is treated as null.`;
 
+// NOTE on schema shape: Anthropic's tool input_schema now rejects
+// `type: ['string','null']` arrays. Optional fields are non-required — the
+// model omits them when unknown and downstream code treats missing as null.
 export const EXTRACTION_TOOL = {
   name: 'extract_inbox_item',
-  description:
-    'Extract structured finance/intake data from one incoming item. Always invoke this tool — never return prose.',
+  description: 'Extract structured finance/intake data from one incoming item.',
   input_schema: {
     type: 'object',
     required: [
       'category',
-      'projectId',
-      'amountUsd',
       'summary',
       'confidence',
       'confidenceReason',
@@ -52,23 +53,23 @@ export const EXTRACTION_TOOL = {
     ],
     properties: {
       category: { type: 'string', enum: [...AI_INBOX_CATEGORIES] },
-      vendorName: { type: ['string', 'null'] },
-      amountUsd: { type: ['number', 'null'], description: 'Total amount in USD as a number, or null.' },
-      currency: { type: ['string', 'null'], description: 'ISO currency code; default USD.' },
-      documentDate: { type: ['string', 'null'], description: 'ISO yyyy-mm-dd of the document, or null.' },
-      dueDate: { type: ['string', 'null'], description: 'ISO yyyy-mm-dd due date for invoices, or null.' },
-      invoiceNumber: { type: ['string', 'null'] },
-      qboAccountSuggestion: { type: ['string', 'null'], description: 'Suggested QBO expense account name.' },
-      gmailLabelRecommendation: { type: ['string', 'null'], description: 'Recommended Gmail label.' },
-      projectId: { type: ['string', 'null'], description: 'Exact project id from KNOWN PROJECTS, or null.' },
-      projectName: { type: ['string', 'null'] },
-      hasInvoiceLink: { type: 'boolean', description: 'True if the invoice is behind a login/portal link and not present in the text or an attachment.' },
-      invoiceLinkUrl: { type: ['string', 'null'], description: 'The portal/invoice URL to open, if hasInvoiceLink is true.' },
-      summary: { type: 'string', description: 'One-line human summary of the item.' },
+      vendorName: { type: 'string', description: 'Vendor; omit if unknown.' },
+      amountUsd: { type: 'number', description: 'Total in USD; omit if none.' },
+      currency: { type: 'string', description: 'ISO currency code; default USD.' },
+      documentDate: { type: 'string', description: 'ISO yyyy-mm-dd; omit if none.' },
+      dueDate: { type: 'string', description: 'ISO yyyy-mm-dd; omit if none.' },
+      invoiceNumber: { type: 'string', description: 'Invoice number; omit if none.' },
+      qboAccountSuggestion: { type: 'string', description: 'Suggested QBO expense account.' },
+      gmailLabelRecommendation: { type: 'string', description: 'Recommended Gmail label.' },
+      projectId: { type: 'string', description: 'Project id from KNOWN PROJECTS; omit if unknown.' },
+      projectName: { type: 'string', description: 'Project name; omit if unknown.' },
+      hasInvoiceLink: { type: 'boolean', description: 'True if invoice is behind a login/portal link.' },
+      invoiceLinkUrl: { type: 'string', description: 'Portal/invoice URL if hasInvoiceLink.' },
+      summary: { type: 'string', description: 'One-line summary of the item.' },
       confidence: { type: 'number', minimum: 0, maximum: 1 },
       confidenceReason: { type: 'string' },
       needsClarification: { type: 'boolean' },
-      clarificationQuestion: { type: ['string', 'null'] },
+      clarificationQuestion: { type: 'string', description: 'Question for human; omit if none.' },
     },
   },
 };

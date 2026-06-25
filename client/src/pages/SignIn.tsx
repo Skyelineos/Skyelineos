@@ -16,7 +16,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Building2, Mail, Lock, Loader2, CheckCircle2, User, HardHat, UserCheck, Users, Palette, ChevronRight, ArrowLeft, MapPin, Wrench, Phone, Compass } from 'lucide-react';
+import { Building2, Mail, Lock, Loader2, CheckCircle2, User, HardHat, UserCheck, Users, Palette, ChevronRight, ArrowLeft, MapPin, Wrench, Phone, Compass, MessageSquare } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
@@ -83,6 +84,7 @@ export default function SignIn() {
   const [regOtherTrade, setRegOtherTrade] = useState("");
   const [regProjectAddress, setRegProjectAddress] = useState("");
   const [regProjectCity, setRegProjectCity] = useState("");
+  const [regSmsConsent, setRegSmsConsent] = useState(false);
 
   const { user, isAuthenticated, loading, authLoading } = useAuth();
 
@@ -229,6 +231,7 @@ export default function SignIn() {
     setRegOtherTrade("");
     setRegProjectAddress("");
     setRegProjectCity("");
+    setRegSmsConsent(false);
     setRegisterOpen(true);
   };
 
@@ -432,6 +435,18 @@ export default function SignIn() {
         }
       }
 
+      // If they opted into SMS, record consent on the contact record too
+      if (linkedContactId && regSmsConsent) {
+        try {
+          await setDoc(doc(db, 'contacts', linkedContactId), {
+            smsOptIn: true,
+            smsOptInAt: serverTimestamp(),
+            smsOptInMethod: 'self_registration',
+            updatedAt: serverTimestamp(),
+          }, { merge: true });
+        } catch { /* best-effort */ }
+      }
+
       // Write user profile to Firestore
       await setDoc(doc(db, 'users', uid), {
         email: regEmail,
@@ -453,6 +468,8 @@ export default function SignIn() {
         active: accountType !== 'team',
         status: accountType === 'team' ? 'pending_approval' : 'active',
         requestedPermissions: accountType === 'team' ? regPermissions : [],
+        smsOptIn: regSmsConsent,
+        ...(regSmsConsent ? { smsOptInAt: serverTimestamp(), smsOptInMethod: 'self_registration' } : {}),
         createdAt: serverTimestamp(),
       });
 
@@ -875,6 +892,26 @@ export default function SignIn() {
                   </div>
                 </div>
               )}
+
+              {/* SMS opt-in — voluntary, separate from account creation */}
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2">
+                <div className="flex items-start gap-3">
+                  <Checkbox
+                    id="sms-consent"
+                    checked={regSmsConsent}
+                    onCheckedChange={(checked) => setRegSmsConsent(Boolean(checked))}
+                    className="mt-0.5"
+                  />
+                  <label htmlFor="sms-consent" className="text-xs text-gray-600 leading-relaxed cursor-pointer">
+                    <span className="flex items-center gap-1 font-medium text-gray-700 mb-0.5">
+                      <MessageSquare className="h-3 w-3" /> SMS Updates (Optional)
+                    </span>
+                    I agree to receive text messages from Skyeline Homes about bids, scheduling, and project updates.
+                    Message &amp; data rates may apply. Reply STOP to unsubscribe. Consent is not required to create an account or use the service.{' '}
+                    <a href="/sms-terms" target="_blank" rel="noopener noreferrer" className="underline hover:text-gray-900">SMS Terms</a>
+                  </label>
+                </div>
+              </div>
 
               <DialogFooter>
                 <Button

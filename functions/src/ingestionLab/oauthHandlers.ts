@@ -19,6 +19,7 @@
 // Add the matching redirect URIs to the Google Cloud OAuth client:
 //   https://skyelineos.web.app/api/ingestionLab/oauth/gmail/callback
 //   https://skyelineos.web.app/api/ingestionLab/oauth/drive/callback
+//   https://skyelineos.web.app/api/ingestionLab/oauth/calendar/callback
 
 import * as admin from 'firebase-admin';
 import type { Express } from 'express';
@@ -26,7 +27,7 @@ import { adminOnly } from './adminAuth';
 
 const APP_BASE = 'https://skyelineos.web.app';
 
-type Provider = 'gmail' | 'drive';
+type Provider = 'gmail' | 'drive' | 'calendar';
 
 // openid + email are included so we can resolve the connected account email
 // via the userinfo endpoint after token exchange — without surfacing email
@@ -34,6 +35,7 @@ type Provider = 'gmail' | 'drive';
 const SCOPES: Record<Provider, string> = {
   gmail: 'https://www.googleapis.com/auth/gmail.readonly openid email',
   drive: 'https://www.googleapis.com/auth/drive.readonly openid email',
+  calendar: 'https://www.googleapis.com/auth/calendar openid email',
 };
 
 function redirectUri(provider: Provider): string {
@@ -60,7 +62,7 @@ function configRef(db: FirebaseFirestore.Firestore) {
 // Public registration entry — called from index.ts after the Express app is
 // constructed. Wires up start + callback pairs for both providers.
 export function registerIngestionLabOAuth(app: Express, db: FirebaseFirestore.Firestore): void {
-  for (const provider of ['gmail', 'drive'] as Provider[]) {
+  for (const provider of ['gmail', 'drive', 'calendar'] as Provider[]) {
     registerProviderRoutes(app, db, provider);
   }
 }

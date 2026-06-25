@@ -12,7 +12,10 @@ import { registerTaskLibrary } from './taskLibrary/routes';
 import { registerExtractEstimateRoute } from './estimates/extractEstimateRoute';
 import { registerBidCompareRoutes } from './bids/analyzeBidsRoute';
 import { registerTaskSignoffRoute } from './tasks/signoffRoute';
+import { registerDailyWorkflowRoutes } from './tasks/dailyWorkflowRoute';
 import { registerEstimateRoutes }   from './estimates/estimateRoutes';
+import { registerExpenseRoutes }    from './expenses/expenseRoutes';
+import { registerDrawRoutes }       from './expenses/drawRoutes';
 
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -24,7 +27,17 @@ app.use(cors({ origin: true }));
 // Raised from the 100kb default so the AI Inbox ingest route can accept
 // base64-encoded invoice PDFs / receipt images inline (a ~20MB PDF is ~27MB
 // base64). Other routes are unaffected — this is just an upper bound.
-app.use(express.json({ limit: '30mb' }));
+// `verify` captures the raw request bytes on `req.rawBody` so webhook
+// handlers (currently just the Intuit QBO webhook in qbo/webhookRoute.ts) can
+// HMAC-verify the payload Intuit signed. The verify callback runs before the
+// JSON parser stores the parsed object on req.body, so we get the exact bytes
+// without disabling the global parser.
+app.use(express.json({
+  limit: '30mb',
+  verify: (req: any, _res: any, buf: Buffer) => {
+    if (buf && buf.length) req.rawBody = buf;
+  },
+}));
 // Twilio inbound webhooks (STOP/HELP) post application/x-www-form-urlencoded.
 app.use(express.urlencoded({ extended: false }));
 
@@ -51,7 +64,8 @@ async function authMiddleware(req: any, res: any, next: any) {
 // bypass the gate. Each has its own out-of-band gating (Twilio signature,
 // magic-link token, OAuth state nonce, shared secret, honeypot+validation).
 //
-//   POST /api/sms/inbound                         Twilio webhook (signed)
+//   POST /api/sms/inbound                         Twilio webhook (legacy URL, signed)
+//   POST /api/sms/webhook                         Twilio webhook (Phase 1 SMS Agent, signed)
 //   GET  /api/bid-requests/by-token/:token        Magic-link landing (token is auth)
 //   POST /api/leads/intake                        LEAD_INTAKE_SECRET shared secret
 //   POST /api/leads/public-intake                 Honeypot + strict validation
@@ -63,14 +77,26 @@ async function authMiddleware(req: any, res: any, next: any) {
 import { registerSmsInboundRoute }      from './notifications/smsInboundRoute';
 import { registerBidTokenEndpoint }     from './bids/bidTokenEndpoint';
 import { registerLeadIntakeRoute }      from './leads/intakeRoute';
-import { registerAiInboxIngest }        from './aiInbox/ingestRoute';
+// QBO → Skyeline Customer/Job sync. The webhook POST is a public Intuit
+// callback (HMAC-signed) and the GET /sync-customers manual trigger verifies
+// its own Firebase ID token inside the handler, so both live with the other
+// public routes ahead of the `/api` auth gate.
+import { registerQboWebhookRoutes }     from './qbo/webhookRoute';
+// Skyeline Homes SMS Agent (Phase 1). The webhook is signed by Twilio so it
+// lives in the public allowlist alongside /api/sms/inbound. The staff routes
+// (/api/sms/send, /api/sms/threads, /api/sms/contacts, /api/sms/generate)
+// register AFTER the /api auth gate — see the late-bound section below.
+import { registerSmsWebhookRoute }      from './sms/routes';
+// Skyeline Homes Voice AI Receptionist (Phase 1) — Twilio voice webhooks.
+// Public (Twilio signature is the gate). Mounted BEFORE the /api auth
+// middleware so Twilio's POSTs aren't rejected for missing JWTs.
+import { registerVoiceRoutes }          from './voice/voiceRoutes';
 registerSmsInboundRoute(app, admin.firestore());
+registerSmsWebhookRoute(app, admin.firestore());
+registerVoiceRoutes(app, admin.firestore());
 registerBidTokenEndpoint(app, admin.firestore());
 registerLeadIntakeRoute(app, admin.firestore());
-// AI Inbox n8n ingestion — authed by the N8N_INGEST_SECRET shared-secret
-// header (not a Firebase token), so it lives in the public allowlist. The
-// route itself rejects any call without the correct secret.
-registerAiInboxIngest(app, admin.firestore()); // POST /api/ai-inbox/ingest
+registerQboWebhookRoutes(app, admin.firestore()); // POST /api/qbo/webhook + GET /api/qbo/sync-customers
 
 // /api/health stays public (liveness probe).
 app.get('/api/health', async (_req: any, res: any) => {
@@ -102,7 +128,7 @@ app.get('/api/health', async (_req: any, res: any) => {
 // These are top-level browser redirects (OAuth callbacks) — they can't carry
 // a Bearer header, so the upstream state nonce is the gate instead.
 const API_AUTH_ALLOWLIST = [
-  /^\/ingestionLab\/oauth\/(gmail|drive)\/callback$/,
+  /^\/ingestionLab\/oauth\/(gmail|drive|calendar)\/callback$/,
 ];
 app.use('/api', (req: any, res: any, next: any) => {
   if (API_AUTH_ALLOWLIST.some((re) => re.test(req.path))) return next();
@@ -121,9 +147,9 @@ registerDriveIngester(app, db);      // POST /api/ingestionLab/ingest/drive
 registerUploadEndpoint(app, db);     // POST /api/ingestionLab/upload
 registerBrainPass(app, db);          // POST /api/ingestionLab/brain/process
 
-// AI Inbox — admin review/approval routes (the n8n ingest route is registered
-// above the gate). Approve is the only path that writes to QuickBooks, and only
-// after a human confirms. See functions/src/aiInbox/.
+// AI Inbox — admin review/approval routes. Approve is the only path that
+// writes to QuickBooks, and only after a human confirms.
+// See functions/src/aiInbox/.
 import { registerAiInboxReviewRoutes } from './aiInbox/reviewRoutes';
 registerAiInboxReviewRoutes(app, db); // /api/ai-inbox/{status,:id/approve,:id/reject,:id/reprocess}
 
@@ -144,7 +170,10 @@ registerTaskLibrary(app, db);        // /api/taskLibrary/...
 registerExtractEstimateRoute(app, authMiddleware); // POST /api/extract-estimate
 registerBidCompareRoutes(app, authMiddleware);
 registerTaskSignoffRoute(app, db);   // POST /api/tasks/:taskId/signoff  (GC/PM/admin approval flow)
+registerDailyWorkflowRoutes(app, db); // /api/projects/:id/daily-workflow, /api/daily-digest, /api/project-tasks/*, /api/material-orders/*
 registerEstimateRoutes(app, db);     // POST /api/estimates/:id/{send-to-client,client-response}
+registerExpenseRoutes(app, db);      // /api/expenses/{capture,:id,:id/reconcile} + /api/projects/:id/expenses
+registerDrawRoutes(app, db);         // /api/projects/:id/draw-periods{,/current,/:periodId/{submit,mark-paid,reconcile}}
 
 // Real Firestore API endpoints
 app.get('/api/projects', async (req: any, res: any) => {
@@ -2169,6 +2198,12 @@ registerBidRequestRoute(app, admin.firestore());
 import { registerQboPaymentLink } from './qbo/paymentLink';
 registerQboPaymentLink(app, admin.firestore());
 
+// QBO two-way sync admin routes:
+//   POST /api/qbo/reconcile     — match recent QBO Purchases to expenses
+//   GET  /api/qbo/sync-status   — connection + token + last-sync snapshot
+import { registerQboSyncRoutes } from './qbo/reconcileRoute';
+registerQboSyncRoutes(app, admin.firestore());
+
 // (Public magic-link bid endpoint /api/bid-requests/by-token/:token is
 // registered at the top of the file in the public allowlist, BEFORE the gate.)
 
@@ -2197,6 +2232,29 @@ registerDeleteBidRequestRoute(app, admin.firestore());
 // Route: POST /api/bids/award
 import { registerAwardBidRoute } from './bids/awardBidRoute';
 registerAwardBidRoute(app, admin.firestore());
+import { registerPoRoutes } from './bids/generatePoRoute';
+registerPoRoutes(app, admin.firestore());
+
+// Bid submission — closes the loop: writes the bid AND flips the parent
+// bidRequest.vendors[i].bidStatus = 'submitted' atomically. Without this,
+// Tyler's dashboard kept showing invited subs as "pending" forever.
+// Route: POST /api/bids/submit
+import { registerSubmitBidRoute } from './bids/submitBidRoute';
+registerSubmitBidRoute(app, admin.firestore());
+
+// Bid summary — per-project at-a-glance of every bid package + vendor
+// status (INVITED → VIEWED → SUBMITTED → ANALYZED → AWARDED).
+// Route: GET /api/projects/:id/bids/summary
+import { registerBidsSummaryRoute } from './bids/bidsSummaryRoute';
+registerBidsSummaryRoute(app, admin.firestore());
+
+// Bid coverage — per-project trade-by-trade gap analysis. Walks the 22
+// canonical construction phases from phaseCatalog and reports MISSING /
+// INVITED / SUBMITTED / ANALYZED / AWARDED for each. Drives the
+// BidCoveragePanel on the project Bids tab.
+// Route: GET /api/projects/:id/bids/coverage
+import { registerBidCoverageRoute } from './bids/bidCoverageRoute';
+registerBidCoverageRoute(app, admin.firestore());
 
 // Route: POST /api/contracts/:id/commencement
 import { registerCommenceRoute } from './contracts/commenceRoute';
@@ -2240,6 +2298,28 @@ registerNotificationRulesRoutes(app, admin.firestore());
 import { registerFireTriggerRoute } from './notifications/fireTriggerRoute';
 registerFireTriggerRoute(app, admin.firestore());
 
+// Skyeline Homes SMS Agent (Phase 1) — staff routes. The webhook was
+// registered above the gate (Twilio signature is the auth). These routes are
+// gated by staffOnly inside the registrar:
+//   POST /api/sms/send
+//   GET  /api/sms/threads
+//   GET  /api/sms/threads/:id/messages
+//   POST /api/sms/contacts
+//   GET  /api/sms/contacts
+//   POST /api/sms/generate
+// Uses ANTHROPIC_API_KEY + TWILIO_* secrets already bound to the api function.
+import { registerSmsStaffRoutes } from './sms/routes';
+registerSmsStaffRoutes(app, admin.firestore());
+
+// Skyeline Homes Voice AI Receptionist — staff routes:
+//   GET /api/voice/calls
+//   GET /api/voice/calls/:callSid
+//   GET /api/projects/:id/calls
+// Gated by staffOnly inside the registrar. Uses ANTHROPIC_API_KEY +
+// TWILIO_* secrets already bound to the api function.
+import { registerVoiceAgentRoutes } from './voice/voiceAgentRoute';
+registerVoiceAgentRoutes(app, admin.firestore());
+
 // Catch-all 404 — must come AFTER all route registrations (QBO routes above included)
 app.use('*', (req: any, res: any) => {
   console.log(`❌ 404 - API endpoint not found: ${req.method} ${req.originalUrl}`);
@@ -2277,12 +2357,13 @@ exports.api = onRequest(
       'TWILIO_ACCOUNT_SID',
       'TWILIO_AUTH_TOKEN',
       'TWILIO_FROM_NUMBER',
+      // Skyeline Homes SMS Agent (Phase 1) signs Twilio webhook callbacks
+      // against this URL. Set after deploy: e.g. https://skyelineos.web.app/api/sms/webhook.
+      // When unset the validator falls back to the host header.
+      'TWILIO_WEBHOOK_URL',
       'APP_BASE_URL',
       // Crestview Solace lead-intake form (/api/leads/intake) shared secret.
       'LEAD_INTAKE_SECRET',
-      // AI Inbox: shared secret the n8n Gmail workflow presents to
-      // POST /api/ai-inbox/ingest (n8n can't carry a Firebase ID token).
-      'N8N_INGEST_SECRET',
       // QA harness: GitHub PAT (actions:write) to dispatch the qa-suite workflow,
       // and the shared bearer the workflow uses to post results back.
       'GH_DISPATCH_TOKEN',
@@ -2319,6 +2400,15 @@ export { dueSweep } from './notifications/scheduledDueSweep';
 //    active project that transitioned into amber/red since yesterday. Idempotent
 //    via projects.scheduleSlipLastFiredOn marker.
 export { scheduleSlipSweep } from './notifications/scheduleSlipSweep';
+
+// ── Skyeline OS task system: assignment + completion loop. ───────────────────
+//    dailyDigestSweep    7:30am MT — sends task reminders + Tyler's morning
+//                                     summary; also runs the overdue check.
+//    overdueTaskSweep    8:00am MT — standalone safety-net overdue pass that
+//                                     escalates HIGH-priority overdue tasks
+//                                     to Tyler via the notifications pipeline.
+export { dailyDigestSweep } from './tasks/dailyDigestCron';
+export { overdueTaskSweep } from './tasks/overdueChecker';
 
 // ── Auto-create Firebase Auth account for every contact with an email ────────
 // Lets any contact use the "Forgot password" flow without an admin first

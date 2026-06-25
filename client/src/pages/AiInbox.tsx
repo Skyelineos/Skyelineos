@@ -1,8 +1,8 @@
 // AI Inbox — admin-only production finance intake at /admin/ai-inbox.
 //
-// Gmail (via an n8n workflow) → POST /api/ai-inbox/ingest → Claude extraction →
-// project match + QBO categorization suggestion → human review → on approval,
-// a Bill (invoices) or Expense (receipts) is written to QuickBooks.
+// Gmail → Claude extraction → project match + QBO categorization suggestion →
+// human review → on approval, a Bill (invoices) or Expense (receipts) is
+// written to QuickBooks.
 //
 // This is the productized successor to the Ingestion Lab spike. It lives in its
 // own `ai_inbox_items` namespace and does not touch `ingestion_lab/`.
@@ -19,7 +19,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
-import { Inbox, Brain, DollarSign, CheckCircle2, AlertCircle, Plug, Zap, Mail, Plus, Trash2, Save } from 'lucide-react';
+import { Inbox, Brain, DollarSign, CheckCircle2, AlertCircle, Plug, Mail, Plus, Trash2, Save } from 'lucide-react';
 import { InboxItemCard } from '@/components/aiInbox/InboxItemCard';
 import type { AiInboxItem, AiInboxConfig, IntakeMailbox } from '@/components/aiInbox/types';
 import { MAX_INTAKE_MAILBOXES } from '@/components/aiInbox/types';
@@ -122,8 +122,8 @@ export default function AiInbox() {
             </div>
             <p className="text-gray-500 text-sm max-w-3xl">
               Gmail invoices, receipts, bank alerts, Home Depot receipts, and sub/client email
-              flow in via n8n, get read by Claude, matched to a project, and pre-categorized for
-              QuickBooks. Nothing posts to QuickBooks until you approve it.
+              get read by Claude, matched to a project, and pre-categorized for QuickBooks.
+              Nothing posts to QuickBooks until you approve it.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -165,13 +165,13 @@ export default function AiInbox() {
         </div>
 
         <Tabs defaultValue="review">
-          <TabsList>
-            <TabsTrigger value="review">Needs Review ({buckets.needsReview.length})</TabsTrigger>
-            <TabsTrigger value="autofiled">Auto-Filed ({buckets.autoFiled.length})</TabsTrigger>
-            <TabsTrigger value="ignored">Ignored ({buckets.ignored.length})</TabsTrigger>
-            <TabsTrigger value="approved">Approved ({buckets.approved.length})</TabsTrigger>
-            <TabsTrigger value="rejected">Rejected ({buckets.rejected.length})</TabsTrigger>
-            <TabsTrigger value="setup">Setup</TabsTrigger>
+          <TabsList className="flex flex-wrap gap-2 h-auto p-2 bg-gray-100 rounded-xl border border-gray-200">
+            <TabsTrigger value="review" className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium shadow-sm hover:bg-gray-50 data-[state=active]:bg-white data-[state=active]:border-gray-800 data-[state=active]:shadow-md data-[state=active]:font-semibold">Needs Review ({buckets.needsReview.length})</TabsTrigger>
+            <TabsTrigger value="autofiled" className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium shadow-sm hover:bg-gray-50 data-[state=active]:bg-white data-[state=active]:border-gray-800 data-[state=active]:shadow-md data-[state=active]:font-semibold">Auto-Filed ({buckets.autoFiled.length})</TabsTrigger>
+            <TabsTrigger value="ignored" className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium shadow-sm hover:bg-gray-50 data-[state=active]:bg-white data-[state=active]:border-gray-800 data-[state=active]:shadow-md data-[state=active]:font-semibold">Ignored ({buckets.ignored.length})</TabsTrigger>
+            <TabsTrigger value="approved" className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium shadow-sm hover:bg-gray-50 data-[state=active]:bg-white data-[state=active]:border-gray-800 data-[state=active]:shadow-md data-[state=active]:font-semibold">Approved ({buckets.approved.length})</TabsTrigger>
+            <TabsTrigger value="rejected" className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium shadow-sm hover:bg-gray-50 data-[state=active]:bg-white data-[state=active]:border-gray-800 data-[state=active]:shadow-md data-[state=active]:font-semibold">Rejected ({buckets.rejected.length})</TabsTrigger>
+            <TabsTrigger value="setup" className="rounded-lg border-2 px-4 py-2 text-sm font-semibold shadow-sm [&[data-state=active]]:bg-[#C9A96E] [&[data-state=active]]:border-[#A8864A] [&[data-state=active]]:text-white [&[data-state=active]]:shadow-md" style={{borderColor:'#C9A96E',backgroundColor:'#FBF6EE',color:'#7A5C2E'}}>⚙ Setup</TabsTrigger>
           </TabsList>
 
           <TabsContent value="review" className="mt-4">
@@ -195,7 +195,7 @@ export default function AiInbox() {
           </TabsContent>
           <TabsContent value="setup" className="mt-4 space-y-4">
             <MailboxEditor mailboxes={config?.mailboxes || []} getIdToken={getIdToken} />
-            <SetupCard qbo={qbo} />
+            <QboStatusCard qbo={qbo} />
           </TabsContent>
         </Tabs>
       </div>
@@ -286,7 +286,7 @@ function MailboxEditor({
         </div>
         <CardDescription>
           Connect up to {MAX_INTAKE_MAILBOXES} email addresses that feed this inbox (e.g. accounting@, your inbox, a shared box).
-          Add one n8n Gmail trigger per address, each sending <code>"mailbox": "&lt;address&gt;"</code> so items are tagged by which inbox they hit.
+          Each ingest call should include <code>"mailbox": "&lt;address&gt;"</code> so items are tagged by which inbox they hit.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -330,53 +330,24 @@ function MailboxEditor({
   );
 }
 
-function SetupCard({ qbo }: { qbo: { connected: boolean; env: string } }) {
+function QboStatusCard({ qbo }: { qbo: { connected: boolean; env: string } }) {
   return (
     <Card>
       <CardHeader>
         <div className="flex items-center gap-2">
-          <Zap className="w-5 h-5" style={{ color: GOLD }} />
-          <CardTitle>n8n ingestion endpoint</CardTitle>
+          <Plug className="w-5 h-5" style={{ color: GOLD }} />
+          <CardTitle>QuickBooks integration</CardTitle>
         </div>
         <CardDescription>
-          Point your n8n Gmail workflow at this endpoint. Authenticate with the shared secret
-          stored in Secret Manager as <code>N8N_INGEST_SECRET</code>.
+          QuickBooks is currently <strong>{qbo.connected ? `connected (${qbo.env})` : 'not connected'}</strong>.
+          Connect it in Settings to enable approve-and-sync.
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-3 text-sm text-gray-700">
-        <div>
-          <p className="font-medium text-gray-900">Endpoint</p>
-          <pre className="text-xs bg-gray-50 border border-gray-100 rounded p-2 mt-1 overflow-auto">
-{`POST https://skyelineos.web.app/api/ai-inbox/ingest
-Header: X-N8N-Secret: <N8N_INGEST_SECRET>
-Content-Type: application/json
-
-{
-  "messageId": "<gmail message id>",      // for idempotency
-  "threadId": "<gmail thread id>",
-  "mailbox": "accounting@skyelinehomes.com", // which intake inbox this hit
-  "from": { "email": "vendor@acme.com", "name": "Acme Supply" },
-  "subject": "Invoice #1234",
-  "text": "<plain-text email body>",
-  "gmailLabels": ["INBOX", "Invoices"],
-  "attachments": [
-    {
-      "filename": "invoice.pdf",
-      "mimeType": "application/pdf",
-      "content": "<base64 of the file>"     // PDFs + images are read by the AI
-    }
-  ],
-  "receivedAt": "2026-06-20T15:00:00Z"
-}`}
-          </pre>
-        </div>
+      <CardContent className="text-sm text-gray-700">
         <ul className="list-disc pl-5 space-y-1 text-gray-600">
-          <li>Items are deduplicated on <code>messageId</code> — n8n can retry safely.</li>
-          <li>Send the attachment <strong>bytes</strong> as base64 in <code>content</code> — Claude reads the PDF/receipt image directly (amount, vendor, line items). Each file ≤ 25&nbsp;MB.</li>
-          <li>Set <code>mailbox</code> per Gmail trigger so items are tagged by which of your connected inboxes they arrived on.</li>
-          <li>The brain runs inline; the response includes the recommended Gmail label so n8n can apply it back in Gmail.</li>
-          <li>Spam/marketing is auto-triaged to the <strong>Ignored</strong> tab; financial items always land in <strong>Needs Review</strong>. Nothing syncs to QuickBooks without your approval.</li>
-          <li>QuickBooks is currently <strong>{qbo.connected ? `connected (${qbo.env})` : 'not connected'}</strong> — connect it in Settings to enable approve-and-sync.</li>
+          <li>Spam/marketing is auto-triaged to the <strong>Ignored</strong> tab; financial items always land in <strong>Needs Review</strong>.</li>
+          <li>Nothing syncs to QuickBooks without your approval.</li>
+          <li>Each ingested item runs through Claude inline; PDFs and receipt images are read directly (vendor, amount, line items).</li>
         </ul>
       </CardContent>
     </Card>

@@ -44,28 +44,33 @@ For each item give:
 
 Always call the extract_communications tool. If nothing is actionable, return an empty items array. Be conservative: a handful of accurate items beats many speculative ones.`;
 
+// NOTE on schema shape: Anthropic's tool input_schema is JSON Schema Draft
+// 2020-12 but the API has tightened — `type: ['string','null']` arrays and
+// `null` inside `enum` arrays are rejected with "provider rejected the
+// request schema or tool payload". We keep a single `type` per field and
+// make optional fields simply non-required so the model can omit them.
 export const EXTRACTION_TOOL = {
   name: 'extract_communications',
-  description: 'Return the structured items extracted from a construction conversation thread.',
+  description: 'Return structured items extracted from a conversation thread.',
   input_schema: {
     type: 'object',
     properties: {
       items: {
         type: 'array',
-        description: 'The extracted items. Empty array if nothing is actionable.',
+        description: 'Extracted items; empty array if nothing actionable.',
         items: {
           type: 'object',
           properties: {
             entityType: { type: 'string', enum: ENTITY_TYPES as unknown as string[] },
             summary: { type: 'string' },
-            ownerName: { type: ['string', 'null'] },
-            dueDate: { type: ['string', 'null'], description: 'YYYY-MM-DD or null' },
-            priority: { type: ['string', 'null'], enum: ['low', 'normal', 'high', null] as any },
+            ownerName: { type: 'string', description: 'Owner name; omit if not stated.' },
+            dueDate: { type: 'string', description: 'YYYY-MM-DD; omit if none.' },
+            priority: { type: 'string', enum: ['low', 'normal', 'high'] },
             tradeMentions: { type: 'array', items: { type: 'string' } },
-            sourceQuote: { type: ['string', 'null'] },
+            sourceQuote: { type: 'string', description: 'Short verbatim snippet; omit if none.' },
             confidence: { type: 'number' },
             needsClarification: { type: 'boolean' },
-            clarificationQuestion: { type: ['string', 'null'] },
+            clarificationQuestion: { type: 'string', description: 'Question for human; omit if none.' },
           },
           required: ['entityType', 'summary', 'confidence'],
         },

@@ -1,7 +1,7 @@
 // AI Inbox brain — runs one item through Claude and returns a normalized
-// extraction. Shared by the n8n ingest route (inline at intake) and the
-// /reprocess route. Enforces a rolling daily spend cap stored in
-// ai_inbox_config/global, mirroring the Ingestion Lab budget guardrail.
+// extraction. Shared by the /reprocess route and any future ingest paths.
+// Enforces a rolling daily spend cap stored in ai_inbox_config/global,
+// mirroring the Ingestion Lab budget guardrail.
 
 import type { firestore as adminFirestore } from 'firebase-admin';
 import * as admin from 'firebase-admin';

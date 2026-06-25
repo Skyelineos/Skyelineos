@@ -11,6 +11,8 @@ import { ConfirmProvider } from '@/hooks/use-confirm';
 import { BrandingProvider } from '@/contexts/BrandingContext';
 // Firebase sign-in page imported below
 import { NotificationCenter } from '@/components/notifications/NotificationCenter';
+import { PushNotificationPrompt } from '@/components/notifications/PushNotificationPrompt';
+import { QuickExpenseFAB } from '@/components/expenses/QuickExpenseFAB';
 import ProtectedRoute from '@/auth/ProtectedRoute';
 import { RoleGuard } from '@/components/auth/RoleGuard';
 import { RoleBasedRedirect } from '@/components/auth/RoleBasedRedirect';
@@ -73,6 +75,7 @@ const Bills = lazy(() => import('@/pages/Bills'));
 const ContentStudio = lazy(() => import('@/pages/ContentStudio'));
 const SiteLog = lazy(() => import('@/pages/SiteLog'));
 const Tasks = lazy(() => import('@/pages/Tasks'));
+const DailyDigest = lazy(() => import('@/pages/DailyDigest'));
 const ChangeOrders = lazy(() => import('@/pages/ChangeOrders'));
 const Timesheet = lazy(() => import('@/pages/Timesheet'));
 const Safety = lazy(() => import('@/pages/Safety'));
@@ -788,7 +791,9 @@ function Router() {
             showNotAuthorized
           >
             <Suspense fallback={<MinimalSpinner title="Loading Settings" />}>
-              <Settings />
+              <ErrorBoundary>
+                <Settings />
+              </ErrorBoundary>
             </Suspense>
           </RoleGuard>
         </ProtectedRoute>
@@ -990,6 +995,19 @@ function Router() {
           >
             <Suspense fallback={<MinimalSpinner title="Loading Tasks" />}>
               <Tasks />
+            </Suspense>
+          </RoleGuard>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/daily">
+        <ProtectedRoute>
+          <RoleGuard
+            allowedRoles={['admin', 'gc', 'projectManager']}
+            showNotAuthorized
+          >
+            <Suspense fallback={<MinimalSpinner title="Loading Daily Digest" />}>
+              <DailyDigest />
             </Suspense>
           </RoleGuard>
         </ProtectedRoute>
@@ -1240,6 +1258,8 @@ function AppContent() {
       <NavigationHandler />
       <Router />
       <NotificationCenter />
+      <PushNotificationPrompt />
+      <QuickExpenseFAB />
     </>
   );
 }

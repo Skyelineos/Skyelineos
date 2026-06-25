@@ -176,18 +176,6 @@ const INTEGRATIONS: Integration[] = [
     manageUrl: 'https://console.cloud.google.com/security/secret-manager?project=skyelineos',
   },
   {
-    name: 'AI Inbox Ingest (n8n)',
-    vendor: 'SkyelineOS',
-    category: 'AI / Automation',
-    icon: ShieldCheck,
-    description:
-      'Shared secret that protects the public POST /api/ai-inbox/ingest endpoint. The n8n Gmail workflow presents it in the X-N8N-Secret header to push invoices/receipts/bank alerts/sub+client email into the AI Inbox, where Claude extracts + project-matches them and an admin approves before anything syncs to QuickBooks. n8n can\'t carry a Firebase token, so this secret is the gate.',
-    usedIn: ['AI Inbox', 'n8n Gmail workflow'],
-    secrets: ['N8N_INGEST_SECRET'],
-    status: 'active',
-    manageUrl: 'https://console.cloud.google.com/security/secret-manager?project=skyelineos',
-  },
-  {
     name: 'App Base URL',
     vendor: 'SkyelineOS',
     category: 'Config',

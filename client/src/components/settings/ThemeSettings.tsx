@@ -244,25 +244,25 @@ export function ThemeSettings() {
           <div className="space-y-3">
             <div className="flex items-center gap-2 flex-wrap">
               <Button 
-                variant="accent"
+                variant={"accent" as any}
                 style={hasUnsavedChanges ? { backgroundColor: pendingColor, borderColor: pendingColor } : undefined}
               >
                 Accent Button
               </Button>
               <Button 
-                variant="accent-outline"
+                variant={"accent-outline" as any}
                 style={hasUnsavedChanges ? { borderColor: pendingColor, color: pendingColor } : undefined}
               >
                 Accent Outline
               </Button>
               <Badge 
-                variant="accent"
+                variant={"accent" as any}
                 style={hasUnsavedChanges ? { backgroundColor: pendingColor } : undefined}
               >
                 Accent Badge
               </Badge>
               <Badge 
-                variant="accent-outline"
+                variant={"accent-outline" as any}
                 style={hasUnsavedChanges ? { borderColor: pendingColor, color: pendingColor } : undefined}
               >
                 Outlined Badge

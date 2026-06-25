@@ -4,6 +4,7 @@ import BudgetTab from '@/components/budget/BudgetTab';
 import { useOptimizedProject } from '@/hooks/useOptimizedProjects';
 import { ProjectDetailSkeleton } from '@/components/projects/ProjectSkeleton';
 import { TradeDrawsPanel } from '@/components/draws/TradeDrawsPanel';
+import DrawSchedulePanel from '@/components/expenses/DrawSchedulePanel';
 
 export default function ProjectBudget() {
   const [, params] = useRoute('/projects/:id/budget');
@@ -39,6 +40,8 @@ export default function ProjectBudget() {
   return (
     <ProjectLayout projectId={projectId!} projectName={transformedProject.name}>
       <div className="p-6 space-y-6">
+        {/* Bi-monthly draw schedule — expenses + invoices rolled up twice a month */}
+        <DrawSchedulePanel projectId={projectId!} projectName={transformedProject.name} />
         {/* Budget snapshot + per-trade draws (new — driven by signed contract budget) */}
         <TradeDrawsPanel projectId={projectId!} />
         {/* Legacy BudgetTab kept for backward compatibility with existing data */}

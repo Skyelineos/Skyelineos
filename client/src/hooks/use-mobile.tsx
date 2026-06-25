@@ -1,7 +1,11 @@
 import { useState, useEffect } from 'react';
 
 export function useMobile() {
-  const [isMobile, setIsMobile] = useState(false);
+  // Initialise synchronously so the first render already has the correct value.
+  // This prevents components gated on !isMobile from flashing briefly on mobile.
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth < 768 : false
+  );
 
   useEffect(() => {
     const checkMobile = () => {

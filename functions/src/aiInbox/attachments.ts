@@ -1,6 +1,6 @@
 // AI Inbox — attachment handling.
 //
-// Decodes base64 attachments that n8n forwards from Gmail (invoice PDFs, receipt
+// Decodes base64 attachments forwarded from Gmail (invoice PDFs, receipt
 // images), stores them to Cloud Storage so they're viewable in the portal, and
 // returns the subset Claude can read (PDF + images) as content blocks.
 //
@@ -38,7 +38,7 @@ function safeName(name: string): string {
 function mimeOf(att: any, filename: string): string {
   const m = att.mimeType || att.contentType || att.type || '';
   if (m) return String(m).toLowerCase();
-  // Infer from extension when n8n doesn't send a mime.
+  // Infer from extension when the caller doesn't send a mime.
   const ext = filename.toLowerCase().split('.').pop() || '';
   if (ext === 'pdf') return 'application/pdf';
   if (ext === 'png') return 'image/png';
@@ -65,7 +65,7 @@ export async function processAttachments(
     const mimeType = mimeOf(att, filename);
     const b64: string | undefined = att.content || att.data || att.base64;
 
-    // No bytes (n8n sent metadata only) — record it, nothing to store/read.
+    // No bytes (metadata only) — record it, nothing to store/read.
     if (!b64 || typeof b64 !== 'string') {
       stored.push({ filename, mimeType, size: Number(att.size) || 0, url: null, sentToClaude: false });
       continue;
@@ -73,7 +73,7 @@ export async function processAttachments(
 
     let buffer: Buffer;
     try {
-      // Tolerate a data: URI prefix if n8n includes one.
+      // Tolerate a data: URI prefix if the caller includes one.
       const clean = b64.includes(',') && b64.startsWith('data:') ? b64.slice(b64.indexOf(',') + 1) : b64;
       buffer = Buffer.from(clean, 'base64');
     } catch {

@@ -21,7 +21,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
-import { RefreshCw, Info, Copy, Check } from 'lucide-react';
+import { RefreshCw, Info, Copy, Check, MessageSquare } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 
 // Role configuration
 const ROLES = [
@@ -44,6 +45,7 @@ export function CreateUserModal({ open, onOpenChange }: CreateUserModalProps) {
     fullName: '',
     username: '',
     role: '',
+    smsConsent: false,
   });
   
   const [createdUser, setCreatedUser] = useState<any>(null);
@@ -63,6 +65,7 @@ export function CreateUserModal({ open, onOpenChange }: CreateUserModalProps) {
           fullName: userData.fullName,
           username: userData.username || null,
           role: userData.role,
+          smsConsent: userData.smsConsent,
         }),
         headers: { 'Content-Type': 'application/json' },
       });
@@ -140,6 +143,7 @@ export function CreateUserModal({ open, onOpenChange }: CreateUserModalProps) {
       fullName: '',
       username: '',
       role: '',
+      smsConsent: false,
     });
     setCreatedUser(null);
     setTemporaryPassword('');
@@ -311,6 +315,27 @@ export function CreateUserModal({ open, onOpenChange }: CreateUserModalProps) {
                 </CardContent>
               </Card>
             )}
+
+            {/* SMS opt-in — admin confirms consent on behalf of new user */}
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2">
+              <div className="flex items-start gap-3">
+                <Checkbox
+                  id="admin-sms-consent"
+                  checked={formData.smsConsent}
+                  onCheckedChange={(checked) =>
+                    setFormData(prev => ({ ...prev, smsConsent: Boolean(checked) }))
+                  }
+                  className="mt-0.5"
+                  disabled={createUserMutation.isPending}
+                />
+                <label htmlFor="admin-sms-consent" className="text-xs text-gray-600 leading-relaxed cursor-pointer">
+                  <span className="flex items-center gap-1 font-medium text-gray-700 mb-0.5">
+                    <MessageSquare className="h-3 w-3" /> SMS Consent (Optional)
+                  </span>
+                  This person has given consent to receive text messages from Skyeline Homes about scheduling, bids, and project updates. Msg &amp; data rates may apply. They can reply STOP to unsubscribe at any time.
+                </label>
+              </div>
+            </div>
 
             {/* Submit Buttons */}
             <div className="flex justify-end space-x-2 pt-4">

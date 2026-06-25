@@ -13,6 +13,7 @@ import * as admin from 'firebase-admin';
 import sgMail from '@sendgrid/mail';
 import twilio from 'twilio';
 import { toE164, isSmsOptedOut } from './sms';
+import { sendPushNotification } from './fcmService';
 
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore();
@@ -288,6 +289,31 @@ async function sendAll(
       }
     } catch (e: any) {
       const msg = `Push failed: ${e.message || String(e)}`;
+      console.error('[dispatch]', msg);
+      errors.push(msg);
+    }
+  }
+
+  // Subcollection-schema push (users/{uid}/fcmTokens/{token}).
+  // Additive to the array-based fan-out above so devices that registered
+  // via the new useFcmToken hook still receive notifications. Best-effort —
+  // failures here never block the primary channels.
+  const pushAllowedByOrg2 = notif.channels?.push !== false;
+  if (pushAllowedByOrg2 && shouldSendPush(recipient, notif.kind) && notif.userId) {
+    try {
+      const link = notif.link
+        ? `${APP_BASE_URL.value() || 'https://skyelineos.web.app'}${notif.link}`
+        : `${APP_BASE_URL.value() || 'https://skyelineos.web.app'}/`;
+      await sendPushNotification(db, [notif.userId], {
+        title: notif.title,
+        body: notif.body || '',
+        url: link,
+      });
+      // We don't flip pushSent here — the array path above already reports
+      // success when at least one device received the message. The
+      // subcollection path is purely additive.
+    } catch (e: any) {
+      const msg = `Push (subcollection) failed: ${e.message || String(e)}`;
       console.error('[dispatch]', msg);
       errors.push(msg);
     }

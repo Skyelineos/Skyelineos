@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { doc, onSnapshot, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { authFetch } from '@/lib/authFetch';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { CheckCircle2, Link2, RefreshCw, Unlink, AlertCircle } from 'lucide-react';
+import { CheckCircle2, Link2, RefreshCw, Unlink, AlertCircle, Loader2, Users } from 'lucide-react';
 
 // Connect-to-QuickBooks UI. Reads /qboConnections/global to show status.
 // "Connect" button redirects to /qbo/oauth/start which Intuit then bounces
@@ -12,12 +13,26 @@ import { CheckCircle2, Link2, RefreshCw, Unlink, AlertCircle } from 'lucide-reac
 export function QboConnectionCard() {
   const [conn, setConn] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  // "Sync Customers → Projects" state. `result` holds the last summary
+  // (or error message) so the user can see how the last sync went without
+  // it auto-clearing on every render.
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<
+    | { ok: true; synced: number; created: number; updated: number; errors: number }
+    | { ok: false; message: string }
+    | null
+  >(null);
 
   useEffect(() => {
-    return onSnapshot(doc(db, 'qboConnections', 'global'), snap => {
-      setConn(snap.exists() ? snap.data() : null);
-      setLoading(false);
-    }, () => setLoading(false));
+    // One-time fetch for fast initial load, then real-time updates
+    getDoc(doc(db, 'qboConnections', 'global'))
+      .then(snap => { setConn(snap.exists() ? snap.data() : null); setLoading(false); })
+      .catch(() => setLoading(false));
+    // Real-time listener for reconnect/disconnect events
+    const unsub = onSnapshot(doc(db, 'qboConnections', 'global'),
+      snap => { setConn(snap.exists() ? snap.data() : null); setLoading(false); },
+      () => setLoading(false));
+    return unsub;
   }, []);
 
   const connect = () => {
@@ -25,6 +40,38 @@ export function QboConnectionCard() {
     // redirect to Intuit's consent screen, which then comes back to
     // /qbo/oauth/callback to land the tokens.
     window.location.href = 'https://skyelineos.web.app/qbo/oauth/start';
+  };
+
+  // Pull every QBO Customer/Job into Skyeline as a Project. Runs the
+  // server-side bulk upsert, then renders
+  //   ✓ 12 projects synced (3 new, 9 updated)
+  // next to the button. Errors show inline so the user doesn't have to open
+  // devtools to debug a 409 / 500.
+  const syncCustomers = async () => {
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const res = await authFetch('/api/qbo/sync-customers', { method: 'GET' });
+      const json = await res.json().catch(() => ({} as any));
+      if (!res.ok) {
+        setSyncResult({
+          ok: false,
+          message: json?.error || `Sync failed (${res.status})`,
+        });
+      } else {
+        setSyncResult({
+          ok: true,
+          synced: Number(json.synced) || 0,
+          created: Number(json.created) || 0,
+          updated: Number(json.updated) || 0,
+          errors: Number(json.errors) || 0,
+        });
+      }
+    } catch (e: any) {
+      setSyncResult({ ok: false, message: e?.message || 'Network error' });
+    } finally {
+      setSyncing(false);
+    }
   };
 
   const disconnect = async () => {
@@ -91,16 +138,46 @@ export function QboConnectionCard() {
                 <span>The refresh token expires soon. Reconnect within the next {expiresInDays} day{expiresInDays === 1 ? '' : 's'} to avoid losing the connection.</span>
               </div>
             )}
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Button onClick={connect} variant="outline" className="gap-1.5">
                 <RefreshCw className="w-3.5 h-3.5" />
                 Reconnect
+              </Button>
+              {/* Brand gold sync button — #C9A96E is Skyeline's primary accent. */}
+              <Button
+                onClick={syncCustomers}
+                disabled={syncing}
+                className="gap-1.5 text-[#141414] hover:opacity-90"
+                style={{ backgroundColor: '#C9A96E', color: '#141414' }}
+              >
+                {syncing ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Users className="w-3.5 h-3.5" />
+                )}
+                {syncing ? 'Syncing…' : 'Sync Customers → Projects'}
               </Button>
               <Button onClick={disconnect} variant="outline" className="gap-1.5 text-red-600 border-red-200 hover:bg-red-50">
                 <Unlink className="w-3.5 h-3.5" />
                 Disconnect
               </Button>
             </div>
+            {syncResult && syncResult.ok && (
+              <div className="flex items-start gap-2 p-2.5 bg-green-50 border border-green-200 rounded text-xs text-green-800">
+                <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                <span>
+                  ✓ {syncResult.synced} project{syncResult.synced === 1 ? '' : 's'} synced
+                  {' '}({syncResult.created} new, {syncResult.updated} updated
+                  {syncResult.errors > 0 ? `, ${syncResult.errors} error${syncResult.errors === 1 ? '' : 's'}` : ''})
+                </span>
+              </div>
+            )}
+            {syncResult && !syncResult.ok && (
+              <div className="flex items-start gap-2 p-2.5 bg-red-50 border border-red-200 rounded text-xs text-red-800">
+                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                <span>{syncResult.message}</span>
+              </div>
+            )}
           </div>
         ) : (
           <div className="space-y-3">

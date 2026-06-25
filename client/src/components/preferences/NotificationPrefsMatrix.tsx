@@ -21,6 +21,7 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
+import { Button } from '@/components/ui/button';
 
 const CHANNEL_COLUMNS: { key: ChannelKind; label: string }[] = [
   { key: 'in_app', label: 'In-app' },
@@ -34,12 +35,22 @@ export function NotificationPrefsMatrix() {
   const uid = firebaseUser?.uid;
   const [prefs, setPrefs] = useState<UserNotificationPrefs>({});
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const debounceRef = useRef<number | null>(null);
 
-  // Load existing prefs.
+  // Load existing prefs. A 5s timeout flips to a retryable error state so the
+  // dialog doesn't sit on "Loading…" forever if Firestore is unreachable.
   useEffect(() => {
     if (!uid) { setLoading(false); return; }
     let cancelled = false;
+    setLoading(true);
+    setLoadFailed(false);
+    const timeoutId = window.setTimeout(() => {
+      if (cancelled) return;
+      setLoading(false);
+      setLoadFailed(true);
+    }, 5000);
     (async () => {
       try {
         const snap = await getDoc(doc(db, 'users', uid));
@@ -55,14 +66,22 @@ export function NotificationPrefsMatrix() {
           }
         }
         setPrefs(cleaned);
+        setLoadFailed(false);
       } catch (e) {
         console.warn('[NotificationPrefsMatrix] load failed', e);
+        if (!cancelled) setLoadFailed(true);
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          window.clearTimeout(timeoutId);
+          setLoading(false);
+        }
       }
     })();
-    return () => { cancelled = true; };
-  }, [uid]);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [uid, reloadKey]);
 
   // Debounced Firestore write.
   const persist = (next: UserNotificationPrefs) => {
@@ -105,54 +124,68 @@ export function NotificationPrefsMatrix() {
   if (loading) {
     return <div className="text-sm text-muted-foreground">Loading notification preferences…</div>;
   }
+  if (loadFailed) {
+    return (
+      <div className="flex flex-col items-start gap-2 text-sm">
+        <p className="text-muted-foreground">
+          Couldn't load preferences — tap to retry.
+        </p>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => setReloadKey(k => k + 1)}
+        >
+          Retry
+        </Button>
+      </div>
+    );
+  }
   if (!uid) {
     return <div className="text-sm text-muted-foreground">Sign in to manage notification preferences.</div>;
   }
 
   return (
-    <div className="space-y-6">
-      <p className="text-sm text-muted-foreground">
-        Choose how you want to hear about each kind of event. In-app and push are
-        on by default; email and SMS are opt-in unless your administrator
-        flipped the default. SMS STOP is always honored.
+    <div className="space-y-5">
+      <p className="text-xs text-muted-foreground">
+        Choose how you hear about each event. SMS STOP always honored.
       </p>
-
-      {/* Column header row */}
-      <div className="grid grid-cols-[1fr_repeat(4,minmax(60px,auto))] gap-3 text-xs font-medium text-muted-foreground px-2">
-        <span></span>
-        {CHANNEL_COLUMNS.map(col => (
-          <span key={col.key} className="text-center">{col.label}</span>
-        ))}
-      </div>
 
       {PREFS_CATEGORY_ORDER.map(cat => {
         const rows = grouped.get(cat) || [];
         if (rows.length === 0) return null;
         return (
-          <div key={cat} className="space-y-2">
-            <h4 className="text-sm font-semibold">{cat}</h4>
+          <div key={cat} className="space-y-1">
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground pb-1">{cat}</h4>
             <Separator />
             {rows.map(([kind, spec]) => (
-              <div
-                key={kind}
-                className="grid grid-cols-[1fr_repeat(4,minmax(60px,auto))] items-center gap-3 px-2 py-2 rounded hover:bg-muted/50"
-              >
-                <Label htmlFor={`np-${kind}`} className="text-sm">{spec.label}</Label>
-                {CHANNEL_COLUMNS.map(col => {
-                  const inCatalog = spec.channels[col.key] !== undefined;
-                  const checked = isChannelEnabledForUser(kind, col.key, prefs);
-                  return (
-                    <div key={col.key} className="flex justify-center">
-                      <Switch
-                        id={`np-${kind}-${col.key}`}
-                        disabled={!inCatalog}
-                        checked={inCatalog ? checked : false}
-                        onCheckedChange={(v: boolean) => toggle(kind, col.key, v)}
-                        aria-label={`${spec.label} — ${col.label}`}
-                      />
-                    </div>
-                  );
-                })}
+              <div key={kind} className="py-2.5 border-b border-gray-100 last:border-0">
+                {/* Label row */}
+                <p className="text-sm font-medium text-gray-800 mb-2">{spec.label}</p>
+                {/* Channel toggles in a responsive row */}
+                <div className="flex flex-wrap gap-3">
+                  {CHANNEL_COLUMNS.map(col => {
+                    const inCatalog = spec.channels[col.key] !== undefined;
+                    const checked = isChannelEnabledForUser(kind, col.key, prefs);
+                    return (
+                      <label
+                        key={col.key}
+                        className={`flex items-center gap-1.5 text-xs select-none ${
+                          inCatalog ? 'text-gray-700 cursor-pointer' : 'text-gray-300 cursor-not-allowed'
+                        }`}
+                      >
+                        <Switch
+                          id={`np-${kind}-${col.key}`}
+                          disabled={!inCatalog}
+                          checked={inCatalog ? checked : false}
+                          onCheckedChange={(v: boolean) => toggle(kind, col.key, v)}
+                          aria-label={`${spec.label} — ${col.label}`}
+                          className="scale-90"
+                        />
+                        <span>{col.label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
             ))}
           </div>

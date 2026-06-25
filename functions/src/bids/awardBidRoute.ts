@@ -20,6 +20,7 @@
 import type { Express } from 'express';
 import * as admin from 'firebase-admin';
 import { fireTrigger } from '../notifications/fireTrigger';
+import { generatePo } from './generatePoRoute';
 
 interface AwardPayload {
   bidId: string;
@@ -177,6 +178,74 @@ async function executeAward(
     } catch (notifyErr) {
       console.warn('[awardBid] notification write failed (non-blocking):', notifyErr);
     }
+  }
+
+  // --- FIX 1: Reconcile estimate line item costs after award ---
+  const awardedAmount = bid.totalAmount ?? bid.amount ?? 0;
+  const trade: string = bid.trade || '';
+  try {
+    const estSnap = await db.collection('estimates')
+      .where('projectId', '==', data.projectId)
+      .where('status', '==', 'approved')
+      .limit(1)
+      .get();
+    if (!estSnap.empty) {
+      const estDoc = estSnap.docs[0];
+      const estData = estDoc.data() as any;
+      const lineItems: any[] = Array.isArray(estData.lineItems) ? [...estData.lineItems] : [];
+      let updated = false;
+      for (let i = 0; i < lineItems.length; i++) {
+        const li = lineItems[i];
+        if (trade && String(li.trade || '').toLowerCase() === trade.toLowerCase()) {
+          lineItems[i] = {
+            ...li,
+            subCost: awardedAmount,
+            awardedBidId: data.bidId,
+            assignedSubIds: check.resolvedUid
+              ? [...new Set([...(li.assignedSubIds || []), check.resolvedUid])]
+              : (li.assignedSubIds || []),
+          };
+          updated = true;
+        }
+      }
+      if (updated) {
+        const totalSubCost = lineItems.reduce((sum: number, li: any) => sum + (Number(li.subCost) || 0), 0);
+        await estDoc.ref.set({ lineItems, totalSubCost, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+      }
+    }
+  } catch (estErr) {
+    console.warn('[awardBid] estimate reconciliation failed (non-blocking):', estErr);
+  }
+
+  // --- FIX 3: Sync project.budget and budgetItems subcollection ---
+  try {
+    const projectRef = db.collection('projects').doc(data.projectId);
+    await projectRef.set(
+      { budget: { [trade]: awardedAmount }, updatedAt: admin.firestore.FieldValue.serverTimestamp() },
+      { merge: true },
+    );
+    await db.collection('projects').doc(data.projectId)
+      .collection('budgetItems').doc(trade || data.bidId).set({
+        trade,
+        budgetedCost: awardedAmount,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        source: 'bid_award',
+        bidId: data.bidId,
+      }, { merge: true });
+  } catch (budgetErr) {
+    console.warn('[awardBid] budget sync failed (non-blocking):', budgetErr);
+  }
+
+  // --- FIX 2: Generate Purchase Order ---
+  try {
+    await generatePo(db, {
+      projectId: data.projectId,
+      bidId: data.bidId,
+      bid,
+      awardedSubUid: check.resolvedUid || null,
+    });
+  } catch (poErr) {
+    console.warn('[awardBid] PO generation failed (non-blocking):', poErr);
   }
 
   return { ok: true, awardedSubUid: check.resolvedUid || null };

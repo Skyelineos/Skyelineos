@@ -7,6 +7,8 @@ import { db, storage } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { fireTrigger } from '@/lib/notifications';
+import { apiRequest } from '@/lib/queryClient';
+import { auth as firebaseAuth } from '@/lib/firebase';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -463,23 +465,53 @@ export function SubBidSubmissionForm({
         bidPayload.quoteFile = quoteFile;
       }
 
-      await addDoc(collection(db, 'bids'), bidPayload);
+      // Primary path: server endpoint that writes the bid AND flips the
+      // parent bidRequest.vendors[i].bidStatus — closing the loop so
+      // Tyler's dashboard shows accurate per-vendor status. We strip
+      // serverTimestamp() sentinels because they can't cross the JSON wire;
+      // the server stamps its own submittedAt.
+      const apiPayload = { ...bidPayload };
+      delete (apiPayload as any).submittedAt;
+      delete (apiPayload as any).agreementAcknowledgedAt;
 
-      // Wave-2: route through fireTrigger — the GC who requested the bid
-      // is the pinned recipient.
-      await fireTrigger({
-        kind: 'bid_received',
-        projectId: request.projectId,
-        targetUserIds: [request.invitedByUserId],
-        payload: {
-          subName: user.name || 'Subcontractor',
-          trade: request.trade,
-          total: total.toLocaleString(),
-          projectName: '',
-          link: `/projects/${request.projectId}/bids`,
-          bidRequestId: request.id,
-        },
-      });
+      let serverWroteIt = false;
+      try {
+        if (firebaseAuth.currentUser) {
+          const resp = await apiRequest('/api/bids/submit', {
+            method: 'POST',
+            body: JSON.stringify({
+              bidRequestId: request.id,
+              projectId: request.projectId,
+              bid: apiPayload,
+            }),
+          });
+          if (resp && (resp as any).ok) serverWroteIt = true;
+        }
+      } catch (apiErr) {
+        console.warn('[SubBidSubmissionForm] /api/bids/submit failed, falling back to direct Firestore:', apiErr);
+      }
+
+      if (!serverWroteIt) {
+        // Fallback path: original behavior. Loop closure on the bidRequest
+        // won't happen, but the bid is at least captured.
+        await addDoc(collection(db, 'bids'), bidPayload);
+
+        // Wave-2: route through fireTrigger — the GC who requested the bid
+        // is the pinned recipient.
+        await fireTrigger({
+          kind: 'bid_received',
+          projectId: request.projectId,
+          targetUserIds: [request.invitedByUserId],
+          payload: {
+            subName: user.name || 'Subcontractor',
+            trade: request.trade,
+            total: total.toLocaleString(),
+            projectName: '',
+            link: `/projects/${request.projectId}/bids`,
+            bidRequestId: request.id,
+          },
+        });
+      }
 
       toast({ title: 'Bid submitted', description: `Total: $${total.toLocaleString()}` });
       onClose();

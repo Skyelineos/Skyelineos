@@ -898,6 +898,72 @@ export type InsertWeatherLocation = z.infer<typeof insertWeatherLocationSchema>;
 // Communication Center cleanup. Live chat is project-scoped Firestore channels;
 // the Communication Center introduces top-level `communications` collections.)
 
+// ── SMS Agent (Phase 1) ──────────────────────────────────────────────────────
+// These tables describe the Skyeline Homes SMS Agent's schema of record. The
+// runtime is Firestore (see functions/src/sms/* and shared/sms-types.ts) but
+// we keep an equivalent Drizzle/Postgres schema here so a future Postgres
+// migration is a copy, not a re-derive. Mirrors the contract in the Phase 1
+// build spec: sms_messages, sms_contacts, sms_threads.
+
+export const smsContacts = pgTable('sms_contacts', {
+  id: serial('id').primaryKey(),
+  name: text('name').notNull(),
+  phoneNumber: varchar('phone_number', { length: 20 }).notNull().unique(), // E.164
+  role: text('role').notNull(),                  // CLIENT | SUB | INTERNAL | VENDOR
+  preferredLanguage: varchar('preferred_language', { length: 2 }).notNull().default('en'), // en | es
+  projectIds: json('project_ids').$type<string[]>().default([]),
+  trade: text('trade'),
+  notes: text('notes'),
+  linkedContactId: text('linked_contact_id'),    // Firestore contacts/{id}
+  createdBy: text('created_by').notNull(),       // uid
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+export const smsThreads = pgTable('sms_threads', {
+  id: serial('id').primaryKey(),
+  contactId: integer('contact_id').notNull(),    // → sms_contacts.id
+  projectId: text('project_id'),                 // Firestore projects/{id}, nullable
+  lastMessageAt: timestamp('last_message_at'),
+  lastMessagePreview: text('last_message_preview'),
+  lastDirection: text('last_direction'),         // inbound | outbound
+  unreadCount: integer('unread_count').default(0),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const smsMessages = pgTable('sms_messages', {
+  id: serial('id').primaryKey(),
+  threadId: integer('thread_id'),                // → sms_threads.id
+  direction: text('direction').notNull(),        // inbound | outbound
+  fromNumber: varchar('from_number', { length: 20 }).notNull(),
+  toNumber: varchar('to_number', { length: 20 }).notNull(),
+  body: text('body').notNull(),
+  twilioSid: text('twilio_sid'),                 // Twilio MessageSid
+  contactId: integer('contact_id'),              // → sms_contacts.id, denormalized for fast filters
+  projectId: text('project_id'),                 // Firestore projects/{id}
+  status: text('status').notNull().default('queued'),
+  generatedByAi: boolean('generated_by_ai').default(false),
+  outboundType: text('outbound_type'),           // OutboundType enum or null
+  errorMessage: text('error_message'),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const insertSmsContactSchema = createInsertSchema(smsContacts).omit({
+  id: true, createdAt: true, updatedAt: true,
+});
+export const insertSmsThreadSchema = createInsertSchema(smsThreads).omit({
+  id: true, createdAt: true,
+});
+export const insertSmsMessageSchema = createInsertSchema(smsMessages).omit({
+  id: true, createdAt: true,
+});
+export type SmsContactRow = typeof smsContacts.$inferSelect;
+export type SmsThreadRow = typeof smsThreads.$inferSelect;
+export type SmsMessageRow = typeof smsMessages.$inferSelect;
+export type InsertSmsContact = z.infer<typeof insertSmsContactSchema>;
+export type InsertSmsThread = z.infer<typeof insertSmsThreadSchema>;
+export type InsertSmsMessage = z.infer<typeof insertSmsMessageSchema>;
+
 // User authentication schemas
 export const insertUserSchema = createInsertSchema(users);
 // Note: insertUserSessionSchema removed - using stateless JWT authentication

@@ -286,89 +286,65 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      console.log('🔥 Firebase auth state changed:', !!firebaseUser);
       setFirebaseUser(firebaseUser);
       
       if (firebaseUser) {
-        // User is signed in to Firebase, load user profile
         await loadUserProfile(firebaseUser);
       } else {
-        // User is signed out, clear all auth state (but not if test mode)
         if (localStorage.getItem('testMode') !== 'true') {
           setUser(null);
           setAuthLoading(false);
         }
       }
-      
+
       setLoading(false);
     });
 
     return unsubscribe;
   }, [loadUserProfile]);
 
-  // Auto-clear cached auth on app start if there are mismatches (skip if test mode)
+  // Auto-clear cached auth ONLY after both the Firestore profile timeout (8s)
+  // AND a generous buffer have elapsed. Previously this fired at 2s, which
+  // raced against loadUserProfile and signed users out mid-load on slow connections.
   useEffect(() => {
     const checkAuthIntegrity = async () => {
-      // Skip integrity check if test mode is active
       if (isTestMode) return;
-      
+      // Only act if firebase user exists but no user profile resolved — and
+      // authLoading is done (meaning loadUserProfile already finished/failed).
       if (firebaseUser && !user && !authLoading) {
-        console.log('🔍 Detected auth mismatch, clearing cache...');
-        // Clear auth cache manually without calling the function
+        if (import.meta.env.DEV) console.warn('Auth mismatch after timeout — clearing cache');
         try {
           await signOut(auth);
-          // Don't use localStorage.clear() to preserve test mode settings
           sessionStorage.clear();
           setFirebaseUser(null);
           setUser(null);
           setLoading(false);
           setAuthLoading(false);
-          console.log('✅ Authentication cache cleared');
         } catch (error) {
           console.error('Clear auth error:', error);
         }
       }
     };
-    
-    const timeoutId = setTimeout(checkAuthIntegrity, 2000);
+    // 15s: well beyond the 8s Firestore timeout so we never fire while loading
+    const timeoutId = setTimeout(checkAuthIntegrity, 15000);
     return () => clearTimeout(timeoutId);
   }, [firebaseUser, user, authLoading, isTestMode]);
 
-  // Initialize auth state from Firebase auth state
+  // DEV-only debug logging — stripped from production builds
   useEffect(() => {
-    if (!user && firebaseUser) {
-      // Try to get user data via token exchange
-      refreshUserData();
-    }
-  }, [user, firebaseUser, refreshUserData]);
-
-  // Add debug logging for authentication state
-  useEffect(() => {
-    console.log('🔍 Auth Debug:', {
+    if (!import.meta.env.DEV) return;
+    console.log('Auth state:', {
       firebaseUser: !!firebaseUser,
       user: !!user,
       userRole: user?.role,
       loading,
       authLoading,
-      isTestMode,
-      isAuthenticated: (!!firebaseUser && !!user) || isTestMode
     });
-  }, [firebaseUser, user, loading, authLoading, isTestMode]);
+  }, [firebaseUser, user, loading, authLoading]);
 
-  // Token refresh — DEAD MECHANISM, intentionally inert.
-  //
-  // This used to POST /api/auth/refresh (a cookie-session rotation endpoint on
-  // the legacy Express `server/`). That server was deleted in Session 10, so the
-  // route no longer exists and the call always 401s. Firebase Auth refreshes its
-  // own ID tokens via the SDK — there is no custom refresh to do here.
-  //
-  // CRITICAL: this MUST NOT sign the user out on "failure". The previous version
-  // called signOut(auth) + setUser(null) whenever the (now non-existent) endpoint
-  // returned non-OK. Paired with the global 401 fetch interceptor below, that
-  // turned ANY single 401 from ANY API call into a full session wipe — so portal
-  // users got logged out seconds after signing in (admin pages happened to avoid
-  // the offending role-gated 401). Kept only to satisfy the context type; it is a
-  // safe no-op that never touches auth state.
+  // Firebase Auth SDK handles token refresh automatically.
+  // This is intentionally a no-op — the old /api/auth/refresh route no longer
+  // exists and calling it caused an infinite 401 logout loop.
   const refreshTokens = useCallback(async (): Promise<boolean> => {
     return false;
   }, []);
@@ -555,14 +531,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const isAuthenticated = Boolean((firebaseUser && user) || isTestMode);
 
-  // NOTE: a global window.fetch interceptor used to live here. On ANY 401 it
-  // called refreshTokens() (which hit the dead /api/auth/refresh endpoint) and,
-  // on the inevitable failure, signed the user out. The net effect was that a
-  // single role-gated 401 from any API call destroyed the whole session — the
-  // root cause of portal users being "spit out" a few seconds after login.
-  // It has been removed: Firebase auto-refreshes ID tokens, and individual API
-  // callers handle their own 401s locally without nuking the session. See
-  // refreshTokens() above.
+  // Automatic token refresh on API errors (401 responses).
+  // isRefreshingRef prevents re-entrant refresh loops (e.g. if the refresh
+  // endpoint itself returns 401 we'd recurse infinitely without this guard).
+  // Global fetch interceptor intentionally removed.
+  // It called the deleted /api/auth/refresh route on every 401,
+  // which always failed and triggered signOut — logging everyone out.
 
   const value: AuthContextType = {
     firebaseUser,

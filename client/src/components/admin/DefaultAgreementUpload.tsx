@@ -27,7 +27,7 @@ export default function DefaultAgreementUpload() {
       formData.append('settingKey', 'default_subcontractor_agreement');
       formData.append('description', 'Default subcontractor agreement template');
       
-      return await apiRequest('POST', '/api/system-settings/file-upload', formData);
+      return await apiRequest('/api/system-settings/file-upload', { method: 'POST', body: formData });
     },
     onSuccess: () => {
       toast({
@@ -52,7 +52,7 @@ export default function DefaultAgreementUpload() {
   // Mutation to remove default agreement
   const removeMutation = useMutation({
     mutationFn: async () => {
-      return await apiRequest('DELETE', '/api/system-settings/default_subcontractor_agreement');
+      return await apiRequest('/api/system-settings/default_subcontractor_agreement', { method: 'DELETE' });
     },
     onSuccess: () => {
       toast({

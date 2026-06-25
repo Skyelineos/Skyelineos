@@ -41,6 +41,7 @@ import {
   Beaker,
   KeyRound,
   Inbox,
+  Settings,
 } from 'lucide-react';
 
 interface NavItem {
@@ -141,12 +142,13 @@ const TEAM_NAV: NavGroup[] = [
       { label: 'API Storage',    href: '/api-storage',    icon: KeyRound },
       { label: 'AI Inbox',       href: '/admin/ai-inbox', icon: Inbox },
       { label: 'Ingestion Lab',  href: '/admin/ingestion-lab', icon: Beaker },
+      { label: 'Settings',       href: '/settings',       icon: Settings },
     ],
   },
 ];
 
 // Management section only for admins
-const MANAGEMENT_HREFS = ['/users', '/master-tasks', '/templates', '/playbook', '/automations', '/import-center', '/subscriptions', '/api-storage', '/admin/ai-inbox', '/admin/ingestion-lab'];
+const MANAGEMENT_HREFS = ['/users', '/master-tasks', '/templates', '/playbook', '/automations', '/import-center', '/subscriptions', '/api-storage', '/admin/ai-inbox', '/admin/ingestion-lab', '/settings'];
 
 // Portal entries — only admins should see these in the team sidebar, since
 // the portal RoleGuards reject gc/projectManager (they're for the portal

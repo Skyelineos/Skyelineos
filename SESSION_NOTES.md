@@ -112,8 +112,10 @@ attachments.ts` decodes them, stores to Cloud Storage (`ai_inbox/{itemId}/...`
   (`MAX_INTAKE_MAILBOXES`). Edited via **`POST /api/ai-inbox/mailboxes`** (admin;
   config is otherwise CF-write-only). UI reads them back via the existing
   onSnapshot. Setup tab has a mailbox editor (add/remove/save).
-- Ingest accepts a `mailbox` field; items are stamped + show a mailbox chip. n8n
-  runs one Gmail trigger per address, each sending `"mailbox": "<addr>"`.
+- Ingest accepts a `mailbox` field; items are stamped + show a mailbox chip.
+  One ingest call per address, each sending `"mailbox": "<addr>"`.
+  (Historical note: an earlier session described an n8n-based Gmail trigger;
+  the n8n integration has since been removed in favor of direct ingestion.)
 
 ### Spam triage (catch-all friendly)
 
@@ -142,7 +144,7 @@ attachments.ts` decodes them, stores to Cloud Storage (`ai_inbox/{itemId}/...`
 - Sub-portal "Submit Invoice" (structured, pre-linked to awarded trade/bid line).
 - Bid-vs-actual job costing: overage/savings (client-visible) + profit (admin-only).
 - A UI "attach PDF to this item + reprocess" upload (the link-flag flow currently
-  assumes the human re-sends through n8n or re-ingests; an in-portal upload-attach
+  assumes the human re-ingests directly; an in-portal upload-attach
   endpoint is the natural next add).
 
 ## Session 20 — Communication Center Phase 3 (AI extraction + summaries)
@@ -220,12 +222,11 @@ and still runs; this is a separate namespace.**
 
 ### Routes (folded into the shared `api` Express app — no new Cloud Run service)
 
-- `POST /api/ai-inbox/ingest` — **n8n endpoint**, registered ABOVE the `/api`
-  auth gate (n8n can't carry a Firebase token). Authed by `X-N8N-Secret` header
-  vs Secret Manager `N8N_INGEST_SECRET` (constant-time compare; fails closed if
-  unset). Idempotent on Gmail `messageId`. Runs the brain inline; if the AI
-  budget is spent or extraction fails, the raw item is still persisted as
-  `status: needs_processing` for later `/reprocess` — inbound mail is never dropped.
+- ~~`POST /api/ai-inbox/ingest`~~ — the public n8n-facing ingest endpoint has
+  been **removed**. Ingestion now happens via direct Firebase-authenticated
+  paths. Inbound mail is still never dropped: if the AI budget is spent or
+  extraction fails, raw items are persisted as `status: needs_processing` for
+  later `/reprocess`.
 - `GET /api/ai-inbox/status` — `{ qboConnected, qboEnv }` for the UI.
 - `POST /api/ai-inbox/:id/approve` — admin-only. Applies any human correction,
   then writes to QBO: **vendor_invoice → A/P Bill; receipt/home_depot_receipt/
@@ -249,14 +250,10 @@ fallback that backfills/validates Claude's `projectId` against real ids.
 
 ### Operator prerequisites (REQUIRED before first run)
 
-1. **`N8N_INGEST_SECRET`** — `firebase functions:secrets:set N8N_INGEST_SECRET`
-   (already added to the `api` `secrets:` array). Put the same value in the n8n
-   HTTP node header `X-N8N-Secret`.
-2. **n8n workflow** — Gmail trigger → HTTP POST to
-   `https://skyelineos.web.app/api/ai-inbox/ingest` with the JSON shape shown on
-   the page's Setup tab (`messageId`, `from`, `subject`, `text`, `gmailLabels`,
-   `attachments`). The response returns the recommended Gmail label so n8n can
-   apply it back. `ANTHROPIC_API_KEY` is already bound.
+1. ~~`N8N_INGEST_SECRET`~~ — no longer required. The n8n ingest path and its
+   shared secret were removed; Secret Manager entry can be deleted out-of-band.
+2. ~~n8n workflow~~ — removed. Ingestion now goes through direct Firebase-
+   authenticated paths; `ANTHROPIC_API_KEY` is already bound.
 3. **QuickBooks** — connect via Settings (existing `qboConnections/global` OAuth,
    sandbox or production). Until connected, financial approvals are blocked in
    the UI (the Approve button is disabled with a hint). Non-financial items
@@ -275,11 +272,11 @@ company to exercise end-to-end — not reachable from the build sandbox.
 
 ### Deliberate deferrals
 
-- No Gmail **write-back** of the recommended label from our side — n8n owns that
-  (we return the label in the ingest + approve responses). A `/apply-label`
-  endpoint would need Gmail write scope; out of scope.
+- No Gmail **write-back** of the recommended label from our side — we return
+  the label in the approve response; the caller is expected to apply it. A
+  `/apply-label` endpoint would need Gmail write scope; out of scope.
 - No batch/scheduled brain sweep — extraction is inline at ingest, with a manual
-  `/reprocess` for budget-deferred or failed items. Add a sweep if n8n ever
+  `/reprocess` for budget-deferred or failed items. Add a sweep if ingest ever
   outpaces the daily budget.
 - QBO account resolution falls back to the first active expense account when the
   suggested account name isn't found; admin can correct the account before approving.

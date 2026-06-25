@@ -17,11 +17,18 @@ yarn-error.log*
 firebase-debug.log
 firebase-debug.*.log
 
+# Functions runtime env (non-secret feature flags) — safe to commit
+# functions/.env
+
 # Environment + secrets — NEVER commit
 .env
 .env.*
 !.env.example
 .runtimeconfig.json
+
+# Firebase service account key — NEVER commit
+service-account.json
+*-service-account.json
 
 # Firebase Functions deployed artifacts
 functions/.runtimeconfig.json

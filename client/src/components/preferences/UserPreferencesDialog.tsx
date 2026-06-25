@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useFcmToken } from '@/hooks/useFcmToken';
 import {
   Dialog,
   DialogContent,
@@ -32,6 +33,7 @@ import {
   Palette,
 } from 'lucide-react';
 import { NotificationPrefsMatrix } from './NotificationPrefsMatrix';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 interface UserPreferencesDialogProps {
   open: boolean;
@@ -42,6 +44,7 @@ export function UserPreferencesDialog({ open, onOpenChange }: UserPreferencesDia
   const { preferences, updatePreference, resetPreferences } = useUserPreferences();
   const { accentColor, setAccentColor } = useTheme();
   const { toast } = useToast();
+  const isMobile = useIsMobile();
   const [hasChanges, setHasChanges] = useState(false);
 
   const handleSave = () => {
@@ -72,7 +75,7 @@ export function UserPreferencesDialog({ open, onOpenChange }: UserPreferencesDia
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-hidden">
+      <DialogContent className="w-full max-w-lg sm:max-w-4xl max-h-[85vh] overflow-y-auto p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Settings className="h-5 w-5" />
@@ -81,30 +84,30 @@ export function UserPreferencesDialog({ open, onOpenChange }: UserPreferencesDia
         </DialogHeader>
 
         <Tabs defaultValue="display" className="w-full">
-          <TabsList className="grid w-full grid-cols-5">
-            <TabsTrigger value="display" className="flex items-center gap-2">
+          <TabsList className="flex w-full overflow-x-auto scrollbar-none gap-1 h-auto p-1">
+            <TabsTrigger value="display" className="shrink-0 text-xs px-3 py-1.5 flex items-center gap-2">
               <Eye className="h-4 w-4" />
               Display
             </TabsTrigger>
-            <TabsTrigger value="notifications" className="flex items-center gap-2">
+            <TabsTrigger value="notifications" className="shrink-0 text-xs px-3 py-1.5 flex items-center gap-2">
               <Bell className="h-4 w-4" />
               Notifications
             </TabsTrigger>
-            <TabsTrigger value="accessibility" className="flex items-center gap-2">
+            <TabsTrigger value="accessibility" className="shrink-0 text-xs px-3 py-1.5 flex items-center gap-2">
               <Accessibility className="h-4 w-4" />
               Accessibility
             </TabsTrigger>
-            <TabsTrigger value="construction" className="flex items-center gap-2">
+            <TabsTrigger value="construction" className="shrink-0 text-xs px-3 py-1.5 flex items-center gap-2">
               <Hammer className="h-4 w-4" />
               Construction
             </TabsTrigger>
-            <TabsTrigger value="advanced" className="flex items-center gap-2">
+            <TabsTrigger value="advanced" className="shrink-0 text-xs px-3 py-1.5 flex items-center gap-2">
               <Settings className="h-4 w-4" />
               Advanced
             </TabsTrigger>
           </TabsList>
 
-          <div className="max-h-[60vh] overflow-y-auto mt-6">
+          <div className="mt-6 px-1">
             <TabsContent value="display" className="space-y-6">
               <div className="space-y-4">
                 <h3 className="text-lg font-medium">Layout & Appearance</h3>
@@ -238,40 +241,44 @@ export function UserPreferencesDialog({ open, onOpenChange }: UserPreferencesDia
                 {/* Wave-2: per-trigger × per-channel matrix wired to
                    users/{uid}.notificationPrefs[kind][channel]. The two
                    legacy global toggles below remain for back-compat with
-                   the older dispatcher reads. */}
-                <NotificationPrefsMatrix />
-
-                <Separator />
+                   the older dispatcher reads. Hidden on mobile — too
+                   cramped for the matrix; use Quick toggles instead. */}
+                {!isMobile && (
+                  <>
+                    <NotificationPrefsMatrix />
+                    <Separator />
+                  </>
+                )}
 
                 <div className="space-y-4">
-                  <h4 className="font-medium">Quick toggles (legacy)</h4>
-                  <p className="text-xs text-muted-foreground">
-                    Coarse global toggles still honored by the legacy dispatcher.
-                    The matrix above takes precedence per (event, channel).
-                  </p>
-                  <div className="flex items-center justify-between">
-                    <div>
+                  <h4 className="font-medium">Notification Channels</h4>
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="min-w-0">
                       <Label htmlFor="email-notifications">Email notifications</Label>
                       <p className="text-sm text-muted-foreground">Receive updates via email</p>
                     </div>
                     <Switch
                       id="email-notifications"
+                      className="shrink-0"
                       checked={preferences.emailNotifications}
                       onCheckedChange={(checked) => updatePref('emailNotifications', checked)}
                     />
                   </div>
 
-                  <div className="flex items-center justify-between">
-                    <div>
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="min-w-0">
                       <Label htmlFor="sms-notifications">SMS notifications</Label>
                       <p className="text-sm text-muted-foreground">Receive critical updates via SMS</p>
                     </div>
                     <Switch
                       id="sms-notifications"
+                      className="shrink-0"
                       checked={preferences.smsNotifications}
                       onCheckedChange={(checked) => updatePref('smsNotifications', checked)}
                     />
                   </div>
+
+                  <PushNotificationToggle />
                 </div>
               </div>
             </TabsContent>
@@ -467,5 +474,44 @@ export function UserPreferencesDialog({ open, onOpenChange }: UserPreferencesDia
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+function PushNotificationToggle() {
+  const { permission, token, error, registering, requestPermission } = useFcmToken();
+  const isGranted = permission === 'granted';
+  const hasToken = !!token;
+
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <div className="min-w-0">
+        <Label htmlFor="push-notifications">Push notifications</Label>
+        <p className="text-sm text-muted-foreground">
+          {isGranted && hasToken
+            ? 'Active on this device'
+            : isGranted
+            ? 'Permission granted — tap Retry to activate'
+            : permission === 'denied'
+            ? 'Blocked — enable in browser/OS settings'
+            : 'Get instant alerts on this device'}
+        </p>
+      </div>
+      {isGranted && hasToken ? (
+        <Switch id="push-notifications" className="shrink-0" checked={true} disabled />
+      ) : (
+        <Button
+          size="sm"
+          variant={permission === 'denied' ? 'outline' : 'default'}
+          disabled={permission === 'denied' || registering}
+          onClick={requestPermission}
+          className="text-white shrink-0"
+          style={permission !== 'denied' ? { backgroundColor: '#C9A96E' } : undefined}
+        >
+          {registering ? 'Registering…' : isGranted ? 'Retry' : 'Enable'}
+        </Button>
+      )}
+      {error && (
+        <p className="text-xs text-red-600 mt-1">{error}</p>
+      )}
+    </div>
   );
 }
