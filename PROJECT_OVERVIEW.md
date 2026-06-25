@@ -33,7 +33,7 @@ Skyeline OS is a **single-tenant construction management app** built for Skyelin
 
 - **Designer Portal** — page component at `client/src/pages/DesignerPortal.tsx` is wired at `/designer-portal/:tab*` in `client/src/App.tsx:515` behind `RoleGuard(['admin', 'designer'])`. Functional; UX work remains.
 - **Role taxonomy refactor** — 20 historical role strings + 4 parallel `UserRole` types + 5 disagreeing normalizers. Audit and 6-phase migration plan in `ROLE_AUDIT.md`. Not executed.
-- **Compliance gate on bid submission** — client-side only; a sub can bypass via direct Firestore write. Needs server-side mirror (rule or Cloud Function).
+- **Compliance gate** — moved from bid-submission to **bid-award** per D-016 (2026-05-28): any sub may submit, only awards are gated, enforced server-side at `/api/bids/award` (`checkSubCompliance`). TASK-0001 closes the remaining privileged-direct-write bypass at the rule layer — `firestore.rules` now denies any direct `bids/{id}` write that sets `status: 'awarded'` without an accompanying `complianceVerifiedAt` (the stamp the award endpoint sets via the Admin SDK).
 - **Takeoff → multi-line spawn** — `onPushToEstimate` accepts an array but consumes only the first measurement; the rest are discarded.
 - **QBO two-way sync** — OAuth wired, but invoices/bills/journal entries don't flow between Skyeline and QuickBooks yet.
 - **Per-sub `additionalEmails`** — Cloud Function writes them on claim, but Contacts edit UI doesn't surface them.
