@@ -355,25 +355,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   }, [firebaseUser, user, loading, authLoading, isTestMode]);
 
-  // Token refresh function with rotation support
+  // Token refresh. We authenticate against Firebase with the ID token in the
+  // Authorization header — there is NO server-side session to refresh. The old
+  // `/api/auth/refresh` endpoint was removed with the legacy server (Session
+  // 10), so POSTing to it always failed, and the failure branch used to call
+  // signOut() — which turned ANY 401 from any `/api/*` call into a forced
+  // logout. That's what kicked users from the Projects page (its
+  // `/api/project-managers` fetch) straight to /sign-in. Firebase's getIdToken()
+  // already auto-refreshes near expiry, so here we just force a token refresh
+  // and NEVER tear down auth state on failure.
   const refreshTokens = useCallback(async (): Promise<boolean> => {
     try {
-      const response = await fetch('/api/auth/refresh', {
-        method: 'POST',
-        credentials: 'include',
-      });
-
-      if (response.ok) {
-        console.log('✅ Tokens refreshed successfully with rotation');
-        return true;
-      } else {
-        console.warn('⚠️ Token refresh failed, user needs to re-authenticate');
-        // If refresh fails, clear auth state
-        await signOut(auth);
-        setFirebaseUser(null);
-        setUser(null);
-        return false;
-      }
+      const current = auth.currentUser;
+      if (!current) return false;
+      await current.getIdToken(true);
+      return true;
     } catch (error) {
       console.error('Token refresh error:', error);
       return false;
@@ -562,30 +558,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const isAuthenticated = Boolean((firebaseUser && user) || isTestMode);
 
-  // Automatic token refresh on API errors (401 responses)
-  useEffect(() => {
-    const originalFetch = window.fetch;
-    
-    window.fetch = async (...args) => {
-      const response = await originalFetch(...args);
-      
-      // If we get 401 and user is authenticated, try refreshing tokens
-      if (response.status === 401 && isAuthenticated && !authLoading) {
-        const refreshed = await refreshTokens();
-        
-        if (refreshed) {
-          // Retry the original request with refreshed tokens
-          return await originalFetch(...args);
-        }
-      }
-      
-      return response;
-    };
-    
-    return () => {
-      window.fetch = originalFetch;
-    };
-  }, [isAuthenticated, authLoading, refreshTokens]);
+  // NOTE: A global `window.fetch` monkey-patch used to live here to "auto
+  // refresh on 401". It intercepted EVERY fetch in the app and, on any 401,
+  // called refreshTokens() — which hit the now-deleted `/api/auth/refresh`
+  // endpoint and then signed the user out. The net effect was that a single
+  // 401 from any `/api/*` request force-logged-out the user (the Projects
+  // page's `/api/project-managers` call bounced people to /sign-in every
+  // time). It's removed: Firebase ID tokens are auto-refreshed by getIdToken()
+  // in the request fetchers, so a 401 should surface to the caller (React
+  // Query handles retry/error per query) — never silently nuke the session.
 
   const value: AuthContextType = {
     firebaseUser,
