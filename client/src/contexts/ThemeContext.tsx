@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
 import type { ReactNode } from 'react';
 
 interface ThemeContextType {
@@ -35,23 +35,25 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('darkMode', String(darkMode));
   }, [darkMode]);
 
-  const setAccentColor = (color: string) => {
+  const setAccentColor = useCallback((color: string) => {
     setAccentColorState(color);
-  };
+  }, []);
 
-  const toggleDarkMode = () => {
+  const toggleDarkMode = useCallback(() => {
     setDarkMode(d => !d);
-  };
+  }, []);
+
+  const value = useMemo(() => ({
+    accentColor,
+    setAccentColor,
+    darkMode,
+    toggleDarkMode,
+    isLoading: false,
+    hasCloudSync: false,
+  }), [accentColor, setAccentColor, darkMode, toggleDarkMode]);
 
   return (
-    <ThemeContext.Provider value={{
-      accentColor,
-      setAccentColor,
-      darkMode,
-      toggleDarkMode,
-      isLoading: false,
-      hasCloudSync: false,
-    }}>
+    <ThemeContext.Provider value={value}>
       {children}
     </ThemeContext.Provider>
   );

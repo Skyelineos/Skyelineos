@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useCallback, useMemo, ReactNode } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 
@@ -39,23 +39,23 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
     },
   });
 
-  const uploadLogo = async (file: File) => {
+  const uploadLogo = useCallback(async (file: File) => {
     await uploadMutation.mutateAsync(file);
-  };
+  }, [uploadMutation]);
 
-  const removeLogo = async () => {
+  const removeLogo = useCallback(async () => {
     await removeMutation.mutateAsync();
-  };
+  }, [removeMutation]);
+
+  const value = useMemo(() => ({
+    logoUrl: (branding as { logoUrl?: string } | undefined)?.logoUrl,
+    isLoading,
+    uploadLogo,
+    removeLogo,
+  }), [branding, isLoading, uploadLogo, removeLogo]);
 
   return (
-    <BrandingContext.Provider
-      value={{
-        logoUrl: branding?.logoUrl,
-        isLoading,
-        uploadLogo,
-        removeLogo,
-      }}
-    >
+    <BrandingContext.Provider value={value}>
       {children}
     </BrandingContext.Provider>
   );

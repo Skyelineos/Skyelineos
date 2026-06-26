@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/auth/AuthContext';
@@ -146,7 +146,7 @@ export function UserPreferencesProvider({ children }: { children: React.ReactNod
     }
   }, [preferences, isLoading]);
 
-  const updatePreference = <K extends keyof UserPreferences>(
+  const updatePreference = useCallback(<K extends keyof UserPreferences>(
     key: K,
     value: UserPreferences[K]
   ) => {
@@ -175,22 +175,22 @@ export function UserPreferencesProvider({ children }: { children: React.ReactNod
         { merge: true },
       ).catch(e => console.warn('[prefs] failed to sync notificationPref to Firestore', e));
     }
-  };
+  }, [firebaseUser?.uid]);
 
-  const resetPreferences = () => {
+  const resetPreferences = useCallback(() => {
     setPreferences(defaultPreferences);
     localStorage.removeItem('userPreferences');
-  };
+  }, []);
+
+  const value = useMemo(() => ({
+    preferences,
+    updatePreference,
+    resetPreferences,
+    isLoading,
+  }), [preferences, updatePreference, resetPreferences, isLoading]);
 
   return (
-    <UserPreferencesContext.Provider 
-      value={{ 
-        preferences, 
-        updatePreference, 
-        resetPreferences, 
-        isLoading 
-      }}
-    >
+    <UserPreferencesContext.Provider value={value}>
       {children}
     </UserPreferencesContext.Provider>
   );

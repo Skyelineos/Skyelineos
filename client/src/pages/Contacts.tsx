@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { findDuplicateContacts, computeMergeUpdates, type DuplicateMatch } from '@/lib/contacts/duplicateDetection';
@@ -489,18 +489,18 @@ export default function Contacts() {
   };
 
   // Derived data
-  const filteredTrades = trades.filter((trade) => {
+  const filteredTrades = useMemo(() => trades.filter((trade) => {
     const matchesSearch = tradeSearchTerm === '' ||
       trade.name.toLowerCase().includes(tradeSearchTerm.toLowerCase()) ||
       trade.description.toLowerCase().includes(tradeSearchTerm.toLowerCase());
     return matchesSearch;
-  });
+  }), [trades, tradeSearchTerm]);
 
   // Internal Skyeline staff roles — grouped under the "Team Members" tile/filter.
   const TEAM_ROLES = ['team', 'employee', 'gc', 'admin', 'project_manager', 'projectmanager', 'staff'];
   const isTeamRole = (role?: string) => TEAM_ROLES.includes((role || '').toLowerCase());
 
-  const filteredContacts = contacts.filter((contact) => {
+  const filteredContacts = useMemo(() => contacts.filter((contact) => {
     const matchesSearch = searchTerm === '' ||
       contact.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       contact.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -522,10 +522,10 @@ export default function Contacts() {
     const aKey = String(a.name || a.email || '').toLowerCase();
     const bKey = String(b.name || b.email || '').toLowerCase();
     return aKey.localeCompare(bKey);
-  });
+  }), [contacts, searchTerm, roleFilter, companyFilter]);
 
-  const uniqueRoles = Array.from(new Set(contacts.map((c) => c.role))).sort();
-  const uniqueCompanies = Array.from(new Set(contacts.map((c) => c.company).filter(Boolean))).sort();
+  const uniqueRoles = useMemo(() => Array.from(new Set(contacts.map((c) => c.role))).sort(), [contacts]);
+  const uniqueCompanies = useMemo(() => Array.from(new Set(contacts.map((c) => c.company).filter(Boolean))).sort(), [contacts]);
 
   const summaryStats = {
     total: contacts.length,

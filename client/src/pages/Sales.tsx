@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useLocation } from 'wouter';
 import {
   collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot,
@@ -1626,7 +1626,7 @@ export default function Sales() {
   }, [user?.firebaseUid]);
 
   // All unique tags across clients
-  const allTags = [...new Set(clients.flatMap(c => c.tags || []))].sort();
+  const allTags = useMemo(() => [...new Set(clients.flatMap(c => c.tags || []))].sort(), [clients]);
 
   // Filter + sort
   const applyFilters = (list: Client[]): Client[] => {
@@ -1660,7 +1660,7 @@ export default function Sales() {
     return out;
   };
 
-  const filteredClients = applyFilters(clients);
+  const filteredClients = useMemo(() => applyFilters(clients), [clients, filters]);
 
   const activeFilterCount = [
     filters.search, filters.budgetMin, filters.budgetMax,

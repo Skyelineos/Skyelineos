@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback, useMemo, ReactNode } from 'react';
 
 export interface AdminViewUser {
   id: string;
@@ -27,17 +27,17 @@ export const AdminViewProvider = ({ children }: { children: ReactNode }) => {
   const [portalType, setPortalType] = useState<'client' | 'subcontractor' | 'designer' | null>(null);
   const [viewedUser, setViewedUser] = useState<AdminViewUser | null>(null);
 
-  const enterAdminView = (type: 'client' | 'subcontractor' | 'designer', user: AdminViewUser) => {
+  const enterAdminView = useCallback((type: 'client' | 'subcontractor' | 'designer', user: AdminViewUser) => {
     setIsAdminView(true);
     setPortalType(type);
     setViewedUser(user);
-  };
+  }, []);
 
-  const exitAdminView = () => {
+  const exitAdminView = useCallback(() => {
     setIsAdminView(false);
     setPortalType(null);
     setViewedUser(null);
-  };
+  }, []);
 
   // We expose this flag for components that want to disable specific actions
   // when in admin view, but we DON'T globally intercept clicks/submits — the
@@ -54,20 +54,20 @@ export const AdminViewProvider = ({ children }: { children: ReactNode }) => {
     return () => document.body.removeAttribute('data-admin-view');
   }, [isAdminView]);
 
+  const value = useMemo(() => ({
+    isAdminView,
+    portalType,
+    viewedUser,
+    isReadOnly,
+    setIsAdminView,
+    setPortalType,
+    setViewedUser,
+    enterAdminView,
+    exitAdminView,
+  }), [isAdminView, portalType, viewedUser, isReadOnly, enterAdminView, exitAdminView]);
+
   return (
-    <AdminViewContext.Provider
-      value={{
-        isAdminView,
-        portalType,
-        viewedUser,
-        isReadOnly,
-        setIsAdminView,
-        setPortalType,
-        setViewedUser,
-        enterAdminView,
-        exitAdminView,
-      }}
-    >
+    <AdminViewContext.Provider value={value}>
       {children}
     </AdminViewContext.Provider>
   );

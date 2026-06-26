@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useLocation } from 'wouter';
 import {
-  collection, onSnapshot, query, where, getDocs,
+  collection, onSnapshot, query, where, getDocs, limit,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
@@ -43,9 +43,9 @@ export function MissingTasksAlertCard() {
     return () => unsub();
   }, []);
 
-  // For each project, check task count. Sequential per-project (small fan-out)
-  // so we don't blow up Firestore quotas. Could optimize later with a single
-  // collectionGroup query if this grows.
+  // For each project, check whether it has ANY task. We only need existence,
+  // so each query is limit(1) (cheap — one doc, not the whole task list) and
+  // the per-project checks run in parallel instead of sequentially.
   useEffect(() => {
     if (projects.length === 0) {
       setMissing([]);
@@ -53,20 +53,20 @@ export function MissingTasksAlertCard() {
     }
     let cancelled = false;
     (async () => {
-      const out: ProjectRow[] = [];
-      for (const p of projects) {
+      const results = await Promise.all(projects.map(async p => {
         try {
           const snap = await getDocs(query(
             collection(db, 'tasks'),
             where('projectId', '==', p.id),
+            limit(1),
           ));
-          if (cancelled) return;
-          if (snap.empty) out.push(p);
+          return snap.empty ? p : null;
         } catch {
           // permission errors → assume not empty so we don't false-positive
+          return null;
         }
-      }
-      if (!cancelled) setMissing(out);
+      }));
+      if (!cancelled) setMissing(results.filter((p): p is ProjectRow => p !== null));
     })();
     return () => { cancelled = true; };
   }, [projects]);

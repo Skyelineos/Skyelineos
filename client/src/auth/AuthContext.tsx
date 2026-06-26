@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback } from "react";
+import { createContext, useContext, useEffect, useState, useCallback, useMemo } from "react";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged, User as FirebaseUser, signOut } from "firebase/auth";
 import {
@@ -538,7 +538,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // It called the deleted /api/auth/refresh route on every 401,
   // which always failed and triggered signOut — logging everyone out.
 
-  const value: AuthContextType = {
+  const value: AuthContextType = useMemo(() => ({
     firebaseUser,
     user,
     loading,
@@ -553,7 +553,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     hasRole,
     isAuthenticated,
     refreshTokens,
-  };
+  }), [
+    firebaseUser,
+    user,
+    loading,
+    authLoading,
+    logout,
+    logoutAllDevices,
+    refreshUserData,
+    getIdToken,
+    getUserSessions,
+    revokeSession,
+    hasPermission,
+    hasRole,
+    isAuthenticated,
+    refreshTokens,
+  ]);
 
   return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>;
 }
