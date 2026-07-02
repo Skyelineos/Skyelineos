@@ -313,8 +313,18 @@ export default function TakeoffStudio({ projectId, projectName, scope, estimateI
   // ─── Upload handler ─────────────────────────────────────────────────────
   const handleFileSelected = async (file: File) => {
     if (!user) return;
-    if (file.type !== 'application/pdf') {
-      toast({ title: 'PDF only', description: 'Phase 1 supports PDF plans only.', variant: 'destructive' });
+    // Accept either the PDF mime type OR a .pdf filename extension. Some
+    // browsers / OS handoffs (Safari on iOS, files from email or iCloud)
+    // report an empty or generic mime for legit PDFs and would otherwise
+    // hit "PDF only" for a real plan.
+    const looksLikePdf =
+      file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+    if (!looksLikePdf) {
+      toast({
+        title: 'PDF only',
+        description: `Phase 1 supports PDF plans only (got "${file.type || 'unknown'}" for ${file.name}).`,
+        variant: 'destructive',
+      });
       return;
     }
     setUploading(true);
@@ -361,7 +371,28 @@ export default function TakeoffStudio({ projectId, projectName, scope, estimateI
       setPageNumber(1);
       toast({ title: 'Plan uploaded', description: file.name });
     } catch (e: any) {
-      toast({ title: 'Upload failed', description: e.message, variant: 'destructive' });
+      // Log the full error object so DevTools shows the Firebase Storage
+      // code (storage/unauthorized, storage/canceled, storage/quota-exceeded,
+      // storage/unauthenticated, storage/retry-limit-exceeded, ...). The
+      // toast summary alone was hiding the actual reason.
+      console.error('[TakeoffStudio] upload failed:', e);
+      const code = e?.code ? String(e.code) : '';
+      const reason = e?.message || 'Something went wrong.';
+      const hint =
+        code === 'storage/unauthorized'
+          ? 'Storage rules blocked this upload — check that you are on the project team.'
+          : code === 'storage/unauthenticated'
+          ? 'Auth token expired — sign out and back in, then retry.'
+          : code === 'storage/quota-exceeded'
+          ? 'Storage quota exceeded on this bucket.'
+          : code === 'storage/retry-limit-exceeded'
+          ? 'Network dropped mid-upload — try again on a stable connection.'
+          : '';
+      toast({
+        title: 'Upload failed',
+        description: hint ? `${reason} — ${hint}` : reason,
+        variant: 'destructive',
+      });
     } finally {
       setUploading(false);
       setUploadProgress(0);
