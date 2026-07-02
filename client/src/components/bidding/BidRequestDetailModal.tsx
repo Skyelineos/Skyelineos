@@ -141,7 +141,17 @@ export function BidRequestDetailModal({ request, projectId, projectName, onClose
 
   const rows: SubRow[] = subs.map(sub => ({
     sub,
-    submittedBid: bidsForRequest.find(b => (b.subContactId || b.subId) === sub.id) || null,
+    // PortalBid identifies a submitter by BOTH .subContactId (the contact
+    // record the sub was invited as) AND .subUserId (the Firebase auth uid
+    // of the account that actually submitted). Match on either — a sub who
+    // was invited by contact id and later authed with a linked uid should
+    // still show up as "submitted" in this column. `b.subId` used to be
+    // read as a fallback but does not exist on PortalBid — see
+    // components/bidding/types.ts.
+    submittedBid: bidsForRequest.find(b =>
+      (b.subContactId && b.subContactId === sub.id) ||
+      (sub.linkedUserId && b.subUserId === sub.linkedUserId)
+    ) || null,
   }));
 
   const pending = rows.filter(r => !r.submittedBid);
