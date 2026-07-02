@@ -84,8 +84,11 @@ export function BidFromEstimateModal({ isOpen, onClose, estimateItem, projectId 
     },
   });
 
-  // Fetch subcontractors
-  const { data: allContacts = [] } = useQuery({
+  // Fetch subcontractors.
+  // Explicit <Contact[]> generic — without it useQuery infers `unknown`,
+  // breaking the .filter() call on the next line at both type-check and
+  // runtime.
+  const { data: allContacts = [] } = useQuery<Contact[]>({
     queryKey: ['/api/contacts'],
     enabled: isOpen,
   });
@@ -278,7 +281,6 @@ export function BidFromEstimateModal({ isOpen, onClose, estimateItem, projectId 
                     <TradeTypeComboBox
                       value={selectedTrade}
                       onValueChange={handleTradeSelection}
-                      placeholder="Choose a trade type"
                     />
                     {selectedTrade && (
                       <p className="text-sm text-gray-600">
