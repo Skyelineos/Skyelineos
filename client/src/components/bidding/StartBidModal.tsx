@@ -65,8 +65,10 @@ export function StartBidModal({
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Fetch all subcontractors from contacts
-  const { data: allContacts = [] } = useQuery({
+  // Fetch all subcontractors from contacts.
+  // Explicit <any[]> generic — without it useQuery infers `unknown`, breaking
+  // the .filter() call on the next line at both type-check and runtime.
+  const { data: allContacts = [] } = useQuery<any[]>({
     queryKey: ['/api/contacts'],
   });
 
@@ -341,8 +343,6 @@ export function StartBidModal({
             <TradeTypeComboBox
               value={selectedTrade === 'manual' ? '' : selectedTrade}
               onValueChange={(value) => handleTradeSelection(value || 'manual')}
-              placeholder="Select a trade to invite all vendors"
-              allowAddNew={false}
             />
           </div>
 
