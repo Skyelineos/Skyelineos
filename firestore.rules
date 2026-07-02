@@ -234,6 +234,15 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Master cost code catalog — company-wide spine for bid packages,
+    // budgets, and client-portal cost rollups. GC-side only (isGCOnly
+    // excludes PM per D-001); clients see rolled-up project budgets,
+    // never the raw master list.
+    match /costCodes/{code} {
+      allow read, write: if isGCOnly();
+      allow delete: if isAdmin();
+    }
+
     // Estimates — linked to clients and jobs.
     // Financial. Read-blocked for PM per D-001 ("shouldn't have the
     // financials" — Tyler 2026-06): isGCOnly() excludes projectManager.
