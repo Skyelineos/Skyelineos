@@ -1,0 +1,119 @@
+code,item,division,bid_package,client_category,allowance,tier_variable,notes
+01-010,Building Permit & Plan Check,01 Precon & General Requirements,GC Direct,Plans Permits & Management,N,N,City/county permit fees
+01-020,Impact & Utility Connection Fees,01 Precon & General Requirements,GC Direct,Plans Permits & Management,N,N,Water/sewer/power connection + impact fees
+01-030,Architectural Design & Drafting,01 Precon & General Requirements,Design,Plans Permits & Management,N,N,
+01-040,Structural Engineering,01 Precon & General Requirements,Engineering,Plans Permits & Management,N,N,
+01-050,Civil Engineering & Site Plan,01 Precon & General Requirements,Engineering,Plans Permits & Management,N,N,
+01-060,Geotechnical / Soils Report,01 Precon & General Requirements,Engineering,Plans Permits & Management,N,N,
+01-070,Survey & Staking,01 Precon & General Requirements,Survey,Plans Permits & Management,N,N,Boundary + construction staking
+01-080,HOA / ARC Review Fees,01 Precon & General Requirements,GC Direct,Plans Permits & Management,N,N,
+01-090,Builder's Risk Insurance,01 Precon & General Requirements,GC Direct,Plans Permits & Management,N,N,
+01-100,Temporary Power,01 Precon & General Requirements,Electrical,Plans Permits & Management,N,N,Temp panel + monthly usage
+01-110,Temporary Water,01 Precon & General Requirements,GC Direct,Plans Permits & Management,N,N,
+01-120,Portable Toilet & Dumpster,01 Precon & General Requirements,GC Direct,Plans Permits & Management,N,N,Monthly rental for build duration
+01-130,Site Security & Temp Fencing,01 Precon & General Requirements,GC Direct,Plans Permits & Management,N,N,
+01-140,Project Supervision,01 Precon & General Requirements,GC Direct,Plans Permits & Management,N,N,Super time if billed to job
+02-010,Demolition,02 Sitework,Excavation,Site & Foundation,N,N,Existing structure removal if applicable
+02-020,Lot Clearing & Grubbing,02 Sitework,Excavation,Site & Foundation,N,N,
+02-030,Excavation & Backfill,02 Sitework,Excavation,Site & Foundation,N,N,Dig + backfill + compaction
+02-040,Rough Grading,02 Sitework,Excavation,Site & Foundation,N,N,
+02-050,Erosion Control / SWPPP,02 Sitework,Excavation,Site & Foundation,N,N,Utah SWPPP compliance
+02-060,Utility Trenching & Laterals,02 Sitework,Excavation,Site & Foundation,N,N,Sewer/water/power/gas laterals
+02-070,Septic System,02 Sitework,Septic,Site & Foundation,N,N,If no sewer available
+02-080,Well & Pump,02 Sitework,Well Drilling,Site & Foundation,N,N,If no culinary water
+02-090,Structural Retaining Walls,02 Sitework,Concrete,Site & Foundation,N,N,Engineered walls
+02-100,Rock Removal / Blasting,02 Sitework,Excavation,Site & Foundation,N,N,Contingent allowance on rocky lots
+03-010,Footings & Foundation Walls,03 Concrete & Foundation,Concrete,Site & Foundation,N,N,Labor + material + pump
+03-020,Foundation Waterproofing & Drain,03 Concrete & Foundation,Waterproofing,Site & Foundation,N,N,Membrane + perimeter drain
+03-030,Window Wells,03 Concrete & Foundation,Concrete,Site & Foundation,N,N,
+03-040,Interior Flatwork (Basement/Garage),03 Concrete & Foundation,Concrete,Site & Foundation,N,N,Slabs + vapor barrier
+03-050,Radon Mitigation Rough,03 Concrete & Foundation,Plumbing,Site & Foundation,N,N,Passive rough-in
+04-010,Framing Labor,04 Framing & Structure,Framing,Structure & Roof,N,N,
+04-020,Lumber Package,04 Framing & Structure,Lumber Supplier,Structure & Roof,N,N,Material only
+04-030,Trusses,04 Framing & Structure,Truss Supplier,Structure & Roof,N,N,
+04-040,Structural Steel & Beams,04 Framing & Structure,Steel,Structure & Roof,N,N,
+04-050,Framing Hardware & Fasteners,04 Framing & Structure,Lumber Supplier,Structure & Roof,N,N,
+04-060,Crane & Equipment,04 Framing & Structure,GC Direct,Structure & Roof,N,N,
+05-010,Roofing,05 Roofing,Roofing,Structure & Roof,N,Y,Asphalt (Signature) / metal or tile accents (Estate/Summit)
+05-020,Rain Gutters & Downspouts,05 Roofing,Gutters,Structure & Roof,N,N,
+05-030,Snow Retention & Ice/Water Detail,05 Roofing,Roofing,Structure & Roof,N,Y,Utah snow load detail
+06-010,Stone / Masonry Veneer,06 Exterior Finishes,Masonry,Exterior Finishes,Y,Y,Coverage scales by tier
+06-020,Stucco,06 Exterior Finishes,Stucco,Exterior Finishes,N,Y,
+06-030,Siding,06 Exterior Finishes,Siding,Exterior Finishes,N,Y,Fiber cement / wood / metal by tier
+06-040,Soffit & Fascia,06 Exterior Finishes,Siding,Exterior Finishes,N,N,
+06-050,Exterior Timber & Corbels,06 Exterior Finishes,Framing,Exterior Finishes,N,Y,Craftsman details (Carrington-style)
+06-060,Decks & Balconies,06 Exterior Finishes,Deck,Exterior Finishes,N,Y,Structure + waterproof coating + railing
+07-010,Window Package,07 Windows & Exterior Doors,Window Supplier,Windows & Doors,Y,Y,Vinyl / fiberglass / aluminum-clad by tier
+07-020,Window & Door Install Labor,07 Windows & Exterior Doors,Framing,Windows & Doors,N,N,Install + flashing
+07-030,Exterior Doors,07 Windows & Exterior Doors,Door Supplier,Windows & Doors,Y,Y,Entry statement door scales by tier
+07-040,Garage Doors & Openers,07 Windows & Exterior Doors,Garage Door,Windows & Doors,Y,Y,
+08-010,Plumbing Rough,08 Plumbing,Plumbing,Mechanical & Systems,N,N,
+08-020,Plumbing Top-Out & Trim,08 Plumbing,Plumbing,Mechanical & Systems,N,N,
+08-030,Plumbing Fixtures,08 Plumbing,Plumbing,Mechanical & Systems,Y,Y,Owner selection allowance
+08-040,Water Heaters / Tankless,08 Plumbing,Plumbing,Mechanical & Systems,N,Y,
+08-050,Water Softener & Filtration,08 Plumbing,Plumbing,Mechanical & Systems,N,Y,Utah hard water
+08-060,Gas Lines,08 Plumbing,Plumbing,Mechanical & Systems,N,N,Interior + exterior stubs
+09-010,HVAC Rough,09 HVAC,HVAC,Mechanical & Systems,N,N,
+09-020,HVAC Equipment & Trim,09 HVAC,HVAC,Mechanical & Systems,N,Y,SEER rating / zoning by tier
+09-030,Radiant Floor Heat,09 HVAC,HVAC,Mechanical & Systems,N,Y,Estate/Summit option
+09-040,Snow Melt System,09 HVAC,HVAC,Mechanical & Systems,N,Y,Driveway/walks - Summit
+10-010,Electrical Rough,10 Electrical,Electrical,Mechanical & Systems,N,N,
+10-020,Electrical Trim,10 Electrical,Electrical,Mechanical & Systems,N,N,
+10-030,Light Fixtures,10 Electrical,Electrical,Mechanical & Systems,Y,Y,Owner selection allowance
+10-040,Low Voltage / Structured Wiring,10 Electrical,Low Voltage,Mechanical & Systems,N,Y,
+10-050,Audio/Video & Home Automation,10 Electrical,Low Voltage,Mechanical & Systems,Y,Y,
+10-060,Security & Cameras,10 Electrical,Low Voltage,Mechanical & Systems,Y,Y,
+10-070,Solar PV,10 Electrical,Solar,Mechanical & Systems,Y,Y,Optional all tiers
+10-080,EV Charger,10 Electrical,Electrical,Mechanical & Systems,N,Y,
+10-090,Standby Generator,10 Electrical,Electrical,Mechanical & Systems,Y,Y,Summit option
+10-100,Heat Tape,10 Electrical,Electrical,Mechanical & Systems,N,N,Eaves & valleys
+11-010,Insulation,11 Insulation,Insulation,Mechanical & Systems,N,Y,Batt / blown / foam hybrid by tier
+11-020,Air Sealing & Foam,11 Insulation,Insulation,Mechanical & Systems,N,Y,
+11-030,Energy Testing & Certification,11 Insulation,Energy Rater,Mechanical & Systems,N,N,Blower door + code compliance
+12-010,Drywall Hang Tape & Texture,12 Drywall,Drywall,Interior Finishes,N,Y,Texture level by tier
+12-020,Specialty Wall Finishes,12 Drywall,Drywall,Interior Finishes,N,Y,Level 5 / plaster - Summit
+13-010,Interior Trim Material,13 Interior Finishes,Trim Supplier,Interior Finishes,N,Y,
+13-020,Finish Carpentry Labor,13 Interior Finishes,Finish Carpentry,Interior Finishes,N,Y,
+13-030,Interior Doors,13 Interior Finishes,Door Supplier,Interior Finishes,N,Y,Hollow / solid core / 8ft by tier
+13-040,Door Hardware,13 Interior Finishes,Trim Supplier,Interior Finishes,Y,Y,Owner selection allowance
+13-050,Cabinetry,13 Interior Finishes,Cabinets,Interior Finishes,Y,Y,Largest single selection item
+13-060,Countertops,13 Interior Finishes,Countertops,Interior Finishes,Y,Y,Quartz / quartzite / marble by tier
+13-070,Paint Interior & Exterior,13 Interior Finishes,Paint,Interior Finishes,N,Y,
+13-080,Tile Material,13 Interior Finishes,Tile Supplier,Interior Finishes,Y,Y,Owner selection allowance
+13-090,Tile Labor,13 Interior Finishes,Tile,Interior Finishes,N,Y,
+13-100,Hardwood Flooring,13 Interior Finishes,Flooring,Interior Finishes,Y,Y,
+13-110,Carpet,13 Interior Finishes,Flooring,Interior Finishes,Y,Y,
+13-120,LVP & Other Flooring,13 Interior Finishes,Flooring,Interior Finishes,Y,Y,
+13-130,Shower Glass & Mirrors,13 Interior Finishes,Glass,Interior Finishes,N,Y,
+13-140,Closet Systems,13 Interior Finishes,Closets,Interior Finishes,Y,Y,
+13-150,Stair Railing & Iron,13 Interior Finishes,Railing,Interior Finishes,N,Y,
+13-160,Feature Walls & Wall Treatments,13 Interior Finishes,Finish Carpentry,Interior Finishes,Y,Y,Wallpaper / slat walls / paneling
+14-010,Appliances,14 Specialties & Equipment,Appliance Supplier,Amenities & Equipment,Y,Y,Owner selection allowance
+14-020,Fireplace Units & Surrounds,14 Specialties & Equipment,Fireplace,Amenities & Equipment,Y,Y,
+14-030,Central Vacuum,14 Specialties & Equipment,Low Voltage,Amenities & Equipment,N,Y,
+14-040,Elevator,14 Specialties & Equipment,Elevator,Amenities & Equipment,N,Y,Summit option
+14-050,Steam Shower & Sauna,14 Specialties & Equipment,Plumbing,Amenities & Equipment,Y,Y,
+14-060,Cold Plunge,14 Specialties & Equipment,Plumbing,Amenities & Equipment,Y,Y,
+14-070,Theater / Media Room Buildout,14 Specialties & Equipment,Low Voltage,Amenities & Equipment,Y,Y,AV + seating + acoustic treatment
+14-080,Golf Simulator,14 Specialties & Equipment,Golf Sim Vendor,Amenities & Equipment,Y,Y,Enclosure + screen + launch monitor
+14-090,Sports Court,14 Specialties & Equipment,Sport Court Vendor,Amenities & Equipment,Y,Y,Indoor basement court
+14-100,Home Gym Buildout,14 Specialties & Equipment,Finish Carpentry,Amenities & Equipment,Y,Y,Rubber floor + mirrors + equipment
+14-110,Wine Room,14 Specialties & Equipment,Finish Carpentry,Amenities & Equipment,Y,Y,
+14-120,Safe Room / Vault Door,14 Specialties & Equipment,Specialty Vendor,Amenities & Equipment,Y,Y,
+15-010,Driveway & Exterior Flatwork,15 Exterior Improvements,Concrete,Outdoor Living & Landscape,N,Y,Broom / pavers / snowmelt-ready by tier
+15-020,Landscaping & Sprinklers,15 Exterior Improvements,Landscape,Outdoor Living & Landscape,Y,Y,
+15-030,Fencing & Gates,15 Exterior Improvements,Fencing,Outdoor Living & Landscape,Y,Y,
+15-040,Pool & Spa,15 Exterior Improvements,Pool,Outdoor Living & Landscape,Y,Y,
+15-050,Outdoor Kitchen & BBQ,15 Exterior Improvements,Landscape,Outdoor Living & Landscape,Y,Y,
+15-060,Pergola & Outdoor Structures,15 Exterior Improvements,Deck,Outdoor Living & Landscape,Y,Y,
+15-070,Exterior Fire Feature,15 Exterior Improvements,Landscape,Outdoor Living & Landscape,Y,Y,
+15-080,Landscape Lighting,15 Exterior Improvements,Landscape,Outdoor Living & Landscape,Y,Y,
+15-090,Final Grade,15 Exterior Improvements,Excavation,Outdoor Living & Landscape,N,N,
+16-010,Construction Cleaning,16 Completion,Cleaning,Completion,N,N,Rough + final clean
+16-020,Window Cleaning,16 Completion,Cleaning,Completion,N,N,
+16-030,Punch List & Touch-Up,16 Completion,GC Direct,Completion,N,N,
+16-040,Final Inspections & CO,16 Completion,GC Direct,Completion,N,N,
+17-010,Builder Fee,17 Soft Costs & Fees,GC Direct,Fees & Contingency,N,N,Cost-plus fee per contract
+17-020,Construction Loan Interest,17 Soft Costs & Fees,GC Direct,Fees & Contingency,N,N,If builder-financed
+17-030,Contingency,17 Soft Costs & Fees,GC Direct,Fees & Contingency,N,N,Recommend 5-10% of hard costs
+17-040,Utilities During Construction,17 Soft Costs & Fees,GC Direct,Fees & Contingency,N,N,

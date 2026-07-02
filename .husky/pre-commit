@@ -20,7 +20,10 @@ if [ -n "$STAGED_FILES" ]; then
   echo "🔐 Scanning staged files for secrets..."
 
   # One regex per line. Quoted heredoc => taken literally, no shell expansion.
-  SECRET_PATTERNS=$(cat <<'EOF'
+  # Defined as a function (not VAR=$(cat <<EOF)) because macOS /bin/sh is
+  # bash 3.2, which mis-parses heredocs inside $() when they contain quotes.
+  secret_patterns() {
+  cat <<'EOF'
 [aA][pP][iI][_-]?[kK][eE][yY].*[=:].*['"][a-zA-Z0-9]{20,}['"]
 [sS][eE][cC][rR][eE][tT].*[=:].*['"][a-zA-Z0-9]{20,}['"]
 [tT][oO][kK][eE][nN].*[=:].*['"][a-zA-Z0-9]{20,}['"]
@@ -35,7 +38,7 @@ sk_live_[0-9a-zA-Z]{24,}
 pk_live_[0-9a-zA-Z]{24,}
 ['"][a-zA-Z0-9]{32,}['"]
 EOF
-)
+  }
 
   FOUND_SECRETS=""
 
@@ -51,9 +54,9 @@ EOF
         grep -nE "$pattern" "$file" | head -3
         FOUND_SECRETS="yes"
       fi
-    done <<EOF
-$SECRET_PATTERNS
-EOF
+    done <<PATTERNS
+$(secret_patterns)
+PATTERNS
   done
 
   if [ -n "$FOUND_SECRETS" ]; then
