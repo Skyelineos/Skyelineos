@@ -52,6 +52,14 @@ interface BidProcess {
   createdAt: string;
 }
 
+// TODO(bid-pipeline): the /api/bid-processes/* and /api/bid-responses/*
+// endpoints this component calls do NOT exist server-side (removed in the
+// Session 10 cleanup — see CLAUDE.md "Bid system — single source of truth").
+// This file is also not imported anywhere as of 2026-07-02. Signatures are
+// now aligned with the current apiRequest(url, RequestInit) contract so tsc
+// stays green, but the component will 404 at runtime until either (a) it's
+// deleted, or (b) it's rewritten to read Firestore directly like
+// PortalBidsPanel does. Tracked in docs/BID_PIPELINE_MISSION.md.
 export default function BidResponseManager({ projectId, estimateId }: BidResponseManagerProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -63,13 +71,13 @@ export default function BidResponseManager({ projectId, estimateId }: BidRespons
   // Fetch bid processes for the project
   const { data: bidProcesses = [], isLoading: loadingProcesses } = useQuery({
     queryKey: ['/api/bid-processes/project', projectId],
-    queryFn: () => apiRequest(`/api/bid-processes/project?projectId=${projectId}`, 'GET'),
+    queryFn: () => apiRequest(`/api/bid-processes/project?projectId=${projectId}`),
   });
 
   // Fetch bid responses for the project
   const { data: bidResponses = [], isLoading: loadingResponses } = useQuery({
     queryKey: ['/api/bid-responses/project', projectId],
-    queryFn: () => apiRequest(`/api/bid-responses/project/${projectId}`, 'GET'),
+    queryFn: () => apiRequest(`/api/bid-responses/project/${projectId}`),
   });
 
   // Fetch all contacts for subcontractor info
@@ -80,7 +88,7 @@ export default function BidResponseManager({ projectId, estimateId }: BidRespons
   // Send reminder mutation
   const sendReminderMutation = useMutation({
     mutationFn: async (data: { bidProcessId: number; message: string }) => {
-      return apiRequest('/api/bid-processes/remind', 'POST', data);
+      return apiRequest('/api/bid-processes/remind', { method: 'POST', body: JSON.stringify(data) });
     },
     onSuccess: () => {
       toast({
@@ -102,7 +110,7 @@ export default function BidResponseManager({ projectId, estimateId }: BidRespons
   // Award bid mutation
   const awardBidMutation = useMutation({
     mutationFn: async (bidResponseId: number) => {
-      return apiRequest(`/api/bid-responses/${bidResponseId}/select`, 'PATCH');
+      return apiRequest(`/api/bid-responses/${bidResponseId}/select`, { method: 'PATCH' });
     },
     onSuccess: () => {
       toast({
@@ -125,7 +133,7 @@ export default function BidResponseManager({ projectId, estimateId }: BidRespons
   // Close bidding process mutation
   const closeBiddingMutation = useMutation({
     mutationFn: async (bidProcessId: number) => {
-      return apiRequest(`/api/bid-processes/${bidProcessId}/close`, 'PATCH');
+      return apiRequest(`/api/bid-processes/${bidProcessId}/close`, { method: 'PATCH' });
     },
     onSuccess: () => {
       toast({
