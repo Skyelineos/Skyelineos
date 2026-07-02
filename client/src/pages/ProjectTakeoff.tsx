@@ -10,7 +10,9 @@ import { useAuth } from '@/hooks/use-auth';
 import { ChevronLeft, AlertTriangle } from 'lucide-react';
 import TakeoffStudio from '@/components/takeoff/TakeoffStudio';
 
-const ALLOWED_ROLES = ['admin', 'gc', 'project_manager', 'designer'];
+// Canonical role names first (per shared/auth-types.ts); legacy snake_case
+// 'project_manager' left as an alias so any historical user doc still resolves.
+const ALLOWED_ROLES = ['admin', 'gc', 'projectManager', 'project_manager', 'designer'];
 
 export default function ProjectTakeoff() {
   const [, params] = useRoute('/projects/:id/takeoff');
