@@ -26,6 +26,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { authFetch } from '@/lib/authFetch';
 import {
+import { logDecision } from '@/lib/decisions/logDecision';
   CheckCircle2,
   XCircle,
   MessageSquareWarning,
@@ -152,6 +153,25 @@ export default function EstimatesTab({ projectId }: EstimatesTabProps) {
       const json = await res.json().catch(() => ({}));
       if (!res.ok || !json.ok) {
         throw new Error(json?.error || `Request failed (HTTP ${res.status}).`);
+      }
+      // Fire-and-forget decision-log write so the audit trail records
+      // "on X date this client approved/declined estimate Y". Failure never
+      // blocks the primary action (logDecision swallows).
+      const est = estimates.find(e => e.id === estimateId);
+      const kind: 'approval' | 'rejection' | 'scope_change' =
+        action === 'approve' ? 'approval' :
+        action === 'decline' ? 'rejection' :
+        'scope_change';
+      if (est?.projectId) {
+        void logDecision({
+          projectId: est.projectId,
+          kind,
+          title: `Estimate ${action === 'approve' ? 'approved' : action === 'decline' ? 'declined' : 'changes requested'} — ${est.title || 'Untitled'}`,
+          summary: message ? `Client note: ${message}` : undefined,
+          subjectRef: { collection: 'estimates', id: est.id, label: est.title },
+          context: { estimateId: est.id, action, totalAmount: est.totalAmount, message },
+          visibility: 'client-visible',
+        });
       }
       toast({
         title:

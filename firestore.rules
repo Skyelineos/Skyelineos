@@ -516,9 +516,29 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // Communication Center — Client Decision Log (staff-internal record).
+    // Client Decision Log (v1) — durable audit record for every material
+    // decision on a project. Staff always read. Client reads THEIR project's
+    // decisions when visibility=='client-visible'; internal decisions stay
+    // staff-only (mirrors the communications thread visibility model).
     match /decisions/{decisionId} {
-      allow read: if isGC();
+      allow read: if isGC()
+        || (isSignedIn()
+            && resource.data.visibility == 'client-visible'
+            && 'projectId' in resource.data
+            && (
+                 // Homeowner on this project via clientIds[]
+                 (
+                   'clientIds' in get(/databases/(default)/documents/projects/$(resource.data.projectId)).data
+                   && get(/databases/(default)/documents/projects/$(resource.data.projectId)).data.clientIds is list
+                   && request.auth.uid in get(/databases/(default)/documents/projects/$(resource.data.projectId)).data.clientIds
+                 )
+                 // Legacy: single clientId field
+                 || (
+                   'clientId' in get(/databases/(default)/documents/projects/$(resource.data.projectId)).data
+                   && get(/databases/(default)/documents/projects/$(resource.data.projectId)).data.clientId == request.auth.uid
+                 )
+               )
+           );
       allow create: if isGC() && request.resource.data.createdBy == request.auth.uid;
       allow update: if isGC();
       allow delete: if isAdmin();
