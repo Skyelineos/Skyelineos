@@ -96,10 +96,32 @@ async function checkSubCompliance(
   const u = userSnap.data() as any;
   const missing: string[] = [];
   if (!u.w9Filed) missing.push('W-9 tax form');
-  if (!u.insuranceCurrent) missing.push('Certificate of Insurance');
+  if (!u.insuranceCurrent) {
+    missing.push('Certificate of Insurance');
+  } else if (u.insuranceExpiresAt) {
+    // COI expiration hardening. The compliance upload route already mirrors
+    // insuranceExpiresAt from contacts/{id}.compliance.coi.expiresAt at
+    // ingest time. If today >= that date, the COI on file has lapsed and
+    // the sub is functionally uninsured for this award. Same UX pattern as
+    // "missing" — surface WHICH item and WHY so the GC knows the fix.
+    const exp = new Date(String(u.insuranceExpiresAt));
+    if (Number.isFinite(exp.getTime()) && exp.getTime() < Date.now()) {
+      const isoDay = String(u.insuranceExpiresAt).slice(0, 10);
+      missing.push(`Certificate of Insurance (expired ${isoDay})`);
+    }
+  }
   if (!u.agreementSigned) missing.push('Signed Subcontractor Agreement');
   if (!u.contractorLicenseNumber || !String(u.contractorLicenseNumber).trim()) {
     missing.push('Contractor license number');
+  } else if (u.contractorLicenseExpiresAt) {
+    // Same treatment for the contractor license when an expiration is on
+    // file. Not every jurisdiction requires it, so we only enforce when the
+    // date is present — silent no-op otherwise.
+    const exp = new Date(String(u.contractorLicenseExpiresAt));
+    if (Number.isFinite(exp.getTime()) && exp.getTime() < Date.now()) {
+      const isoDay = String(u.contractorLicenseExpiresAt).slice(0, 10);
+      missing.push(`Contractor license (expired ${isoDay})`);
+    }
   }
   return {
     ok: missing.length === 0,

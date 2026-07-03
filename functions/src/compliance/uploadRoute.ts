@@ -154,6 +154,7 @@ export function registerComplianceUploadRoute(
       }
       if (data.type === 'contractorLicense' && data.contractorLicenseNumber) {
         userMirror.contractorLicenseNumber = String(data.contractorLicenseNumber).trim();
+        if (data.expiresAt) userMirror.contractorLicenseExpiresAt = data.expiresAt;
       }
       batch.set(userRef, userMirror, { merge: true });
       await batch.commit();
