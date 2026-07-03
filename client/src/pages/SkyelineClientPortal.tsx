@@ -50,6 +50,7 @@ import { ProjectProgressView } from '@/components/projects/ProjectProgressView';
 import type { GeneratedSchedule } from '@/lib/schedule/types';
 
 import {
+import { ProjectDecisionsCard } from '@/components/projects/ProjectDecisionsCard';
   LayoutDashboard,
   Palette,
   DollarSign,
@@ -490,6 +491,13 @@ export default function SkyelineClientPortal() {
               project={selectedProject}
               onNavigate={handleNavigate}
             />
+            {/* Client-visible decisions on this project. Firestore rules gate
+                the query to visibility=='client-visible' only. */}
+            {selectedProjectId && (
+              <div className="px-4 sm:px-6">
+                <ProjectDecisionsCard projectId={selectedProjectId} audience="client" />
+              </div>
+            )}
           </div>
         );
       }

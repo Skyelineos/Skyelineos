@@ -40,6 +40,7 @@ import { JobsiteLocationCard } from '@/components/common/JobsiteLocationCard';
 import { ProjectOverviewKPIStrip } from '@/components/projects/ProjectOverviewKPIStrip';
 import { ProjectTodayInbox } from '@/components/projects/ProjectTodayInbox';
 import { ProjectActivityFeed } from '@/components/projects/ProjectActivityFeed';
+import { ProjectDecisionsCard } from '@/components/projects/ProjectDecisionsCard';
 import { ProjectPeopleStrip } from '@/components/projects/ProjectPeopleStrip';
 import { ProjectBudgetHeatMap } from '@/components/projects/ProjectBudgetHeatMap';
 import { ProjectWeatherCard } from '@/components/projects/ProjectWeatherCard';
@@ -338,6 +339,12 @@ export default function ProjectOverview() {
         <ProjectPeopleStrip projectId={projectId!} project={project} />
 
         {/* Recent activity — last 14 days of notifications for this project. */}
+        {/* Decision Log — every material approval / rejection tied back to
+            the source doc. Sits above the activity feed since decisions are
+            the record of WHAT WAS AGREED; activity is everything that
+            happened including noise. */}
+        <ProjectDecisionsCard projectId={projectId!} audience="gc" />
+
         <ProjectActivityFeed projectId={projectId!} />
 
         {/* Trades on this project — derived from task data. */}

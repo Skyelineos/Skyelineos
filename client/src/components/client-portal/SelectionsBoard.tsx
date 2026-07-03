@@ -1,3 +1,4 @@
+import { logDecision } from '@/lib/decisions/logDecision';
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { collection, getDocs, addDoc, updateDoc, doc, orderBy, query as fsQuery, serverTimestamp } from 'firebase/firestore';
@@ -68,8 +69,9 @@ export default function SelectionsBoard({ projectId, clientId }: SelectionsBoard
         items: updatedItems,
         updatedAt: serverTimestamp(),
       });
+      let overageCoId: string | null = null;
       if (overage > 0) {
-        await addDoc(collection(db, 'changeOrders'), {
+        const coRef = await addDoc(collection(db, 'changeOrders'), {
           projectId,
           title: `Selection Overage — ${sel.room} ${sel.area}`,
           description: `Client approved ${sel.room} ${sel.area} (${sel.category}). Total exceeds allowance by $${overage.toLocaleString()}.`,
@@ -80,7 +82,23 @@ export default function SelectionsBoard({ projectId, clientId }: SelectionsBoard
           clientId,
           createdAt: serverTimestamp(),
         });
+        overageCoId = coRef.id;
       }
+      // Log a client-visible decision so the audit trail carries the fact
+      // "on X date the homeowner approved this selection" independent of
+      // any later edit to the selection or CO doc.
+      await logDecision({
+        projectId,
+        kind: 'selection',
+        title: `Selection approved — ${sel.room} ${sel.area}`,
+        summary: overage > 0
+          ? `Client approved ${sel.category}. Exceeded allowance by $${overage.toLocaleString()} — CO pending.`
+          : `Client approved ${sel.category}. Within allowance.`,
+        subjectRef: { collection: `projects/${projectId}/selections`, id: sel.id, label: `${sel.room} ${sel.area}` },
+        context: { room: sel.room, area: sel.area, category: sel.category, overage, overageCoId },
+        visibility: 'client-visible',
+        clientId,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['selections', projectId] });

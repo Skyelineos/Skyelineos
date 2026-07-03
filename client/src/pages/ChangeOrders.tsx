@@ -18,6 +18,7 @@ import { useToast } from '@/hooks/use-toast';
 import { fireTrigger } from '@/lib/notifications';
 import { useConfirm } from '@/hooks/use-confirm';
 import {
+import { logDecision } from '@/lib/decisions/logDecision';
   Plus, Search, FileText, MoreVertical, CheckCircle, XCircle, Eye,
   TrendingUp, Clock, DollarSign, Calendar
 } from 'lucide-react';
@@ -238,6 +239,15 @@ export function ChangeOrdersContent({ projectId: scopedProjectId }: { projectId?
         status: 'approved',
         approvedAt: serverTimestamp()
       });
+      void logDecision({
+        projectId: String(co.projectId || ''),
+        kind: 'change_order',
+        title: `Change order approved — ${co.title || 'Untitled CO'}`,
+        summary: co.description ? String(co.description).slice(0, 300) : undefined,
+        subjectRef: { collection: 'changeOrders', id: co.id, label: co.title },
+        context: { changeOrderId: co.id, amount: co.amount, previousStatus: co.status, newStatus: 'approved' },
+        visibility: 'client-visible',
+      });
       toast({ title: 'Change order approved' });
     } catch (error: unknown) {
       toast({
@@ -258,6 +268,15 @@ export function ChangeOrdersContent({ projectId: scopedProjectId }: { projectId?
     if (!ok) return;
     try {
       await updateDoc(doc(db, 'changeOrders', co.id), { status: 'rejected' });
+      void logDecision({
+        projectId: String(co.projectId || ''),
+        kind: 'change_order',
+        title: `Change order rejected — ${co.title || 'Untitled CO'}`,
+        summary: co.description ? String(co.description).slice(0, 300) : undefined,
+        subjectRef: { collection: 'changeOrders', id: co.id, label: co.title },
+        context: { changeOrderId: co.id, amount: co.amount, previousStatus: co.status, newStatus: 'rejected' },
+        visibility: 'client-visible',
+      });
       toast({ title: 'Change order rejected' });
     } catch (error: unknown) {
       toast({
