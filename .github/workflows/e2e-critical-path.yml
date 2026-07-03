@@ -1,0 +1,66 @@
+name: E2E Critical Path
+
+# Runs the critical-path Playwright suite against the deployed app on:
+#   - every push to main (deploy notification email confirms first, then this runs)
+#   - every pull_request touching client/, functions/, or scripts/e2e/
+#   - manual dispatch
+#
+# Does NOT block deploy — this workflow runs POST-deploy so a failure surfaces
+# via the workflow status but doesn't roll back the release. That trade-off
+# keeps CI turnaround fast for the (many) code-only changes that don't affect
+# the critical path.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'client/src/**'
+      - 'functions/src/**'
+      - 'scripts/e2e/**'
+  pull_request:
+    paths:
+      - 'client/src/**'
+      - 'functions/src/**'
+      - 'scripts/e2e/**'
+  workflow_dispatch:
+
+concurrency:
+  group: e2e-critical-path-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      BASE_URL: https://skyelineos.web.app
+      # These must be set as repo Actions secrets. Missing → suite skips.
+      E2E_ADMIN_EMAIL: ${{ secrets.E2E_ADMIN_EMAIL }}
+      E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
+      E2E_CONFIRM: '1'          # skip the confirmation prompt
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run critical-path suite
+        run: node scripts/e2e/run.mjs --suite critical --yes
+
+      - name: Upload screenshots (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: critical-path-screenshots
+          path: scripts/e2e/screenshots/critical-path/
+          if-no-files-found: ignore
+          retention-days: 7

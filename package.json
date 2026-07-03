@@ -20,7 +20,8 @@
     "test:e2e:ui": "node scripts/e2e/run.mjs --suite ui",
     "test:e2e:cleanup": "node scripts/e2e/cleanup.mjs",
     "test:tour": "node scripts/page-tour.mjs",
-    "prepare": "husky || true"
+    "prepare": "husky || true",
+    "test:e2e:critical": "node scripts/e2e/run.mjs --suite critical"
   },
   "dependencies": {
     "@axe-core/react": "^4.10.2",

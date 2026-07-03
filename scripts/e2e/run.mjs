@@ -16,6 +16,7 @@ import { writeFileSync } from 'node:fs';
 import { createHarness, BASE_URL, API_BASE, RUN_ID } from './lib/harness.mjs';
 import { run as runTaskLibrary } from './suites/taskLibrary.suite.mjs';
 import { run as runUiSmoke } from './suites/uiSmoke.suite.mjs';
+import { run as runCriticalPath } from './suites/criticalPath.suite.mjs';
 
 const args = process.argv.slice(2);
 const has = (f) => args.includes(f);
@@ -61,6 +62,10 @@ async function report(phase, patch) {
 // Which suites to run.
 const runData = suiteArg ? suiteArg === 'taskLibrary' : true;
 const runUi = suiteArg ? suiteArg === 'ui' : has('--ui');
+// Critical-path suite: opt-in via --suite critical OR --critical flag.
+// Skipped by default so a plain `npm run test:e2e` stays fast; add it to
+// CI's parallel matrix as a separate job.
+const runCritical = suiteArg ? suiteArg === 'critical' : has('--critical');
 
 async function confirm() {
   if (yes) return;
@@ -98,6 +103,10 @@ async function confirm() {
     if (runUi) {
       console.log('\n▶ Suite: UI smoke');
       await runUiSmoke(h);
+    }
+    if (runCritical) {
+      console.log('\n▶ Suite: Critical path');
+      await runCriticalPath(h);
     }
   } catch (e) {
     hadError = true;
