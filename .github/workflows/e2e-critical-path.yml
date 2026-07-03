@@ -34,10 +34,17 @@ jobs:
     timeout-minutes: 15
     env:
       BASE_URL: https://skyelineos.web.app
+      # Public Firebase web config — already embedded in the deployed app bundle
+      VITE_FIREBASE_API_KEY: AIzaSyA4Yad3iMPyNGMiijucmJm5j4sa5O0I0E0
+      VITE_FIREBASE_AUTH_DOMAIN: skyelineos.firebaseapp.com
+      VITE_FIREBASE_PROJECT_ID: skyelineos
+      VITE_FIREBASE_STORAGE_BUCKET: skyelineos.appspot.com
+      VITE_FIREBASE_MESSAGING_SENDER_ID: '1062333414392'
+      VITE_FIREBASE_APP_ID: '1:1062333414392:web:cd5b4ffa2d6345b3ca340d'
       # These must be set as repo Actions secrets. Missing → suite skips.
       E2E_ADMIN_EMAIL: ${{ secrets.E2E_ADMIN_EMAIL }}
       E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
-      E2E_CONFIRM: '1'          # skip the confirmation prompt
+      E2E_CONFIRM: '1' # skip the confirmation prompt
     steps:
       - uses: actions/checkout@v4
 
