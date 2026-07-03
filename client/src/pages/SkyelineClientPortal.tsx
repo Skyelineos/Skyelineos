@@ -49,8 +49,9 @@ import { ScheduleTimeline } from '@/components/schedule/ScheduleTimeline';
 import { ProjectProgressView } from '@/components/projects/ProjectProgressView';
 import type { GeneratedSchedule } from '@/lib/schedule/types';
 
-import {
 import { ProjectDecisionsCard } from '@/components/projects/ProjectDecisionsCard';
+
+import {
   LayoutDashboard,
   Palette,
   DollarSign,
