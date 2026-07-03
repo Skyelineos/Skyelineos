@@ -63,6 +63,11 @@ interface LineItem {
   subName?: string;
   notes?: string;
   fromEmail?: boolean;
+  /** Extract-Review-Accept marker. When true, this row came from an AI
+   *  extraction (email/PDF import) and has NOT yet been reviewed by the
+   *  user. Rendered with a yellow tint + Accept/Reject affordances.
+   *  Flipped to false (or the field removed) once the user accepts. */
+  isProposed?: boolean;
   // Takeoff + selection fields
   takeoffMeasurementId?: string;
   needsSelection?: boolean;
@@ -400,14 +405,44 @@ function LineItemRow({
   const rowClass = lineStatus === 'ex'    ? 'opacity-60'
                  : lineStatus === 'note'  ? 'italic'
                  : '';
-  const rowStyle: React.CSSProperties = (
-    lineStatus === 'ex'    ? { borderLeft: '3px dashed #B91C1C', paddingLeft: '8px' }
-  : lineStatus === 'note'  ? { borderLeft: '3px solid #1D4ED8', paddingLeft: '8px', backgroundColor: 'rgba(59,130,246,0.03)' }
-  : lineStatus === 'allow' ? { borderLeft: '3px solid #C9A96E', paddingLeft: '8px', backgroundColor: 'rgba(245,158,11,0.04)' }
-  : {}
-  );
+  const rowStyle: React.CSSProperties = item.isProposed
+    // Extract → Review → Accept: proposed rows sit in a yellow tint until
+    // the user clicks Accept. The tint beats the line-status tint (proposed
+    // is a stronger signal — "you might not want this at all").
+    ? { borderLeft: '3px solid #F59E0B', paddingLeft: '8px', backgroundColor: 'rgba(245,158,11,0.08)' }
+    : (
+      lineStatus === 'ex'    ? { borderLeft: '3px dashed #B91C1C', paddingLeft: '8px' }
+    : lineStatus === 'note'  ? { borderLeft: '3px solid #1D4ED8', paddingLeft: '8px', backgroundColor: 'rgba(59,130,246,0.03)' }
+    : lineStatus === 'allow' ? { borderLeft: '3px solid #C9A96E', paddingLeft: '8px', backgroundColor: 'rgba(245,158,11,0.04)' }
+    : {}
+    );
   return (
     <div className={`py-1 border-b border-gray-100 last:border-0 space-y-0.5 ${rowClass}`} style={rowStyle}>
+      {item.isProposed && (
+        <div className="flex items-center gap-2 mb-1 px-0.5">
+          <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-amber-800 bg-amber-100 border border-amber-200 rounded-full px-2 py-0.5">
+            Proposed — needs review
+          </span>
+          <button
+            type="button"
+            onClick={() => onChange(item.id, 'isProposed', false)}
+            className="text-[11px] font-medium text-white rounded px-2 py-0.5 hover:opacity-90"
+            style={{ backgroundColor: '#C9A96E' }}
+            title="Accept this row as-is"
+          >
+            Accept
+          </button>
+          <button
+            type="button"
+            onClick={() => onDelete(item.id)}
+            className="text-[11px] font-medium text-red-700 border border-red-200 rounded px-2 py-0.5 hover:bg-red-50"
+            title="Reject and remove this row"
+          >
+            Reject
+          </button>
+          <span className="text-[11px] text-gray-500">Edit any field below then Accept.</span>
+        </div>
+      )}
       {/* ── Row 1 column headers ── New order per Tyler:
             Status · Trade · Mat/Lab · Item · Qty · UOM · Cost/unit · Sell/unit · Measure.
             Total Qty is moved to Row 2 as a *displayed result* (no longer an editable input). */}
@@ -1315,6 +1350,26 @@ function EstimateModal({
             <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
               <div className="flex items-center gap-2">
                 <h3 className="font-semibold text-gray-800">Scope of Work</h3>
+                {(() => {
+                  const proposedCount = items.filter(i => i.isProposed).length;
+                  if (proposedCount === 0) return null;
+                  return (
+                    <>
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-amber-800 bg-amber-100 border border-amber-200 rounded-full px-2 py-0.5">
+                        {proposedCount} proposed
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setItems(prev => prev.map(i => i.isProposed ? { ...i, isProposed: false } : i))}
+                        className="text-[11px] font-medium text-white rounded px-2 py-0.5 hover:opacity-90"
+                        style={{ backgroundColor: '#C9A96E' }}
+                        title="Accept every proposed row on this estimate"
+                      >
+                        Accept all {proposedCount}
+                      </button>
+                    </>
+                  );
+                })()}
                 {/* Import sub PDFs directly into this estimate. Multiple PDFs
                     across trades aggregate into one estimate's lineItems.
                     Only shown when the estimate has a project — the upload
@@ -1921,6 +1976,11 @@ export function EstimateBuilderContent({ projectId, projectName, embedded = fals
       subName: item.subName,
       notes: `From: ${item.subEmail} — ${item.notes?.slice(0, 120) ?? ''}`,
       fromEmail: true,
+      // Extract → Review → Accept: imported rows land as proposed. The
+      // GC must Accept (or edit + Accept) before they become "real" data
+      // on the estimate. Visually rendered with a yellow tint so the
+      // difference between AI-extracted and human-reviewed is unmissable.
+      isProposed: true,
     }));
 
     const projectId: string | undefined = items[0]?.projectId;
