@@ -10,13 +10,11 @@ import {
   CheckSquare,
   Shield,
   Palette,
-  Camera,
   DollarSign,
   FileSignature,
   ArrowLeft,
   LogOut,
   X,
-  Menu
 } from 'lucide-react';
 
 const sidebarItems = [
@@ -24,56 +22,56 @@ const sidebarItems = [
     id: 'dashboard',
     label: 'Dashboard',
     icon: Home,
-    path: 'dashboard'
+    path: 'dashboard',
   },
   {
     id: 'contracts',
     label: 'My Contract',
     icon: FileSignature,
-    path: 'contracts'
+    path: 'contracts',
   },
   {
     id: 'documents',
     label: 'Documents',
     icon: FileText,
-    path: 'documents'
+    path: 'documents',
   },
   {
     id: 'design',
     label: 'Design',
     icon: Palette,
-    path: 'design'
+    path: 'design',
   },
   {
     id: 'schedule',
     label: 'Schedule',
     icon: Calendar,
-    path: 'schedule'
+    path: 'schedule',
   },
   {
     id: 'estimates',
     label: 'Estimates',
     icon: DollarSign,
-    path: 'estimates'
+    path: 'estimates',
   },
   {
     id: 'messages',
     label: 'Messages',
     icon: MessageSquare,
-    path: 'messages'
+    path: 'messages',
   },
   {
     id: 'punch-list',
     label: 'Punch List',
     icon: CheckSquare,
-    path: 'punch-list'
+    path: 'punch-list',
   },
   {
     id: 'warranty',
     label: 'Warranty',
     icon: Shield,
-    path: 'warranty'
-  }
+    path: 'warranty',
+  },
 ];
 
 interface ClientSidebarProps {
@@ -81,9 +79,13 @@ interface ClientSidebarProps {
   onToggle?: () => void;
 }
 
-export default function ClientSidebar({ isOpen = false, onToggle }: ClientSidebarProps) {
+export default function ClientSidebar({
+  isOpen = false,
+  onToggle,
+}: ClientSidebarProps) {
   const [location, setLocation] = useLocation();
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
+  const clientName = user?.name || 'Home Owner';
   const currentTab = location.split('/')[2] || 'dashboard';
 
   const handleBackClick = () => {
@@ -115,53 +117,49 @@ export default function ClientSidebar({ isOpen = false, onToggle }: ClientSideba
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed left-0 top-0 z-50 h-screen w-64 text-white transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0 lg:z-auto",
-          isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+          'fixed left-0 top-0 z-50 h-screen w-64 text-white transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0 lg:z-auto',
+          isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         )}
         style={{ backgroundColor: 'var(--color-sidebar-bg)' }}
       >
         {/* Mobile close button */}
-        <div className="flex items-center justify-between p-4 lg:hidden border-b border-slate-700">
+        <div className="flex items-center justify-between p-4 lg:hidden border-b border-white/10">
           <div className="text-lg font-semibold">Client Portal</div>
           <Button
             variant="ghost"
             size="icon"
             onClick={onToggle}
-            className="text-white hover:bg-slate-800"
+            className="text-white hover:bg-white/5"
           >
             <X className="h-5 w-5" />
           </Button>
         </div>
 
         {/* Desktop header with Back Button */}
-        <div className="p-4 border-b border-slate-700 hidden lg:block">
+        <div className="p-4 border-b border-white/10 hidden lg:block">
           <Button
             variant="ghost"
             size="sm"
             onClick={handleBackClick}
-            className="mb-3 w-full justify-start text-slate-300 hover:text-white hover:bg-slate-800"
+            className="mb-3 w-full justify-start text-white/70 hover:text-white hover:bg-white/5"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back to Dashboard
           </Button>
-          
+
           <div className="space-y-1">
-            <h2 className="text-lg font-semibold text-white">
-              Client Portal
-            </h2>
-            <p className="text-sm text-slate-300">
-              Jennifer Brown
-            </p>
+            <h2 className="text-lg font-semibold text-white">Client Portal</h2>
+            <p className="text-sm text-white/70">{clientName}</p>
           </div>
         </div>
 
         {/* Mobile header with back button */}
-        <div className="p-4 border-b border-slate-700 lg:hidden">
+        <div className="p-4 border-b border-white/10 lg:hidden">
           <Button
             variant="ghost"
             size="sm"
             onClick={handleBackClick}
-            className="mb-3 w-full justify-start text-slate-300 hover:text-white hover:bg-slate-800"
+            className="mb-3 w-full justify-start text-white/70 hover:text-white hover:bg-white/5"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back to Dashboard
@@ -170,20 +168,20 @@ export default function ClientSidebar({ isOpen = false, onToggle }: ClientSideba
 
         {/* Navigation Menu */}
         <nav className="flex flex-col p-4 space-y-1">
-          {sidebarItems.map(item => {
+          {sidebarItems.map((item) => {
             const Icon = item.icon;
             const isActive = currentTab === item.path;
             const linkPath = `/client-portal/${item.path}`;
-            
+
             return (
               <Link
                 key={item.path}
                 href={linkPath}
                 className={cn(
-                  "group flex items-center space-x-3 px-3 py-3 text-sm font-medium rounded-lg transition-colors",
+                  'group flex items-center space-x-3 px-3 py-3 text-sm font-medium rounded-lg transition-colors',
                   isActive
-                    ? "bg-accent text-accent-foreground"
-                    : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                    ? 'text-[#C9A96E] bg-[#C9A96E]/15 border-l-2 border-[#C9A96E]'
+                    : 'text-white/60 hover:bg-white/5 hover:text-white'
                 )}
                 onClick={() => {
                   // Close mobile sidebar when navigating
@@ -207,7 +205,7 @@ export default function ClientSidebar({ isOpen = false, onToggle }: ClientSideba
             <button
               type="button"
               onClick={handleLogout}
-              className="w-full flex items-center space-x-3 px-3 py-3 text-sm font-medium rounded-lg transition-colors text-slate-400 hover:text-white hover:bg-slate-800"
+              className="w-full flex items-center space-x-3 px-3 py-3 text-sm font-medium rounded-lg transition-colors text-white/50 hover:text-white hover:bg-white/5"
             >
               <LogOut className="h-5 w-5 flex-shrink-0" />
               <span>Sign Out</span>
@@ -216,8 +214,8 @@ export default function ClientSidebar({ isOpen = false, onToggle }: ClientSideba
         </nav>
 
         {/* Footer */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-slate-700">
-          <div className="text-xs text-slate-400 text-center">
+        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-white/10">
+          <div className="text-xs text-white/50 text-center">
             <p>Client Portal</p>
             <p className="mt-1">Skyeline Homes</p>
           </div>

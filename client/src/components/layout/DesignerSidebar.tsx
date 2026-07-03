@@ -9,10 +9,8 @@ import {
   MessageSquare,
   Calendar,
   FileText,
-  Home,
   LogOut,
   X,
-  Menu
 } from 'lucide-react';
 
 // Each entry advertises a destination the designer can actually reach.
@@ -33,12 +31,24 @@ interface SidebarItem {
 }
 
 const sidebarItems: SidebarItem[] = [
-  { id: 'projects',   label: 'Projects',          icon: Briefcase,     kind: 'tab' },
-  { id: 'selections', label: 'Design Selections', icon: Palette,       kind: 'tab' },
-  { id: 'gallery',    label: 'Design Gallery',    icon: Camera,        kind: 'tab' },
-  { id: 'schedule',   label: 'Schedule',          icon: Calendar,      kind: 'tab' },
-  { id: 'documents',  label: 'Documents',         icon: FileText,      kind: 'route', href: '/documents' },
-  { id: 'messages',   label: 'Messages',          icon: MessageSquare, kind: 'route', href: '/messages' },
+  { id: 'projects', label: 'Projects', icon: Briefcase, kind: 'tab' },
+  { id: 'selections', label: 'Design Selections', icon: Palette, kind: 'tab' },
+  { id: 'gallery', label: 'Design Gallery', icon: Camera, kind: 'tab' },
+  { id: 'schedule', label: 'Schedule', icon: Calendar, kind: 'tab' },
+  {
+    id: 'documents',
+    label: 'Documents',
+    icon: FileText,
+    kind: 'route',
+    href: '/documents',
+  },
+  {
+    id: 'messages',
+    label: 'Messages',
+    icon: MessageSquare,
+    kind: 'route',
+    href: '/messages',
+  },
 ];
 
 interface DesignerSidebarProps {
@@ -46,8 +56,11 @@ interface DesignerSidebarProps {
   onToggle?: () => void;
 }
 
-export default function DesignerSidebar({ isOpen = false, onToggle }: DesignerSidebarProps) {
-  const [location, setLocation] = useLocation();
+export default function DesignerSidebar({
+  isOpen = false,
+  onToggle,
+}: DesignerSidebarProps) {
+  const [location] = useLocation();
   const currentTab = location.split('/')[2] || 'projects';
   const { user, logout } = useAuth();
   const designerName = user?.name || 'Designer';
@@ -56,7 +69,9 @@ export default function DesignerSidebar({ isOpen = false, onToggle }: DesignerSi
   // /designer-portal/<id> tabs and absolute /documents | /messages routes.
   const isItemActive = (item: SidebarItem) => {
     if (item.kind === 'route') {
-      return item.href === location || location.startsWith((item.href || '') + '/');
+      return (
+        item.href === location || location.startsWith((item.href || '') + '/')
+      );
     }
     return currentTab === item.id;
   };
@@ -72,8 +87,6 @@ export default function DesignerSidebar({ isOpen = false, onToggle }: DesignerSi
     }
   };
 
-
-
   return (
     <>
       {/* Mobile backdrop */}
@@ -87,64 +100,61 @@ export default function DesignerSidebar({ isOpen = false, onToggle }: DesignerSi
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed left-0 top-0 z-50 h-screen w-64 text-white transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0 lg:z-auto",
-          isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+          'fixed left-0 top-0 z-50 h-screen w-64 text-white transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0 lg:z-auto',
+          isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         )}
         style={{ backgroundColor: 'var(--color-sidebar-bg)' }}
       >
         {/* Mobile close button */}
-        <div className="flex items-center justify-between p-4 lg:hidden border-b border-slate-700">
+        <div className="flex items-center justify-between p-4 lg:hidden border-b border-white/10">
           <div className="text-lg font-semibold">Designer Portal</div>
           <Button
             variant="ghost"
             size="icon"
             onClick={onToggle}
-            className="text-white hover:bg-slate-800"
+            className="text-white hover:bg-white/5"
           >
             <X className="h-5 w-5" />
           </Button>
         </div>
 
         {/* Desktop header */}
-        <div className="p-4 border-b border-slate-700 hidden lg:block">
+        <div className="p-4 border-b border-white/10 hidden lg:block">
           <div className="space-y-1">
             <h2 className="text-lg font-semibold text-white">
               Designer Portal
             </h2>
-            <p className="text-sm text-slate-300">
-              {designerName}
-            </p>
+            <p className="text-sm text-white/70">{designerName}</p>
           </div>
         </div>
 
         {/* Mobile header */}
-        <div className="p-4 border-b border-slate-700 lg:hidden">
+        <div className="p-4 border-b border-white/10 lg:hidden">
           <div className="text-lg font-semibold text-white mb-2">
             Designer Portal
           </div>
-          <p className="text-sm text-slate-300">
-            Creative Design Studios
-          </p>
+          <p className="text-sm text-white/70">Creative Design Studios</p>
         </div>
 
         {/* Navigation Menu */}
         <nav className="flex flex-col p-4 space-y-1">
-          {sidebarItems.map(item => {
+          {sidebarItems.map((item) => {
             const Icon = item.icon;
             const isActive = isItemActive(item);
-            const linkPath = item.kind === 'route'
-              ? (item.href as string)
-              : `/designer-portal/${item.id}`;
-            
+            const linkPath =
+              item.kind === 'route'
+                ? (item.href as string)
+                : `/designer-portal/${item.id}`;
+
             return (
               <Link
                 key={item.id}
                 href={linkPath}
                 className={cn(
-                  "group flex items-center space-x-3 px-3 py-3 text-sm font-medium rounded-lg transition-colors",
+                  'group flex items-center space-x-3 px-3 py-3 text-sm font-medium rounded-lg transition-colors',
                   isActive
-                    ? "bg-accent text-accent-foreground"
-                    : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                    ? 'text-[#C9A96E] bg-[#C9A96E]/15 border-l-2 border-[#C9A96E]'
+                    : 'text-white/60 hover:bg-white/5 hover:text-white'
                 )}
                 onClick={() => {
                   // Close mobile sidebar when navigating
@@ -167,7 +177,7 @@ export default function DesignerSidebar({ isOpen = false, onToggle }: DesignerSi
             <button
               type="button"
               onClick={handleLogout}
-              className="w-full flex items-center space-x-3 px-3 py-3 text-sm font-medium rounded-lg transition-colors text-slate-400 hover:text-white hover:bg-slate-800"
+              className="w-full flex items-center space-x-3 px-3 py-3 text-sm font-medium rounded-lg transition-colors text-white/50 hover:text-white hover:bg-white/5"
             >
               <LogOut className="h-5 w-5 flex-shrink-0" />
               <span>Sign Out</span>
@@ -176,8 +186,8 @@ export default function DesignerSidebar({ isOpen = false, onToggle }: DesignerSi
         </nav>
 
         {/* Footer */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-slate-700">
-          <div className="text-xs text-slate-400 text-center">
+        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-white/10">
+          <div className="text-xs text-white/50 text-center">
             <p>Designer Portal</p>
             <p className="mt-1">Skyeline Homes</p>
           </div>

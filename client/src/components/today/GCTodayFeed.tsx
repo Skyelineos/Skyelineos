@@ -1,22 +1,41 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'wouter';
-import { collection, collectionGroup, query, where, onSnapshot, orderBy, limit } from 'firebase/firestore';
+import {
+  collection,
+  collectionGroup,
+  query,
+  where,
+  onSnapshot,
+  orderBy,
+  limit,
+} from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { useRoleAccess } from '@/hooks/useRoleAccess';
 import { TodaySection, TodayRow, greeting, todayLabel } from './TodaySection';
 import { Badge } from '@/components/ui/badge';
 import {
-  ClipboardList, DollarSign, Camera, MessageSquare, Wallet,
-  AlertTriangle, FolderOpen, Flame, UserPlus,
+  ClipboardList,
+  DollarSign,
+  MessageSquare,
+  Wallet,
+  FolderOpen,
+  Flame,
+  UserPlus,
 } from 'lucide-react';
 
 // Human label for each lead-gen avenue. Keep in sync with LEAD_SOURCES in
 // client/src/pages/Sales.tsx.
 const SOURCE_LABELS: Record<string, string> = {
-  website: 'Website', event: 'Event', ad_campaign: 'Ad Campaign',
-  referral: 'Referral', instagram: 'Social', parade_of_homes: 'Parade of Homes',
-  email: 'Email', phone: 'Phone', other: 'Other',
+  website: 'Website',
+  event: 'Event',
+  ad_campaign: 'Ad Campaign',
+  referral: 'Referral',
+  instagram: 'Social',
+  parade_of_homes: 'Parade of Homes',
+  email: 'Email',
+  phone: 'Phone',
+  other: 'Other',
 };
 const sourceLabel = (source?: string, detail?: string) => {
   const base = (source && SOURCE_LABELS[source]) || 'New';
@@ -40,7 +59,7 @@ export function GCTodayFeed() {
   const showFinancials = canAccessFinancials();
   const [tasksToday, setTasksToday] = useState<any[]>([]);
   const [billsDueWeek, setBillsDueWeek] = useState<any[]>([]);
-  const [walkthroughsOpen, setWalkthroughsOpen] = useState<any[]>([]);
+  const [, setWalkthroughsOpen] = useState<any[]>([]);
   const [unreadNotifs, setUnreadNotifs] = useState<any[]>([]);
   const [drawsPending, setDrawsPending] = useState<any[]>([]);
   const [recentProjects, setRecentProjects] = useState<any[]>([]);
@@ -53,31 +72,48 @@ export function GCTodayFeed() {
       collection(db, 'tasks'),
       where('status', 'in', ['todo', 'in_progress']),
       orderBy('dueDate', 'asc'),
-      limit(50),
+      limit(50)
     );
-    return onSnapshot(q, snap => {
-      const items = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
-      // Filter client-side to today-or-earlier (Firestore can't do AND on different orderBy)
-      setTasksToday(items.filter(t => t.dueDate && t.dueDate <= todayYMD).slice(0, 8));
-    }, () => {});
+    return onSnapshot(
+      q,
+      (snap) => {
+        const items = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as any);
+        // Filter client-side to today-or-earlier (Firestore can't do AND on different orderBy)
+        setTasksToday(
+          items.filter((t) => t.dueDate && t.dueDate <= todayYMD).slice(0, 8)
+        );
+      },
+      () => {}
+    );
   }, []);
 
   // Bills due in next 7 days, unpaid. Gated on financial access — PMs
   // won't even subscribe (rules would block read anyway, but skipping
   // saves a roundtrip and avoids permission-denied warnings in console).
   useEffect(() => {
-    if (!showFinancials) { setBillsDueWeek([]); return; }
+    if (!showFinancials) {
+      setBillsDueWeek([]);
+      return;
+    }
     const q = query(
       collection(db, 'financials'),
       where('type', '==', 'bill'),
       where('status', '==', 'unpaid'),
       orderBy('dueDate', 'asc'),
-      limit(50),
+      limit(50)
     );
-    return onSnapshot(q, snap => {
-      const items = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
-      setBillsDueWeek(items.filter(b => !b.dueDate || b.dueDate <= sevenDaysYMD).slice(0, 8));
-    }, () => {});
+    return onSnapshot(
+      q,
+      (snap) => {
+        const items = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as any);
+        setBillsDueWeek(
+          items
+            .filter((b) => !b.dueDate || b.dueDate <= sevenDaysYMD)
+            .slice(0, 8)
+        );
+      },
+      () => {}
+    );
   }, [showFinancials]);
 
   // Open walkthroughs across all projects (collectionGroup)
@@ -99,26 +135,41 @@ export function GCTodayFeed() {
       where('userId', '==', userId),
       where('read', '==', false),
       orderBy('createdAt', 'desc'),
-      limit(20),
+      limit(20)
     );
-    return onSnapshot(q, snap => {
-      setUnreadNotifs(snap.docs.map(d => ({ id: d.id, ...d.data() } as any)));
-    }, () => {});
+    return onSnapshot(
+      q,
+      (snap) => {
+        setUnreadNotifs(
+          snap.docs.map((d) => ({ id: d.id, ...d.data() }) as any)
+        );
+      },
+      () => {}
+    );
   }, [user]);
 
   // Draws — pending status, by due date soonest. Gated on financial access.
   useEffect(() => {
-    if (!showFinancials) { setDrawsPending([]); return; }
+    if (!showFinancials) {
+      setDrawsPending([]);
+      return;
+    }
     // Draws live in projects/{id}/draws — collectionGroup query
     const q = query(
       collectionGroup(db, 'draws'),
       where('status', 'in', ['pending', 'requested']),
       orderBy('dueDate', 'asc'),
-      limit(10),
+      limit(10)
     );
-    return onSnapshot(q, snap => {
-      setDrawsPending(snap.docs.map(d => ({ id: d.id, ...d.data() } as any)));
-    }, () => {});
+    return onSnapshot(
+      q,
+      (snap) => {
+        setDrawsPending(
+          snap.docs.map((d) => ({ id: d.id, ...d.data() }) as any)
+        );
+      },
+      () => {}
+    );
   }, [showFinancials]);
 
   // High-priority leads created or updated in the past 7 days. Anchors the
@@ -128,33 +179,64 @@ export function GCTodayFeed() {
       collection(db, 'clients'),
       where('priority', '==', 'high'),
       orderBy('updatedAt', 'desc'),
-      limit(20),
+      limit(20)
     );
-    const unsub = onSnapshot(q, snap => {
-      const items = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
-      const cutoffMs = Date.now() - 7 * 86400000;
-      // Keep ones updated within 7 days, OR with no updatedAt (fall back to created)
-      setHotLeads(items.filter(c => {
-        const updated = c.updatedAt?.seconds ? c.updatedAt.seconds * 1000 : 0;
-        const created = c.createdAt?.seconds ? c.createdAt.seconds * 1000 : 0;
-        const ts = updated || created;
-        return !ts || ts >= cutoffMs;
-      }).slice(0, 8));
-    }, () => {
-      // Fallback if composite index missing — fetch w/o orderBy and filter+sort client-side.
-      const fb = query(collection(db, 'clients'), where('priority', '==', 'high'), limit(50));
-      onSnapshot(fb, fbsnap => {
-        const items = fbsnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const items = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as any);
         const cutoffMs = Date.now() - 7 * 86400000;
-        const filtered = items.filter(c => {
-          const updated = c.updatedAt?.seconds ? c.updatedAt.seconds * 1000 : 0;
-          const created = c.createdAt?.seconds ? c.createdAt.seconds * 1000 : 0;
-          const ts = updated || created;
-          return !ts || ts >= cutoffMs;
-        }).sort((a, b) => (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0));
-        setHotLeads(filtered.slice(0, 8));
-      }, () => {});
-    });
+        // Keep ones updated within 7 days, OR with no updatedAt (fall back to created)
+        setHotLeads(
+          items
+            .filter((c) => {
+              const updated = c.updatedAt?.seconds
+                ? c.updatedAt.seconds * 1000
+                : 0;
+              const created = c.createdAt?.seconds
+                ? c.createdAt.seconds * 1000
+                : 0;
+              const ts = updated || created;
+              return !ts || ts >= cutoffMs;
+            })
+            .slice(0, 8)
+        );
+      },
+      () => {
+        // Fallback if composite index missing — fetch w/o orderBy and filter+sort client-side.
+        const fb = query(
+          collection(db, 'clients'),
+          where('priority', '==', 'high'),
+          limit(50)
+        );
+        onSnapshot(
+          fb,
+          (fbsnap) => {
+            const items = fbsnap.docs.map(
+              (d) => ({ id: d.id, ...d.data() }) as any
+            );
+            const cutoffMs = Date.now() - 7 * 86400000;
+            const filtered = items
+              .filter((c) => {
+                const updated = c.updatedAt?.seconds
+                  ? c.updatedAt.seconds * 1000
+                  : 0;
+                const created = c.createdAt?.seconds
+                  ? c.createdAt.seconds * 1000
+                  : 0;
+                const ts = updated || created;
+                return !ts || ts >= cutoffMs;
+              })
+              .sort(
+                (a, b) =>
+                  (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0)
+              );
+            setHotLeads(filtered.slice(0, 8));
+          },
+          () => {}
+        );
+      }
+    );
     return unsub;
   }, []);
 
@@ -163,15 +245,27 @@ export function GCTodayFeed() {
   // is fired server-side by the newLeadAlert Cloud Function. Single-field
   // orderBy needs no composite index.
   useEffect(() => {
-    const q = query(collection(db, 'clients'), orderBy('createdAt', 'desc'), limit(25));
-    return onSnapshot(q, snap => {
-      const cutoffMs = Date.now() - 7 * 86400000;
-      const items = snap.docs.map(d => ({ id: d.id, ...d.data() } as any)).filter(c => {
-        const created = c.createdAt?.seconds ? c.createdAt.seconds * 1000 : 0;
-        return created >= cutoffMs;
-      });
-      setNewLeads(items.slice(0, 8));
-    }, () => {});
+    const q = query(
+      collection(db, 'clients'),
+      orderBy('createdAt', 'desc'),
+      limit(25)
+    );
+    return onSnapshot(
+      q,
+      (snap) => {
+        const cutoffMs = Date.now() - 7 * 86400000;
+        const items = snap.docs
+          .map((d) => ({ id: d.id, ...d.data() }) as any)
+          .filter((c) => {
+            const created = c.createdAt?.seconds
+              ? c.createdAt.seconds * 1000
+              : 0;
+            return created >= cutoffMs;
+          });
+        setNewLeads(items.slice(0, 8));
+      },
+      () => {}
+    );
   }, []);
 
   // Recent projects (most recently updated)
@@ -180,22 +274,38 @@ export function GCTodayFeed() {
       collection(db, 'projects'),
       where('status', 'in', ['active', 'planning']),
       orderBy('updatedAt', 'desc'),
-      limit(5),
+      limit(5)
     );
-    return onSnapshot(q, snap => {
-      setRecentProjects(snap.docs.map(d => ({ id: d.id, ...d.data() } as any)));
-    }, err => {
-      // updatedAt ordering may need an index — fallback
-      const fb = query(collection(db, 'projects'), where('status', '==', 'active'), limit(5));
-      return onSnapshot(fb, fbsnap => {
-        setRecentProjects(fbsnap.docs.map(d => ({ id: d.id, ...d.data() } as any)));
-      }, () => {});
-    });
+    return onSnapshot(
+      q,
+      (snap) => {
+        setRecentProjects(
+          snap.docs.map((d) => ({ id: d.id, ...d.data() }) as any)
+        );
+      },
+      (_err) => {
+        // updatedAt ordering may need an index — fallback
+        const fb = query(
+          collection(db, 'projects'),
+          where('status', '==', 'active'),
+          limit(5)
+        );
+        return onSnapshot(
+          fb,
+          (fbsnap) => {
+            setRecentProjects(
+              fbsnap.docs.map((d) => ({ id: d.id, ...d.data() }) as any)
+            );
+          },
+          () => {}
+        );
+      }
+    );
   }, []);
 
   const totalBillsDue = useMemo(
     () => billsDueWeek.reduce((s, b) => s + (b.amount || 0), 0),
-    [billsDueWeek],
+    [billsDueWeek]
   );
 
   return (
@@ -210,7 +320,9 @@ export function GCTodayFeed() {
 
       {/* Quick stats strip — each tile drills into its detail page.
           Bills + Draws tiles hide for PMs (no financial access). */}
-      <div className={`grid grid-cols-2 ${showFinancials ? 'md:grid-cols-4' : 'md:grid-cols-2'} gap-3`}>
+      <div
+        className={`grid grid-cols-2 ${showFinancials ? 'md:grid-cols-4' : 'md:grid-cols-2'} gap-3`}
+      >
         <Stat
           icon={<ClipboardList className="w-4 h-4" />}
           label="Tasks today"
@@ -259,7 +371,7 @@ export function GCTodayFeed() {
         emptyState="No new leads in the past week."
         viewAllHref="/sales"
       >
-        {newLeads.map(c => (
+        {newLeads.map((c) => (
           <TodayRow
             key={c.id}
             primary={
@@ -272,7 +384,9 @@ export function GCTodayFeed() {
             meta={
               <span className="font-mono">
                 {c.budget ? `$${(c.budget / 1000).toFixed(0)}k` : ''}
-                {c.city && <span className="text-gray-400 ml-1.5">· {c.city}</span>}
+                {c.city && (
+                  <span className="text-gray-400 ml-1.5">· {c.city}</span>
+                )}
               </span>
             }
             href="/sales"
@@ -289,7 +403,7 @@ export function GCTodayFeed() {
         emptyState="No high-priority leads in the past week."
         viewAllHref="/sales"
       >
-        {hotLeads.map(c => (
+        {hotLeads.map((c) => (
           <TodayRow
             key={c.id}
             primary={
@@ -302,7 +416,11 @@ export function GCTodayFeed() {
             meta={
               <span className="font-mono">
                 {c.budget ? `$${(c.budget / 1000).toFixed(0)}k` : ''}
-                {c.assignedToName && <span className="text-gray-400 ml-1.5">· {c.assignedToName}</span>}
+                {c.assignedToName && (
+                  <span className="text-gray-400 ml-1.5">
+                    · {c.assignedToName}
+                  </span>
+                )}
               </span>
             }
             href="/sales"
@@ -319,17 +437,23 @@ export function GCTodayFeed() {
           emptyState="No tasks due today — clear runway."
           viewAllHref="/tasks"
         >
-          {tasksToday.map(t => (
+          {tasksToday.map((t) => (
             <TodayRow
               key={t.id}
-              primary={<span className="font-medium">{t.name || 'Untitled task'}</span>}
+              primary={
+                <span className="font-medium">{t.name || 'Untitled task'}</span>
+              }
               secondary={t.projectName || '—'}
               meta={
-                t.dueDate < todayYMD
-                  ? <span className="text-red-600 font-medium">overdue</span>
-                  : <span className="text-orange-600">today</span>
+                t.dueDate < todayYMD ? (
+                  <span className="text-red-600 font-medium">overdue</span>
+                ) : (
+                  <span className="text-orange-600">today</span>
+                )
               }
-              href={t.projectId ? `/projects/${t.projectId}/overview` : '/tasks'}
+              href={
+                t.projectId ? `/projects/${t.projectId}/overview` : '/tasks'
+              }
               highlight={t.dueDate < todayYMD}
             />
           ))}
@@ -342,20 +466,28 @@ export function GCTodayFeed() {
             count={billsDueWeek.length}
             icon={<DollarSign className="w-4 h-4" />}
             emptyState="No bills due in the next 7 days."
-            viewAllHref="/finance"
+            viewAllHref="/financials"
           >
-            {billsDueWeek.map(b => (
+            {billsDueWeek.map((b) => (
               <TodayRow
                 key={b.id}
-                primary={<span className="font-medium">{b.vendor || 'Unknown vendor'}</span>}
+                primary={
+                  <span className="font-medium">
+                    {b.vendor || 'Unknown vendor'}
+                  </span>
+                }
                 secondary={b.description || b.invoiceNumber || ''}
                 meta={
                   <span className="font-mono">
                     ${(b.amount || 0).toLocaleString()}
-                    {b.dueDate && <span className="text-gray-400 ml-1.5">· {b.dueDate}</span>}
+                    {b.dueDate && (
+                      <span className="text-gray-400 ml-1.5">
+                        · {b.dueDate}
+                      </span>
+                    )}
                   </span>
                 }
-                href="/finance"
+                href="/financials"
               />
             ))}
           </TodaySection>
@@ -369,13 +501,17 @@ export function GCTodayFeed() {
           emptyState="Nothing in the inbox."
           viewAllHref="/messages"
         >
-          {unreadNotifs.slice(0, 5).map(n => (
+          {unreadNotifs.slice(0, 5).map((n) => (
             <TodayRow
               key={n.id}
               primary={<span className="font-medium">{n.title}</span>}
               secondary={n.body || n.fromUserName || ''}
-              meta={<span className="text-[10px] uppercase">{n.kind?.replace('_', ' ')}</span>}
-              href={n.link || '#'}
+              meta={
+                <span className="text-[10px] uppercase">
+                  {n.kind?.replace('_', ' ')}
+                </span>
+              }
+              href={n.link || undefined}
             />
           ))}
         </TodaySection>
@@ -387,20 +523,28 @@ export function GCTodayFeed() {
             count={drawsPending.length}
             icon={<Wallet className="w-4 h-4" />}
             emptyState="No draws waiting."
-            viewAllHref="/finance"
+            viewAllHref="/financials"
           >
-            {drawsPending.slice(0, 5).map(d => (
+            {drawsPending.slice(0, 5).map((d) => (
               <TodayRow
                 key={d.id}
-                primary={<span className="font-medium">{d.milestone || `Draw ${d.drawNumber || ''}`}</span>}
+                primary={
+                  <span className="font-medium">
+                    {d.milestone || `Draw ${d.drawNumber || ''}`}
+                  </span>
+                }
                 secondary={d.projectName || ''}
                 meta={
                   <span className="font-mono">
                     ${(d.amount || 0).toLocaleString()}
-                    {d.dueDate && <span className="text-gray-400 ml-1.5">· {d.dueDate}</span>}
+                    {d.dueDate && (
+                      <span className="text-gray-400 ml-1.5">
+                        · {d.dueDate}
+                      </span>
+                    )}
                   </span>
                 }
-                href="/finance"
+                href="/financials"
               />
             ))}
           </TodaySection>
@@ -415,14 +559,18 @@ export function GCTodayFeed() {
             emptyState="No active projects yet."
             viewAllHref="/projects"
           >
-            {recentProjects.map(p => (
+            {recentProjects.map((p) => (
               <TodayRow
                 key={p.id}
                 primary={<span className="font-medium">{p.name}</span>}
                 secondary={p.address || p.clientName || ''}
                 meta={
                   <span className="flex items-center gap-2">
-                    {p.currentPhase && <Badge variant="outline" className="text-[10px]">{p.currentPhase}</Badge>}
+                    {p.currentPhase && (
+                      <Badge variant="outline" className="text-[10px]">
+                        {p.currentPhase}
+                      </Badge>
+                    )}
                     <span>{p.status}</span>
                   </span>
                 }
@@ -442,8 +590,20 @@ export function GCTodayFeed() {
 // this feed so the click affordance feels consistent.
 
 function Stat({
-  icon, label, value, sublabel, color = 'text-gray-900', href,
-}: { icon: React.ReactNode; label: string; value: string | number; sublabel?: string; color?: string; href?: string }) {
+  icon,
+  label,
+  value,
+  sublabel,
+  color = 'text-gray-900',
+  href,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string | number;
+  sublabel?: string;
+  color?: string;
+  href?: string;
+}) {
   const body = (
     <>
       <div className="flex items-center gap-1.5 text-xs text-gray-500">
