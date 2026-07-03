@@ -32,6 +32,8 @@ import { qboRequest } from './qboClient';
 import {
   syncQboCustomersToProjects,
   upsertQboCustomerAsProject,
+  listQboCustomers,
+  importSelectedQboCustomers,
   type QboCustomer,
 } from './customerSync';
 
@@ -298,6 +300,77 @@ export function registerQboWebhookRoutes(
       }
       console.error('[qbo/sync-customers] error:', err);
       res.status(500).json({ error: err?.message || 'Sync failed' });
+    }
+  });
+
+  // Shared staff-token guard for the new selection-UI endpoints. We can't
+  // lean on the global /api auth middleware because this whole module is
+  // mounted ahead of it (so the Intuit webhook can hit /api/qbo/webhook).
+  async function requireStaff(req: any, res: Response): Promise<boolean> {
+    const authHeader = String(req.headers.authorization || '');
+    if (!authHeader.startsWith('Bearer ')) {
+      res.status(401).json({ error: 'No token' });
+      return false;
+    }
+    let uid: string;
+    try {
+      const decoded = await admin.auth().verifyIdToken(authHeader.slice(7));
+      uid = decoded.uid;
+    } catch {
+      res.status(401).json({ error: 'Invalid token' });
+      return false;
+    }
+    if (!(await callerIsStaff(db, uid))) {
+      res.status(403).json({ error: 'Staff role required' });
+      return false;
+    }
+    return true;
+  }
+
+  // GET /api/qbo/customers — list every active QBO customer for the staff
+  // selection UI. Returns a flat row shape with an `alreadyImported` flag
+  // so the modal can render a useful default sort + "already imported" badge.
+  app.get('/api/qbo/customers', async (req: any, res: Response) => {
+    try {
+      if (!(await requireStaff(req, res))) return;
+      const rows = await listQboCustomers(db);
+      res.json({ customers: rows });
+    } catch (err: any) {
+      if (err?.code === 'not_connected') {
+        res.status(409).json({ error: err.message, code: 'not_connected' });
+        return;
+      }
+      console.error('[qbo/customers] error:', err);
+      res.status(500).json({ error: err?.message || 'List failed' });
+    }
+  });
+
+  // POST /api/qbo/import-customers — import only the IDs the user checked.
+  // Body: { customerIds: string[] }. Returns the same stats shape as the
+  // bulk sync plus `requested` and `matched` counts so the UI can flag any
+  // IDs that disappeared between list → import.
+  app.post('/api/qbo/import-customers', async (req: any, res: Response) => {
+    try {
+      if (!(await requireStaff(req, res))) return;
+      const body = req.body || {};
+      const customerIds: string[] = Array.isArray(body.customerIds)
+        ? body.customerIds
+        : [];
+      if (customerIds.length === 0) {
+        res
+          .status(400)
+          .json({ error: 'customerIds must be a non-empty array' });
+        return;
+      }
+      const stats = await importSelectedQboCustomers(db, customerIds);
+      res.json(stats);
+    } catch (err: any) {
+      if (err?.code === 'not_connected') {
+        res.status(409).json({ error: err.message, code: 'not_connected' });
+        return;
+      }
+      console.error('[qbo/import-customers] error:', err);
+      res.status(500).json({ error: err?.message || 'Import failed' });
     }
   });
 }

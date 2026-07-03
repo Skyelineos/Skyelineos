@@ -81,7 +81,9 @@ const Timesheet = lazy(() => import('@/pages/Timesheet'));
 const Safety = lazy(() => import('@/pages/Safety'));
 const GlobalDocuments = lazy(() => import('@/pages/GlobalDocuments'));
 const Catalogs = lazy(() => import('@/pages/Catalogs'));
+const CostCodes = lazy(() => import('@/pages/CostCodes'));
 const Reports = lazy(() => import('@/pages/Reports'));
+const Expenses = lazy(() => import('@/pages/Expenses'));
 const CommsLog = lazy(() => import('@/pages/CommsLog'));
 const DesignBoard = lazy(() => import('@/pages/DesignBoard'));
 const Templates = lazy(() => import('@/pages/Templates'));
@@ -460,6 +462,16 @@ function Router() {
           <RoleGuard allowedRoles={['admin', 'gc']} showNotAuthorized>
             <Suspense fallback={<MinimalSpinner title="Loading Bills" />}>
               <Bills />
+            </Suspense>
+          </RoleGuard>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/expenses">
+        <ProtectedRoute>
+          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+            <Suspense fallback={<MinimalSpinner title="Loading Expenses" />}>
+              <Expenses />
             </Suspense>
           </RoleGuard>
         </ProtectedRoute>
@@ -1075,6 +1087,19 @@ function Router() {
           >
             <Suspense fallback={<MinimalSpinner title="Loading Catalogs" />}>
               <Catalogs />
+            </Suspense>
+          </RoleGuard>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/cost-codes">
+        <ProtectedRoute>
+          <RoleGuard
+            allowedRoles={['admin', 'gc']}
+            showNotAuthorized
+          >
+            <Suspense fallback={<MinimalSpinner title="Loading Cost Codes" />}>
+              <CostCodes />
             </Suspense>
           </RoleGuard>
         </ProtectedRoute>

@@ -22,6 +22,7 @@ import {
   FileText,
   GitPullRequest,
   BookOpen,
+  Hash,
   BarChart2,
   Zap,
   Radio,
@@ -60,7 +61,8 @@ const TEAM_NAV: NavGroup[] = [
   {
     label: 'Overview',
     items: [
-      { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+      { label: 'Dashboard',    href: '/dashboard', icon: LayoutDashboard },
+      { label: 'Daily Digest', href: '/daily',     icon: ClipboardCheck },
     ],
   },
   {
@@ -89,6 +91,7 @@ const TEAM_NAV: NavGroup[] = [
       { label: 'Timesheet', href: '/timesheet', icon: Clock },
       { label: 'Safety',    href: '/safety',    icon: ShieldCheck },
       { label: 'Catalogs',  href: '/catalogs',  icon: BookOpen },
+      { label: 'Cost Codes', href: '/cost-codes', icon: Hash },
     ],
   },
   {
@@ -100,9 +103,10 @@ const TEAM_NAV: NavGroup[] = [
   {
     label: 'Finance',
     items: [
-      { label: 'Finance', href: '/financials',  icon: DollarSign },
-      { label: 'Bills (AI)', href: '/bills',  icon: Receipt },
-      { label: 'Reports', href: '/reports',  icon: BarChart2 },
+      { label: 'Financials', href: '/financials', icon: DollarSign },
+      { label: 'Expenses',   href: '/expenses',   icon: Receipt },
+      { label: 'Bills',      href: '/bills',      icon: Receipt },
+      { label: 'Reports',    href: '/reports',    icon: BarChart2 },
     ],
   },
   {
@@ -140,15 +144,14 @@ const TEAM_NAV: NavGroup[] = [
       { label: 'Automations',    href: '/automations',    icon: Zap },
       { label: 'Subscriptions',  href: '/subscriptions',  icon: Wallet },
       { label: 'API Storage',    href: '/api-storage',    icon: KeyRound },
-      { label: 'AI Inbox',       href: '/admin/ai-inbox', icon: Inbox },
+      { label: 'AI Inbox',       href: '/admin/ai-inbox',     icon: Inbox },
       { label: 'Ingestion Lab',  href: '/admin/ingestion-lab', icon: Beaker },
-      { label: 'Settings',       href: '/settings',       icon: Settings },
     ],
   },
 ];
 
 // Management section only for admins
-const MANAGEMENT_HREFS = ['/users', '/master-tasks', '/templates', '/playbook', '/automations', '/import-center', '/subscriptions', '/api-storage', '/admin/ai-inbox', '/admin/ingestion-lab', '/settings'];
+const MANAGEMENT_HREFS = ['/users', '/master-tasks', '/templates', '/playbook', '/automations', '/import-center', '/subscriptions', '/api-storage', '/admin/ai-inbox', '/admin/ingestion-lab'];
 
 // Portal entries — only admins should see these in the team sidebar, since
 // the portal RoleGuards reject gc/projectManager (they're for the portal
@@ -160,6 +163,7 @@ const PORTAL_HREFS = ['/client-portal', '/subcontractor-portal', '/designer-port
 // PM sidebar instead of regressing them to /not-authorized.
 const PM_RESTRICTED_HREFS = [
   '/estimates',
+  '/cost-codes',
   '/financials',
   '/bills',
   '/reports',
@@ -369,9 +373,25 @@ export function Sidebar({ isOpen, onToggle }: SidebarProps) {
         ))}
       </nav>
 
-      {/* Bottom brand mark */}
-      <div className="px-5 py-4 flex-shrink-0" style={{ borderTop: '1px solid rgba(201,169,110,0.15)' }}>
-        <p className="text-xs font-sans text-center" style={{ color: 'rgba(255,255,255,0.2)', letterSpacing: '0.08em' }}>
+      {/* Bottom: Settings + brand */}
+      <div className="px-3 pb-3 flex-shrink-0" style={{ borderTop: '1px solid rgba(201,169,110,0.15)' }}>
+        <Link
+          href="/settings"
+          className={cn(
+            'flex items-center gap-3 px-3 py-2.5 mt-3 rounded-md text-sm font-sans font-medium transition-all duration-150',
+            location === '/settings'
+              ? 'text-white'
+              : 'hover:text-white hover:bg-white/5'
+          )}
+          style={location === '/settings'
+            ? { backgroundColor: 'rgba(201,169,110,0.15)', color: '#C9A96E', borderLeft: '2px solid #C9A96E' }
+            : { color: 'rgba(255,255,255,0.55)' }
+          }
+        >
+          <Settings className="h-4 w-4 flex-shrink-0" />
+          <span>Settings</span>
+        </Link>
+        <p className="text-xs font-sans text-center mt-3" style={{ color: 'rgba(255,255,255,0.2)', letterSpacing: '0.08em' }}>
           © {new Date().getFullYear()} Skyeline Homes
         </p>
       </div>

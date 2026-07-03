@@ -33,6 +33,10 @@ export interface QboCustomer {
   DisplayName?: string;
   CompanyName?: string;
   Active?: boolean;
+  Balance?: number | string;
+  Job?: boolean;
+  ParentRef?: { value?: string; name?: string };
+  MetaData?: { CreateTime?: string; LastUpdatedTime?: string };
   PrimaryEmailAddr?: { Address?: string };
   PrimaryPhone?: { FreeFormNumber?: string };
   BillAddr?: {
@@ -43,6 +47,21 @@ export interface QboCustomer {
     PostalCode?: string;
     Country?: string;
   };
+}
+
+// ── Row shape returned to the selection UI ──────────────────────────────────
+// `GET /api/qbo/customers` returns one of these per active QBO customer so
+// the staff UI can render a searchable list with checkboxes.
+export interface QboCustomerRow {
+  qboId: string;
+  displayName: string;
+  companyName?: string;
+  balance: number;
+  isSubCustomer: boolean;
+  parentId?: string;
+  parentName?: string;
+  lastUpdated: string;
+  alreadyImported: boolean;
 }
 
 export interface CustomerSyncStats {
@@ -211,6 +230,171 @@ export async function syncQboCustomersToProjects(
   const customers: QboCustomer[] = Array.isArray(resp?.QueryResponse?.Customer)
     ? resp.QueryResponse.Customer
     : [];
+
+  for (const customer of customers) {
+    const { result, error } = await upsertQboCustomerAsProject(db, customer);
+    if (result === 'created') {
+      stats.created += 1;
+      stats.synced += 1;
+    } else if (result === 'updated') {
+      stats.updated += 1;
+      stats.synced += 1;
+    } else if (result === 'unchanged') {
+      stats.synced += 1;
+    } else {
+      stats.errors += 1;
+      stats.errorDetails!.push({
+        qboCustomerId: String(customer.Id || ''),
+        error: error || 'unknown',
+      });
+    }
+  }
+  if (stats.errorDetails && stats.errorDetails.length === 0) {
+    delete stats.errorDetails;
+  }
+  return stats;
+}
+
+// ── Public: list QBO customers for the selection UI ────────────────────────
+
+/**
+ * Pull every active QBO Customer and return a flattened row shape suited
+ * for the staff selection UI. Cross-references the Skyeline `projects`
+ * collection so each row can tell the user whether it's already imported.
+ *
+ * Throws { code: 'not_connected' } via qboRequest if QBO isn't linked.
+ */
+export async function listQboCustomers(
+  db: adminFirestore.Firestore,
+): Promise<QboCustomerRow[]> {
+  const queryStr =
+    `SELECT * FROM Customer WHERE Active = true MAXRESULTS 1000`;
+  const resp = await qboRequest(
+    db,
+    'GET',
+    `query?query=${encodeURIComponent(queryStr)}`,
+  );
+  const customers: QboCustomer[] = Array.isArray(resp?.QueryResponse?.Customer)
+    ? resp.QueryResponse.Customer
+    : [];
+
+  // Build a Set of qboCustomerIds we've already mapped to Skyeline projects.
+  // One query, in-memory join — cheaper than per-row Firestore lookups for
+  // up to ~1k customers.
+  const importedIds = new Set<string>();
+  try {
+    const existing = await db
+      .collection('projects')
+      .where('qboCustomerId', '!=', '')
+      .select('qboCustomerId')
+      .get();
+    for (const d of existing.docs) {
+      const id = (d.data() as any)?.qboCustomerId;
+      if (id) importedIds.add(String(id));
+    }
+  } catch (err) {
+    // Index missing or no docs match — fall back to a tolerant scan. We'd
+    // rather return rows with `alreadyImported: false` than 500 the UI.
+    try {
+      const all = await db.collection('projects').get();
+      for (const d of all.docs) {
+        const id = (d.data() as any)?.qboCustomerId;
+        if (id) importedIds.add(String(id));
+      }
+    } catch {
+      // Give up on the cross-ref; leave the set empty.
+    }
+  }
+
+  const rows: QboCustomerRow[] = customers.map((c) => {
+    const displayName =
+      safeStr(c.DisplayName) ||
+      safeStr(c.CompanyName) ||
+      `QBO Customer ${c.Id}`;
+    const balance = Number(c.Balance);
+    return {
+      qboId: String(c.Id),
+      displayName,
+      companyName: safeStr(c.CompanyName) || undefined,
+      balance: Number.isFinite(balance) ? balance : 0,
+      isSubCustomer: !!c.Job,
+      parentId: safeStr(c.ParentRef?.value) || undefined,
+      parentName: safeStr(c.ParentRef?.name) || undefined,
+      lastUpdated: safeStr(c.MetaData?.LastUpdatedTime),
+      alreadyImported: importedIds.has(String(c.Id)),
+    };
+  });
+
+  // Sort: not-yet-imported first, then by displayName. Makes the default UI
+  // state useful (the user mostly cares about new ones).
+  rows.sort((a, b) => {
+    if (a.alreadyImported !== b.alreadyImported) {
+      return a.alreadyImported ? 1 : -1;
+    }
+    return a.displayName.localeCompare(b.displayName);
+  });
+
+  return rows;
+}
+
+// ── Public: import a curated subset of QBO customers ──────────────────────
+
+/**
+ * Import only the QBO customer IDs the user explicitly checked. Same
+ * upsert logic as the bulk sync but filtered server-side so the UI can't
+ * race / double-import.
+ *
+ * Returns the same stats shape as the bulk sync plus the resolved count of
+ * IDs we actually found in QBO (handy when the UI list is stale).
+ */
+export async function importSelectedQboCustomers(
+  db: adminFirestore.Firestore,
+  customerIds: string[],
+): Promise<CustomerSyncStats & { requested: number; matched: number }> {
+  const stats: CustomerSyncStats & { requested: number; matched: number } = {
+    synced: 0,
+    created: 0,
+    updated: 0,
+    errors: 0,
+    errorDetails: [],
+    requested: 0,
+    matched: 0,
+  };
+
+  // De-dupe + normalise the requested IDs. Anything non-stringy is dropped.
+  const wanted = new Set<string>();
+  for (const id of customerIds || []) {
+    const s = safeStr(id);
+    if (s) wanted.add(s);
+  }
+  stats.requested = wanted.size;
+  if (wanted.size === 0) {
+    delete stats.errorDetails;
+    return stats;
+  }
+
+  // QBO `IN ('a','b',...)` — we keep the same `Active = true` filter as the
+  // bulk pull so deactivated customers can't sneak in via a stale UI list.
+  // QBO caps IN to ~30 items per query; chunk to be safe.
+  const ids = Array.from(wanted);
+  const chunkSize = 25;
+  const customers: QboCustomer[] = [];
+  for (let i = 0; i < ids.length; i += chunkSize) {
+    const chunk = ids.slice(i, i + chunkSize);
+    const inList = chunk.map((id) => `'${id.replace(/'/g, "\\'")}'`).join(',');
+    const queryStr =
+      `SELECT * FROM Customer WHERE Active = true AND Id IN (${inList}) MAXRESULTS 1000`;
+    const resp = await qboRequest(
+      db,
+      'GET',
+      `query?query=${encodeURIComponent(queryStr)}`,
+    );
+    const got: QboCustomer[] = Array.isArray(resp?.QueryResponse?.Customer)
+      ? resp.QueryResponse.Customer
+      : [];
+    customers.push(...got);
+  }
+  stats.matched = customers.length;
 
   for (const customer of customers) {
     const { result, error } = await upsertQboCustomerAsProject(db, customer);

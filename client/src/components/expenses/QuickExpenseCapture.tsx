@@ -429,7 +429,7 @@ export function QuickExpenseCapture({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         className="sm:max-w-lg max-h-[90vh] overflow-y-auto"
-        style={{ fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif' }}
+        style={{ fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif', backgroundColor: '#ffffff' }}
       >
         <DialogHeader>
           <DialogTitle
