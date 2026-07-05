@@ -1,6 +1,3 @@
-#!/usr/bin/env sh
-. "$(dirname -- "$0")/_/husky.sh"
-
 # GitHub sync guard — informational warning before pushing. Non-blocking:
 # it prints whether you're behind origin/main so you don't push/deploy stale
 # work, but never blocks the push itself.
