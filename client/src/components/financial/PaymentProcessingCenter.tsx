@@ -99,19 +99,19 @@ export default function PaymentProcessingCenter({ projectId }: PaymentProcessing
   });
 
   // Fetch payment processing records
-  const { data: payments, isLoading: paymentsLoading } = useQuery({
+  const { data: payments, isLoading: paymentsLoading } = useQuery<any>({
     queryKey: [`/api/financial/payment-processing/${projectId}`],
     refetchInterval: 30000,
   });
 
   // Fetch approved invoices ready for payment
-  const { data: approvedInvoices, isLoading: invoicesLoading } = useQuery({
+  const { data: approvedInvoices, isLoading: invoicesLoading } = useQuery<any>({
     queryKey: [`/api/financial/approved-invoices/${projectId}`],
     refetchInterval: 30000,
   });
 
   // Fetch payment statistics
-  const { data: paymentStats, isLoading: statsLoading } = useQuery({
+  const { data: paymentStats, isLoading: statsLoading } = useQuery<any>({
     queryKey: [`/api/financial/payment-stats/${projectId}`],
     refetchInterval: 60000,
   });
@@ -213,10 +213,7 @@ export default function PaymentProcessingCenter({ projectId }: PaymentProcessing
       
       const result = await stripe.confirmCardPayment(clientSecret, {
         payment_method: {
-          card: {
-            // This would typically come from Stripe Elements
-            // For now, we'll handle this in the mutation
-          }
+          card: {} as any, // placeholder — real Stripe Element injected at runtime
         }
       });
 

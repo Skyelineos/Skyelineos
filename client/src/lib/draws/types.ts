@@ -1,7 +1,7 @@
 // Draws — milestone payment requests sent to the client.
 // Each draw is one slice of the project's contract total being billed.
 
-import type { TradeId } from '@/lib/estimates/markup';
+import type { TradeId } from '@/lib/estimates/types';
 
 export type DrawStatus = 'draft' | 'pending' | 'submitted' | 'approved' | 'paid';
 

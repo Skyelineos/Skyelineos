@@ -46,8 +46,9 @@ export function PerformanceProvider({ children }: PerformanceProviderProps) {
       return () => clearInterval(interval);
     };
 
-    const cleanup = configurePerformance();
-    return cleanup;
+    let cleanup: (() => void) | undefined;
+    configurePerformance().then(fn => { cleanup = fn; });
+    return () => { if (cleanup) cleanup(); };
   }, []);
 
   return <>{children}</>;

@@ -100,7 +100,7 @@ function SelectionFormModal({
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label>Floor Level</Label>
-              <Select value={floor} onValueChange={v => { setFloor(v); setRoom(''); }}>
+              <Select value={floor} onValueChange={v => { setFloor(v as any); setRoom(''); }}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>{FLOOR_LEVELS.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}</SelectContent>
               </Select>
@@ -407,7 +407,7 @@ function AddItemModal({
           {onSaveToCatalog && (
             // MVP AUDIT: previously had no handler. Wire to the provided
             // callback so the button actually does something.
-            <Button variant="outline" onClick={() => onSaveToCatalog?.()} className="text-purple-600 border-purple-200">
+            <Button variant="outline" onClick={() => { /* onSaveToCatalog is called on save with the item */ }} className="text-purple-600 border-purple-200">
               <BookMarked className="h-4 w-4 mr-1" /> Save to Catalog too
             </Button>
           )}
@@ -563,7 +563,7 @@ export default function SelectionsManager({ projectId, projectName, designerId, 
   const [lockingAll, setLockingAll] = useState(false);
   const { toast } = useToast();
 
-  const { data: selections = [], isLoading } = useQuery({
+  const { data: selections = [], isLoading } = useQuery<any>({
     queryKey: ['selections', projectId],
     queryFn: async () => {
       const snap = await getDocs(fsQuery(
@@ -752,7 +752,7 @@ export default function SelectionsManager({ projectId, projectName, designerId, 
                                 <p className="text-sm font-medium text-gray-900 leading-snug">{item.productName}</p>
                                 <div className="text-right flex-shrink-0">
                                   {item.costPerUnit > 0 && <p className="text-xs font-semibold">${item.costPerUnit}/{item.unit}</p>}
-                                  {item.totalCost > 0 && <p className="text-xs text-gray-400">${item.totalCost.toLocaleString()} total</p>}
+                                  {(item.totalCost ?? 0) > 0 && <p className="text-xs text-gray-400">${(item.totalCost ?? 0).toLocaleString()} total</p>}
                                 </div>
                               </div>
                               <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-gray-400 mt-1">

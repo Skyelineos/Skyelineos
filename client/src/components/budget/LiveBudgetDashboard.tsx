@@ -54,25 +54,25 @@ export default function LiveBudgetDashboard({ projectId }: LiveBudgetDashboardPr
   const [autoRefresh, setAutoRefresh] = useState(true);
 
   // Fetch approved estimates
-  const { data: estimates = [] } = useQuery({
+  const { data: estimates = [] } = useQuery<any>({
     queryKey: ['/api/estimates/approved', projectId],
     refetchInterval: autoRefresh ? 30000 : false, // Refresh every 30 seconds
   });
 
   // Fetch invoices
-  const { data: invoices = [] } = useQuery({
+  const { data: invoices = [] } = useQuery<any>({
     queryKey: ['/api/invoices/project', projectId],
     refetchInterval: autoRefresh ? 30000 : false,
   });
 
   // Fetch client payments
-  const { data: clientPayments = [] } = useQuery({
+  const { data: clientPayments = [] } = useQuery<any>({
     queryKey: ['/api/projects', projectId, 'client-payments'],
     refetchInterval: autoRefresh ? 30000 : false,
   });
 
   // Fetch purchase orders
-  const { data: purchaseOrders = [] } = useQuery({
+  const { data: purchaseOrders = [] } = useQuery<any>({
     queryKey: ['/api/purchase-orders/project', projectId],
     refetchInterval: autoRefresh ? 30000 : false,
   });

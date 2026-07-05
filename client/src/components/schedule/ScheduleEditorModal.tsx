@@ -45,7 +45,7 @@ export default function ScheduleEditorModal({
   const { toast } = useToast();
 
   // Fetch contacts for subcontractor selection
-  const { data: contacts = [] } = useQuery({
+  const { data: contacts = [] } = useQuery<any>({
     queryKey: ['/api/contacts'],
   });
 

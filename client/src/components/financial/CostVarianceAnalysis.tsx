@@ -30,19 +30,19 @@ export default function CostVarianceAnalysis({ projectId }: CostVarianceAnalysis
   const [timeRange, setTimeRange] = useState<string>('30days');
 
   // Fetch budget variances
-  const { data: variances, isLoading: variancesLoading } = useQuery({
+  const { data: variances, isLoading: variancesLoading } = useQuery<any>({
     queryKey: [`/api/financial/budget-variances/${projectId}`],
     refetchInterval: 30000, // Real-time updates every 30 seconds
   });
 
   // Fetch actual costs
-  const { data: actualCosts, isLoading: costsLoading } = useQuery({
+  const { data: actualCosts, isLoading: costsLoading } = useQuery<any>({
     queryKey: [`/api/financial/actual-costs/${projectId}`],
     refetchInterval: 30000,
   });
 
   // Fetch cost trends
-  const { data: costTrends, isLoading: trendsLoading } = useQuery({
+  const { data: costTrends, isLoading: trendsLoading } = useQuery<any>({
     queryKey: [`/api/financial/cost-trends/${projectId}`, timeRange],
     refetchInterval: 60000, // Update every minute
   });
@@ -79,7 +79,7 @@ export default function CostVarianceAnalysis({ projectId }: CostVarianceAnalysis
   const stats = calculateVarianceStats(filteredVariances);
 
   // Get unique trades for filter
-  const trades = Array.from(new Set(variances?.map(v => v.trade).filter(Boolean))) || [];
+  const trades: string[] = Array.from(new Set((variances?.map((v: any) => v.trade) ?? []).filter(Boolean))) as string[];
 
   const getVarianceColor = (variance: number, percentage: number) => {
     if (Math.abs(percentage) <= 5) return 'text-green-600';
@@ -229,7 +229,7 @@ export default function CostVarianceAnalysis({ projectId }: CostVarianceAnalysis
                   <XAxis dataKey="trade" />
                   <YAxis tickFormatter={(value) => `$${(value / 1000).toFixed(0)}K`} />
                   <Tooltip 
-                    formatter={(value, name) => [formatCurrency(value), name]}
+                    formatter={(value: any, name: any) => [formatCurrency(value as number), name]}
                     labelFormatter={(label) => `Trade: ${label}`}
                   />
                   <Bar dataKey="budgetedAmount" fill="#3b82f6" name="Budgeted" />
@@ -293,7 +293,7 @@ export default function CostVarianceAnalysis({ projectId }: CostVarianceAnalysis
                   <XAxis dataKey="date" />
                   <YAxis tickFormatter={(value) => `$${(value / 1000).toFixed(0)}K`} />
                   <Tooltip 
-                    formatter={(value, name) => [formatCurrency(value), name]}
+                    formatter={(value: any, name: any) => [formatCurrency(value as number), name]}
                     labelFormatter={(label) => `Date: ${label}`}
                   />
                   <Line type="monotone" dataKey="budgetedCumulative" stroke="#3b82f6" name="Budgeted (Cumulative)" />

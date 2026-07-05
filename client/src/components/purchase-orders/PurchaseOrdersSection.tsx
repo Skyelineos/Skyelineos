@@ -38,7 +38,7 @@ export default function PurchaseOrdersSection({ projectId }: PurchaseOrdersSecti
   const [viewMode, setViewMode] = useState<'project' | 'all'>('project');
 
   // Fetch POs for the project
-  const { data: projectPOs = [], isLoading: isLoadingProject, refetch: refetchProject } = useQuery({
+  const { data: projectPOs = [], isLoading: isLoadingProject, refetch: refetchProject } = useQuery<any>({
     queryKey: ['/api/purchase-orders/project', projectId],
     queryFn: async () => {
       const response = await fetch(`/api/purchase-orders/project/${projectId}`);
@@ -48,7 +48,7 @@ export default function PurchaseOrdersSection({ projectId }: PurchaseOrdersSecti
   });
 
   // Fetch all POs (admin view)
-  const { data: allPOs = [], isLoading: isLoadingAll, refetch: refetchAll } = useQuery({
+  const { data: allPOs = [], isLoading: isLoadingAll, refetch: refetchAll } = useQuery<any>({
     queryKey: ['/api/purchase-orders'],
     queryFn: async () => {
       const response = await fetch('/api/purchase-orders');

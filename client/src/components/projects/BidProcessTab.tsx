@@ -56,7 +56,7 @@ export function BidProcessTab({ projectId }: BidProcessTabProps) {
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
   // Fetch bid items for this project
-  const { data: bidItems = [], isLoading, error } = useQuery({
+  const { data: bidItems = [], isLoading, error } = useQuery<any>({
     queryKey: ['/api/bid-items', projectId],
     queryFn: async () => {
       const response = await fetch(`/api/bid-items?projectId=${projectId}`);

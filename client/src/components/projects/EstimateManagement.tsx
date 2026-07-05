@@ -36,7 +36,7 @@ export default function EstimateManagement() {
 
 
   // Fetch estimates for the project
-  const { data: estimates = [], isLoading: estimatesLoading } = useQuery({
+  const { data: estimates = [], isLoading: estimatesLoading } = useQuery<any>({
     queryKey: ['/api/estimates', projectId],
     queryFn: async () => {
       const response = await apiRequest('/api/estimates', { method: 'GET' });
@@ -45,7 +45,7 @@ export default function EstimateManagement() {
   });
 
   // Fetch project data for PDF generation
-  const { data: project } = useQuery({
+  const { data: project } = useQuery<any>({
     queryKey: ['/api/projects', projectId],
     enabled: !!projectId
   });

@@ -30,7 +30,7 @@ export default function SelectionsTab({ projectId, clientId }: SelectionsTabProp
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [confirmApprove, setConfirmApprove] = useState<{ selectionId: string; option: any; overage: number } | null>(null);
 
-  const { data: selections = [], isLoading } = useQuery({
+  const { data: selections = [], isLoading } = useQuery<any>({
     queryKey: ['selections', projectId],
     queryFn: async () => {
       const snap = await getDocs(fsQuery(collection(db, 'projects', projectId, 'selections'), orderBy('createdAt', 'asc')));

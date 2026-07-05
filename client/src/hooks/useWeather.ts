@@ -37,7 +37,7 @@ interface WeatherData {
 }
 
 export function useWeather(location: string) {
-  return useQuery({
+  return useQuery<any>({
     queryKey: ['weather', location],
     queryFn: async (): Promise<WeatherData> => {
       const apiKey = import.meta.env.VITE_OWM_API_KEY;

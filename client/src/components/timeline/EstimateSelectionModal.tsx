@@ -35,7 +35,7 @@ export function EstimateSelectionModal({
   const [selectedEstimateIds, setSelectedEstimateIds] = useState<number[]>([]);
   const { toast } = useToast();
 
-  const { data: approvedEstimates = [], isLoading } = useQuery({
+  const { data: approvedEstimates = [], isLoading } = useQuery<any>({
     queryKey: [`/api/projects/${projectId}/estimates/approved`],
     enabled: isOpen && !!projectId,
   });

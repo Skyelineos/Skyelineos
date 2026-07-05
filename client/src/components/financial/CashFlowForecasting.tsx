@@ -70,13 +70,13 @@ export default function CashFlowForecasting({ projectId }: CashFlowForecastingPr
   });
 
   // Fetch cash flow forecasts
-  const { data: forecasts, isLoading: forecastsLoading } = useQuery({
+  const { data: forecasts, isLoading: forecastsLoading } = useQuery<any>({
     queryKey: [`/api/financial/cash-flow-forecasts/${projectId}`],
     refetchInterval: 30000,
   });
 
   // Fetch cash flow analysis
-  const { data: analysis, isLoading: analysisLoading } = useQuery({
+  const { data: analysis, isLoading: analysisLoading } = useQuery<any>({
     queryKey: [`/api/financial/cash-flow-analysis/${projectId}`, viewMode],
     refetchInterval: 60000,
   });
@@ -500,7 +500,7 @@ export default function CashFlowForecasting({ projectId }: CashFlowForecastingPr
                   <XAxis dataKey="date" />
                   <YAxis tickFormatter={(value) => `$${(value / 1000).toFixed(0)}K`} />
                   <Tooltip 
-                    formatter={(value, name) => [formatCurrency(value), name]}
+                    formatter={(value: any, name: any) => [formatCurrency(value as number), name]}
                     labelFormatter={(label) => `Date: ${label}`}
                   />
                   <Area 

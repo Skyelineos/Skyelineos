@@ -74,7 +74,7 @@ export default function ProtectedRouteTest() {
             status: 'passed',
             message: 'All AuthContext methods and properties are available'
           };
-        } catch (error) {
+        } catch (error: any) {
           return {
             testName: 'AuthContext Integration',
             status: 'failed',
@@ -113,7 +113,7 @@ export default function ProtectedRouteTest() {
               message: `Only ${successfulRedirects}/${protectedRoutes.length} routes redirected correctly`
             };
           }
-        } catch (error) {
+        } catch (error: any) {
           return {
             testName: 'Unauthenticated Redirect Test',
             status: 'failed',
@@ -152,7 +152,7 @@ export default function ProtectedRouteTest() {
             status: successfulAccess === accessibleRoutes.length ? 'passed' : 'failed',
             message: `${successfulAccess}/${accessibleRoutes.length} accessible routes granted access for role: ${user.role}`
           };
-        } catch (error) {
+        } catch (error: any) {
           return {
             testName: 'Authenticated Access Test',
             status: 'failed',
@@ -193,7 +193,7 @@ export default function ProtectedRouteTest() {
             status: correctRestrictions === restrictedRoutes.length ? 'passed' : 'failed',
             message: `${correctRestrictions}/${restrictedRoutes.length} restricted routes properly denied for role: ${userRole}`
           };
-        } catch (error) {
+        } catch (error: any) {
           return {
             testName: 'Role-Based Access Control',
             status: 'failed',
@@ -225,7 +225,7 @@ export default function ProtectedRouteTest() {
             status: 'passed',
             message: 'Loading states are properly managed during auth checks'
           };
-        } catch (error) {
+        } catch (error: any) {
           return {
             testName: 'Loading States Test',
             status: 'failed',
@@ -258,7 +258,7 @@ export default function ProtectedRouteTest() {
               message: `API auth check failed with status: ${cookieTest.status}`
             };
           }
-        } catch (error) {
+        } catch (error: any) {
           return {
             testName: 'Cookie-Based Authentication',
             status: 'failed',
@@ -296,7 +296,7 @@ export default function ProtectedRouteTest() {
               ? 'Session data is properly maintained'
               : 'Session data is missing or invalid'
           };
-        } catch (error) {
+        } catch (error: any) {
           return {
             testName: 'Session Persistence Test',
             status: 'failed',
@@ -321,7 +321,7 @@ export default function ProtectedRouteTest() {
       try {
         const result = await scenario.testFunction();
         updateTestResult(result);
-      } catch (error) {
+      } catch (error: any) {
         updateTestResult({
           testName: scenario.name,
           status: 'failed',
@@ -346,7 +346,7 @@ export default function ProtectedRouteTest() {
     try {
       const result = await scenario.testFunction();
       updateTestResult(result);
-    } catch (error) {
+    } catch (error: any) {
       updateTestResult({
         testName: scenario.name,
         status: 'failed',

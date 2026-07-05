@@ -56,7 +56,7 @@ export default function SubcontractorDocuments({ contact, onUpdate }: Subcontrac
   const queryClient = useQueryClient();
 
   // Query to get document status
-  const { data: documentStatus, isLoading } = useQuery({
+  const { data: documentStatus, isLoading } = useQuery<any>({
     queryKey: ['/api/contacts', contact.id, 'documents'],
     select: (data: any) => ({
       w9Uploaded: data?.w9Uploaded || false,
@@ -172,7 +172,7 @@ export default function SubcontractorDocuments({ contact, onUpdate }: Subcontrac
                       documentStatus?.agreementSigned;
     
     return isUploaded ? (
-      <Badge variant="accent" className="bg-green-100 text-green-800">
+      <Badge variant={"accent" as any} className="bg-green-100 text-green-800">
         Uploaded
       </Badge>
     ) : (
@@ -202,7 +202,7 @@ export default function SubcontractorDocuments({ contact, onUpdate }: Subcontrac
       };
     }
     
-    const missing = [];
+    const missing: string[] = [];
     if (!w9Complete) missing.push('W-9');
     if (!insuranceComplete) missing.push('Insurance');
     if (!agreementComplete) missing.push('Agreement');

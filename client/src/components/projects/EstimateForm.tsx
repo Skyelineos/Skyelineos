@@ -87,7 +87,7 @@ export function EstimateForm({ projectId, onSave, initialData, isEditing = false
   const [searchTerm, setSearchTerm] = useState('');
   const [tradeManagerOpen, setTradeManagerOpen] = useState(false);
   // Fetch trades from API instead of localStorage
-  const { data: apiTrades = [] } = useQuery<any[]>({
+  const { data: apiTrades = [] } = useQuery<any>({
     queryKey: ['/api/trades'],
     staleTime: 5 * 60 * 1000 // 5 minutes
   });
@@ -108,7 +108,7 @@ export function EstimateForm({ projectId, onSave, initialData, isEditing = false
   });
 
   // Fetch contacts for subcontractor selection
-  const { data: allContacts = [] } = useQuery<any[]>({
+  const { data: allContacts = [] } = useQuery<any>({
     queryKey: ['/api/contacts'],
   });
 
@@ -167,12 +167,12 @@ export function EstimateForm({ projectId, onSave, initialData, isEditing = false
   });
 
   // Fetch all estimates for copying
-  const { data: allEstimates = [] } = useQuery<any[]>({
+  const { data: allEstimates = [] } = useQuery<any>({
     queryKey: ['/api/estimates'],
   });
 
   // Fetch all projects to show project names in copy dialog
-  const { data: allProjects = [] } = useQuery<any[]>({
+  const { data: allProjects = [] } = useQuery<any>({
     queryKey: ['/api/projects'],
   });
 
@@ -336,12 +336,12 @@ export function EstimateForm({ projectId, onSave, initialData, isEditing = false
     mutationFn: (tradeName: string) => 
       apiRequest('/api/trades', { 
         method: 'POST', 
-        body: {
+        body: JSON.stringify({
           name: tradeName,
           description: `Auto-created trade: ${tradeName}`,
           category: 'Construction',
           isActive: true
-        }
+        })
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/trades'] });
@@ -441,7 +441,7 @@ export function EstimateForm({ projectId, onSave, initialData, isEditing = false
       // Development logging removed
       
       // Parse the estimate data - it's stored in the 'categories' field directly
-      let categories = [];
+      let categories: { categoryName: any; items: any[] }[] = [];
       if (sourceEstimate.categories && Array.isArray(sourceEstimate.categories)) {
         // Development logging removed
         // Map the existing categories structure to our form schema
@@ -825,7 +825,7 @@ export function EstimateForm({ projectId, onSave, initialData, isEditing = false
                     const sourceProject = allProjects.find((p: any) => p.id === estimate.projectId);
                     const projectName = sourceProject?.name || 'Unknown Project';
                     
-                    let categories = [];
+                    let categories: { categoryName: any; items: any[] }[] = [];
                     let totalCost = estimate.totalCost || estimate.estimatedAmount || 0;
                     
                     try {

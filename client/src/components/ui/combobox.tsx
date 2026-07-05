@@ -18,12 +18,13 @@ import {
 interface ComboBoxProps {
   options: string[]
   value?: string
-  onValueChange: (value: string) => void
+  onValueChange: (value: string) => void | Promise<void>
   placeholder?: string
   searchPlaceholder?: string
   className?: string
   allowCustom?: boolean
   emptyMessage?: string
+  disabled?: boolean
 }
 
 export function ComboBox({

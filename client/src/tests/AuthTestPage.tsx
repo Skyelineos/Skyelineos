@@ -124,7 +124,7 @@ export default function AuthTestPage() {
       await new Promise(resolve => setTimeout(resolve, 500));
       setLocation('/auth-test');
       
-    } catch (error) {
+    } catch (error: any) {
       setTestResults(prev => 
         prev.map(result => 
           result.route === testRoute.route && result.timestamp.getTime() === currentTime.getTime()
@@ -220,7 +220,7 @@ export default function AuthTestPage() {
       };
       
       setTestResults(prev => [...prev, authResult]);
-    } catch (error) {
+    } catch (error: any) {
       const errorResult = {
         route: 'API Auth Check',
         expectedBehavior: 'Valid API response',

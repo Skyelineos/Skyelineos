@@ -15,6 +15,15 @@ import {
   OrderByDirection
 } from 'firebase/firestore';
 import { db } from './firebase';
+import { getAuth } from 'firebase/auth';
+
+const getAuthHeaders = async (): Promise<Record<string, string>> => {
+  const auth = getAuth();
+  const user = auth.currentUser;
+  if (!user) return {};
+  const token = await user.getIdToken();
+  return { Authorization: `Bearer ${token}` };
+};
 
 // Firebase error wrapper for consistent error handling
 export class FirestoreError extends Error {

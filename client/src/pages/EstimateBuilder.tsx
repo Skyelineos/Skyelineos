@@ -469,13 +469,13 @@ function LineItemRow({
           <SelectTrigger
             className="h-8 text-sm pr-7"
             style={(() => {
-              const map: Record<string, { bg: string; fg: string }> = {
-                inc:   { bg: 'rgba(16,185,129,0.15)', fg: '#047857' },
-                ex:    { bg: 'rgba(220,38,38,0.12)',  fg: '#B91C1C' },
-                note:  { bg: 'rgba(59,130,246,0.12)', fg: '#1D4ED8' },
-                allow: { bg: 'rgba(245,158,11,0.15)', fg: '#92400e' },
+              const map: Record<string, React.CSSProperties> = {
+                inc:   { backgroundColor: 'rgba(16,185,129,0.15)', color: '#047857' },
+                ex:    { backgroundColor: 'rgba(220,38,38,0.12)',  color: '#B91C1C' },
+                note:  { backgroundColor: 'rgba(59,130,246,0.12)', color: '#1D4ED8' },
+                allow: { backgroundColor: 'rgba(245,158,11,0.15)', color: '#92400e' },
               };
-              return map[lineStatus] ?? { bg: 'white', fg: '#9CA3AF' };
+              return map[lineStatus] ?? { backgroundColor: 'white', color: '#9CA3AF' };
             })()}
             title={
               lineStatus === 'inc'   ? 'Included — counts toward owner price total'
@@ -523,14 +523,14 @@ function LineItemRow({
           <SelectTrigger
             className="h-8 text-sm pr-7"
             style={(() => {
-              const map: Record<string, { bg: string; fg: string }> = {
-                material:     { bg: 'rgba(245,158,11,0.15)', fg: '#92400e' },
-                labor:        { bg: 'rgba(59,130,246,0.15)', fg: '#1e40af' },
-                both:         { bg: 'rgba(107,114,128,0.15)', fg: '#374151' },
-                equipment:    { bg: 'rgba(168,85,247,0.15)', fg: '#6B21A8' },
-                subcontractor:{ bg: 'rgba(16,185,129,0.15)', fg: '#047857' },
+              const map: Record<string, React.CSSProperties> = {
+                material:     { backgroundColor: 'rgba(245,158,11,0.15)', color: '#92400e' },
+                labor:        { backgroundColor: 'rgba(59,130,246,0.15)', color: '#1e40af' },
+                both:         { backgroundColor: 'rgba(107,114,128,0.15)', color: '#374151' },
+                equipment:    { backgroundColor: 'rgba(168,85,247,0.15)', color: '#6B21A8' },
+                subcontractor:{ backgroundColor: 'rgba(16,185,129,0.15)', color: '#047857' },
               };
-              return map[kind] ?? { bg: 'white', fg: '#9CA3AF' };
+              return map[kind] ?? { backgroundColor: 'white', color: '#9CA3AF' };
             })()}
           >
             <div className="flex-1 overflow-hidden text-left">

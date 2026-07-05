@@ -54,7 +54,7 @@ export default function EnhancedFinancialDashboard({ projectId }: EnhancedFinanc
   }, [autoRefresh]);
 
   // Enhanced data fetching with real-time updates
-  const { data: projects = [], isLoading: projectsLoading } = useQuery<any[]>({
+  const { data: projects = [], isLoading: projectsLoading } = useQuery<any>({
     queryKey: ['/api/projects'],
     refetchInterval: autoRefresh ? 30000 : false,
   });
@@ -64,17 +64,17 @@ export default function EnhancedFinancialDashboard({ projectId }: EnhancedFinanc
     refetchInterval: autoRefresh ? 30000 : false,
   });
 
-  const { data: cashFlowData = [], isLoading: cashFlowLoading } = useQuery<any[]>({
+  const { data: cashFlowData = [], isLoading: cashFlowLoading } = useQuery<any>({
     queryKey: ['/api/financial/cash-flow-analysis', projectId, timeRange],
     refetchInterval: autoRefresh ? 30000 : false,
   });
 
-  const { data: profitabilityData = [], isLoading: profitLoading } = useQuery<any[]>({
+  const { data: profitabilityData = [], isLoading: profitLoading } = useQuery<any>({
     queryKey: ['/api/financial/profitability-trends', projectId, timeRange],
     refetchInterval: autoRefresh ? 30000 : false,
   });
 
-  const { data: budgetVariances = [], isLoading: varianceLoading } = useQuery<any[]>({
+  const { data: budgetVariances = [], isLoading: varianceLoading } = useQuery<any>({
     queryKey: ['/api/financial/budget-variances', projectId],
     refetchInterval: autoRefresh ? 30000 : false,
   });

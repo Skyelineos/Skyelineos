@@ -21,7 +21,7 @@ export function hasPath(
   // Find all dependencies where fromId is the source
   const outgoingDeps = dependencies.filter(dep => dep.source === fromId);
   
-  return outgoingDeps.some(dep => hasPath(dep.target, toId, dependencies, visited));
+  return outgoingDeps.some(dep => hasPath(dep.target!, toId, dependencies, visited));
 }
 
 /**
@@ -37,8 +37,8 @@ export function detectCycles(dependencies: Dependency[]): number[][] {
 
   // Get all unique task IDs
   const taskIds = Array.from(new Set([
-    ...dependencies.map(d => d.source),
-    ...dependencies.map(d => d.target)
+    ...dependencies.map(d => d.source).filter((x): x is number => x !== undefined),
+    ...dependencies.map(d => d.target).filter((x): x is number => x !== undefined)
   ]));
 
   function dfs(taskId: number): boolean {
@@ -62,10 +62,10 @@ export function detectCycles(dependencies: Dependency[]): number[][] {
     // Visit all dependent tasks
     const dependents = dependencies
       .filter(dep => dep.source === taskId)
-      .map(dep => dep.target);
+      .map(dep => dep.target!);
 
     for (const dependent of dependents) {
-      if (dfs(dependent)) {
+      if (dfs(dependent!)) {
         return true;
       }
     }

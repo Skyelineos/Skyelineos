@@ -47,7 +47,7 @@ export default function SelectionsBoard({ projectId, clientId }: SelectionsBoard
   const [activeFloorFilter, setActiveFloorFilter] = useState<string>('All');
   const [activeCategoryFilter, setActiveCategoryFilter] = useState<string>('All');
 
-  const { data: selections = [], isLoading } = useQuery({
+  const { data: selections = [], isLoading } = useQuery<any>({
     queryKey: ['selections', projectId],
     queryFn: async () => {
       const snap = await getDocs(fsQuery(
@@ -167,7 +167,7 @@ export default function SelectionsBoard({ projectId, clientId }: SelectionsBoard
           </button>
         ))}
         <span className="text-gray-300 self-center">|</span>
-        {categories.map(c => (
+        {(categories as string[]).map(c => (
           <button key={c} onClick={() => setActiveCategoryFilter(c)}
             className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${activeCategoryFilter === c ? 'border-blue-400 bg-blue-50 text-blue-700 font-medium' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
             {c}
@@ -304,8 +304,8 @@ export default function SelectionsBoard({ projectId, clientId }: SelectionsBoard
                                               {item.costPerUnit > 0 && (
                                                 <p className="text-sm font-bold text-gray-800">${item.costPerUnit}/{item.unit}</p>
                                               )}
-                                              {item.totalCost > 0 && (
-                                                <p className="text-xs text-gray-500">${item.totalCost.toLocaleString()} total</p>
+                                              {(item.totalCost ?? 0) > 0 && (
+                                                <p className="text-xs text-gray-500">${(item.totalCost ?? 0).toLocaleString()} total</p>
                                               )}
                                             </div>
                                           </div>
@@ -377,11 +377,11 @@ export default function SelectionsBoard({ projectId, clientId }: SelectionsBoard
       <Dialog open={!!confirmApprove} onOpenChange={() => setConfirmApprove(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{confirmApprove?.overage > 0 ? 'Approve with Overage' : 'Confirm Approval'}</DialogTitle>
+            <DialogTitle>{(confirmApprove?.overage ?? 0) > 0 ? 'Approve with Overage' : 'Confirm Approval'}</DialogTitle>
           </DialogHeader>
           <div className="text-sm text-gray-600 py-2 space-y-2">
-            {confirmApprove?.overage > 0 ? (
-              <p>These selections exceed your allowance by <strong className="text-orange-600">${confirmApprove.overage.toLocaleString()}</strong>. A change order will be created for your review.</p>
+            {(confirmApprove?.overage ?? 0) > 0 ? (
+              <p>These selections exceed your allowance by <strong className="text-orange-600">${(confirmApprove?.overage ?? 0).toLocaleString()}</strong>. A change order will be created for your review.</p>
             ) : (
               <p>You're approving the selections for <strong>{confirmApprove?.sel.room} — {confirmApprove?.sel.area}</strong>. This will notify your designer to proceed.</p>
             )}

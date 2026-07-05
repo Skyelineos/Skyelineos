@@ -50,11 +50,11 @@ export function ClientPaymentsTab() {
   });
 
   // Fetch data
-  const { data: clientPayments = [], isLoading } = useQuery({
+  const { data: clientPayments = [], isLoading } = useQuery<any>({
     queryKey: ['/api/client-payments'],
   });
 
-  const { data: projects = [] } = useQuery({
+  const { data: projects = [] } = useQuery<any>({
     queryKey: ['/api/projects'],
   });
 

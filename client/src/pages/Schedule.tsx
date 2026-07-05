@@ -28,7 +28,7 @@ export default function Schedule() {
   const isMobile = useIsMobile();
 
   // Fetch active projects directly from Firestore (org IAM blocks /api/projects)
-  const { data: activeProjects = [], error: projectsError } = useQuery({
+  const { data: activeProjects = [], error: projectsError } = useQuery<any>({
     queryKey: ['/api/projects'],
     queryFn: async () => {
       const snap = await getDocs(collection(db, 'projects'));
@@ -42,7 +42,7 @@ export default function Schedule() {
   });
 
   // Fetch all tasks for statistics directly from Firestore.
-  const { data: allTasks = [], error: tasksError } = useQuery<any[]>({
+  const { data: allTasks = [], error: tasksError } = useQuery<any>({
     queryKey: ['/api/tasks/all-active'],
     queryFn: async () => {
       const snap = await getDocs(collection(db, 'tasks'));

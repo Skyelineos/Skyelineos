@@ -121,11 +121,11 @@ export function SmartSchedulingAssistant({
     const scheduleEfficiency = totalDuration > 0 ? 
       Math.min(100, (criticalPathLength / totalDuration) * 100) : 100;
     
-    const resourceConflicts = tasks.filter(t => t.resourceConflicts?.length > 0).length;
+    const resourceConflicts = tasks.filter(t => (t.resourceConflicts?.length ?? 0) > 0).length;
     const resourceUtilization = Math.max(0, 100 - (resourceConflicts / tasks.length) * 100);
     
     const highRiskTasks = tasks.filter(t => 
-      t.weatherDependent || t.priority === 'critical' || t.resourceConflicts?.length > 0
+      t.weatherDependent || t.priority === 'critical' || (t.resourceConflicts?.length ?? 0) > 0
     ).length;
     const riskScore = (highRiskTasks / tasks.length) * 100;
     
@@ -197,7 +197,7 @@ export function SmartSchedulingAssistant({
     }
 
     // Resource conflict resolution
-    const conflictTasks = tasks.filter(t => t.resourceConflicts?.length > 0);
+    const conflictTasks = tasks.filter(t => (t.resourceConflicts?.length ?? 0) > 0);
     if (conflictTasks.length > 0) {
       suggestions.push({
         id: 'resolve-conflicts',

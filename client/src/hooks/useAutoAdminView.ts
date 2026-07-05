@@ -39,7 +39,7 @@ export function useAutoAdminView() {
   const { isAdminView, enterAdminView, exitAdminView } = useAdminView();
 
   // Get contacts for selecting default users (Firestore direct).
-  const { data: contacts = [] } = useQuery({
+  const { data: contacts = [] } = useQuery<any>({
     queryKey: ['/api/contacts'],
     enabled: hasRole('admin'),
     queryFn: async () => {

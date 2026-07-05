@@ -142,7 +142,7 @@ const ExpandedTimelineView: React.FC<ExpandedTimelineViewProps> = ({
 
   // Timeline day cells with month headers
   const renderTimelineGrid = () => {
-    const days = [];
+    const days: React.ReactElement[] = [];
     const { start, totalDays } = timelineBounds;
 
     for (let i = 0; i < totalDays; i++) {
@@ -333,7 +333,7 @@ const ExpandedTimelineView: React.FC<ExpandedTimelineViewProps> = ({
       }
       
       // Weekend overlay data
-      const weekendOverlays = [];
+      const weekendOverlays: { left: number; width: number }[] = [];
       for (let dayOffset = 0; dayOffset < totalCalendarDays; dayOffset++) {
         const checkDate = addDays(task.startDate, dayOffset);
         if (isWeekend(checkDate)) {

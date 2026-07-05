@@ -67,7 +67,7 @@ export default function ProjectOverview() {
   const { project: transformedProject, rawProject: project, isLoading, error } = useOptimizedProject(projectId);
 
   // Optimized progress calculation for better navigation performance
-  const { data: liveProgress, isLoading: progressLoading } = useQuery({
+  const { data: liveProgress, isLoading: progressLoading } = useQuery<any>({
     queryKey: ['project-live-progress', projectId],
     queryFn: () => calculateLiveProgress(projectId!),
     enabled: !!projectId && projectId !== 'undefined',
@@ -79,7 +79,7 @@ export default function ProjectOverview() {
   // Trades on this project — derived from tasks scoped to the project.
   // Must run BEFORE any early returns so React's hook order stays stable
   // across renders.
-  const { data: projectTrades = [] } = useQuery({
+  const { data: projectTrades = [] } = useQuery<any>({
     queryKey: ['project-trades', projectId],
     enabled: !!projectId,
     staleTime: 60_000,
@@ -100,7 +100,7 @@ export default function ProjectOverview() {
   // Fallback client lookup. Legacy projects (created from Sales lead conversion)
   // sometimes only store the linked contact/client ID without copying the
   // email + phone onto the project doc. Resolve them on demand.
-  const { data: linkedClient } = useQuery({
+  const { data: linkedClient } = useQuery<any>({
     queryKey: ['project-linked-client', projectId, (project as any)?.clientIds?.[0]],
     enabled: !!projectId && !!project,
     staleTime: 60_000,

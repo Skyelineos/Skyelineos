@@ -158,7 +158,7 @@ export function FinancialDataView({ projectId, className = '' }: FinancialDataVi
                   </div>
                   <div className="text-right space-y-1">
                     <div className="font-medium">{formatCurrency(data.amount)}</div>
-                    <Badge variant={getPaymentStatus(data.amount, data.paid).variant}>
+                    <Badge variant={getPaymentStatus(data.amount, data.paid).variant as any}>
                       {formatCurrency(data.paid)} paid
                     </Badge>
                   </div>
@@ -198,7 +198,7 @@ export function FinancialDataView({ projectId, className = '' }: FinancialDataVi
                     <div className="text-right space-y-1">
                       <div className="font-medium">{formatCurrency(financial.amount)}</div>
                       <div className="flex items-center gap-2">
-                        <Badge variant={paymentStatus.variant}>
+                        <Badge variant={paymentStatus.variant as any}>
                           {paymentStatus.status}
                         </Badge>
                         {financial.paidToDate > 0 && (

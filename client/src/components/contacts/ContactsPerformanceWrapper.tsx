@@ -35,7 +35,7 @@ export function ContactsPerformanceWrapper({ children }: ContactsPerformanceWrap
   const queryClient = useQueryClient();
 
   // Optimized contacts query with aggressive caching
-  const { data: contacts = [], isLoading, error } = useQuery({
+  const { data: contacts = [], isLoading, error } = useQuery<any>({
     queryKey: ['/api/contacts'],
     select: (data) => Array.isArray(data) ? data : [],
     staleTime: 15 * 60 * 1000, // 15 minutes - contacts don't change frequently

@@ -27,19 +27,19 @@ export default function ProfitMarginAnalysis({ projectId }: ProfitMarginAnalysis
   const [viewType, setViewType] = useState<'summary' | 'detailed'>('summary');
 
   // Fetch profit margin analysis
-  const { data: marginAnalysis, isLoading: marginLoading } = useQuery({
+  const { data: marginAnalysis, isLoading: marginLoading } = useQuery<any>({
     queryKey: [`/api/financial/profit-margin-analysis/${projectId}`, selectedTrade, timeRange],
     refetchInterval: 30000,
   });
 
   // Fetch profit trends
-  const { data: profitTrends, isLoading: trendsLoading } = useQuery({
+  const { data: profitTrends, isLoading: trendsLoading } = useQuery<any>({
     queryKey: [`/api/financial/profit-trends/${projectId}`, timeRange],
     refetchInterval: 60000,
   });
 
   // Fetch benchmark data
-  const { data: benchmarks, isLoading: benchmarksLoading } = useQuery({
+  const { data: benchmarks, isLoading: benchmarksLoading } = useQuery<any>({
     queryKey: [`/api/financial/profit-benchmarks/${projectId}`],
     refetchInterval: 300000, // Update every 5 minutes
   });
@@ -49,7 +49,7 @@ export default function ProfitMarginAnalysis({ projectId }: ProfitMarginAnalysis
   ) || [];
 
   // Get unique trades for filter
-  const trades = Array.from(new Set(marginAnalysis?.map(analysis => analysis.trade).filter(Boolean))) || [];
+  const trades: string[] = Array.from(new Set((marginAnalysis?.map((a: any) => a.trade) ?? []).filter(Boolean))) as string[];
 
   // Calculate overall project metrics
   const calculateOverallMetrics = (analyses: any[]) => {
@@ -288,7 +288,7 @@ export default function ProfitMarginAnalysis({ projectId }: ProfitMarginAnalysis
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>
-                    <Tooltip formatter={(value) => formatCurrency(value)} />
+                    <Tooltip formatter={(value: any) => formatCurrency(value as number)} />
                   </PieChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -361,9 +361,9 @@ export default function ProfitMarginAnalysis({ projectId }: ProfitMarginAnalysis
                   <YAxis yAxisId="left" tickFormatter={(value) => `$${(value / 1000).toFixed(0)}K`} />
                   <YAxis yAxisId="right" orientation="right" tickFormatter={(value) => `${value}%`} />
                   <Tooltip 
-                    formatter={(value, name) => {
-                      if (name.includes('%')) return [`${value}%`, name];
-                      return [formatCurrency(value), name];
+                    formatter={(value: any, name: any) => {
+                      if (typeof name === 'string' && name.includes('%')) return [`${value}%`, name];
+                      return [formatCurrency(value as number), name];
                     }}
                     labelFormatter={(label) => `Period: ${label}`}
                   />

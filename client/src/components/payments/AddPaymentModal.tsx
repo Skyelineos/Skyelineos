@@ -34,7 +34,7 @@ export default function AddPaymentModal({ isOpen, onClose, invoice, projectId }:
   const queryClient = useQueryClient();
 
   // Get available POs for linking
-  const { data: availablePOs = [] } = useQuery({
+  const { data: availablePOs = [] } = useQuery<any>({
     queryKey: [`/api/purchase-orders/available/${projectId}`],
     enabled: isOpen && linkToPO
   });

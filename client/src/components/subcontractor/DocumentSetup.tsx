@@ -30,7 +30,7 @@ export default function DocumentSetup({ contactId, onCompleted }: DocumentSetupP
   const queryClient = useQueryClient();
 
   // Query to get current document status
-  const { data: documentStatus, isLoading } = useQuery({
+  const { data: documentStatus, isLoading } = useQuery<any>({
     queryKey: ['/api/contacts', contactId, 'documents'],
     select: (data: any) => ({
       w9Uploaded: data?.w9Uploaded || false,
@@ -41,13 +41,13 @@ export default function DocumentSetup({ contactId, onCompleted }: DocumentSetupP
   });
 
   // Query to get default agreement
-  const { data: defaultAgreement } = useQuery({
+  const { data: defaultAgreement } = useQuery<any>({
     queryKey: ['/api/system-settings/default_subcontractor_agreement'],
     select: (data: any) => data?.settingValue || null
   });
 
   // Query to get custom agreement for this contact
-  const { data: customAgreement } = useQuery({
+  const { data: customAgreement } = useQuery<any>({
     queryKey: ['/api/contacts', contactId, 'custom-agreement'],
     select: (data: any) => data?.customAgreementUrl || null
   });

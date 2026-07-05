@@ -38,7 +38,7 @@ interface ChangeOrder {
   status: COStatus;
   type: COType;
   reason?: string;
-  createdAt?: unknown;
+  createdAt?: string | Date | { toDate: () => Date };
   approvedAt?: unknown;
   approvedBy?: string;
 }

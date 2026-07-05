@@ -367,7 +367,7 @@ export function FinancialDashboard({ projectId, className = '', schedule = [] }:
                             }`}>
                               {formatAccountingCurrency(balance)}
                             </span>
-                            <Badge variant={balanceStatus.variant} className="text-xs">
+                            <Badge variant={balanceStatus.variant as any} className="text-xs">
                               {balanceStatus.text}
                             </Badge>
                           </div>
@@ -444,7 +444,7 @@ export function FinancialDashboard({ projectId, className = '', schedule = [] }:
                     dataKey="cumulativeCashFlow" 
                     stroke="hsl(var(--primary))"
                     strokeWidth={2}
-                    dot={(props: any) => {
+                    dot={(props: any): any => {
                       const { payload } = props;
                       return payload?.isForecasted ? null : { 
                         fill: 'hsl(var(--primary))', 
@@ -464,7 +464,7 @@ export function FinancialDashboard({ projectId, className = '', schedule = [] }:
                       stroke="hsl(var(--muted-foreground))"
                       strokeWidth={2}
                       strokeDasharray="5 5"
-                      dot={(props: any) => {
+                      dot={(props: any): any => {
                         const { payload } = props;
                         return payload?.isForecasted ? { 
                           fill: 'hsl(var(--muted-foreground))', 

@@ -18,7 +18,7 @@ interface GlobalScheduleResponse {
 }
 
 export function useGlobalSchedule() {
-  return useQuery({
+  return useQuery<any>({
     queryKey: ['schedule', 'allProjects'],
     queryFn: async (): Promise<GlobalScheduleResponse> => {
       const response = await fetch('/api/schedule/global');

@@ -48,7 +48,7 @@ export function EditProjectForm({ project, open, onOpenChange }: EditProjectForm
   const [selectedClientId, setSelectedClientId] = useState<string>('');
 
   // Fetch all contacts for project manager selection and client selection
-  const { data: allContacts = [] } = useQuery({
+  const { data: allContacts = [] } = useQuery<any>({
     queryKey: ['/api/contacts'],
     queryFn: async () => {
       const response = await fetch('/api/contacts');

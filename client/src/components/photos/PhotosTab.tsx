@@ -104,7 +104,7 @@ export default function PhotosTab({ projectId }: PhotosTabProps) {
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
 
   // Fetch photos based on current user role
-  const { data: photos = [], isLoading } = useQuery({
+  const { data: photos = [], isLoading } = useQuery<any>({
     queryKey: [`/api/projects/${projectId}/photos`, currentUser.role],
     queryFn: () => apiRequest(`/api/projects/${projectId}/photos?role=${currentUser.role}`, 'GET'),
   });

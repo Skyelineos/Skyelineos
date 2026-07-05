@@ -68,7 +68,7 @@ export function StartBidModal({
   // Fetch all subcontractors from contacts.
   // Explicit <any[]> generic — without it useQuery infers `unknown`, breaking
   // the .filter() call on the next line at both type-check and runtime.
-  const { data: allContacts = [] } = useQuery<any[]>({
+  const { data: allContacts = [] } = useQuery<any>({
     queryKey: ['/api/contacts'],
   });
 

@@ -14,7 +14,7 @@ export interface EstimateItem {
 }
 
 export function useEstimateItems(projectId: string) {
-  return useQuery({
+  return useQuery<any>({
     queryKey: [`/api/projects/${projectId}/estimates/approved`],
     enabled: !!projectId,
   });

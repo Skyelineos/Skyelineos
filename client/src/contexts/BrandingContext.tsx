@@ -14,7 +14,7 @@ const BrandingContext = createContext<BrandingContextType | undefined>(undefined
 export function BrandingProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
 
-  const { data: branding, isLoading } = useQuery({
+  const { data: branding, isLoading } = useQuery<any>({
     queryKey: ['/api/branding'],
     staleTime: 5 * 60 * 1000, // 5 minutes
   });

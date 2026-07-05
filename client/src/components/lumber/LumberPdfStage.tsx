@@ -58,7 +58,7 @@ export function LumberPdfStage({
   const canvasRef = useRef<PdfCanvasHandle | null>(null);
   const [zoom, setZoom] = useState(1);
   const [transform, setTransform] = useState({ scale: 1, tx: 0, ty: 0 });
-  const [containerSize, setContainerSize] = useState({ w: 800, h });
+  const [containerSize, setContainerSize] = useState({ w: 800, h: 600 });
 
   // In-progress draw state
   const [inProgressPoints, setInProgressPoints] = useState<PdfPoint[]>([]);

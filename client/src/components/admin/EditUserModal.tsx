@@ -181,7 +181,7 @@ export function EditUserModal({ open, onOpenChange, user }: EditUserModalProps) 
     }
     
     if (formData.username !== (user.username || '')) {
-      updateData.username = formData.username || null;
+      updateData.username = formData.username || undefined;
     }
 
     // Update general fields if they changed

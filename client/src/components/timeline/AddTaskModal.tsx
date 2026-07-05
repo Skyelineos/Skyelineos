@@ -93,13 +93,13 @@ export function AddTaskModal({ isOpen, onClose, onTaskAdded, projectId }: AddTas
   });
 
   // Fetch estimates for the project
-  const { data: estimates = [], isLoading: estimatesLoading } = useQuery({
+  const { data: estimates = [], isLoading: estimatesLoading } = useQuery<any>({
     queryKey: [`/api/projects/${projectId}/estimates`],
     enabled: isOpen && activeTab === 'estimates'
   });
 
   // Fetch contacts for assignment
-  const { data: contacts = [] } = useQuery({
+  const { data: contacts = [] } = useQuery<any>({
     queryKey: ['/api/contacts'],
     enabled: isOpen
   });

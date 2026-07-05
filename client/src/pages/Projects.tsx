@@ -87,7 +87,7 @@ function ProjectCard({
     data: liveProgress,
     isLoading: progressLoading,
     error: progressError,
-  } = useQuery({
+  } = useQuery<any>({
     queryKey: ['liveProgress', project.id],
     queryFn: () => calculateLiveProgress(project.id),
     staleTime: 30000, // Refresh every 30 seconds

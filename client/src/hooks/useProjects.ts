@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { transformDbProject } from '@/lib/projectUtils';
 import { queryCache, cacheKeys } from '@/lib/apiCache';
-import { DatabaseProject, Contact, TransformedProject } from '@shared/types';
+import { DatabaseProject, Contact } from "@shared/types";
+import type { TransformedProject } from "@/lib/projectUtils";
 
 // Custom hook for optimized project data fetching
 export function useProjects() {

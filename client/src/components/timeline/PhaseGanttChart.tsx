@@ -288,7 +288,7 @@ export function PhaseGanttChart({
     const taskDays = endDayIndex - startDayIndex + 1;
     
     // Generate day cells for this task
-    const taskCells = [];
+    const taskCells: React.ReactElement[] = [];
     const totalDays = differenceInDays(dateRange.end, dateRange.start) + 1;
     
     for (let dayIndex = 0; dayIndex < totalDays; dayIndex++) {

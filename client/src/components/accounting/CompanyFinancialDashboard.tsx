@@ -37,16 +37,16 @@ export function CompanyFinancialDashboard() {
   const [timeRange, setTimeRange] = useState<'month' | 'quarter' | 'year'>('month');
 
   // Fetch live company-wide financial data
-  const { data: companyFinancials, isLoading } = useQuery({ 
+  const { data: companyFinancials, isLoading } = useQuery<any>({ 
     queryKey: ['/api/financial/company-summary'],
     refetchInterval: 30000 // Refresh every 30 seconds
   });
   
   // Fallback to individual data if company summary not available
-  const { data: projects = [] } = useQuery({ queryKey: ['/api/projects'] });
-  const { data: invoices = [] } = useQuery({ queryKey: ['/api/invoices'] });
-  const { data: clientPayments = [] } = useQuery({ queryKey: ['/api/client-payments'] });
-  const { data: purchaseOrders = [] } = useQuery({ queryKey: ['/api/purchase-orders'] });
+  const { data: projects = [] } = useQuery<any>({ queryKey: ['/api/projects'] });
+  const { data: invoices = [] } = useQuery<any>({ queryKey: ['/api/invoices'] });
+  const { data: clientPayments = [] } = useQuery<any>({ queryKey: ['/api/client-payments'] });
+  const { data: purchaseOrders = [] } = useQuery<any>({ queryKey: ['/api/purchase-orders'] });
 
   // Calculate financial metrics from live company data
   const calculateMetrics = (): FinancialMetrics => {

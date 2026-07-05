@@ -34,7 +34,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { useAuth } from '@/hooks/use-auth';
 import { NewClientModal } from '@/components/contacts/NewClientModal';
-import { useAuth } from '@/auth/AuthContext';
 import type { Contact } from '@shared/messaging-types';
 
 const projectSchema = z.object({
@@ -138,7 +137,7 @@ export function NewProjectForm({ isOpen, onClose, onProjectCreated }: NewProject
   }, [isOpen]);
 
   // Fetch all contacts for client selection
-  const { data: allContacts = [], refetch: refetchContacts } = useQuery({
+  const { data: allContacts = [], refetch: refetchContacts } = useQuery<any>({
     queryKey: ['/api/contacts'],
     queryFn: async () => {
       console.log('🔄 Fetching contacts for project form...');

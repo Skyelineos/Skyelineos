@@ -884,7 +884,7 @@ export default function SubcontractorPortal() {
       case 'invoices': return renderInvoices();
       case 'pay-app': return renderPayApp();
       case 'purchase-orders': return renderPurchaseOrders();
-      case 'progress-photos': return <PhotosTab />;
+      case 'progress-photos': return <PhotosTab projectId={projects[0]?.id || ''} />;
       case 'rfis': return renderRFIs();
       case 'messages': return renderMessages();
       default: return renderDashboard();

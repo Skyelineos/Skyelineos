@@ -34,7 +34,7 @@ export function FinancialPositionCard() {
       try {
         // Load manual cash/AP override from settings
         const snap = await getDoc(doc(db, 'settings', 'financialPosition'));
-        const manual = snap.exists() ? snap.data() as FinancialPosition : { cashOnHand: 0, ap: 0 };
+        const manual = snap.exists() ? snap.data() as FinancialPosition : { cashOnHand: 0, ap: 0, ar: 0, lastUpdated: undefined, source: undefined } as FinancialPosition;
 
         // Calculate AR from outstanding invoices (live from Firestore)
         const invSnap = await getDocs(collection(db, 'invoices'));

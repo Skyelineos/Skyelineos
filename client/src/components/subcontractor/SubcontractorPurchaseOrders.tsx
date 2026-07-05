@@ -38,7 +38,7 @@ export default function SubcontractorPurchaseOrders({ subcontractorId }: Subcont
   const queryClient = useQueryClient();
 
   // Fetch POs for the subcontractor
-  const { data: purchaseOrders = [], isLoading, refetch } = useQuery({
+  const { data: purchaseOrders = [], isLoading, refetch } = useQuery<any>({
     queryKey: ['/api/purchase-orders/subcontractor', subcontractorId],
     queryFn: async () => {
       const response = await fetch(`/api/purchase-orders/subcontractor/${subcontractorId}`);
@@ -85,9 +85,9 @@ export default function SubcontractorPurchaseOrders({ subcontractorId }: Subcont
       case 'draft':
         return <Badge variant="secondary" className="bg-gray-100 text-gray-800"><Clock className="w-3 h-3 mr-1" />Draft</Badge>;
       case 'sent':
-        return <Badge variant="accent" className="bg-blue-100 text-blue-800"><Send className="w-3 h-3 mr-1" />Awaiting Signature</Badge>;
+        return <Badge variant={"accent" as any} className="bg-blue-100 text-blue-800"><Send className="w-3 h-3 mr-1" />Awaiting Signature</Badge>;
       case 'signed':
-        return <Badge variant="accent" className="bg-green-100 text-green-800"><CheckCircle className="w-3 h-3 mr-1" />Signed</Badge>;
+        return <Badge variant={"accent" as any} className="bg-green-100 text-green-800"><CheckCircle className="w-3 h-3 mr-1" />Signed</Badge>;
       default:
         return <Badge variant="outline">{status}</Badge>;
     }

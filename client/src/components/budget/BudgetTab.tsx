@@ -76,19 +76,19 @@ export default function BudgetTab({ projectId }: BudgetTabProps) {
   }
 
   // Fetch budget summary
-  const { data: budgetSummary = {}, isLoading: summaryLoading } = useQuery({
+  const { data: budgetSummary = {}, isLoading: summaryLoading } = useQuery<any>({
     queryKey: ['/api/projects', projectId, 'budget-summary'],
     enabled: !!projectId,
   });
 
   // Fetch client payments
-  const { data: clientPayments = [], isLoading: paymentsLoading } = useQuery({
+  const { data: clientPayments = [], isLoading: paymentsLoading } = useQuery<any>({
     queryKey: ['/api/projects', projectId, 'client-payments'],
     enabled: !!projectId,
   });
 
   // Fetch subcontractor invoices  
-  const { data: subInvoices = [], isLoading: invoicesLoading } = useQuery({
+  const { data: subInvoices = [], isLoading: invoicesLoading } = useQuery<any>({
     queryKey: ['/api/projects', projectId, 'invoices'],
     enabled: !!projectId,
   });

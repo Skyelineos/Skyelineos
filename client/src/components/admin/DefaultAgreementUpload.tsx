@@ -14,7 +14,7 @@ export default function DefaultAgreementUpload() {
   const queryClient = useQueryClient();
 
   // Query to get current default agreement
-  const { data: defaultAgreement, isLoading } = useQuery({
+  const { data: defaultAgreement, isLoading } = useQuery<any>({
     queryKey: ['/api/system-settings/default_subcontractor_agreement'],
     select: (data: any) => data?.settingValue || null
   });

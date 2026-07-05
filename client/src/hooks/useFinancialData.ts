@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
-import { db, hasFirebaseConfig } from '../firebase/config';
+import { db } from '../lib/firebase';
+const hasFirebaseConfig = true;
 import { useEffect, useRef } from 'react';
 import type { FirebaseFinancial } from '../../../shared/schema';
 
@@ -24,7 +25,7 @@ export function useFinancialData(projectId: number): FinancialDataReturn {
   const queryKey = ['financials', projectId];
 
   // Initialize query with empty data
-  const queryResult = useQuery({
+  const queryResult = useQuery<any>({
     queryKey,
     queryFn: () => [], // Initial empty data - real data comes from real-time listener
     enabled: hasFirebaseConfig && !!projectId,

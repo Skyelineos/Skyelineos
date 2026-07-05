@@ -559,7 +559,7 @@ export default function ContactDetailView({
                               variant="ghost" 
                               size="sm"
                               className="h-5 w-5 p-0 ml-1"
-                              onClick={() => copyToClipboard(contact.email, 'Email')}
+                              onClick={() => copyToClipboard(contact.email ?? '', 'Email')}
                             >
                               <Copy className="h-3 w-3" />
                             </Button>
@@ -573,7 +573,7 @@ export default function ContactDetailView({
                               variant="ghost" 
                               size="sm"
                               className="h-5 w-5 p-0 ml-1"
-                              onClick={() => copyToClipboard(contact.phone, 'Phone')}
+                              onClick={() => copyToClipboard(contact.phone ?? '', 'Phone')}
                             >
                               <Copy className="h-3 w-3" />
                             </Button>
@@ -785,7 +785,7 @@ export default function ContactDetailView({
                 {/* Tags */}
                 {(() => {
                   try {
-                    const tags = JSON.parse(contact.tags || '[]');
+                    const tags = JSON.parse(typeof contact.tags === "string" ? contact.tags : "[]") as string[];
                     return tags.length > 0 && (
                       <Card className="bg-gray-50">
                         <CardHeader>

@@ -81,7 +81,7 @@ export default function QuickAuthTests() {
         status: response.ok ? 'pass' : 'info',
         message: `API auth check: ${response.status}. ${response.ok ? 'Valid session cookies found' : 'No valid session (expected if not logged in)'}`
       });
-    } catch (error) {
+    } catch (error: any) {
       addTestResult({
         id: 'api-auth',
         name: 'Cookie-based API Authentication',
@@ -136,7 +136,7 @@ export default function QuickAuthTests() {
         // Navigate back
         setLocation('/auth-test');
         
-      } catch (error) {
+      } catch (error: any) {
         addTestResult({
           id: testId,
           name: `Protected Route: ${route.description}`,

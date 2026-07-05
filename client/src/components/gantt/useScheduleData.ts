@@ -41,7 +41,7 @@ export function useScheduleData({
     data: trades = [], 
     isLoading: tradesLoading, 
     error: tradesError 
-  } = useQuery({
+  } = useQuery<any>({
     queryKey: ['trades', projectId, dataSource],
     queryFn: async (): Promise<Trade[]> => {
       if (dataSource === 'firestore') {
@@ -64,7 +64,7 @@ export function useScheduleData({
     data: milestones = [], 
     isLoading: milestonesLoading, 
     error: milestonesError 
-  } = useQuery({
+  } = useQuery<any>({
     queryKey: ['milestones', projectId, dataSource],
     queryFn: async (): Promise<Milestone[]> => {
       if (dataSource === 'firestore') {

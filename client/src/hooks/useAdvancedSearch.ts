@@ -128,7 +128,7 @@ export function useAdvancedSearch(
       return acc;
     }, {} as Record<string, number>);
 
-    const appliedFilters = [];
+    const appliedFilters: string[] = [];
     if (statusFilter !== 'all') appliedFilters.push(`Status: ${statusFilter}`);
     if (managerFilter !== 'all') appliedFilters.push(`Manager: ${managerFilter}`);
     if (budgetRange[0] > 0 || budgetRange[1] < 10000000) {

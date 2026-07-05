@@ -82,7 +82,7 @@ export function UserManagement() {
   const queryClient = useQueryClient();
 
   // Fetch users
-  const { data: users = [], isLoading, refetch } = useQuery({
+  const { data: users = [], isLoading, refetch } = useQuery<any>({
     queryKey: ['/api/admin/users'],
     queryFn: () => apiRequest('/api/admin/users'),
   });
@@ -124,7 +124,7 @@ export function UserManagement() {
   });
 
   // Designer access requests
-  const { data: accessRequests = [], refetch: refetchRequests } = useQuery({
+  const { data: accessRequests = [], refetch: refetchRequests } = useQuery<any>({
     queryKey: ['/api/designer/access-requests'],
     queryFn: async () => {
       const res = await fetch('/api/designer/access-requests');

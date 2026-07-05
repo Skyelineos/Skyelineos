@@ -77,7 +77,7 @@ export function SimplifiedEstimateForm({ projectId, onSubmit, onCancel, isLoadin
   });
 
   // Fetch existing estimates for copying
-  const { data: existingEstimates = [] } = useQuery<any[]>({
+  const { data: existingEstimates = [] } = useQuery<any>({
     queryKey: ['/api/estimates'],
   });
 
@@ -121,7 +121,7 @@ export function SimplifiedEstimateForm({ projectId, onSubmit, onCancel, isLoadin
         totalDuration: Math.max(...data.items.map(item => item.duration || 1)),
       };
 
-      const response = await apiRequest('/api/estimates', { method: 'POST', body: estimateData });
+      const response = await apiRequest('/api/estimates', { method: 'POST', body: JSON.stringify(estimateData) });
       // Development logging removed
       return response;
     },

@@ -238,7 +238,7 @@ export function DocumentTemplateEditor({
                   <div className="bg-gray-900 text-white text-xs font-semibold px-3 py-1.5">{box.label}</div>
                   <div className="p-3 text-xs text-gray-700 space-y-0.5">
                     {'lines' in box
-                      ? box.lines.map((l, i) => <p key={i}>{l}</p>)
+                      ? (box.lines ?? []).map((l, i) => <p key={i}>{l}</p>)
                       : box.pairs!.map(([k, v]) => (
                           <div key={k} className="flex gap-2">
                             <span className="font-medium w-24">{k}</span>

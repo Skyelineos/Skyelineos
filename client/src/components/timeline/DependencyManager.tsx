@@ -222,7 +222,7 @@ export function DependencyManager({
     suggestedDependencies: string[];
     reason: string;
   }[] => {
-    const suggestions = [];
+    const suggestions: { taskId: string; suggestedDependencies: string[]; reason: string; }[] = [];
     const taskMap = new Map(taskList.map(task => [task.id, task]));
 
     taskList.forEach(task => {

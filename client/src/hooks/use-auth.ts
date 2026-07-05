@@ -14,6 +14,8 @@ interface User {
   firstName?: string;
   lastName?: string;
   permissions: string[];
+  firebaseUid?: string;
+  navDisabled?: boolean;
 }
 
 // Legacy AuthContextType interface for backward compatibility

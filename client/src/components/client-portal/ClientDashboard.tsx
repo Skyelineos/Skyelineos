@@ -20,7 +20,7 @@ interface ClientDashboardProps {
 
 export default function ClientDashboard({ projectId, project, onNavigate }: ClientDashboardProps) {
   // Pending selections needing approval
-  const { data: selections = [] } = useQuery({
+  const { data: selections = [] } = useQuery<any>({
     queryKey: ['selections', projectId],
     queryFn: async () => {
       const snap = await getDocs(
@@ -32,7 +32,7 @@ export default function ClientDashboard({ projectId, project, onNavigate }: Clie
   });
 
   // Pending change orders needing client decision
-  const { data: changeOrders = [] } = useQuery({
+  const { data: changeOrders = [] } = useQuery<any>({
     queryKey: ['changeOrders', projectId],
     queryFn: async () => {
       // Top-level `changeOrders` keyed by projectId (canonical location).

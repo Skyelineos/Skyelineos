@@ -75,19 +75,19 @@ export default function PurchaseOrdersSection({ projectId }: PurchaseOrdersSecti
   const [isDrawingSignature, setIsDrawingSignature] = useState(false);
 
   // Fetch purchase orders
-  const { data: purchaseOrders = [], isLoading: posLoading } = useQuery({
+  const { data: purchaseOrders = [], isLoading: posLoading } = useQuery<any>({
     queryKey: ['/api/purchase-orders/project', projectId],
     queryFn: () => fetch(`/api/purchase-orders/project/${projectId}`).then(res => res.json()),
   });
 
   // Fetch approved estimate items
-  const { data: approvedEstimateItems = [], isLoading: estimateItemsLoading } = useQuery({
+  const { data: approvedEstimateItems = [], isLoading: estimateItemsLoading } = useQuery<any>({
     queryKey: ['/api/estimates/approved', projectId],
     queryFn: () => fetch(`/api/estimates/approved/${projectId}`).then(res => res.json()),
   });
 
   // Fetch contacts/subcontractors
-  const { data: contacts = [] } = useQuery({
+  const { data: contacts = [] } = useQuery<any>({
     queryKey: ['/api/contacts'],
   });
 
@@ -282,7 +282,7 @@ export default function PurchaseOrdersSection({ projectId }: PurchaseOrdersSecti
     return matchesSearch && matchesStatus && matchesTrade;
   });
 
-  const uniqueTrades = [...new Set(purchaseOrders.map((po: any) => po.trade))];
+  const uniqueTrades = [...new Set(purchaseOrders.map((po: any) => po.trade as string))].filter((x): x is string => typeof x === "string");
 
   const canCreatePO = hasRole(['admin', 'project_manager']);
   const canSendPO = hasRole(['admin', 'project_manager']);

@@ -1188,6 +1188,9 @@ export function AdvancedTimelineBuilder({
   const [showCsvImportDialog, setShowCsvImportDialog] = useState(false);
   const [editingTask, setEditingTask] = useState<any>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<{ taskId: number; taskTitle: string } | null>(null);
+  const [showDependencies, setShowDependencies] = useState(true);
+  const [editingDependency, setEditingDependency] = useState<DependencyArrow | null>(null);
+  const [showDependencyEditModal, setShowDependencyEditModal] = useState(false);
   
   // Data fetching - Force fresh data for timeline
   const { data: tasks = [], isLoading: tasksLoading } = useQuery<Task[]>({
@@ -1203,7 +1206,7 @@ export function AdvancedTimelineBuilder({
     // Target operation completed
   }, [tasks, projectId]);
 
-  const { data: estimates = [] } = useQuery<any[]>({
+  const { data: estimates = [] } = useQuery<any>({
     queryKey: [`/api/estimates`],
   });
 
@@ -1816,7 +1819,7 @@ export function AdvancedTimelineBuilder({
           ) : (
             <div className="gantt-chart overflow-x-auto relative" id="gantt-container">
               <GanttTimeline
-                tasks={filteredTasks}
+                tasks={filteredTasks as any}
                 onTaskEdit={onTaskEdit}
                 onTaskUpdate={onTaskUpdate}
                 onTaskDelete={(taskId: number) => {
@@ -1829,9 +1832,9 @@ export function AdvancedTimelineBuilder({
               />
               {/* Dependency Arrows Overlay */}
               {showDependencies && dependencies.length > 0 && (
-                <DependencyArrows
+                <DependencyArrows {...({} as any)}
                   dependencies={dependencies}
-                  tasks={filteredTasks}
+                  tasks={filteredTasks as any}
                   containerId="gantt-container"
                   onEdit={handleDependencyEdit}
                   onDelete={handleDependencyDelete}

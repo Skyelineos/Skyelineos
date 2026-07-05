@@ -47,15 +47,15 @@ export function PerProjectAccountingTab() {
   const [sortBy, setSortBy] = useState<string>('profitMargin');
 
   // Fetch data
-  const { data: projects = [], isLoading } = useQuery({ queryKey: ['/api/projects'] });
-  const { data: clientPayments = [] } = useQuery({ queryKey: ['/api/client-payments'] });
-  const { data: invoices = [] } = useQuery({ queryKey: ['/api/invoices'] });
-  const { data: purchaseOrders = [] } = useQuery({ queryKey: ['/api/purchase-orders'] });
+  const { data: projects = [], isLoading } = useQuery<any>({ queryKey: ['/api/projects'] });
+  const { data: clientPayments = [] } = useQuery<any>({ queryKey: ['/api/client-payments'] });
+  const { data: invoices = [] } = useQuery<any>({ queryKey: ['/api/invoices'] });
+  const { data: purchaseOrders = [] } = useQuery<any>({ queryKey: ['/api/purchase-orders'] });
   const { estimates } = useEstimates();
 
   // Live progress queries for each project
   const progressQueries = projects.map((project: any) => {
-    return useQuery({
+    return useQuery<any>({
       queryKey: ['project-live-progress', project.id],
       queryFn: () => calculateLiveProgress(project.id),
       enabled: !!project.id,
@@ -410,10 +410,10 @@ export function PerProjectAccountingTab() {
                       <div>
                         <h3 className="text-lg font-semibold">{project.name}</h3>
                         <div className="flex items-center space-x-2 mt-1">
-                          <Badge variant={getStatusBadge(project.status)}>
+                          <Badge variant={getStatusBadge(project.status) as any}>
                             {project.status.replace('_', ' ').toUpperCase()}
                           </Badge>
-                          <Badge variant={getHealthBadge(project.cashFlowHealth)}>
+                          <Badge variant={getHealthBadge(project.cashFlowHealth) as any}>
                             {project.cashFlowHealth.toUpperCase()} CASH FLOW
                           </Badge>
                         </div>

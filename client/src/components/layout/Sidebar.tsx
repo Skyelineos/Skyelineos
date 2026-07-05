@@ -299,7 +299,7 @@ export function Sidebar({ isOpen, onToggle }: SidebarProps) {
   useAutoAdminView();
 
   const role = user?.role || 'client';
-  const navDisabled = user?.navDisabled ?? [];
+  const navDisabled: string[] = Array.isArray(user?.navDisabled) ? user.navDisabled as string[] : [];
   const navGroups = getNavForRole(role, navDisabled);
 
   // Role-aware home destination — wraps the brand title so users can click

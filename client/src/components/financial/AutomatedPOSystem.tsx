@@ -45,19 +45,19 @@ export default function AutomatedPOSystem({ projectId }: AutomatedPOSystemProps)
   });
 
   // Fetch approved bids ready for PO generation
-  const { data: approvedBids, isLoading: bidsLoading } = useQuery({
+  const { data: approvedBids, isLoading: bidsLoading } = useQuery<any>({
     queryKey: [`/api/financial/approved-bids/${projectId}`],
     refetchInterval: 30000,
   });
 
   // Fetch automated PO queue
-  const { data: automatedPOs, isLoading: posLoading } = useQuery({
+  const { data: automatedPOs, isLoading: posLoading } = useQuery<any>({
     queryKey: [`/api/financial/automated-pos/${projectId}`],
     refetchInterval: 15000,
   });
 
   // Fetch automation settings
-  const { data: settings, isLoading: settingsLoading } = useQuery({
+  const { data: settings, isLoading: settingsLoading } = useQuery<any>({
     queryKey: [`/api/financial/automation-settings/${projectId}`],
     refetchInterval: 60000,
   });

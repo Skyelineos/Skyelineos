@@ -64,7 +64,7 @@ export default function GCDesignSnapshot({ projectId, projectName }: GCDesignSna
   });
 
   // Load project to get designer info
-  const { data: project } = useQuery({
+  const { data: project } = useQuery<any>({
     queryKey: ['project-meta', projectId],
     queryFn: async () => {
       const res = await fetch(`/api/projects/${projectId}`);

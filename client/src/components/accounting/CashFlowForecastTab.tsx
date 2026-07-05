@@ -43,10 +43,10 @@ export function CashFlowForecastTab() {
   const [confidenceThreshold, setConfidenceThreshold] = useState<number>(80);
 
   // Fetch data
-  const { data: projects = [] } = useQuery({ queryKey: ['/api/projects'] });
-  const { data: clientPayments = [] } = useQuery({ queryKey: ['/api/client-payments'] });
-  const { data: invoices = [] } = useQuery({ queryKey: ['/api/invoices'] });
-  const { data: purchaseOrders = [] } = useQuery({ queryKey: ['/api/purchase-orders'] });
+  const { data: projects = [] } = useQuery<any>({ queryKey: ['/api/projects'] });
+  const { data: clientPayments = [] } = useQuery<any>({ queryKey: ['/api/client-payments'] });
+  const { data: invoices = [] } = useQuery<any>({ queryKey: ['/api/invoices'] });
+  const { data: purchaseOrders = [] } = useQuery<any>({ queryKey: ['/api/purchase-orders'] });
 
   // Generate cash flow forecast data
   const generateCashFlowForecast = (): CashFlowItem[] => {

@@ -81,11 +81,11 @@ export function SubcontractorPaymentsTab() {
     queryKey: ['/api/invoices'],
   });
 
-  const { data: projects = [] } = useQuery<any[]>({
+  const { data: projects = [] } = useQuery<any>({
     queryKey: ['/api/projects'],
   });
 
-  const { data: contacts = [] } = useQuery<any[]>({
+  const { data: contacts = [] } = useQuery<any>({
     queryKey: ['/api/contacts'],
   });
 

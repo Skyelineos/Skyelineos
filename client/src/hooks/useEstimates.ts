@@ -4,7 +4,7 @@ import { Estimate, EstimateItem } from '@shared/types';
 export function useEstimates() {
   const queryClient = useQueryClient();
   
-  const query = useQuery({
+  const query = useQuery<any>({
     queryKey: ['/api/estimates'],
     staleTime: 2 * 60 * 1000, // 2 minutes cache for navigation performance
     gcTime: 5 * 60 * 1000, // 5 minutes garbage collection

@@ -133,49 +133,49 @@ export default function DocumentsTab({ projectId }: DocumentsTabProps) {
   const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
 
   // Get vendor details for selected PO
-  const { data: poVendorDetails } = useQuery({
+  const { data: poVendorDetails } = useQuery<any>({
     queryKey: ['/api/contacts', selectedPO?.subcontractorId],
     queryFn: () => fetch(`/api/contacts/${selectedPO.subcontractorId}`).then(res => res.json()),
     enabled: !!selectedPO?.subcontractorId,
   });
 
   // Fetch project documents
-  const { data: documents = [], isLoading: documentsLoading } = useQuery({
+  const { data: documents = [], isLoading: documentsLoading } = useQuery<any>({
     queryKey: ['/api/documents', projectId],
     queryFn: () => fetch(`/api/documents?projectId=${projectId}`).then(res => res.json()),
   });
 
   // Fetch purchase orders
-  const { data: purchaseOrders = [], isLoading: posLoading } = useQuery({
+  const { data: purchaseOrders = [], isLoading: posLoading } = useQuery<any>({
     queryKey: ['/api/purchase-orders', projectId],
     queryFn: () => fetch(`/api/purchase-orders?projectId=${projectId}`).then(res => res.json()),
   });
 
   // Fetch change orders
-  const { data: changeOrders = [], isLoading: changeOrdersLoading } = useQuery({
+  const { data: changeOrders = [], isLoading: changeOrdersLoading } = useQuery<any>({
     queryKey: ['/api/change-orders', projectId],
     queryFn: () => fetch(`/api/change-orders?projectId=${projectId}`).then(res => res.json()),
   });
 
   // Fetch invoices
-  const { data: invoices = [], isLoading: invoicesLoading } = useQuery({
+  const { data: invoices = [], isLoading: invoicesLoading } = useQuery<any>({
     queryKey: ['/api/invoices', projectId],
     queryFn: () => fetch(`/api/invoices?projectId=${projectId}`).then(res => res.json()),
   });
 
   // Fetch approved estimate items
-  const { data: approvedEstimateItems = [], isLoading: estimateItemsLoading } = useQuery({
+  const { data: approvedEstimateItems = [], isLoading: estimateItemsLoading } = useQuery<any>({
     queryKey: ['/api/estimates/approved', projectId],
     queryFn: () => fetch(`/api/estimates/approved/${projectId}`).then(res => res.json()),
   });
 
   // Fetch contacts/subcontractors
-  const { data: contacts = [] } = useQuery({
+  const { data: contacts = [] } = useQuery<any>({
     queryKey: ['/api/contacts'],
   });
 
   // Fetch project tasks for schedule integration
-  const { data: projectTasks = [] } = useQuery({
+  const { data: projectTasks = [] } = useQuery<any>({
     queryKey: [`/api/projects/${projectId}/tasks`],
   });
 

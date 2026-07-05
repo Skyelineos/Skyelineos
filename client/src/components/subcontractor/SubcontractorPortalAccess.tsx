@@ -88,13 +88,13 @@ export default function SubcontractorPortalAccess({ projectId }: SubcontractorPo
   const [notes, setNotes] = useState('');
 
   // Fetch subcontractors
-  const { data: subcontractors = [], isLoading: subsLoading } = useQuery({
+  const { data: subcontractors = [], isLoading: subsLoading } = useQuery<any>({
     queryKey: ['/api/contacts'],
     select: (data: Contact[]) => data.filter((contact: Contact) => contact.type === 'subcontractor')
   });
 
   // Fetch bid processes for the project
-  const { data: bidProcesses = [], isLoading: bidProcessesLoading, refetch: refetchBidProcesses } = useQuery({
+  const { data: bidProcesses = [], isLoading: bidProcessesLoading, refetch: refetchBidProcesses } = useQuery<any>({
     queryKey: ['/api/bid-processes/project'],
     queryFn: async () => {
       const response = await fetch('/api/bid-processes/project');
@@ -103,7 +103,7 @@ export default function SubcontractorPortalAccess({ projectId }: SubcontractorPo
   });
 
   // Fetch bid responses
-  const { data: bidResponses = [], isLoading: bidResponsesLoading, refetch: refetchBidResponses } = useQuery({
+  const { data: bidResponses = [], isLoading: bidResponsesLoading, refetch: refetchBidResponses } = useQuery<any>({
     queryKey: [`/api/bid-responses/project/${projectId}`]
   });
 

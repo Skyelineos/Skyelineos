@@ -22,12 +22,12 @@ export default function PaymentDashboard({ projectId }: PaymentDashboardProps) {
   const [statusFilter, setStatusFilter] = useState('all');
 
   // Fetch invoices for the project
-  const { data: invoices = [], isLoading: invoicesLoading } = useQuery({
+  const { data: invoices = [], isLoading: invoicesLoading } = useQuery<any>({
     queryKey: [`/api/invoices/project/${projectId}`]
   });
 
   // Fetch purchase orders for the project
-  const { data: purchaseOrders = [], isLoading: posLoading } = useQuery({
+  const { data: purchaseOrders = [], isLoading: posLoading } = useQuery<any>({
     queryKey: [`/api/purchase-orders/project/${projectId}`]
   });
 
@@ -233,7 +233,7 @@ export default function PaymentDashboard({ projectId }: PaymentDashboardProps) {
           isOpen={showAddPayment}
           onClose={handleClosePaymentModal}
           invoice={selectedInvoice}
-          projectId={projectId}
+          projectId={Number(projectId)}
         />
       )}
     </div>

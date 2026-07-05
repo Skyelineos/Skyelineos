@@ -198,7 +198,7 @@ export default function Contacts() {
   };
 
   const handleEditContact = (contact: Contact) => {
-    setEditingContact(contact);
+    setEditingContact(contact as any);
   };
 
   const handleDeleteContact = async (contactId: string) => {
@@ -1282,7 +1282,7 @@ export default function Contacts() {
             open={showContactDetail}
             onOpenChange={setShowContactDetail}
             onEdit={(contact) => {
-              setEditingContact(contact);
+              setEditingContact(contact as any);
               setShowContactDetail(false);
             }}
           />

@@ -15,7 +15,7 @@ interface PDFPreviewProps {
 
 export function PDFPreview({ estimate, projectId, onClose }: PDFPreviewProps) {
   // Fetch project data
-  const { data: project } = useQuery({
+  const { data: project } = useQuery<any>({
     queryKey: ['/api/projects', projectId],
     enabled: !!projectId
   });

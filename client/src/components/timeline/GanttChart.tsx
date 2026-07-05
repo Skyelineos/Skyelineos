@@ -151,7 +151,7 @@ export function GanttChart({
 
   // Generate timeline header with month headers
   const renderTimelineHeader = () => {
-    const days = [];
+    const days: React.ReactElement[] = [];
     const { start, totalDays } = dateRange;
 
     for (let i = 0; i < totalDays; i++) {
@@ -298,7 +298,7 @@ export function GanttChart({
 
   // Render dependency lines
   const renderDependencies = () => {
-    const lines = [];
+    const lines: React.ReactElement[] = [];
     
     tasks.forEach((task) => {
       task.dependencies.forEach((depId) => {

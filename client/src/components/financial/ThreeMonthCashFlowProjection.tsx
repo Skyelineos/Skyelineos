@@ -22,7 +22,7 @@ interface ThreeMonthCashFlowProjectionProps {
 export default function ThreeMonthCashFlowProjection({ projectId }: ThreeMonthCashFlowProjectionProps) {
   
   // Fetch 3-month cash flow forecast
-  const { data: cashFlowData, isLoading } = useQuery({
+  const { data: cashFlowData, isLoading } = useQuery<any>({
     queryKey: [`/api/financial/cash-flow-forecast/${projectId}`],
     refetchInterval: 30000,
   });

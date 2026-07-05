@@ -69,19 +69,19 @@ export default function BidResponseManager({ projectId, estimateId }: BidRespons
   const [reminderMessage, setReminderMessage] = useState('');
 
   // Fetch bid processes for the project
-  const { data: bidProcesses = [], isLoading: loadingProcesses } = useQuery({
+  const { data: bidProcesses = [], isLoading: loadingProcesses } = useQuery<any>({
     queryKey: ['/api/bid-processes/project', projectId],
     queryFn: () => apiRequest(`/api/bid-processes/project?projectId=${projectId}`),
   });
 
   // Fetch bid responses for the project
-  const { data: bidResponses = [], isLoading: loadingResponses } = useQuery({
+  const { data: bidResponses = [], isLoading: loadingResponses } = useQuery<any>({
     queryKey: ['/api/bid-responses/project', projectId],
     queryFn: () => apiRequest(`/api/bid-responses/project/${projectId}`),
   });
 
   // Fetch all contacts for subcontractor info
-  const { data: contacts = [] } = useQuery({
+  const { data: contacts = [] } = useQuery<any>({
     queryKey: ['/api/contacts'],
   });
 

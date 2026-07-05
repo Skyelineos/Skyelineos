@@ -67,7 +67,7 @@ export function EditEstimateItemDialog({ item, isOpen, onClose, onSave }: EditEs
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Fetch subcontractors for vendor selection
-  const { data: allContacts = [] } = useQuery<any[]>({
+  const { data: allContacts = [] } = useQuery<any>({
     queryKey: ['/api/contacts'],
     enabled: isOpen,
   });

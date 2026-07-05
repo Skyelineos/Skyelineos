@@ -25,6 +25,8 @@ interface DatabaseProject {
   startDate?: string | Date;
   targetCompletion?: string | Date;
   projectMetadata?: string | object;
+  createdAt?: string | Date | null;
+  projectCode?: string;
 }
 
 export interface TransformedProject {

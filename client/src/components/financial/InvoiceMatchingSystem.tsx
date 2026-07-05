@@ -36,19 +36,19 @@ export default function InvoiceMatchingSystem({ projectId }: InvoiceMatchingSyst
   const [matchingThreshold, setMatchingThreshold] = useState(0.85);
 
   // Fetch invoice matching records
-  const { data: invoiceMatching, isLoading: matchingLoading } = useQuery({
+  const { data: invoiceMatching, isLoading: matchingLoading } = useQuery<any>({
     queryKey: [`/api/financial/invoice-matching/${projectId}`],
     refetchInterval: 30000,
   });
 
   // Fetch unmatched invoices
-  const { data: unmatchedInvoices, isLoading: invoicesLoading } = useQuery({
+  const { data: unmatchedInvoices, isLoading: invoicesLoading } = useQuery<any>({
     queryKey: [`/api/financial/unmatched-invoices/${projectId}`],
     refetchInterval: 30000,
   });
 
   // Fetch unmatched purchase orders
-  const { data: unmatchedPOs, isLoading: posLoading } = useQuery({
+  const { data: unmatchedPOs, isLoading: posLoading } = useQuery<any>({
     queryKey: [`/api/financial/unmatched-pos/${projectId}`],
     refetchInterval: 30000,
   });

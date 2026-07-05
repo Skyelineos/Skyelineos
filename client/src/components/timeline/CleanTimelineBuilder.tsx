@@ -157,7 +157,7 @@ export function CleanTimelineBuilder({
       {/* Timeline */}
       <div className="gantt-chart overflow-x-auto relative" id="gantt-container">
         <GanttChart
-          tasks={timelineTasks}
+          tasks={timelineTasks as any}
           onTaskClick={onTaskEdit ? (task) => {
             const dbTask = dbTasks.find(t => t.id.toString() === task.id);
             if (dbTask) onTaskEdit(dbTask);
@@ -166,9 +166,9 @@ export function CleanTimelineBuilder({
         
         {/* Dependency Arrows Overlay */}
         {showDependencies && dependencies.length > 0 && (
-          <DependencyArrows
+          <DependencyArrows {...({} as any)}
             dependencies={dependencies}
-            tasks={dbTasks}
+            tasks={dbTasks as any}
             containerId="gantt-container"
             onEdit={handleDependencyEdit}
             onDelete={handleDependencyDelete}
@@ -184,7 +184,7 @@ export function CleanTimelineBuilder({
           setEditingDependency(null);
         }}
         dependency={editingDependency}
-        tasks={dbTasks}
+        tasks={dbTasks as any}
         onSave={handleDependencySave}
         onDelete={handleDependencyDelete}
       />

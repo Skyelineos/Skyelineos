@@ -12,7 +12,7 @@ export interface ProjectPermissions {
 export function useProjectPermissions(projectId: string | number) {
   const { user, isAuthenticated } = useAuth();
 
-  const { data: permissions, isLoading, error } = useQuery({
+  const { data: permissions, isLoading, error } = useQuery<any>({
     queryKey: ['project-permissions', projectId, user?.id],
     queryFn: async (): Promise<ProjectPermissions> => {
       if (!isAuthenticated || !user) {

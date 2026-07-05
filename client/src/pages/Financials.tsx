@@ -34,7 +34,7 @@ export default function Financials() {
   // Development logging removed
 
   // Fetch projects for selector
-  const { data: projects = [] } = useQuery<any[]>({ queryKey: ['/api/projects'] });
+  const { data: projects = [] } = useQuery<any>({ queryKey: ['/api/projects'] });
 
   // Function to render content based on current tab
   const renderTabContent = () => {

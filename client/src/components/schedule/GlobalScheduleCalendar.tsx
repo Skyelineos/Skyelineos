@@ -42,7 +42,7 @@ interface GlobalScheduleCalendarProps {
 
 export function GlobalScheduleCalendar({ projectId }: GlobalScheduleCalendarProps = {}) {
   // Fetch tasks directly from Firestore — global or project-scoped.
-  const { data: tasks = [], isLoading, error } = useQuery<any[]>({
+  const { data: tasks = [], isLoading, error } = useQuery<any>({
     queryKey: projectId ? [`/api/projects/${projectId}/schedule`] : ['/api/tasks/all-active'],
     queryFn: async () => {
       if (projectId) {

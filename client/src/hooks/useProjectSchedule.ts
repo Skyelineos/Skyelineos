@@ -22,6 +22,9 @@ export interface Dependency {
   toTaskId: number;
   dependencyType: 'FS' | 'SS' | 'FF' | 'SF';
   lag?: number;
+  /** Alias fields used by graph utilities */
+  source?: number;
+  target?: number;
 }
 
 export interface ScheduleData {
@@ -82,7 +85,7 @@ export function useProjectSchedule(projectId: string | number) {
     refetch,
     isRefetching,
     isFetching
-  } = useQuery({
+  } = useQuery<any>({
     queryKey: ['project-schedule', projectId],
     queryFn: async (): Promise<ScheduleData> => {
       // Processing operation
@@ -256,3 +259,5 @@ export const scheduleKeys = {
   tasks: (projectId: string | number) => ['project-schedule', projectId, 'tasks'] as const,
   dependencies: (projectId: string | number) => ['project-schedule', projectId, 'dependencies'] as const,
 };
+/** Alias for Dependency — for backward compatibility */
+export type ScheduleDependency = Dependency;

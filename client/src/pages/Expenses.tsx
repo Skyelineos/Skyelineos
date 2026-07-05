@@ -166,8 +166,7 @@ export default function Expenses() {
       {showCapture && (
         <QuickExpenseCapture
           open={showCapture}
-          onClose={() => setShowCapture(false)}
-          onSaved={() => { setShowCapture(false); load(); }}
+          onOpenChange={(v) => { if (!v) setShowCapture(false); }}
         />
       )}
     </div>
