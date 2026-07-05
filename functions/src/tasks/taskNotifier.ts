@@ -32,6 +32,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { sendSms } from '../sms/smsService';
 import type { ProjectTask } from './projectTaskEngine';
 import { createTaskCalendarEvent } from './calendarService';
+import { sendPushNotification } from '../notifications/fcmService';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -81,6 +82,7 @@ async function resolveContact(
   preferredLanguage: 'en' | 'es';
   email?: string | null;
   googleAccessToken?: string | null;
+  linkedUserId?: string | null;
 } | null> {
   if (!contactId) return null;
   try {
@@ -94,6 +96,9 @@ async function resolveContact(
         preferredLanguage: d.preferredLanguage === 'es' ? 'es' : 'en',
         email: d.email || null,
         googleAccessToken: null, // sms_contacts don't store Google tokens
+        // sms_contacts can carry a linkedContactId back to canonical contacts;
+        // FCM tokens live on the linked user, so pass whichever the row has.
+        linkedUserId: d.linkedUserId || null,
       };
     }
   } catch (err: any) {
@@ -110,12 +115,125 @@ async function resolveContact(
         preferredLanguage: d.preferredLanguage === 'es' ? 'es' : 'en',
         email: d.email || null,
         googleAccessToken: d.googleAccessToken || null,
+        linkedUserId: d.linkedUserId || null,
       };
     }
   } catch (err: any) {
     console.warn('[taskNotifier/resolveContact] contacts lookup failed:', err?.message);
   }
   return null;
+}
+
+// ── FCM helpers ──────────────────────────────────────────────────────────────
+//
+// Contacts don't store FCM tokens directly — devices register against a
+// Firebase Auth user (users/{uid}) either via the array schema
+// (users/{uid}.fcmTokens: string[]) or the subcollection schema
+// (users/{uid}/fcmTokens/{token}). We resolve the contact → linkedUserId
+// bridge, then peek at both schemas to decide whether push is even possible
+// for this contact.
+
+async function hasFcmTokensForUser(db: Firestore, uid: string): Promise<boolean> {
+  if (!uid) return false;
+  try {
+    const userSnap = await db.collection('users').doc(uid).get();
+    if (userSnap.exists) {
+      const arr = (userSnap.data() as any)?.fcmTokens;
+      if (Array.isArray(arr) && arr.some((t) => typeof t === 'string' && t.length > 0)) {
+        return true;
+      }
+    }
+  } catch (err: any) {
+    console.warn('[taskNotifier/hasFcmTokensForUser] users read failed:', err?.message);
+  }
+  try {
+    const sub = await db.collection('users').doc(uid)
+      .collection('fcmTokens')
+      .where('active', '==', true)
+      .limit(1)
+      .get();
+    if (!sub.empty) return true;
+  } catch (err: any) {
+    console.warn('[taskNotifier/hasFcmTokensForUser] subcollection read failed:', err?.message);
+  }
+  return false;
+}
+
+/**
+ * Push-first delivery helper. Attempts FCM to the contact's linked user; if
+ * there are no tokens on file OR the FCM send throws, falls back to SMS via
+ * the existing sendSms path. Returns 'push' | 'sms' | 'none' for logging.
+ *
+ * Rationale: subs / clients who've installed the PWA get a quiet notification
+ * that shows up on their phone lock screen for free. SMS is still the safety
+ * net for anyone who hasn't opted into push (which today is most subs).
+ *
+ * NOTE ON RATE LIMITS: the SMS rate limiter (sms/rateLimiter.ts —
+ * 10 AI calls / 20 sends per contact/day) is enforced by the SMS pipeline
+ * (sms/routes.ts) and by callers that opt into checkRateLimit before
+ * dispatch. sendSms() itself is not rate-limited, so wrapping SMS here does
+ * not disturb that logic; we leave the existing enforcement points intact.
+ */
+async function dispatchPushFirst(
+  db: Firestore,
+  contact: {
+    id: string;
+    name: string;
+    phoneNumber: string;
+    linkedUserId?: string | null;
+  },
+  pushPayload: { title: string; body: string; url?: string; data?: Record<string, string> },
+  smsOpts: {
+    body: string;
+    projectId?: string | null;
+    outboundType?: Parameters<typeof sendSms>[1]['outboundType'];
+  },
+): Promise<'push' | 'sms' | 'none'> {
+  const linkedUid = contact.linkedUserId || null;
+
+  // 1. Try FCM push if the contact is linked to a user with tokens on file.
+  if (linkedUid) {
+    let hasTokens = false;
+    try {
+      hasTokens = await hasFcmTokensForUser(db, linkedUid);
+    } catch (err: any) {
+      console.warn('[taskNotifier/dispatchPushFirst] token probe failed:', err?.message);
+    }
+    if (hasTokens) {
+      try {
+        await sendPushNotification(db, [linkedUid], pushPayload);
+        // sendPushNotification swallows FCM errors internally, so "success"
+        // here means "we handed it off to FCM with at least one token to try".
+        // That's the point at which we stop; if every token was stale FCM will
+        // mark them inactive and the *next* task assignment for this contact
+        // will naturally fall through to SMS.
+        return 'push';
+      } catch (err: any) {
+        console.warn('[taskNotifier/dispatchPushFirst] FCM send failed, falling back to SMS:', err?.message);
+      }
+    }
+  }
+
+  // 2. Fall back to SMS.
+  if (contact.phoneNumber) {
+    try {
+      await sendSms(db, {
+        to: contact.phoneNumber,
+        body: smsOpts.body,
+        contactId: contact.id,
+        projectId: smsOpts.projectId ?? null,
+        generatedByAi: false,
+        outboundType: smsOpts.outboundType ?? null,
+      });
+      return 'sms';
+    } catch (err: any) {
+      console.error('[taskNotifier/dispatchPushFirst] sendSms failed:', err?.message);
+    }
+  } else {
+    console.warn(`[taskNotifier/dispatchPushFirst] contact ${contact.id} has no phone; SMS fallback skipped`);
+  }
+
+  return 'none';
 }
 
 // ── notifyTaskAssigned ───────────────────────────────────────────────────────
@@ -147,17 +265,28 @@ export async function notifyTaskAssigned(
     ? `Hola ${firstName(contact.name)}, te asignaron: ${task.name} en ${projectName}. Para el ${due}. Responde LISTO cuando termines o AYUDA si necesitas algo.`
     : `Hey ${firstName(contact.name)}, you've been assigned: ${task.name} at ${projectName}. Due ${due}. Reply DONE when complete or HELP if you need something.`;
 
-  try {
-    await sendSms(db, {
-      to: contact.phoneNumber,
+  const pushTitle = isEs ? `Tarea asignada: ${task.name}` : `New task: ${task.name}`;
+  const pushBody = isEs
+    ? `${projectName} — para el ${due}`
+    : `${projectName} — due ${due}`;
+
+  const via = await dispatchPushFirst(
+    db,
+    contact,
+    {
+      title: pushTitle,
+      body: pushBody,
+      url: `/projects/${task.projectId}/tasks/${task.id}`,
+      data: { taskId: task.id, projectId: task.projectId, kind: 'task_assigned' },
+    },
+    {
       body,
-      contactId: contact.id,
       projectId: task.projectId,
-      generatedByAi: false,
       outboundType: 'SUB_SCHEDULE_REQUEST',
-    });
-  } catch (err: any) {
-    console.error('[taskNotifier/notifyTaskAssigned] sendSms failed:', err?.message);
+    },
+  );
+  if (via === 'none') {
+    console.warn(`[taskNotifier/notifyTaskAssigned] no channel delivered for task ${task.id} → contact ${contact.id}`);
   }
 
   // Best-effort calendar event. Returns null silently when the feature flag is off.
@@ -221,21 +350,38 @@ export async function sendTaskReminder(
     ? `Buenos días ${firstName(contact.name)}, recordatorio — ${task.name} en ${projectName} es para hoy. Responde LISTO cuando termines.`
     : `Morning ${firstName(contact.name)}, reminder — ${task.name} at ${projectName} is due today. Reply DONE when complete.`;
 
+  const pushTitle = isEs
+    ? `Recordatorio: ${task.name}`
+    : `Reminder: ${task.name}`;
+  const pushBody = isEs
+    ? `${projectName} es para hoy`
+    : `${projectName} is due today`;
+
   try {
-    await sendSms(db, {
-      to: contact.phoneNumber,
-      body,
-      contactId: contact.id,
-      projectId: task.projectId,
-      generatedByAi: false,
-      outboundType: 'REMINDER',
-    });
+    const via = await dispatchPushFirst(
+      db,
+      contact,
+      {
+        title: pushTitle,
+        body: pushBody,
+        url: `/projects/${task.projectId}/tasks/${task.id}`,
+        data: { taskId: task.id, projectId: task.projectId, kind: 'task_reminder' },
+      },
+      {
+        body,
+        projectId: task.projectId,
+        outboundType: 'REMINDER',
+      },
+    );
+    if (via === 'none') {
+      console.warn(`[taskNotifier/sendTaskReminder] no channel delivered for task ${task.id}`);
+    }
     await db.collection('project_tasks').doc(task.id).update({
       taskReminderLastSentOn: today,
       updatedAt: new Date().toISOString(),
     });
   } catch (err: any) {
-    console.error('[taskNotifier/sendTaskReminder] sendSms failed:', err?.message);
+    console.error('[taskNotifier/sendTaskReminder] dispatch failed:', err?.message);
   }
 }
 

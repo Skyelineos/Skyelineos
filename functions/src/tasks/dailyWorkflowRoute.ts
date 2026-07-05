@@ -30,6 +30,7 @@ import {
   MaterialOrder,
 } from './materialsTracker';
 import { getPhaseTask, PHASE_ORDER, ConstructionPhase } from './phaseCatalog';
+import { notifyTaskAssigned } from './taskNotifier';
 
 export interface DailyWorkflowResponse {
   projectId: string;
@@ -308,9 +309,37 @@ export function registerDailyWorkflowRoutes(app: Express, db: Firestore) {
       for (const k of allowed) {
         if (k in (req.body || {})) update[k] = (req.body as any)[k];
       }
-      await db.collection('project_tasks').doc(req.params.taskId).update(update);
-      const snap = await db.collection('project_tasks').doc(req.params.taskId).get();
-      res.json({ id: snap.id, ...snap.data() });
+
+      // Snapshot the previous assignment so we only notify when it actually
+      // changed (assigning the same contact twice, or a no-op patch that
+      // includes assignedContactId, shouldn't re-spam the sub).
+      const taskRef = db.collection('project_tasks').doc(req.params.taskId);
+      const beforeSnap = await taskRef.get();
+      const prevAssignedContactId = beforeSnap.exists
+        ? ((beforeSnap.data() as any)?.assignedContactId ?? null)
+        : null;
+
+      await taskRef.update(update);
+      const snap = await taskRef.get();
+      const updatedTask: any = { id: snap.id, ...snap.data() };
+
+      // Fire the assignment notifier when the assignee actually changed and
+      // the new value is non-empty. Failure here MUST NOT break the PATCH —
+      // the caller only cares that the task update succeeded.
+      const nextAssignedContactId = (updatedTask.assignedContactId ?? null) as string | null;
+      if (
+        'assignedContactId' in (req.body || {})
+        && nextAssignedContactId
+        && nextAssignedContactId !== prevAssignedContactId
+      ) {
+        try {
+          await notifyTaskAssigned(db, updatedTask as ProjectTask, nextAssignedContactId);
+        } catch (notifyErr: any) {
+          console.warn('[patchTask] notifyTaskAssigned failed (non-fatal):', notifyErr?.message || notifyErr);
+        }
+      }
+
+      res.json(updatedTask);
     } catch (err: any) {
       console.error('[patchTask] error:', err);
       res.status(500).json({ error: err.message || 'failed to update task' });
