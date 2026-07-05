@@ -89,9 +89,19 @@ export function registerSmsWebhookRoute(app: Express, db: adminFirestore.Firesto
     try {
       const sigValid = verifyTwilioSignature(req);
       if (!sigValid) {
-        // Log but allow through while we debug Firebase Hosting header forwarding.
-        // TODO: re-enable hard reject once signature validation is confirmed working.
-        console.warn('[sms/webhook] signature invalid — allowing through for debug (remove before prod hardening)');
+        // Hard reject on invalid signature. Twilio treats a 403 as a
+        // permanent failure (no retry storm) and we don't emit TwiML so we
+        // don't leak the presence of the endpoint to unauthenticated callers.
+        console.warn('[sms/webhook] signature invalid — rejecting with 403', {
+          host: req.get('host'),
+          xForwardedHost: req.headers['x-forwarded-host'],
+          xOriginalUrl: req.headers['x-original-url'],
+          originalUrl: req.originalUrl,
+          hasToken: Boolean(process.env.TWILIO_AUTH_TOKEN),
+          hasWebhookUrl: Boolean(process.env.TWILIO_WEBHOOK_URL),
+        });
+        res.status(403).type('text/plain').send('invalid signature');
+        return;
       }
 
       const inbound = parseInbound(req);

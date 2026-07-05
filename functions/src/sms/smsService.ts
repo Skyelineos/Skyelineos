@@ -65,22 +65,50 @@ export function verifyTwilioSignature(req: Request): boolean {
   if (!signature) return false;
 
   // Reconstruct the exact URL Twilio used to sign. Cloud Functions sits behind
-  // Hosting rewrites, so `req.protocol` is sometimes "http" even though the
-  // public URL is https. Prefer the explicit TWILIO_WEBHOOK_URL when set so
-  // signature validation lines up with Twilio's view of the world; fall back
-  // to the host header otherwise.
+  // Firebase Hosting rewrites, so `req.protocol` / `req.get('host')` /
+  // `req.originalUrl` don't necessarily match the *public* URL Twilio used
+  // when computing the signature.
   //
-  // NOTE TO OPERATOR: set TWILIO_WEBHOOK_URL once the public URL is finalized
-  // (e.g. https://skyelineos.web.app/api/sms/webhook). Without it we use the
-  // host header, which works as long as Hosting doesn't rewrite the path.
+  // Strategy: try every plausible URL candidate in preference order and
+  // accept the first one whose signature validates. This is safe because
+  // twilio.validateRequest is a keyed HMAC — an attacker cannot make a
+  // forged signature validate against ANY URL without the auth token.
+  //
+  // Candidates (in order):
+  //   1. TWILIO_WEBHOOK_URL   — operator-pinned canonical URL (preferred)
+  //   2. x-original-url       — Firebase Hosting preserves the pre-rewrite
+  //                             URL here on some deployments
+  //   3. x-forwarded-proto + x-forwarded-host + originalUrl
+  //   4. https://<host><originalUrl>  — default fallback
+  //   5. same as (4) but with req.url instead of originalUrl (post-rewrite)
+  const authority = String(
+    req.headers['x-forwarded-host'] || req.get('host') || '',
+  ).trim();
+  const proto = String(req.headers['x-forwarded-proto'] || 'https').trim();
+  const originalUrl = String(req.headers['x-original-url'] || req.originalUrl || req.url || '');
+
+  const candidates = new Set<string>();
   const configured = (process.env.TWILIO_WEBHOOK_URL || '').trim();
-  const url = configured || `https://${req.get('host')}${req.originalUrl}`;
-  try {
-    return twilio.validateRequest(authToken, signature, url, req.body || {});
-  } catch (e) {
-    console.error('[sms-service] signature validation threw:', e);
-    return false;
+  if (configured) candidates.add(configured);
+  if (authority) {
+    candidates.add(`${proto}://${authority}${originalUrl}`);
+    candidates.add(`https://${authority}${originalUrl}`);
+    candidates.add(`${proto}://${authority}${req.originalUrl || ''}`);
+    candidates.add(`https://${authority}${req.originalUrl || ''}`);
   }
+
+  const body = (req.body || {}) as Record<string, unknown>;
+  for (const url of candidates) {
+    if (!url) continue;
+    try {
+      if (twilio.validateRequest(authToken, signature, url, body)) {
+        return true;
+      }
+    } catch (e) {
+      console.error('[sms-service] signature validation threw for', url, e);
+    }
+  }
+  return false;
 }
 
 // ── Inbound parsing ──────────────────────────────────────────────────────────
