@@ -11,6 +11,8 @@
 import type { Express } from 'express';
 import * as admin from 'firebase-admin';
 import * as sgMail from '@sendgrid/mail';
+import { requireBidsStaff } from '../middleware/rbac';
+import { requireProjectAccess } from '../middleware/requireProjectAccess';
 
 export interface GeneratePoInput {
   projectId: string;
@@ -115,13 +117,11 @@ export function registerPoRoutes(
   db: admin.firestore.Firestore,
 ) {
   // GET /api/projects/:projectId/purchase-orders
-  // List all POs for a project.
-  app.get('/api/projects/:projectId/purchase-orders', async (req: any, res: any) => {
+  // List all POs for a project. Any project member can read (subs need to
+  // see their own PO). requireProjectAccess replaces the inline token verify
+  // that used to trust anyone with a valid Firebase JWT.
+  app.get('/api/projects/:projectId/purchase-orders', requireProjectAccess, async (req: any, res: any) => {
     try {
-      const authHeader = req.headers.authorization;
-      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Sign in required' });
-      await admin.auth().verifyIdToken(authHeader.substring(7));
-
       const snap = await db
         .collection('projects').doc(req.params.projectId)
         .collection('purchaseOrders')
@@ -137,18 +137,14 @@ export function registerPoRoutes(
 
   // POST /api/projects/:projectId/purchase-orders/:poId/send
   // Email the PO to the vendor with a link to acknowledge/sign.
-  app.post('/api/projects/:projectId/purchase-orders/:poId/send', async (req: any, res: any) => {
+  //
+  // Audit fix (2026-07-05): the previous handler did its own role check by
+  // re-verifying the Bearer token — that bypassed the /api authMiddleware
+  // req.user propagation and didn't check project ownership. Consolidated
+  // onto requireBidsStaff + requireProjectAccess.
+  app.post('/api/projects/:projectId/purchase-orders/:poId/send', requireBidsStaff, requireProjectAccess, async (req: any, res: any) => {
     try {
-      const authHeader = req.headers.authorization;
-      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Sign in required' });
-      const decoded = await admin.auth().verifyIdToken(authHeader.substring(7));
-
-      // Only GC/admin/PM can send POs
-      const userSnap = await db.collection('users').doc(decoded.uid).get();
-      const role = (userSnap.data() as any)?.role;
-      if (!['gc', 'admin', 'projectManager'].includes(String(role))) {
-        return res.status(403).json({ error: 'Only Skyeline staff can send POs' });
-      }
+      const decoded = req.user; // populated by authMiddleware
 
       const { projectId, poId } = req.params;
       const poRef = db.collection('projects').doc(projectId).collection('purchaseOrders').doc(poId);
@@ -215,7 +211,7 @@ export function registerPoRoutes(
       await poRef.update({
         status: 'sent',
         sentAt: admin.firestore.FieldValue.serverTimestamp(),
-        sentByUid: decoded.uid,
+        sentByUid: decoded?.uid || null,
       });
 
       return res.json({ ok: true, poNumber: po.poNumber, sentTo: po.vendorEmail });

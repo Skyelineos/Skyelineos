@@ -27,6 +27,7 @@ import * as admin from 'firebase-admin';
 import sgMail from '@sendgrid/mail';
 import { fireTriggerForMany } from '../notifications/fireTrigger';
 import { resolveClientOfProject } from '../notifications/audienceResolvers';
+import { requireProjectAccess } from '../middleware/requireProjectAccess';
 
 const STAFF_ROLES = new Set(['admin', 'gc', 'projectManager']);
 // Estimates carry internal cost/margin data, so the Firestore read rule is
@@ -536,7 +537,11 @@ export function registerEstimateRoutes(
   // (LineItem.lineStatus === 'allow'), stripped to client-facing fields only.
   // Internal subCost / markup / margins are intentionally NOT returned, so a
   // designer can set a selection's allowance without seeing builder costs.
-  app.get('/api/projects/:projectId/allowances', async (req: any, res: any) => {
+  //
+  // Audit fix (2026-07-05): add requireProjectAccess so a designer for
+  // Project A can't read Project B's allowances. Role check below still
+  // rejects clients + subs.
+  app.get('/api/projects/:projectId/allowances', requireProjectAccess, async (req: any, res: any) => {
     try {
       const projectId = String(req.params.projectId || '').trim();
       if (!projectId)

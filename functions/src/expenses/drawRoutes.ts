@@ -23,6 +23,8 @@ import type { Express } from 'express';
 import * as admin from 'firebase-admin';
 import sgMail from '@sendgrid/mail';
 import { pushDrawToQbo } from '../qbo/expenseSync';
+import { requireFinance } from '../middleware/rbac';
+import { requireProjectAccess } from '../middleware/requireProjectAccess';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -405,8 +407,10 @@ export function registerDrawRoutes(
   db: admin.firestore.Firestore,
 ): void {
   // GET /api/projects/:projectId/draw-periods — list all periods, newest first
+  // Any project member can view (clients see their own draw statements).
   app.get(
     '/api/projects/:projectId/draw-periods',
+    requireProjectAccess,
     async (req: any, res: any) => {
       try {
         const projectId = String(req.params.projectId || '').trim();
@@ -434,6 +438,7 @@ export function registerDrawRoutes(
   // GET /api/projects/:projectId/draw-periods/current — current open period
   app.get(
     '/api/projects/:projectId/draw-periods/current',
+    requireProjectAccess,
     async (req: any, res: any) => {
       try {
         const projectId = String(req.params.projectId || '').trim();
@@ -523,8 +528,11 @@ export function registerDrawRoutes(
   );
 
   // POST /api/projects/:projectId/draw-periods/:periodId/submit
+  // Mutates + sends email to client/bank — finance role only.
   app.post(
     '/api/projects/:projectId/draw-periods/:periodId/submit',
+    requireFinance,
+    requireProjectAccess,
     async (req: any, res: any) => {
       try {
         const uid: string = req.user?.uid;
@@ -837,6 +845,8 @@ export function registerDrawRoutes(
   // POST /api/projects/:projectId/draw-periods/:periodId/mark-paid
   app.post(
     '/api/projects/:projectId/draw-periods/:periodId/mark-paid',
+    requireFinance,
+    requireProjectAccess,
     async (req: any, res: any) => {
       try {
         const uid: string = req.user?.uid;
@@ -911,6 +921,8 @@ export function registerDrawRoutes(
   // POST /api/projects/:projectId/draw-periods/:periodId/reconcile
   app.post(
     '/api/projects/:projectId/draw-periods/:periodId/reconcile',
+    requireFinance,
+    requireProjectAccess,
     async (req: any, res: any) => {
       try {
         const uid: string = req.user?.uid;

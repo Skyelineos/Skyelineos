@@ -17,6 +17,22 @@ import { registerEstimateRoutes }   from './estimates/estimateRoutes';
 import { registerExpenseRoutes }    from './expenses/expenseRoutes';
 import { registerDrawRoutes }       from './expenses/drawRoutes';
 
+// Security middleware — added 2026-07-05 to close IDOR + RBAC gaps flagged in
+// security-audit-2026-07-05.md §5 + §6. The legacy /api/** block below only had
+// an outer authMiddleware gate; these enforce per-project ownership and
+// per-route role checks the same way firestore.rules would for a direct read.
+import {
+  requireStaff,
+  requireGcOnly,
+  requireAdmin,
+  requireFinance,
+  requireBidsStaff,
+} from './middleware/rbac';
+import {
+  requireProjectAccess,
+  requireExpenseProjectAccess,
+} from './middleware/requireProjectAccess';
+
 // Initialize Firebase Admin
 admin.initializeApp();
 const db = admin.firestore();
@@ -176,7 +192,8 @@ registerExpenseRoutes(app, db);      // /api/expenses/{capture,:id,:id/reconcile
 registerDrawRoutes(app, db);         // /api/projects/:id/draw-periods{,/current,/:periodId/{submit,mark-paid,reconcile}}
 
 // Real Firestore API endpoints
-app.get('/api/projects', async (req: any, res: any) => {
+// Global project list — staff only. Clients/subs use per-project endpoints.
+app.get('/api/projects', requireStaff, async (req: any, res: any) => {
   try {
     const projectsSnapshot = await db.collection('projects').get();
     const projects = projectsSnapshot.docs.map(doc => ({
@@ -192,8 +209,8 @@ app.get('/api/projects', async (req: any, res: any) => {
   }
 });
 
-// Real Firestore contacts endpoints with normalization
-app.get('/api/contacts', async (req: any, res: any) => {
+// Real Firestore contacts endpoints with normalization — staff-only view of the CRM.
+app.get('/api/contacts', requireStaff, async (req: any, res: any) => {
   try {
     console.log('🔍 Firebase Functions: Fetching contacts from Firestore...');
     const contactsSnapshot = await db.collection('contacts').get();
@@ -262,7 +279,8 @@ app.get('/api/contacts', async (req: any, res: any) => {
   }
 });
 
-app.get('/api/contacts/project/:projectId', async (req: any, res: any) => {
+// Project contacts list — anyone with project access can see who's on the team.
+app.get('/api/contacts/project/:projectId', requireProjectAccess, async (req: any, res: any) => {
   try {
     const projectId = req.params.projectId;
     
@@ -332,7 +350,8 @@ app.get('/api/notifications', (req: any, res: any) => {
 });
 
 // Individual project endpoints
-app.get('/api/projects/:id', async (req: any, res: any) => {
+// requireProjectAccess: audit §5 — previously any signed-in user could read any project.
+app.get('/api/projects/:id', requireProjectAccess, async (req: any, res: any) => {
   try {
     const projectId = req.params.id;
     
@@ -360,12 +379,15 @@ app.get('/api/projects/:id', async (req: any, res: any) => {
   }
 });
 
-app.patch('/api/projects/:id/archive', (req: any, res: any) => {
+// Archive is a project mutation — staff only + project ownership.
+app.patch('/api/projects/:id/archive', requireStaff, requireProjectAccess, (req: any, res: any) => {
   res.json({ success: true, message: 'Project archived successfully' });
 });
 
 // DELETE endpoint for projects - FIXED FOR PRODUCTION
-app.delete('/api/projects/:id', async (req: any, res: any) => {
+// Audit §6: delete is destructive — admin/gc only (matches firestore.rules `allow delete: if isAdmin()`
+// but broaden to gc to match D-001; PM is explicitly excluded from destructive project ops).
+app.delete('/api/projects/:id', requireGcOnly, requireProjectAccess, async (req: any, res: any) => {
   try {
     const projectId = req.params.id;
     
@@ -436,7 +458,8 @@ app.delete('/api/projects/:id', async (req: any, res: any) => {
 });
 
 // Real Firestore project tasks endpoints
-app.get('/api/projects/:id/tasks', async (req: any, res: any) => {
+// Any project member (client/sub/designer/staff) can read tasks for a project they have access to.
+app.get('/api/projects/:id/tasks', requireProjectAccess, async (req: any, res: any) => {
   try {
     const projectId = req.params.id;
     const tasksSnapshot = await db.collection('tasks')
@@ -456,7 +479,7 @@ app.get('/api/projects/:id/tasks', async (req: any, res: any) => {
   }
 });
 
-app.get('/api/projects/:id/schedule', async (req: any, res: any) => {
+app.get('/api/projects/:id/schedule', requireProjectAccess, async (req: any, res: any) => {
   try {
     const projectId = req.params.id;
     const tasksSnapshot = await db.collection('tasks')
@@ -479,11 +502,12 @@ app.get('/api/projects/:id/schedule', async (req: any, res: any) => {
   }
 });
 
-app.post('/api/projects/:id/schedule/generate', (req: any, res: any) => {
+// Schedule regeneration mutates project data — staff only.
+app.post('/api/projects/:id/schedule/generate', requireStaff, requireProjectAccess, (req: any, res: any) => {
   res.json({ success: true, message: 'Schedule generated successfully' });
 });
 
-app.get('/api/projects/:id/dependencies', async (req: any, res: any) => {
+app.get('/api/projects/:id/dependencies', requireProjectAccess, async (req: any, res: any) => {
   try {
     const projectId = req.params.id;
     const dependenciesSnapshot = await db.collection('dependencies')
@@ -502,7 +526,7 @@ app.get('/api/projects/:id/dependencies', async (req: any, res: any) => {
   }
 });
 
-app.get('/api/projects/:id/photos', async (req: any, res: any) => {
+app.get('/api/projects/:id/photos', requireProjectAccess, async (req: any, res: any) => {
   try {
     const projectId = req.params.id;
     const photosSnapshot = await db.collection('photos')
@@ -522,7 +546,8 @@ app.get('/api/projects/:id/photos', async (req: any, res: any) => {
 });
 
 // Real Firestore estimates endpoints
-app.get('/api/estimates', async (req: any, res: any) => {
+// Global estimate list reveals contract pricing across all projects — staff only.
+app.get('/api/estimates', requireStaff, async (req: any, res: any) => {
   try {
     const estimatesSnapshot = await db.collection('estimates').get();
     const estimates = estimatesSnapshot.docs.map(doc => ({
@@ -538,7 +563,8 @@ app.get('/api/estimates', async (req: any, res: any) => {
   }
 });
 
-app.get('/api/projects/:id/estimates/approved', async (req: any, res: any) => {
+// Approved estimates reveal contract pricing — project members only.
+app.get('/api/projects/:id/estimates/approved', requireProjectAccess, async (req: any, res: any) => {
   try {
     const projectId = req.params.id;
     const estimatesSnapshot = await db.collection('estimates')
@@ -558,7 +584,8 @@ app.get('/api/projects/:id/estimates/approved', async (req: any, res: any) => {
   }
 });
 
-app.get('/api/estimates/approved/:projectId', async (req: any, res: any) => {
+// Duplicate of the above with :projectId param — same gate.
+app.get('/api/estimates/approved/:projectId', requireProjectAccess, async (req: any, res: any) => {
   try {
     const projectId = req.params.projectId;
     const estimatesSnapshot = await db.collection('estimates')
@@ -579,7 +606,8 @@ app.get('/api/estimates/approved/:projectId', async (req: any, res: any) => {
 });
 
 // Real Firestore bids endpoints
-app.get('/api/bids/:projectId', async (req: any, res: any) => {
+// Bids reveal competitive sub pricing — restrict to staff on this project.
+app.get('/api/bids/:projectId', requireBidsStaff, requireProjectAccess, async (req: any, res: any) => {
   try {
     const projectId = req.params.projectId;
     const bidsSnapshot = await db.collection('bids')
@@ -641,7 +669,8 @@ app.get('/api/trades', async (req: any, res: any) => {
   }
 });
 
-app.post('/api/trades', async (req: any, res: any) => {
+// Trade taxonomy mutations — staff only (audit §6).
+app.post('/api/trades', requireStaff, async (req: any, res: any) => {
   try {
     const tradeData = req.body;
     
@@ -670,7 +699,7 @@ app.post('/api/trades', async (req: any, res: any) => {
   }
 });
 
-app.patch('/api/trades/:id', async (req: any, res: any) => {
+app.patch('/api/trades/:id', requireStaff, async (req: any, res: any) => {
   try {
     const tradeId = req.params.id;
     const tradeData = req.body;
@@ -688,7 +717,8 @@ app.patch('/api/trades/:id', async (req: any, res: any) => {
   }
 });
 
-app.delete('/api/trades/:id', async (req: any, res: any) => {
+// Deleting a trade cascades — gc-only.
+app.delete('/api/trades/:id', requireGcOnly, async (req: any, res: any) => {
   try {
     const tradeId = req.params.id;
     
@@ -702,8 +732,8 @@ app.delete('/api/trades/:id', async (req: any, res: any) => {
   }
 });
 
-// Contacts endpoints with full CRUD
-app.post('/api/contacts', async (req: any, res: any) => {
+// Contacts endpoints with full CRUD — staff only (contacts are the sub/vendor CRM).
+app.post('/api/contacts', requireStaff, async (req: any, res: any) => {
   try {
     console.log('🔍 Firebase Functions: Received contact creation request v2');
     console.log('📋 Request headers:', req.headers);
@@ -761,7 +791,7 @@ app.post('/api/contacts', async (req: any, res: any) => {
   }
 });
 
-app.patch('/api/contacts/:id', async (req: any, res: any) => {
+app.patch('/api/contacts/:id', requireStaff, async (req: any, res: any) => {
   try {
     const contactId = req.params.id;
     const updateData = req.body;
@@ -779,7 +809,8 @@ app.patch('/api/contacts/:id', async (req: any, res: any) => {
   }
 });
 
-app.delete('/api/contacts/:id', async (req: any, res: any) => {
+// Contact deletion — admin only to match firestore.rules `allow delete: if isAdmin()`.
+app.delete('/api/contacts/:id', requireAdmin, async (req: any, res: any) => {
   try {
     const contactId = req.params.id;
     
@@ -793,8 +824,8 @@ app.delete('/api/contacts/:id', async (req: any, res: any) => {
   }
 });
 
-// Real Firestore documents endpoints
-app.get('/api/documents', async (req: any, res: any) => {
+// Real Firestore documents endpoints — staff only for the global view.
+app.get('/api/documents', requireStaff, async (req: any, res: any) => {
   try {
     const documentsSnapshot = await db.collection('documents').get();
     const documents = documentsSnapshot.docs.map(doc => ({
@@ -810,8 +841,8 @@ app.get('/api/documents', async (req: any, res: any) => {
   }
 });
 
-// Real Firestore tasks endpoints  
-app.get('/api/tasks', async (req: any, res: any) => {
+// Real Firestore tasks endpoints — global list is staff-only.
+app.get('/api/tasks', requireStaff, async (req: any, res: any) => {
   try {
     const tasksSnapshot = await db.collection('tasks').get();
     const tasks = tasksSnapshot.docs.map(doc => ({
@@ -827,7 +858,7 @@ app.get('/api/tasks', async (req: any, res: any) => {
   }
 });
 
-app.get('/api/tasks/all-active', async (req: any, res: any) => {
+app.get('/api/tasks/all-active', requireStaff, async (req: any, res: any) => {
   try {
     const tasksSnapshot = await db.collection('tasks')
       .where('isActive', '==', true)
@@ -846,8 +877,8 @@ app.get('/api/tasks/all-active', async (req: any, res: any) => {
   }
 });
 
-// Real Firestore search endpoint
-app.get('/api/search', async (req: any, res: any) => {
+// Real Firestore search endpoint — staff-only cross-project search.
+app.get('/api/search', requireStaff, async (req: any, res: any) => {
   try {
     const query = req.query.q?.toString().toLowerCase() || '';
     
@@ -918,7 +949,8 @@ app.get('/api/branding', (req: any, res: any) => {
 // remains a public liveness probe.)
 
 // Additional Firebase-specific endpoints
-app.post('/api/projects', async (req: any, res: any) => {
+// Project create — gc-only (matches firestore.rules `allow create: if isGCOnly()`; PM excluded per D-001).
+app.post('/api/projects', requireGcOnly, async (req: any, res: any) => {
   try {
     const projectData = req.body;
     
@@ -948,7 +980,8 @@ app.post('/api/projects', async (req: any, res: any) => {
   }
 });
 
-app.patch('/api/projects/:id', async (req: any, res: any) => {
+// Project update — staff (admin/gc/pm) AND assigned to the project.
+app.patch('/api/projects/:id', requireStaff, requireProjectAccess, async (req: any, res: any) => {
   try {
     const projectId = req.params.id;
     const updateData = req.body;
@@ -966,7 +999,8 @@ app.patch('/api/projects/:id', async (req: any, res: any) => {
   }
 });
 
-app.post('/api/estimates', async (req: any, res: any) => {
+// Estimate create — staff only (has cost/margin data).
+app.post('/api/estimates', requireStaff, async (req: any, res: any) => {
   try {
     const estimateData = req.body;
     
@@ -994,8 +1028,8 @@ app.post('/api/estimates', async (req: any, res: any) => {
   }
 });
 
-// Delete an estimate
-app.delete('/api/estimates/:id', async (req: any, res: any) => {
+// Delete an estimate — staff only.
+app.delete('/api/estimates/:id', requireStaff, async (req: any, res: any) => {
   try {
     const estimateId = req.params.id;
     
@@ -1024,7 +1058,8 @@ app.delete('/api/estimates/:id', async (req: any, res: any) => {
   }
 });
 
-app.post('/api/tasks', async (req: any, res: any) => {
+// Task create — staff only.
+app.post('/api/tasks', requireStaff, async (req: any, res: any) => {
   try {
     const taskData = req.body;
     
@@ -1275,7 +1310,8 @@ app.delete('/api/admin/users/:uid', async (req: any, res: any) => {
 
 // ── Selections ────────────────────────────────────────────────────────────────
 
-app.get('/api/projects/:projectId/selections', async (req: any, res: any) => {
+// Selections — any project member can read (client sees their own to pick).
+app.get('/api/projects/:projectId/selections', requireProjectAccess, async (req: any, res: any) => {
   try {
     const { projectId } = req.params;
     const snap = await db.collection('projects').doc(projectId).collection('selections').orderBy('createdAt', 'asc').get();
@@ -1283,7 +1319,8 @@ app.get('/api/projects/:projectId/selections', async (req: any, res: any) => {
   } catch (e) { res.status(500).json({ error: 'Failed to fetch selections' }); }
 });
 
-app.post('/api/projects/:projectId/selections', async (req: any, res: any) => {
+// Selection create — staff only (client picks via the /approve endpoint below).
+app.post('/api/projects/:projectId/selections', requireStaff, requireProjectAccess, async (req: any, res: any) => {
   try {
     const { projectId } = req.params;
     const ref = await db.collection('projects').doc(projectId).collection('selections').add({
@@ -1302,7 +1339,8 @@ app.post('/api/projects/:projectId/selections', async (req: any, res: any) => {
   } catch (e) { res.status(500).json({ error: 'Failed to create selection' }); }
 });
 
-app.patch('/api/projects/:projectId/selections/:selectionId', async (req: any, res: any) => {
+// Selection edit (option add/edit/allowance change) — staff only.
+app.patch('/api/projects/:projectId/selections/:selectionId', requireStaff, requireProjectAccess, async (req: any, res: any) => {
   try {
     const { projectId, selectionId } = req.params;
     const ref = db.collection('projects').doc(projectId).collection('selections').doc(selectionId);
@@ -1313,7 +1351,8 @@ app.patch('/api/projects/:projectId/selections/:selectionId', async (req: any, r
 });
 
 // Client approves a selection option — auto-creates change order if over allowance
-app.post('/api/projects/:projectId/selections/:selectionId/approve', async (req: any, res: any) => {
+// Any project member (client picks their own; staff can approve on the client's behalf for the offline flow).
+app.post('/api/projects/:projectId/selections/:selectionId/approve', requireProjectAccess, async (req: any, res: any) => {
   try {
     const { projectId, selectionId } = req.params;
     const { optionId, approvedBy } = req.body;
@@ -1361,7 +1400,8 @@ app.post('/api/projects/:projectId/selections/:selectionId/approve', async (req:
 
 // ── Change Orders ─────────────────────────────────────────────────────────────
 
-app.get('/api/projects/:projectId/change-orders', async (req: any, res: any) => {
+// Change orders are read by clients (to decide) and staff (to manage).
+app.get('/api/projects/:projectId/change-orders', requireProjectAccess, async (req: any, res: any) => {
   try {
     const { projectId } = req.params;
     // SOURCE OF TRUTH: top-level `changeOrders/` filtered by projectId field
@@ -1375,7 +1415,8 @@ app.get('/api/projects/:projectId/change-orders', async (req: any, res: any) => 
   } catch (e) { res.status(500).json({ error: 'Failed to fetch change orders' }); }
 });
 
-app.post('/api/projects/:projectId/change-orders', async (req: any, res: any) => {
+// Change order create — finance-adjacent staff (admin/gc/pm).
+app.post('/api/projects/:projectId/change-orders', requireFinance, requireProjectAccess, async (req: any, res: any) => {
   try {
     const { projectId } = req.params;
     // SOURCE OF TRUTH: top-level `changeOrders/` keyed by projectId field.
@@ -1394,7 +1435,10 @@ app.post('/api/projects/:projectId/change-orders', async (req: any, res: any) =>
   } catch (e) { res.status(500).json({ error: 'Failed to create change order' }); }
 });
 
-app.patch('/api/projects/:projectId/change-orders/:coId/decision', async (req: any, res: any) => {
+// Change-order approve/decline: allow anyone on the project team.
+// The client legitimately owns this decision on their own project; staff can
+// mirror it. IDOR fix ensures they can't do this on someone else's project.
+app.patch('/api/projects/:projectId/change-orders/:coId/decision', requireProjectAccess, async (req: any, res: any) => {
   try {
     const { projectId, coId } = req.params;
     const { decision, decidedBy } = req.body; // decision: 'approved' | 'declined'

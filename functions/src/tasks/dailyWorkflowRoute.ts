@@ -15,6 +15,8 @@
 
 import type { Express, Request, Response } from 'express';
 import type { Firestore } from 'firebase-admin/firestore';
+import { requireStaff } from '../middleware/rbac';
+import { requireProjectAccess } from '../middleware/requireProjectAccess';
 import {
   generateProjectTaskList,
   recommendSubForTask,
@@ -216,7 +218,8 @@ async function buildDailyWorkflow(
 // ── Route registration ───────────────────────────────────────────────────────
 export function registerDailyWorkflowRoutes(app: Express, db: Firestore) {
   // GET /api/projects/:id/daily-workflow
-  app.get('/api/projects/:id/daily-workflow', async (req: Request, res: Response) => {
+  // Any project member can pull their morning digest.
+  app.get('/api/projects/:id/daily-workflow', requireProjectAccess, async (req: Request, res: Response) => {
     try {
       const workflow = await buildDailyWorkflow(db, req.params.id);
       res.json(workflow);
@@ -227,7 +230,8 @@ export function registerDailyWorkflowRoutes(app: Express, db: Firestore) {
   });
 
   // GET /api/daily-digest — all active projects rolled up
-  app.get('/api/daily-digest', async (_req: Request, res: Response) => {
+  // Cross-project rollup — staff only.
+  app.get('/api/daily-digest', requireStaff, async (_req: Request, res: Response) => {
     try {
       // "Active" = not status=complete/archived. We filter generously: if the
       // project doc has no status, assume active.
@@ -261,7 +265,8 @@ export function registerDailyWorkflowRoutes(app: Express, db: Firestore) {
   });
 
   // POST /api/projects/:id/generate-tasks
-  app.post('/api/projects/:id/generate-tasks', async (req: Request, res: Response) => {
+  // Bootstrap project_tasks — staff only, project scope.
+  app.post('/api/projects/:id/generate-tasks', requireStaff, requireProjectAccess, async (req: Request, res: Response) => {
     try {
       const projectType = (req.body?.projectType || 'CUSTOM') as 'CUSTOM' | 'SPEC';
       const startDateStr = req.body?.startDate;
@@ -278,7 +283,11 @@ export function registerDailyWorkflowRoutes(app: Express, db: Firestore) {
   });
 
   // GET /api/projects/:id/tasks
-  app.get('/api/projects/:id/tasks', async (req: Request, res: Response) => {
+  // NOTE: this handler shadows the earlier `/api/projects/:id/tasks` in
+  // index.ts — registration order gives that one priority (Express runs
+  // middleware in order). Keep project access enforcement here as
+  // defense-in-depth in case the earlier route is removed.
+  app.get('/api/projects/:id/tasks', requireProjectAccess, async (req: Request, res: Response) => {
     try {
       const snap = await db
         .collection('project_tasks')
@@ -293,7 +302,9 @@ export function registerDailyWorkflowRoutes(app: Express, db: Firestore) {
   });
 
   // PATCH /api/project-tasks/:taskId
-  app.patch('/api/project-tasks/:taskId', async (req: Request, res: Response) => {
+  // Task edit — staff only (assign, mark status, retime). Individual
+  // subs go through the sign-off route, not this generic edit.
+  app.patch('/api/project-tasks/:taskId', requireStaff, async (req: Request, res: Response) => {
     try {
       const allowed = [
         'status',
@@ -347,7 +358,8 @@ export function registerDailyWorkflowRoutes(app: Express, db: Firestore) {
   });
 
   // GET /api/project-tasks/:taskId/recommend-sub
-  app.get('/api/project-tasks/:taskId/recommend-sub', async (req: Request, res: Response) => {
+  // Sub recommendation reads the contact catalog — staff only.
+  app.get('/api/project-tasks/:taskId/recommend-sub', requireStaff, async (req: Request, res: Response) => {
     try {
       const snap = await db.collection('project_tasks').doc(req.params.taskId).get();
       if (!snap.exists) return res.status(404).json({ error: 'task not found' });
@@ -363,7 +375,8 @@ export function registerDailyWorkflowRoutes(app: Express, db: Firestore) {
   });
 
   // POST /api/material-orders/:id/order
-  app.post('/api/material-orders/:id/order', async (req: Request, res: Response) => {
+  // Materials-order lifecycle mutations — staff only.
+  app.post('/api/material-orders/:id/order', requireStaff, async (req: Request, res: Response) => {
     try {
       const { vendorContactId, expectedDelivery } = req.body || {};
       if (!vendorContactId || !expectedDelivery) {
@@ -381,7 +394,7 @@ export function registerDailyWorkflowRoutes(app: Express, db: Firestore) {
   });
 
   // POST /api/material-orders/:id/delivered
-  app.post('/api/material-orders/:id/delivered', async (req: Request, res: Response) => {
+  app.post('/api/material-orders/:id/delivered', requireStaff, async (req: Request, res: Response) => {
     try {
       const when = req.body?.actualDelivery ? new Date(req.body.actualDelivery) : new Date();
       await markMaterialDelivered(db, req.params.id, when);
@@ -394,7 +407,7 @@ export function registerDailyWorkflowRoutes(app: Express, db: Firestore) {
   });
 
   // POST /api/material-orders/:id/delayed
-  app.post('/api/material-orders/:id/delayed', async (req: Request, res: Response) => {
+  app.post('/api/material-orders/:id/delayed', requireStaff, async (req: Request, res: Response) => {
     try {
       const { newExpectedDelivery, reason } = req.body || {};
       if (!newExpectedDelivery || !reason) {
@@ -412,7 +425,7 @@ export function registerDailyWorkflowRoutes(app: Express, db: Firestore) {
   });
 
   // GET /api/projects/:id/materials — full materials list (any status)
-  app.get('/api/projects/:id/materials', async (req: Request, res: Response) => {
+  app.get('/api/projects/:id/materials', requireProjectAccess, async (req: Request, res: Response) => {
     try {
       const snap = await db
         .collection('material_orders')

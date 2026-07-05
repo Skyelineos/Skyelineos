@@ -19,6 +19,11 @@ import * as admin from 'firebase-admin';
 import Anthropic from '@anthropic-ai/sdk';
 import { assignExpenseToDrawPeriod } from './drawRoutes';
 import { pushExpenseToQbo } from '../qbo/expenseSync';
+import { requireFinance } from '../middleware/rbac';
+import {
+  requireProjectAccess,
+  requireExpenseProjectAccess,
+} from '../middleware/requireProjectAccess';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -236,7 +241,10 @@ export function registerExpenseRoutes(
   db: admin.firestore.Firestore,
 ): void {
   // POST /api/expenses/capture — extract receipt + create expense doc
-  app.post('/api/expenses/capture', async (req: any, res: any) => {
+  //
+  // Audit fix (2026-07-05): finance role (admin/gc/pm) AND project access.
+  // Uses requireProjectAccess which reads req.body.projectId via extractProjectId.
+  app.post('/api/expenses/capture', requireFinance, requireProjectAccess, async (req: any, res: any) => {
     try {
       const uid: string = req.user?.uid;
       if (!uid) {
@@ -457,7 +465,8 @@ export function registerExpenseRoutes(
   });
 
   // GET /api/projects/:projectId/expenses — list expenses for a project
-  app.get('/api/projects/:projectId/expenses', async (req: any, res: any) => {
+  // Any project member can read — expenses show up in the client's draw statement.
+  app.get('/api/projects/:projectId/expenses', requireProjectAccess, async (req: any, res: any) => {
     try {
       const projectId = String(req.params.projectId || '').trim();
       if (!projectId) {
@@ -485,7 +494,11 @@ export function registerExpenseRoutes(
   // Since the expense lives at projects/{projectId}/expenses/{expenseId} we
   // need to know the projectId. Accept it in either the body or as a query
   // param so the client can call this without re-fetching the project.
-  app.patch('/api/expenses/:expenseId', async (req: any, res: any) => {
+  //
+  // Audit fix (2026-07-05): finance role AND resolved-project access. The
+  // expense middleware handles the case where the client didn't hint the
+  // projectId by looking it up via collectionGroup.
+  app.patch('/api/expenses/:expenseId', requireFinance, requireExpenseProjectAccess, async (req: any, res: any) => {
     try {
       const uid: string = req.user?.uid;
       if (!uid) {
@@ -556,6 +569,8 @@ export function registerExpenseRoutes(
   // POST /api/expenses/:expenseId/reconcile — mark reconciled + store QBO id
   app.post(
     '/api/expenses/:expenseId/reconcile',
+    requireFinance,
+    requireExpenseProjectAccess,
     async (req: any, res: any) => {
       try {
         const uid: string = req.user?.uid;
