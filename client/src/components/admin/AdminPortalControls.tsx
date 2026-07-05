@@ -159,28 +159,28 @@ export const AdminPortalControls = () => {
   // with normal-state banners; red + "DO NOT SHARE" is impossible to miss
   // in a screenshot review.
   return (
-    <div className="bg-red-100 border-b-2 border-red-500 px-4 py-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4 flex-wrap">
-          <div className="flex items-center gap-2">
-            <Eye className="h-4 w-4 text-red-700" />
-            <span className="text-sm font-bold text-red-900 uppercase tracking-wide">
+    <div className="bg-red-100 border-b-2 border-red-500 px-3 py-3 sm:px-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3">
+        <div className="flex items-center gap-2 sm:gap-4 flex-wrap min-w-0">
+          <div className="flex items-center gap-2 flex-wrap min-w-0">
+            <Eye className="h-4 w-4 text-red-700 flex-shrink-0" />
+            <span className="text-xs sm:text-sm font-bold text-red-900 uppercase tracking-wide">
               Admin viewing {getPortalDisplayName(currentPortalType)}
             </span>
-            <span className="text-[10px] font-semibold text-white bg-red-600 rounded px-1.5 py-0.5 uppercase tracking-wider">
+            <span className="text-[10px] font-semibold text-white bg-red-600 rounded px-1.5 py-0.5 uppercase tracking-wider whitespace-nowrap">
               Do not share with client
             </span>
           </div>
           
-          <div className="flex items-center gap-2">
-            <Users className="h-4 w-4 text-blue-600" />
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <Users className="h-4 w-4 text-blue-600 flex-shrink-0" />
             <Popover open={open} onOpenChange={setOpen}>
               <PopoverTrigger asChild>
                 <Button
                   variant="outline"
                   role="combobox"
                   aria-expanded={open}
-                  className="w-[200px] h-8 justify-between text-sm"
+                  className="w-full sm:w-[200px] h-8 justify-between text-sm"
                   disabled={isLoading}
                 >
                   {viewedUser ? viewedUser.name : (isLoading ? "Loading..." : "Select user...")}
@@ -239,7 +239,7 @@ export const AdminPortalControls = () => {
           variant="outline"
           size="sm"
           onClick={handleExitAdminView}
-          className="text-theme-primary border-theme-accent/30 hover:bg-theme-accent/10"
+          className="text-theme-primary border-theme-accent/30 hover:bg-theme-accent/10 w-full sm:w-auto flex-shrink-0"
         >
           <Settings className="h-4 w-4 mr-2" />
           Exit Admin View

@@ -59,7 +59,9 @@ export function ThemeSettings() {
   };
 
   const resetToDefault = () => {
-    const defaultColor = '#2F80ED';
+    // Skyeline brand gold — matches --accent-color in index.css and the
+    // ThemeContext default so "Reset" restores the intended brand.
+    const defaultColor = '#C9A96E';
     setPendingColor(defaultColor);
     setCustomColor(defaultColor);
     setHasUnsavedChanges(defaultColor !== accentColor);

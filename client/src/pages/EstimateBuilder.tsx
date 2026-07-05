@@ -2078,8 +2078,8 @@ export function EstimateBuilderContent({ projectId, projectName, embedded = fals
             <Button variant="outline" className="flex items-center gap-1.5 px-3">
               <SlidersHorizontal className="h-4 w-4" /> Filter
             </Button>
-            <Button onClick={() => { setEditing(null); setModalOpen(true); }}
-              className="bg-green-600 hover:bg-green-700 text-white flex items-center gap-2">
+            <Button variant="accent" onClick={() => { setEditing(null); setModalOpen(true); }}
+              className="flex items-center gap-2">
               <Plus className="h-4 w-4" /> Estimate
             </Button>
           </div>

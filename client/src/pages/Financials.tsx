@@ -90,10 +90,10 @@ export default function Financials() {
 
   // Overview Tab (Dashboard)
   const renderOverviewTab = () => (
-    <div className="p-6 space-y-6">
+    <div className="p-4 sm:p-6 space-y-6 max-w-full overflow-x-hidden">
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-2">
-          <h1 className="text-3xl font-bold text-gray-900">Financial Overview</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Financial Overview</h1>
           <p className="text-gray-600">
             Comprehensive financial dashboard and key metrics
           </p>
@@ -105,10 +105,10 @@ export default function Financials() {
             <CardTitle className="text-lg">Financial View</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center gap-4">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
               <label className="text-sm font-medium">Select Project:</label>
               <Select value={selectedProjectId.toString()} onValueChange={(value) => setSelectedProjectId(parseInt(value))}>
-                <SelectTrigger className="w-64">
+                <SelectTrigger className="w-full sm:w-64">
                   <SelectValue placeholder="Select a project" />
                 </SelectTrigger>
                 <SelectContent>

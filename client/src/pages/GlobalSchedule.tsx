@@ -4,6 +4,7 @@ import { GlobalScheduleCalendar } from '../components/schedule/GlobalScheduleCal
 import { useScheduleEvents } from '../hooks/useEventSocket';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Calendar, Users, Clock, AlertCircle } from 'lucide-react';
+import { AppLayout } from '../components/layout/AppLayout';
 
 export default function GlobalSchedule() {
   const { user } = useAuth();
@@ -23,13 +24,13 @@ export default function GlobalSchedule() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-7xl mx-auto space-y-6">
+    <AppLayout>
+    <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
-              <Calendar className="w-8 h-8 text-blue-600" />
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 flex items-center gap-3">
+              <Calendar className="w-7 h-7 sm:w-8 sm:h-8" style={{ color: '#C9A96E' }} />
               Global Project Schedule
             </h1>
             <p className="text-gray-600 mt-2">
@@ -132,7 +133,7 @@ export default function GlobalSchedule() {
             </div>
           </CardContent>
         </Card>
-      </div>
     </div>
+    </AppLayout>
   );
 }

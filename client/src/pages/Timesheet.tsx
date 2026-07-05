@@ -240,8 +240,9 @@ function WeeklyGrid({ weekStart, entries, onCellClick }: WeeklyGridProps) {
 
   if (projects.length === 0) {
     return (
-      <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
-        <div className="grid grid-cols-8 text-xs font-semibold text-gray-500 bg-gray-50 border-b border-gray-200">
+      <div className="rounded-xl border border-gray-200 bg-white overflow-x-auto">
+        <div className="grid text-xs font-semibold text-gray-500 bg-gray-50 border-b border-gray-200 min-w-[560px]"
+          style={{ gridTemplateColumns: '140px repeat(7, minmax(48px, 1fr))' }}>
           <div className="px-3 py-2">Project</div>
           {days.map((d, i) => (
             <div key={i} className="px-2 py-2 text-center">
@@ -250,7 +251,7 @@ function WeeklyGrid({ weekStart, entries, onCellClick }: WeeklyGridProps) {
             </div>
           ))}
         </div>
-        <div className="px-4 py-6 text-sm text-gray-400 text-center col-span-8">
+        <div className="px-4 py-6 text-sm text-gray-400 text-center min-w-[560px]">
           No entries this week
         </div>
       </div>
@@ -258,9 +259,9 @@ function WeeklyGrid({ weekStart, entries, onCellClick }: WeeklyGridProps) {
   }
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
-      <div className="grid text-xs font-semibold text-gray-500 bg-gray-50 border-b border-gray-200"
-        style={{ gridTemplateColumns: '180px repeat(7, 1fr)' }}>
+    <div className="rounded-xl border border-gray-200 bg-white overflow-x-auto">
+      <div className="grid text-xs font-semibold text-gray-500 bg-gray-50 border-b border-gray-200 min-w-[560px]"
+        style={{ gridTemplateColumns: '140px repeat(7, minmax(48px, 1fr))' }}>
         <div className="px-3 py-2">Project</div>
         {days.map((d, i) => (
           <div key={i} className="px-2 py-2 text-center">
@@ -272,8 +273,8 @@ function WeeklyGrid({ weekStart, entries, onCellClick }: WeeklyGridProps) {
       {projects.map(proj => (
         <div
           key={proj.id}
-          className="grid border-b border-gray-100 last:border-b-0"
-          style={{ gridTemplateColumns: '180px repeat(7, 1fr)' }}
+          className="grid border-b border-gray-100 last:border-b-0 min-w-[560px]"
+          style={{ gridTemplateColumns: '140px repeat(7, minmax(48px, 1fr))' }}
         >
           <div className="px-3 py-3 text-sm font-medium text-gray-700 flex items-center truncate">{proj.name}</div>
           {days.map((d, i) => {

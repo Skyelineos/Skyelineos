@@ -46,7 +46,10 @@ export function PushNotificationPrompt() {
 
   return (
     <div
-      className="fixed bottom-4 right-4 z-50 max-w-sm w-[calc(100vw-2rem)] sm:w-96 rounded-lg shadow-xl border border-gray-200 bg-white p-4 animate-in slide-in-from-bottom-5 fade-in"
+      // Sits above the QuickExpenseFAB (bottom-6 right-6, 3.5rem tall) on
+      // mobile so the FAB never covers the Enable/Maybe Later buttons.
+      // Desktop keeps its original bottom-right anchor.
+      className="fixed z-50 max-w-sm w-[calc(100vw-2rem)] sm:w-96 rounded-lg shadow-xl border border-gray-200 bg-white p-4 animate-in slide-in-from-bottom-5 fade-in bottom-24 right-4 sm:bottom-4"
       role="dialog"
       aria-live="polite"
       aria-label="Enable push notifications"
@@ -71,18 +74,18 @@ export function PushNotificationPrompt() {
           <p className="mt-1 text-sm text-gray-600">
             Enable push notifications to get instant updates on tasks, bids, and project milestones.
           </p>
-          <div className="mt-3 flex items-center gap-2">
+          <div className="mt-3 flex flex-wrap items-center gap-2">
             <Button
               size="sm"
               onClick={handleEnable}
               disabled={busy}
-              className="text-white gap-1.5"
+              className="text-white gap-1.5 whitespace-nowrap"
               style={{ backgroundColor: '#C9A96E' }}
             >
               {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Bell className="h-3.5 w-3.5" />}
               Enable Notifications
             </Button>
-            <Button size="sm" variant="ghost" onClick={handleDismiss} disabled={busy}>
+            <Button size="sm" variant="ghost" onClick={handleDismiss} disabled={busy} className="whitespace-nowrap">
               Maybe Later
             </Button>
           </div>

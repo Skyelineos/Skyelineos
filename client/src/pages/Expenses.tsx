@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Receipt, Camera, RefreshCw } from 'lucide-react';
 import { QuickExpenseCapture } from '@/components/expenses/QuickExpenseCapture';
+import { AppLayout } from '@/components/layout/AppLayout';
 
 interface Expense {
   id: string;
@@ -63,9 +64,10 @@ export default function Expenses() {
   useEffect(() => { load(); }, []);
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
+    <AppLayout>
+    <div className="max-w-5xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-heading text-brand-black">Expenses</h1>
           <p className="text-sm text-muted-foreground mt-0.5">All paid receipts and credit card purchases across projects</p>
@@ -90,7 +92,7 @@ export default function Expenses() {
       {/* Summary card */}
       <Card>
         <CardContent className="pt-5 pb-4">
-          <div className="grid grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
             <div>
               <p className="text-xs uppercase tracking-wider text-muted-foreground">Total Expenses</p>
               <p className="text-2xl font-semibold mt-1" style={{ color: '#C9A96E' }}>{fmt(total)}</p>
@@ -170,5 +172,6 @@ export default function Expenses() {
         />
       )}
     </div>
+    </AppLayout>
   );
 }

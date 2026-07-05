@@ -602,14 +602,14 @@ export default function Contacts() {
 
   return (
     <AppLayout>
-      <div className="space-y-6 p-6">
+      <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <Users className="h-6 w-6" />
-            <h1 className="text-2xl font-bold">Contacts & Trades</h1>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex items-center space-x-2 min-w-0">
+            <Users className="h-6 w-6 flex-shrink-0" />
+            <h1 className="text-2xl font-bold truncate">Contacts & Trades</h1>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-shrink-0">
             <Button
               variant={activeTab === 'contacts' ? 'default' : 'outline'}
               size="sm"
@@ -641,11 +641,11 @@ export default function Contacts() {
 
           <TabsContent value="contacts" className="space-y-6">
             {/* Contacts Header Actions */}
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
               <div className="text-sm text-gray-600">
                 Manage your construction project contacts
               </div>
-              <div className="flex items-center space-x-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Button variant="outline" onClick={exportContacts}>
                   <Download className="h-4 w-4 mr-2" />
                   Export CSV

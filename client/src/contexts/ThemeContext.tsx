@@ -14,7 +14,9 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [accentColor, setAccentColorState] = useState<string>(() => {
-    return localStorage.getItem('accentColor') || '#2F80ED';
+    // Skyeline brand gold — matches --accent-color in index.css so the
+    // runtime override respects the design system out of the box.
+    return localStorage.getItem('accentColor') || '#C9A96E';
   });
 
   const [darkMode, setDarkMode] = useState<boolean>(() => {

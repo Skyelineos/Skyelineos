@@ -1552,8 +1552,8 @@ export function AdvancedTimelineBuilder({
           {/* Action Buttons Row */}
           <div className="flex items-center gap-3 flex-wrap">
             <Button
+              variant="accent"
               onClick={() => setShowAutoScheduleDialog(true)}
-              className="bg-blue-600 hover:bg-blue-700 text-white"
               size="sm"
               disabled={readonly || availableEstimates.length === 0}
             >
@@ -1566,7 +1566,6 @@ export function AdvancedTimelineBuilder({
               variant="outline"
               size="sm"
               disabled={readonly}
-              className="text-purple-600 border-purple-200 hover:bg-purple-50"
             >
               <FileText className="w-4 h-4 mr-2" />
               Import CSV Schedule
@@ -1765,7 +1764,6 @@ export function AdvancedTimelineBuilder({
                   });
                 }}
                 disabled={filteredTasks.length === 0}
-                className="text-green-600 border-green-200 hover:bg-green-50"
               >
                 <FileText className="w-4 h-4 mr-2" />
                 Export CSV
@@ -1778,8 +1776,8 @@ export function AdvancedTimelineBuilder({
         <div className="gantt-scroll-wrapper bg-white border rounded-lg overflow-hidden">
           {filteredTasks.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 px-8 text-center">
-              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
-                <Calendar className="w-8 h-8 text-blue-600" />
+              <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4" style={{ backgroundColor: 'rgba(201,169,110,0.15)' }}>
+                <Calendar className="w-8 h-8" style={{ color: '#C9A96E' }} />
               </div>
               <h3 className="text-lg font-semibold text-gray-900 mb-2">Let's build your schedule!</h3>
               <p className="text-gray-600 mb-6 max-w-md">
@@ -1787,8 +1785,8 @@ export function AdvancedTimelineBuilder({
               </p>
               <div className="flex flex-wrap gap-3 justify-center">
                 <Button 
+                  variant="accent"
                   onClick={() => setShowCreateTaskDialog(true)}
-                  className="bg-blue-600 hover:bg-blue-700"
                   disabled={readonly}
                 >
                   <Plus className="w-4 h-4 mr-2" />
@@ -1798,7 +1796,6 @@ export function AdvancedTimelineBuilder({
                   <Button
                     variant="outline"
                     onClick={() => setShowAutoScheduleDialog(true)}
-                    className="text-blue-600 border-blue-200 hover:bg-blue-50"
                     disabled={readonly}
                   >
                     <Sparkles className="w-4 h-4 mr-2" />
@@ -1808,7 +1805,6 @@ export function AdvancedTimelineBuilder({
                 <Button
                   variant="outline"
                   onClick={() => setShowCsvImportDialog(true)}
-                  className="text-purple-600 border-purple-200 hover:bg-purple-50"
                   disabled={readonly}
                 >
                   <FileText className="w-4 h-4 mr-2" />
