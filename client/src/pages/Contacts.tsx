@@ -19,6 +19,7 @@ import { EditContactModal } from '@/components/contacts/EditContactModal';
 import ContactImportModal from '@/components/contacts/ContactImportModal';
 import ContactDetailView from '@/components/contacts/ContactDetailView';
 import { AppLayout } from '@/components/layout/AppLayout';
+import { PageHeader } from '@/components/common/PageHeader';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -579,9 +580,7 @@ export default function Contacts() {
     return (
       <AppLayout>
         <div className="space-y-6 p-6">
-          <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-bold">Contacts</h1>
-          </div>
+          <PageHeader title="Contacts" icon={<Users className="h-6 w-6" />} />
           <div className="grid gap-4">
             {[1, 2, 3, 4].map((i) => (
               <Card key={i}>
@@ -604,12 +603,11 @@ export default function Contacts() {
     <AppLayout>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div className="flex items-center space-x-2 min-w-0">
-            <Users className="h-6 w-6 flex-shrink-0" />
-            <h1 className="text-2xl font-bold truncate">Contacts & Trades</h1>
-          </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
+        <PageHeader
+          title="Contacts & Trades"
+          icon={<Users className="h-6 w-6" />}
+          actions={
+            <div className="flex items-center gap-2 flex-shrink-0">
             <Button
               variant={activeTab === 'contacts' ? 'default' : 'outline'}
               size="sm"
@@ -628,8 +626,9 @@ export default function Contacts() {
               <Wrench className="h-4 w-4 mr-2" />
               Trades
             </Button>
-          </div>
-        </div>
+            </div>
+          }
+        />
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <div className="hidden">

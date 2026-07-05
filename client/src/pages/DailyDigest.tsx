@@ -6,6 +6,7 @@
 
 import { useEffect, useState } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
+import { PageHeader } from '@/components/common/PageHeader';
 import { DailyWorkflowCard } from '@/components/workflow/DailyWorkflowCard';
 import { Loader2, AlertCircle, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -50,16 +51,16 @@ export default function DailyDigest() {
   return (
     <AppLayout>
       <div className="p-4 md:p-6 space-y-4 max-w-[1800px] mx-auto">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Daily Digest</h1>
-            <div className="text-sm text-muted-foreground mt-0.5">{today}</div>
-          </div>
-          <Button size="sm" variant="outline" onClick={load} disabled={loading}>
-            <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
-        </div>
+        <PageHeader
+          title="Daily Digest"
+          subtitle={today}
+          actions={
+            <Button size="sm" variant="outline" onClick={load} disabled={loading}>
+              <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+          }
+        />
 
         {loading && !digest && (
           <div className="flex items-center gap-2 text-muted-foreground py-8 justify-center">

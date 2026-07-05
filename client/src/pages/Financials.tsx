@@ -93,8 +93,8 @@ export default function Financials() {
     <div className="p-4 sm:p-6 space-y-6 max-w-full overflow-x-hidden">
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-2">
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Financial Overview</h1>
-          <p className="text-gray-600">
+          <h1 className="font-heading text-2xl sm:text-3xl font-semibold text-brand-black tracking-tight">Financial Overview</h1>
+          <p className="text-sm text-muted-foreground">
             Comprehensive financial dashboard and key metrics
           </p>
         </div>
@@ -136,7 +136,7 @@ export default function Financials() {
   const renderCashFlowTab = () => (
     <div className="p-6 space-y-6">
       <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold text-gray-900">Cash Flow Analysis</h1>
+        <h1 className="font-heading text-2xl sm:text-3xl font-semibold text-brand-black tracking-tight">Cash Flow Analysis</h1>
         <p className="text-gray-600">
           Income vs expenses and cash flow projections
         </p>
@@ -173,7 +173,7 @@ export default function Financials() {
   const renderBudgetAnalysisTab = () => (
     <div className="p-6 space-y-6">
       <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold text-gray-900">Budget Analysis</h1>
+        <h1 className="font-heading text-2xl sm:text-3xl font-semibold text-brand-black tracking-tight">Budget Analysis</h1>
         <p className="text-gray-600">
           Project budget tracking and variance analysis
         </p>
@@ -202,7 +202,7 @@ export default function Financials() {
   const renderInvoicesTab = () => (
     <div className="p-6 space-y-6">
       <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold text-gray-900">Invoice Management</h1>
+        <h1 className="font-heading text-2xl sm:text-3xl font-semibold text-brand-black tracking-tight">Invoice Management</h1>
         <p className="text-gray-600">
           Create, track, and manage project invoices
         </p>
@@ -228,7 +228,7 @@ export default function Financials() {
   const renderPaymentsTab = () => (
     <div className="p-6 space-y-6">
       <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold text-gray-900">Payment Processing</h1>
+        <h1 className="font-heading text-2xl sm:text-3xl font-semibold text-brand-black tracking-tight">Payment Processing</h1>
         <p className="text-gray-600">
           Client and subcontractor payment management
         </p>
@@ -266,7 +266,7 @@ export default function Financials() {
   const renderPurchaseOrdersTab = () => (
     <div className="p-6 space-y-6">
       <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold text-gray-900">Purchase Orders</h1>
+        <h1 className="font-heading text-2xl sm:text-3xl font-semibold text-brand-black tracking-tight">Purchase Orders</h1>
         <p className="text-gray-600">
           PO tracking, automation, and management
         </p>
@@ -279,7 +279,7 @@ export default function Financials() {
   const renderCostTrackingTab = () => (
     <div className="p-6 space-y-6">
       <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold text-gray-900">Cost Tracking</h1>
+        <h1 className="font-heading text-2xl sm:text-3xl font-semibold text-brand-black tracking-tight">Cost Tracking</h1>
         <p className="text-gray-600">
           Project cost analysis and per-project accounting
         </p>
@@ -292,7 +292,7 @@ export default function Financials() {
   const renderReportsTab = () => (
     <div className="p-6 space-y-6">
       <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold text-gray-900">Financial Reports</h1>
+        <h1 className="font-heading text-2xl sm:text-3xl font-semibold text-brand-black tracking-tight">Financial Reports</h1>
         <p className="text-gray-600">
           Generate and export financial reports
         </p>
@@ -312,7 +312,7 @@ export default function Financials() {
   const renderSettingsTab = () => (
     <div className="p-6 space-y-6">
       <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold text-gray-900">Financial Settings</h1>
+        <h1 className="font-heading text-2xl sm:text-3xl font-semibold text-brand-black tracking-tight">Financial Settings</h1>
         <p className="text-gray-600">
           Connect accounting tools and configure financial preferences
         </p>

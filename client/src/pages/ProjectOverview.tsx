@@ -205,7 +205,7 @@ export default function ProjectOverview() {
         {/* Project Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">{transformedProject.name}</h1>
+            <h1 className="font-heading text-2xl sm:text-3xl font-semibold text-brand-black tracking-tight">{transformedProject.name}</h1>
             <p className="text-gray-600 mt-1">Project ID: {transformedProject.projectId}</p>
           </div>
           <div className="flex items-center gap-3">

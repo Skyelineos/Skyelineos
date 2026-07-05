@@ -363,7 +363,7 @@ export function BillsContent({ projectId: scopedProjectId }: { projectId?: strin
         <div>
           <div className="flex items-center gap-3 mb-1">
             <Receipt className="w-7 h-7 text-[#C9A96E]" />
-            <h1 className="text-2xl font-bold text-gray-900">AI Bill OCR</h1>
+            <h1 className="font-heading text-2xl sm:text-3xl font-semibold text-brand-black tracking-tight">AI Bill OCR</h1>
             <Badge className="bg-purple-100 text-purple-700 border-purple-200 gap-1">
               <Sparkles className="w-3 h-3" /> Powered by Claude
             </Badge>

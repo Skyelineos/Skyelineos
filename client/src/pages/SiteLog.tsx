@@ -262,7 +262,7 @@ export function SiteLogContent({ projectId: scopedProjectId }: { projectId?: str
         {/* Header */}
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Site Observation Log</h1>
+            <h1 className="font-heading text-2xl sm:text-3xl font-semibold text-brand-black tracking-tight">Site Observation Log</h1>
             <p className="text-sm text-gray-500 mt-1">
               {openCount > 0 && <span className="text-amber-600 font-medium">{openCount} open</span>}
               {openCount > 0 && clientCount > 0 && <span className="text-gray-400"> · </span>}

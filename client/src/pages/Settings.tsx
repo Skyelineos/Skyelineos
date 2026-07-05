@@ -1,4 +1,5 @@
 import { AppLayout } from '@/components/layout/AppLayout';
+import { PageHeader } from '@/components/common/PageHeader';
 import { QboConnectionCard } from '@/components/settings/QboConnectionCard';
 import { CalendarConnectionCard } from '@/components/settings/CalendarConnectionCard';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -271,12 +272,10 @@ export default function Settings() {
     <AppLayout>
       <div className="space-y-6">
         {/* Header */}
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Settings</h1>
-          <p className="mt-2 text-gray-600">
-            Manage your account, preferences, and system configuration
-          </p>
-        </div>
+        <PageHeader
+          title="Settings"
+          subtitle="Manage your account, preferences, and system configuration"
+        />
 
         {/* Settings Tabs */}
         <Tabs defaultValue="profile" className="space-y-4">

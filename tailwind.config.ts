@@ -81,6 +81,13 @@ export default {
           "beige": "var(--brand-beige)",
           "light-gray-blue": "var(--brand-light-gray-blue)",
           "black": "var(--brand-black)",
+          // Brand palette — kept in sync with client/src/index.css :root.
+          // Exposes `bg-brand-gold`, `text-brand-gold`,
+          // `hover:bg-brand-gold-dark`, `bg-brand-cream` so page code can
+          // use brand tokens directly instead of arbitrary hex values.
+          "gold": "var(--brand-gold)",
+          "gold-dark": "var(--brand-gold-dark)",
+          "cream": "var(--brand-cream)",
         },
         destructive: {
           DEFAULT: "var(--destructive)",

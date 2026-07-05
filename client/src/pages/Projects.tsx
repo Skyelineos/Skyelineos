@@ -34,6 +34,8 @@ import {
 import { Progress } from '@/components/ui/progress';
 import { NewProjectForm } from '@/components/projects/NewProjectForm';
 import { ProjectGridSkeleton } from '@/components/projects/ProjectSkeleton';
+import { PageHeader } from '@/components/common/PageHeader';
+import { EmptyState } from '@/components/common/EmptyState';
 import { queryClient, apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import { getStatusLabel, getStatusBadgeClass } from '@/lib/projectUtils';
@@ -566,14 +568,10 @@ export default function Projects() {
     return (
       <AppLayout>
         <div className="space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">Projects</h1>
-              <p className="mt-2 text-gray-600">
-                Manage and track all your construction projects
-              </p>
-            </div>
-          </div>
+          <PageHeader
+            title="Projects"
+            subtitle="Manage and track all your construction projects"
+          />
           <ProjectGridSkeleton />
         </div>
       </AppLayout>
@@ -586,43 +584,41 @@ export default function Projects() {
       <AppLayout>
         <div className="space-y-6">
           {/* Header - Always show even on error */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">Projects</h1>
-              <p className="mt-2 text-gray-600">
-                Manage and track all your construction projects
-              </p>
-            </div>
-            <div className="flex gap-2 flex-wrap">
-              <Button
-                variant="accent"
-                className="self-start sm:self-auto"
-                onClick={() => setLocation('/projects/setup')}
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                New Project (guided)
-              </Button>
-              {/* Legacy single-page form — kept so any habit-formed flow
-                  still works. The guided wizard is the recommended path
-                  and will become the only path in a follow-up update. */}
-              <Button
-                variant="outline"
-                className="self-start sm:self-auto"
-                onClick={() => setIsNewProjectFormOpen(true)}
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                Quick add
-              </Button>
-              <Button
-                variant="outline"
-                className="self-start sm:self-auto"
-                onClick={() => setIsEditMode(!isEditMode)}
-              >
-                <Edit3 className="mr-2 h-4 w-4" />
-                Edit Projects
-              </Button>
-            </div>
-          </div>
+          <PageHeader
+            title="Projects"
+            subtitle="Manage and track all your construction projects"
+            actions={
+              <>
+                <Button
+                  variant="accent"
+                  className="self-start sm:self-auto"
+                  onClick={() => setLocation('/projects/setup')}
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  New Project (guided)
+                </Button>
+                {/* Legacy single-page form — kept so any habit-formed flow
+                    still works. The guided wizard is the recommended path
+                    and will become the only path in a follow-up update. */}
+                <Button
+                  variant="outline"
+                  className="self-start sm:self-auto"
+                  onClick={() => setIsNewProjectFormOpen(true)}
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Quick add
+                </Button>
+                <Button
+                  variant="outline"
+                  className="self-start sm:self-auto"
+                  onClick={() => setIsEditMode(!isEditMode)}
+                >
+                  <Edit3 className="mr-2 h-4 w-4" />
+                  Edit Projects
+                </Button>
+              </>
+            }
+          />
 
           {/* Error Message */}
           <div className="flex items-center justify-center h-64">
@@ -653,39 +649,37 @@ export default function Projects() {
   const projectsContent = (
     <div className="space-y-6">
       {/* Header - Always visible */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Projects</h1>
-          <p className="mt-2 text-gray-600">
-            Manage and track all your construction projects
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            variant="accent"
-            onClick={() => setIsNewProjectFormOpen(true)}
-            data-accent="true"
-            style={{
-              backgroundColor: 'var(--accent-color)',
-              color: 'white',
-              border: '1px solid var(--accent-color)',
-            }}
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            New Project
-          </Button>
-          {allProjects && allProjects.length > 0 && (
+      <PageHeader
+        title="Projects"
+        subtitle="Manage and track all your construction projects"
+        actions={
+          <>
             <Button
-              variant="outline"
-              className="self-start sm:self-auto"
-              onClick={() => setIsEditMode(!isEditMode)}
+              variant="accent"
+              onClick={() => setIsNewProjectFormOpen(true)}
+              data-accent="true"
+              style={{
+                backgroundColor: 'var(--accent-color)',
+                color: 'white',
+                border: '1px solid var(--accent-color)',
+              }}
             >
-              <Edit3 className="mr-2 h-4 w-4" />
-              Edit Projects
+              <Plus className="mr-2 h-4 w-4" />
+              New Project
             </Button>
-          )}
-        </div>
-      </div>
+            {allProjects && allProjects.length > 0 && (
+              <Button
+                variant="outline"
+                className="self-start sm:self-auto"
+                onClick={() => setIsEditMode(!isEditMode)}
+              >
+                <Edit3 className="mr-2 h-4 w-4" />
+                Edit Projects
+              </Button>
+            )}
+          </>
+        }
+      />
 
       {/* Project Metrics Dashboard - Only show when projects exist */}
       {allProjects && allProjects.length > 0 && (
@@ -983,50 +977,32 @@ export default function Projects() {
 
       {/* Empty State */}
       {filteredProjects.length === 0 && (
-        <Card>
-          <CardContent className="text-center py-16">
-            <div className="text-gray-400 mb-6">
-              <FolderOpen className="mx-auto h-16 w-16" />
-            </div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">
-              No projects found
-            </h3>
-            <p className="text-gray-500 mb-8 text-base">
-              {searchTerm || statusFilter !== 'all'
-                ? 'Try adjusting your search or filter criteria'
-                : 'Get started by creating your first project'}
-            </p>
-            {/* Always show the Create Project button prominently */}
-            <div className="space-y-4">
-              <Button
-                variant="accent"
-                onClick={() => setIsNewProjectFormOpen(true)}
-                className="text-lg px-8 py-3 rounded-lg"
-                size="lg"
-                data-accent="true"
-                style={{
-                  backgroundColor: 'var(--accent-color)',
-                  color: 'white',
-                  border: '1px solid var(--accent-color)',
-                }}
-              >
-                <Plus className="mr-2 h-5 w-5" />
-                Create Project
+        <EmptyState
+          icon={<FolderOpen className="h-7 w-7" />}
+          title="No projects found"
+          description={
+            searchTerm || statusFilter !== 'all'
+              ? 'Try adjusting your search or filter criteria.'
+              : 'Get started by creating your first project.'
+          }
+          action={
+            <Button
+              onClick={() => setIsNewProjectFormOpen(true)}
+              className="bg-brand-gold hover:bg-brand-gold-dark text-white border-brand-gold"
+              size="lg"
+            >
+              <Plus className="mr-2 h-5 w-5" />
+              Create Project
+            </Button>
+          }
+          secondaryAction={
+            (searchTerm || statusFilter !== 'all') ? (
+              <Button onClick={clearAllFilters} variant="outline">
+                Clear Filters
               </Button>
-              {searchTerm || statusFilter !== 'all' ? (
-                <div>
-                  <Button
-                    onClick={clearAllFilters}
-                    variant="outline"
-                    className="ml-4"
-                  >
-                    Clear Filters
-                  </Button>
-                </div>
-              ) : null}
-            </div>
-          </CardContent>
-        </Card>
+            ) : undefined
+          }
+        />
       )}
 
       {/* New Project Form Modal */}

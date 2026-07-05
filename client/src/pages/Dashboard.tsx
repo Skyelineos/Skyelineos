@@ -105,9 +105,10 @@ export default function Dashboard() {
 
         </div>
 
-        {/* Mobile quick actions */}
-        <div className="block md:hidden mt-6 p-4 bg-blue-50 rounded-xl border border-blue-200">
-          <p className="text-sm text-blue-700 text-center text-wrap">
+        {/* Mobile quick actions — uses brand palette so the tip banner reads
+            as an inline hint rather than a foreign blue callout. */}
+        <div className="block md:hidden mt-6 p-4 bg-brand-beige rounded-xl border border-brand-light-gray-blue">
+          <p className="text-sm text-muted-foreground text-center text-wrap">
             Tap cards for details, or use the menu to navigate between sections.
           </p>
         </div>

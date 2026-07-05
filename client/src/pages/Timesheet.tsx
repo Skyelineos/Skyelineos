@@ -374,7 +374,7 @@ export default function Timesheet() {
         {/* Header */}
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-gray-900">Timesheets</h1>
+            <h1 className="font-heading text-2xl sm:text-3xl font-semibold text-brand-black tracking-tight">Timesheets</h1>
             <Badge className="bg-[#C9A96E]/20 text-[#b8934d] border-[#C9A96E]/40 font-semibold">
               <Clock className="w-3 h-3 mr-1" />
               {weeklyHours.toFixed(1)} hrs this week

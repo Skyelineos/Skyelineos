@@ -34,7 +34,7 @@ export default function ProjectWalkthroughs() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <ClipboardCheck className="w-6 h-6 text-[#C9A96E]" />
-            <h1 className="text-2xl font-bold text-gray-900">Walkthroughs</h1>
+            <h1 className="font-heading text-2xl sm:text-3xl font-semibold text-brand-black tracking-tight">Walkthroughs</h1>
           </div>
           <WalkthroughCapture projectId={projectId} projectName={project.name} />
         </div>

@@ -145,10 +145,16 @@ export function MobileNav({ isOpen, onOpenChange }: MobileNavProps) {
                       "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors min-w-0",
                     )}
                     style={isActive ? {
-                      backgroundColor: '#C9A96E',
-                      color: '#141414',
+                      // Match desktop Sidebar.tsx active state — subtle
+                      // gold tint + gold text + left border stripe. Keeps
+                      // desktop and mobile visually aligned instead of the
+                      // old mobile solid-gold pill (which read as a
+                      // completely different UI mode).
+                      backgroundColor: 'rgba(201,169,110,0.15)',
+                      color: '#C9A96E',
+                      borderLeft: '2px solid #C9A96E',
                     } : {
-                      color: '#e2e8f0', // slate-200 — readable on dark bg
+                      color: 'rgba(255,255,255,0.65)',
                     }}
                     onMouseEnter={e => {
                       if (!isActive) {

@@ -1362,7 +1362,7 @@ export default function ImportCenter() {
         <div>
           <div className="flex items-center gap-3 mb-1">
             <FileSpreadsheet className="w-7 h-7 text-[#C9A96E]" />
-            <h1 className="text-2xl font-bold text-gray-900">Import Center</h1>
+            <h1 className="font-heading text-2xl sm:text-3xl font-semibold text-brand-black tracking-tight">Import Center</h1>
           </div>
           <p className="text-gray-500 text-sm">
             Paste a <strong>Google Sheets URL</strong> (shared "Anyone with the link") or upload a CSV from Excel, Buildertrend, Smartsheet, or any other tool.

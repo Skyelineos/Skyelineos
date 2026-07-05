@@ -21,7 +21,7 @@ export function AppLayout({ children, currentProject }: AppLayoutProps) {
     // height) while iOS Safari's collapsible URL bar doesn't clip the right-
     // side scroll container. overflow-hidden is intentional on the OUTER
     // shell — the inner <main> is the scroll surface.
-    <div className="flex h-screen min-h-[100dvh] bg-gray-50 overflow-hidden">
+    <div className="flex h-screen min-h-[100dvh] bg-brand-cream overflow-hidden">
       {/* Persistent left sidebar — always visible on desktop */}
       {!isMobile && (
         <div className="flex-shrink-0 w-64">

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
+import { PageHeader } from '@/components/common/PageHeader';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -151,15 +152,11 @@ export default function ContractsPage() {
   return (
     <AppLayout>
       <div className="p-6 max-w-7xl mx-auto space-y-6">
-        <div className="flex items-center justify-between gap-4 flex-wrap">
-          <div className="flex items-center gap-3">
-            <FileSignature className="w-7 h-7 text-[#C9A96E]" />
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Contracts</h1>
-              <p className="text-sm text-gray-500">Build agreements, sub agreements, designer agreements — and the payments tied to them.</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
+        <PageHeader
+          title="Contracts"
+          subtitle="Build agreements, sub agreements, designer agreements — and the payments tied to them."
+          icon={<FileSignature className="w-6 h-6" />}
+          actions={
             <Select value="new" onValueChange={(v) => v !== 'new' && startCreate(v as ContractType)}>
               <SelectTrigger className="w-[230px]">
                 <SelectValue placeholder="+ New Contract" />
@@ -172,8 +169,8 @@ export default function ContractsPage() {
                 <SelectItem value="employee">Employment Agreement</SelectItem>
               </SelectContent>
             </Select>
-          </div>
-        </div>
+          }
+        />
 
         {/* Summary tiles */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

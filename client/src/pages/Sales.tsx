@@ -2610,9 +2610,9 @@ export default function Sales() {
             stays on-screen instead of running off the right edge at 390px. */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5 flex-shrink-0">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Sales</h1>
+            <h1 className="font-heading text-2xl sm:text-3xl font-semibold text-brand-black tracking-tight">Sales</h1>
             {totalPipeline > 0 && (
-              <p className="text-sm text-gray-500 mt-0.5">
+              <p className="text-sm text-muted-foreground mt-1">
                 Pipeline: {fmtFull(totalPipeline)}
               </p>
             )}

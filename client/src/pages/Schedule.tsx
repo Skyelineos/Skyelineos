@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useLocation } from 'wouter';
 import { AppLayout } from '@/components/layout/AppLayout';
+import { PageHeader } from '@/components/common/PageHeader';
 
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -113,32 +114,28 @@ export default function Schedule() {
   const scheduleContent = (
     <div className="space-y-6">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Global Schedule</h1>
-            <p className="mt-2 text-gray-600">
-              Unified calendar view across all active construction projects
-            </p>
-          </div>
-          
-          {/* Quick Stats */}
-          <div className="flex items-center gap-4">
-            <div className="text-center">
-              <div className="text-2xl font-bold text-theme-primary">{scheduleStats.totalTasks}</div>
-              <div className="text-sm text-gray-500">Total Tasks</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-green-600">{completionRate}%</div>
-              <div className="text-sm text-gray-500">Complete</div>
-            </div>
-            {scheduleStats.overdueTasks > 0 && (
+        <PageHeader
+          title="Global Schedule"
+          subtitle="Unified calendar view across all active construction projects"
+          actions={
+            <div className="flex items-center gap-4">
               <div className="text-center">
-                <div className="text-2xl font-bold text-red-600">{scheduleStats.overdueTasks}</div>
-                <div className="text-sm text-gray-500">Overdue</div>
+                <div className="text-2xl font-bold text-theme-primary">{scheduleStats.totalTasks}</div>
+                <div className="text-xs text-gray-500">Total Tasks</div>
               </div>
-            )}
-          </div>
-        </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-green-600">{completionRate}%</div>
+                <div className="text-xs text-gray-500">Complete</div>
+              </div>
+              {scheduleStats.overdueTasks > 0 && (
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-red-600">{scheduleStats.overdueTasks}</div>
+                  <div className="text-xs text-gray-500">Overdue</div>
+                </div>
+              )}
+            </div>
+          }
+        />
 
         {/* Schedule Overview Cards — each tile drills into its detail view */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

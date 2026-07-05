@@ -141,7 +141,7 @@ function HubView({ onSelect }: { onSelect: (c: TemplateCategory) => void }) {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Templates</h1>
+        <h1 className="font-heading text-2xl sm:text-3xl font-semibold text-brand-black tracking-tight">Templates</h1>
         <p className="text-sm text-gray-500 mt-0.5">Reusable templates for estimates, documents, tasks, jobs, and schedules</p>
       </div>
 

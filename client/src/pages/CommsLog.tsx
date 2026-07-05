@@ -186,7 +186,7 @@ export default function CommsLog() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Comms Log</h1>
+            <h1 className="font-heading text-2xl sm:text-3xl font-semibold text-brand-black tracking-tight">Comms Log</h1>
             <p className="text-sm text-gray-500 mt-0.5">Track all client and team communications</p>
           </div>
           <Button onClick={() => setShowDialog(true)} style={{ backgroundColor: '#C9A96E' }} className="text-white hover:opacity-90 gap-2">

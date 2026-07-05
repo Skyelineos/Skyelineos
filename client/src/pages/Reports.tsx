@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
+import { PageHeader } from '@/components/common/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -53,13 +54,11 @@ export default function Reports() {
   return (
     <AppLayout>
       <div className="p-6 max-w-7xl mx-auto space-y-6">
-        <div className="flex items-center gap-3">
-          <BarChart2 className="w-7 h-7 text-[#C9A96E]" />
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Reports</h1>
-            <p className="text-sm text-gray-500">Pre-built reports on profit, jobs, and leads.</p>
-          </div>
-        </div>
+        <PageHeader
+          title="Reports"
+          subtitle="Pre-built reports on profit, jobs, and leads."
+          icon={<BarChart2 className="w-6 h-6" />}
+        />
 
         <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-6">
           <div className="space-y-1">

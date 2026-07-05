@@ -223,7 +223,7 @@ export default function DesignerPortal() {
               </div>
             ) : (
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Designer Portal</h1>
+                <h1 className="font-heading text-2xl sm:text-3xl font-semibold text-brand-black tracking-tight">Designer Portal</h1>
                 <p className="text-sm text-gray-500 mt-0.5">
                   {isAdminView && viewedUser
                     ? `Viewing as ${viewedUser.name}`

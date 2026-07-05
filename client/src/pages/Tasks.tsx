@@ -12,6 +12,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { AppLayout } from '@/components/layout/AppLayout';
+import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -528,15 +529,12 @@ export function TasksContent({
     <div className="space-y-6">
       {/* Header — stacks on mobile so the view-mode toggle and 'Add Task'
             CTA never push each other off-screen at 390px. */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <CheckSquare className="h-6 w-6 flex-shrink-0" />
-          <h1 className="text-2xl font-bold">Tasks</h1>
-          <Badge variant="secondary" className="text-sm">
-            {filteredTasks.length}
-          </Badge>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
+      <PageHeader
+        title="Tasks"
+        icon={<CheckSquare className="h-6 w-6" />}
+        subtitle={`${filteredTasks.length} ${filteredTasks.length === 1 ? 'task' : 'tasks'}`}
+        actions={
+          <div className="flex items-center gap-2 flex-wrap">
           {/* View-mode segmented toggle. min-h-[44px] on the shared border
                 container gives each segment a full touch target while the
                 inner buttons keep their tight visual spacing. */}
@@ -568,14 +566,14 @@ export function TasksContent({
           </div>
           <Button
             onClick={openAddDialog}
-            className="text-white"
-            style={{ backgroundColor: '#C9A96E', borderColor: '#C9A96E' }}
+            className="bg-brand-gold hover:bg-brand-gold-dark text-white border-brand-gold"
           >
             <Plus className="h-4 w-4 mr-2" />
             Add Task
           </Button>
-        </div>
-      </div>
+          </div>
+        }
+      />
 
       {/* Filter Bar */}
       <div className="flex flex-col sm:flex-row gap-3">
