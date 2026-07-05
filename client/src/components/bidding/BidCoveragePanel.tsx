@@ -80,9 +80,7 @@ export function BidCoveragePanel({ projectId }: Props) {
     if (silent) setRefreshing(true); else setLoading(true);
     setError(null);
     try {
-      const res = await apiRequest(`/api/projects/${projectId}/bids/coverage`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = (await res.json()) as CoverageResponse;
+      const json = (await apiRequest(`/api/projects/${projectId}/bids/coverage`)) as CoverageResponse;
       setData(json);
     } catch (e: any) {
       setError(e?.message || 'Failed to load bid coverage');

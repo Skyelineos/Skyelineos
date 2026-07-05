@@ -135,38 +135,38 @@ export default function DocumentsTab({ projectId }: DocumentsTabProps) {
   // Get vendor details for selected PO
   const { data: poVendorDetails } = useQuery<any>({
     queryKey: ['/api/contacts', selectedPO?.subcontractorId],
-    queryFn: () => fetch(`/api/contacts/${selectedPO.subcontractorId}`).then(res => res.json()),
+    queryFn: () => apiRequest(`/api/contacts/${selectedPO.subcontractorId}`),
     enabled: !!selectedPO?.subcontractorId,
   });
 
   // Fetch project documents
   const { data: documents = [], isLoading: documentsLoading } = useQuery<any>({
     queryKey: ['/api/documents', projectId],
-    queryFn: () => fetch(`/api/documents?projectId=${projectId}`).then(res => res.json()),
+    queryFn: () => apiRequest(`/api/documents?projectId=${projectId}`),
   });
 
   // Fetch purchase orders
   const { data: purchaseOrders = [], isLoading: posLoading } = useQuery<any>({
     queryKey: ['/api/purchase-orders', projectId],
-    queryFn: () => fetch(`/api/purchase-orders?projectId=${projectId}`).then(res => res.json()),
+    queryFn: () => apiRequest(`/api/purchase-orders?projectId=${projectId}`),
   });
 
   // Fetch change orders
   const { data: changeOrders = [], isLoading: changeOrdersLoading } = useQuery<any>({
     queryKey: ['/api/change-orders', projectId],
-    queryFn: () => fetch(`/api/change-orders?projectId=${projectId}`).then(res => res.json()),
+    queryFn: () => apiRequest(`/api/change-orders?projectId=${projectId}`),
   });
 
   // Fetch invoices
   const { data: invoices = [], isLoading: invoicesLoading } = useQuery<any>({
     queryKey: ['/api/invoices', projectId],
-    queryFn: () => fetch(`/api/invoices?projectId=${projectId}`).then(res => res.json()),
+    queryFn: () => apiRequest(`/api/invoices?projectId=${projectId}`),
   });
 
   // Fetch approved estimate items
   const { data: approvedEstimateItems = [], isLoading: estimateItemsLoading } = useQuery<any>({
     queryKey: ['/api/estimates/approved', projectId],
-    queryFn: () => fetch(`/api/estimates/approved/${projectId}`).then(res => res.json()),
+    queryFn: () => apiRequest(`/api/estimates/approved/${projectId}`),
   });
 
   // Fetch contacts/subcontractors
@@ -634,26 +634,26 @@ export default function DocumentsTab({ projectId }: DocumentsTabProps) {
     );
   };
 
-  const filteredDocuments = documents.filter((doc: ProjectDocument) => {
+  const filteredDocuments = (Array.isArray(documents) ? documents : []).filter((doc: ProjectDocument) => {
     const matchesSearch = (doc.originalFileName?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
                          (doc.description?.toLowerCase() || '').includes(searchTerm.toLowerCase());
     return matchesSearch;
   });
 
-  const filteredPOs = purchaseOrders.filter((po: PurchaseOrder) => {
+  const filteredPOs = (Array.isArray(purchaseOrders) ? purchaseOrders : []).filter((po: PurchaseOrder) => {
     const matchesSearch = (po.trade?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
                          (po.description?.toLowerCase() || '').includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || po.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
-  const filteredChangeOrders = changeOrders.filter((co: ChangeOrder) => {
+  const filteredChangeOrders = (Array.isArray(changeOrders) ? changeOrders : []).filter((co: ChangeOrder) => {
     const matchesSearch = (co.description?.toLowerCase() || '').includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || co.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
-  const filteredInvoices = invoices.filter((invoice: Invoice) => {
+  const filteredInvoices = (Array.isArray(invoices) ? invoices : []).filter((invoice: Invoice) => {
     const matchesSearch = (invoice.trade?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
                          (invoice.description?.toLowerCase() || '').includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || invoice.status === statusFilter;
