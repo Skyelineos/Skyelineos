@@ -2256,6 +2256,21 @@ registerBidsSummaryRoute(app, admin.firestore());
 import { registerBidCoverageRoute } from './bids/bidCoverageRoute';
 registerBidCoverageRoute(app, admin.firestore());
 
+// Automated Bid Solicitation System — direct-outreach engine that queues +
+// emails Utah County contractors for each trade on a project. Sits alongside
+// the magic-link bid request flow above.
+// Routes:
+//   POST   /api/bids/solicit
+//   POST   /api/bids/solicit/:projectId/send-all
+//   POST   /api/bids/solicit/gardanier
+//   GET    /api/bids/solicitations/:projectId
+//   POST   /api/bids/solicitations/:id/send
+//   POST   /api/bids/solicitations/:id/remind
+//   DELETE /api/bids/solicitations/:id
+//   GET    /api/bids/trades
+import { registerBidSolicitationRoutes } from './bids/bidSolicitationRoutes';
+registerBidSolicitationRoutes(app, admin.firestore());
+
 // Route: POST /api/contracts/:id/commencement
 import { registerCommenceRoute } from './contracts/commenceRoute';
 registerCommenceRoute(app, admin.firestore());

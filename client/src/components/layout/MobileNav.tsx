@@ -9,16 +9,13 @@ import {
   SheetDescription,
   SheetHeader,
   SheetTitle,
-  SheetTrigger,
 } from '@/components/ui/sheet';
-import { Button } from '@/components/ui/button';
 import {
   LayoutDashboard,
   FolderOpen,
   Calendar,
   DollarSign,
   MessageSquare,
-  Settings,
   Users,
   UserCheck,
   HardHat,
@@ -33,10 +30,7 @@ import {
   BarChart2,
   Hammer,
   Radio,
-  Zap,
-  Share2,
   UserCog,
-  Wallet,
 } from 'lucide-react';
 
 interface MobileNavProps {
@@ -70,18 +64,18 @@ const getNavigationItems = () => [
   // /messages RoleGuard allows every signed-in persona.
   { label: 'Messaging',             href: '/messages',             icon: MessageSquare,   roles: ['Admin', 'GC', 'ProjectManager', 'Designer', 'Subcontractor', 'Client'] as const },
   { label: 'Comms Log',             href: '/comms-log',            icon: Radio,           roles: ['Admin', 'GC', 'ProjectManager'] as const },
-  // /automations RoleGuard: ['admin'].
-  { label: 'Automations',           href: '/automations',          icon: Zap,             roles: ['Admin'] as const },
+  // MVP AUDIT (2026-07-04): moved to future-features/.
+  // { label: 'Automations',           href: '/automations',          icon: Zap,             roles: ['Admin'] as const },
   // Portal entries: gated to portal users + admin (impersonation). Hiding
   // them from GC/PM stops the bounce-to-/not-authorized loop.
   { label: 'Client Portal',         href: '/client-portal',        icon: UserCheck,       roles: ['Admin', 'Client'] as const },
   { label: 'Subcontractor Portal',  href: '/subcontractor-portal', icon: HardHat,         roles: ['Admin', 'Sub', 'Subcontractor'] as const },
   { label: 'Designer Portal',       href: '/designer-portal',      icon: Palette,         roles: ['Admin', 'Designer'] as const },
-  // /design-board RoleGuard: ['admin', 'gc', 'designer'] — drop PM.
-  { label: 'Design Board',          href: '/design-board',         icon: Palette,         roles: ['Admin', 'GC', 'Designer'] as const },
-  // /social-media RoleGuard: ['admin', 'gc'] — drop PM.
-  { label: 'Social Media',          href: '/social-media',         icon: Share2,          roles: ['Admin', 'GC'] as const },
-  { label: 'Subscriptions',         href: '/subscriptions',        icon: Wallet,          roles: ['Admin'] as const },
+  // MVP AUDIT (2026-07-04): Design Board / Social Media / Subscriptions moved
+  // to future-features/.
+  // { label: 'Design Board',          href: '/design-board',         icon: Palette,         roles: ['Admin', 'GC', 'Designer'] as const },
+  // { label: 'Social Media',          href: '/social-media',         icon: Share2,          roles: ['Admin', 'GC'] as const },
+  // { label: 'Subscriptions',         href: '/subscriptions',        icon: Wallet,          roles: ['Admin'] as const },
   { label: 'Users',                 href: '/users',                icon: UserCog,         roles: ['Admin'] as const },
 ];
 

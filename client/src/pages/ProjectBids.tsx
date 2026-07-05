@@ -5,6 +5,7 @@ import { AddendaManager } from '@/components/bidding/AddendaManager';
 import { SsotCurationPanel } from '@/components/bidding/SsotCurationPanel';
 import { BidSetGatePanel } from '@/components/bidding/BidSetGatePanel';
 import { BidCoveragePanel } from '@/components/bidding/BidCoveragePanel';
+import { BidSolicitationPanel } from '@/components/BidSolicitation/BidSolicitationPanel';
 import { useOptimizedProject } from '@/hooks/useOptimizedProjects';
 import { ProjectDetailSkeleton } from '@/components/projects/ProjectSkeleton';
 
@@ -44,6 +45,7 @@ export default function ProjectBids() {
       <div className="p-6 space-y-6">
         <BidSetGatePanel projectId={projectId!} />
         <BidCoveragePanel projectId={projectId!} />
+        <BidSolicitationPanel projectId={projectId!} projectName={transformedProject.name} />
         <PortalBidsPanel projectId={projectId!} projectName={transformedProject.name} />
         <SsotCurationPanel projectId={projectId!} />
         <AddendaManager

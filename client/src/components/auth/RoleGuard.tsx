@@ -5,7 +5,7 @@ import { useAdminView } from '@/contexts/AdminViewContext';
 import { Redirect } from 'wouter';
 import { getDefaultRouteForRole } from '@/utils/roleRedirects';
 
-export type UserRole = 'admin' | 'gc' | 'projectManager' | 'client' | 'subcontractor' | 'designer';
+export type UserRole = 'admin' | 'gc' | 'projectManager' | 'client' | 'subcontractor' | 'sub' | 'designer';
 
 // Role normalization function - same logic as useRoleAccess.
 // BUGFIX 2026-06: `gc` was being collapsed into `projectManager`, which

@@ -177,7 +177,34 @@ export const queryClient = new QueryClient({
   },
 });
 
-export const apiRequest = async (url: string, options: RequestInit = {}) => {
+// Dual-signature apiRequest:
+//   Modern: apiRequest(url, options?)                  — fetch-style
+//   Legacy: apiRequest(method, url, body?)             — axios-style used across older components
+// Both are supported so we don't have to rewrite ~90 callsites in one pass.
+export const apiRequest = async (
+  arg1: string,
+  arg2: RequestInit | string = {},
+  arg3?: unknown,
+) => {
+  let url: string;
+  let options: RequestInit = {};
+
+  const LEGACY_METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
+  if (typeof arg2 === 'string' && LEGACY_METHODS.has(arg1.toUpperCase())) {
+    // Legacy 3-arg form
+    const method = arg1.toUpperCase();
+    url = arg2;
+    options = {
+      method,
+      ...(arg3 !== undefined && method !== 'GET'
+        ? { body: typeof arg3 === 'string' ? arg3 : JSON.stringify(arg3) }
+        : {}),
+    };
+  } else {
+    url = arg1;
+    options = (typeof arg2 === 'object' && arg2 !== null ? arg2 : {}) as RequestInit;
+  }
+
   try {
     const method = options.method || 'GET';
     

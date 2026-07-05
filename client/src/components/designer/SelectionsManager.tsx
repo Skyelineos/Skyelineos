@@ -405,7 +405,9 @@ function AddItemModal({
         <DialogFooter className="flex-col sm:flex-row gap-2">
           <Button variant="outline" onClick={onClose}>Cancel</Button>
           {onSaveToCatalog && (
-            <Button variant="outline" onClick={() => {}} className="text-purple-600 border-purple-200">
+            // MVP AUDIT: previously had no handler. Wire to the provided
+            // callback so the button actually does something.
+            <Button variant="outline" onClick={() => onSaveToCatalog?.()} className="text-purple-600 border-purple-200">
               <BookMarked className="h-4 w-4 mr-1" /> Save to Catalog too
             </Button>
           )}

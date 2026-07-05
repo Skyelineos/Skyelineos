@@ -24,9 +24,7 @@ import {
   BookOpen,
   Hash,
   BarChart2,
-  Zap,
   Radio,
-  Share2,
   TrendingUp,
   Hammer,
   UserCog,
@@ -34,14 +32,8 @@ import {
   Briefcase,
   ClipboardCheck,
   FileSpreadsheet,
-  Wallet,
   Receipt,
-  Lightbulb,
-  Sparkles,
   FileSignature,
-  Beaker,
-  KeyRound,
-  Inbox,
   Settings,
 } from 'lucide-react';
 
@@ -125,27 +117,31 @@ const TEAM_NAV: NavGroup[] = [
       { label: 'Designer Portal',      href: '/designer-portal',      icon: Palette },
     ],
   },
-  {
-    label: 'Creative',
-    items: [
-      { label: 'Design Board', href: '/design-board', icon: Palette },
-      { label: 'Content Studio', href: '/content-studio', icon: Sparkles },
-      { label: 'Social Media', href: '/social-media', icon: Share2 },
-    ],
-  },
+  // MVP AUDIT (2026-07-04): Creative group (Design Board / Content Studio /
+  // Social Media) moved to future-features/. Restore alongside the pages.
+  // {
+  //   label: 'Creative',
+  //   items: [
+  //     { label: 'Design Board', href: '/design-board', icon: Palette },
+  //     { label: 'Content Studio', href: '/content-studio', icon: Sparkles },
+  //     { label: 'Social Media', href: '/social-media', icon: Share2 },
+  //   ],
+  // },
   {
     label: 'Management',
     items: [
       { label: 'Users',          href: '/users',          icon: UserCog },
       { label: 'Master Tasks',   href: '/master-tasks',   icon: ClipboardList },
       { label: 'Templates',      href: '/templates',      icon: Hammer },
-      { label: 'Playbook',       href: '/playbook',       icon: Lightbulb },
+      // MVP AUDIT: Playbook / Automations / Subscriptions / API Storage /
+      // AI Inbox / Ingestion Lab moved to future-features/.
+      // { label: 'Playbook',       href: '/playbook',       icon: Lightbulb },
       { label: 'Import Center',  href: '/import-center',  icon: FileSpreadsheet },
-      { label: 'Automations',    href: '/automations',    icon: Zap },
-      { label: 'Subscriptions',  href: '/subscriptions',  icon: Wallet },
-      { label: 'API Storage',    href: '/api-storage',    icon: KeyRound },
-      { label: 'AI Inbox',       href: '/admin/ai-inbox',     icon: Inbox },
-      { label: 'Ingestion Lab',  href: '/admin/ingestion-lab', icon: Beaker },
+      // { label: 'Automations',    href: '/automations',    icon: Zap },
+      // { label: 'Subscriptions',  href: '/subscriptions',  icon: Wallet },
+      // { label: 'API Storage',    href: '/api-storage',    icon: KeyRound },
+      // { label: 'AI Inbox',       href: '/admin/ai-inbox',     icon: Inbox },
+      // { label: 'Ingestion Lab',  href: '/admin/ingestion-lab', icon: Beaker },
     ],
   },
 ];

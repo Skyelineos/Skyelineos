@@ -14,7 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/auth/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import {
-  Mail, HardDrive, MessageSquare, Cloud, Brain, RefreshCw, CheckCircle2, XCircle,
+  Mail, HardDrive, MessageSquare, Cloud, Brain, RefreshCw, CheckCircle2, XCircle, Calendar,
 } from 'lucide-react';
 import type { IngestionConfig } from './types';
 
@@ -44,7 +44,7 @@ export function ConnectorsTab({ config, rawCounts }: ConnectorsTabProps) {
     return data;
   }
 
-  async function startOAuth(provider: 'gmail' | 'drive') {
+  async function startOAuth(provider: 'gmail' | 'drive' | 'calendar') {
     setBusy(`connect-${provider}`);
     try {
       const { url } = await authedPost(`/api/ingestionLab/oauth/${provider}/start`);
@@ -128,6 +128,18 @@ export function ConnectorsTab({ config, rawCounts }: ConnectorsTabProps) {
           ingestBusy={busy === 'ingest-drive'}
           ingestDisabled={!config?.drive?.email}
         />
+        <ConnectorCard
+          icon={<Calendar className="w-6 h-6 text-[#C9A96E]" />}
+          title="Google Calendar"
+          subtitle="Task deadlines & crew scheduling"
+          connectionLabel={config?.calendar?.email}
+          onConnect={() => startOAuth('calendar')}
+          onIngest={() => {}}
+          connectBusy={busy === 'connect-calendar'}
+          ingestBusy={false}
+          ingestDisabled={true}
+          hideIngest
+        />
         <UploadSourceCard
           icon={<MessageSquare className="w-6 h-6 text-gray-400" />}
           title="iMessage"
@@ -180,11 +192,12 @@ interface ConnectorCardProps {
   connectBusy: boolean;
   ingestBusy: boolean;
   ingestDisabled: boolean;
+  hideIngest?: boolean;
 }
 
 function ConnectorCard({
   icon, title, subtitle, connectionLabel,
-  onConnect, onIngest, connectBusy, ingestBusy, ingestDisabled,
+  onConnect, onIngest, connectBusy, ingestBusy, ingestDisabled, hideIngest,
 }: ConnectorCardProps) {
   const connected = !!connectionLabel;
   return (
@@ -218,16 +231,18 @@ function ConnectorCard({
         >
           {connectBusy ? 'Opening Google…' : connected ? 'Reconnect' : `Connect ${title}`}
         </Button>
-        <Button
-          variant="outline"
-          onClick={onIngest}
-          disabled={ingestDisabled || ingestBusy}
-          className="gap-2"
-          title={ingestDisabled ? 'Connect first' : undefined}
-        >
-          <RefreshCw className={`w-4 h-4 ${ingestBusy ? 'animate-spin' : ''}`} />
-          {ingestBusy ? 'Ingesting…' : 'Run Ingestion'}
-        </Button>
+        {!hideIngest && (
+          <Button
+            variant="outline"
+            onClick={onIngest}
+            disabled={ingestDisabled || ingestBusy}
+            className="gap-2"
+            title={ingestDisabled ? 'Connect first' : undefined}
+          >
+            <RefreshCw className={`w-4 h-4 ${ingestBusy ? 'animate-spin' : ''}`} />
+            {ingestBusy ? 'Ingesting…' : 'Run Ingestion'}
+          </Button>
+        )}
       </CardContent>
     </Card>
   );

@@ -9,6 +9,7 @@ export type ReviewStatus = 'pending' | 'approved' | 'rejected' | 'corrected';
 export interface IngestionConfig {
   gmail?: { email?: string; connectedAt?: any; expiresAt?: any } | null;
   drive?: { email?: string; connectedAt?: any; expiresAt?: any } | null;
+  calendar?: { email?: string; connectedAt?: any; expiresAt?: any } | null;
   dailyBudgetUsd?: number;
   spendTodayUsd?: number;
   spendDate?: string;

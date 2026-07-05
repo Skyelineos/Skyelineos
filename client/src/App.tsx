@@ -64,15 +64,18 @@ const EstimateBuilder = lazy(() => import('@/pages/EstimateBuilder'));
 const UserManagement = lazy(() => import('@/pages/UserManagement'));
 const ProjectDesign = lazy(() => import('@/pages/ProjectDesign'));
 const ProjectTakeoff = lazy(() => import('@/pages/ProjectTakeoff'));
-const Subscriptions = lazy(() => import('@/pages/Subscriptions'));
-const ApiStorage = lazy(() => import('@/pages/ApiStorage'));
-const StyleLibraryAdmin = lazy(() => import('@/pages/StyleLibraryAdmin'));
+// MVP AUDIT (2026-07-04): moved to future-features/pages/. Non-MVP for a
+// custom-home builder. Re-enable by moving back and un-commenting the routes.
+// const Subscriptions = lazy(() => import('@/pages/Subscriptions'));
+// const ApiStorage = lazy(() => import('@/pages/ApiStorage'));
+// const StyleLibraryAdmin = lazy(() => import('@/pages/StyleLibraryAdmin'));
 const LearnMore = lazy(() => import('@/pages/LearnMore'));
-const Giveaway = lazy(() => import('@/pages/Giveaway'));
+// const Giveaway = lazy(() => import('@/pages/Giveaway'));
 const SmsPrivacy = lazy(() => import('@/pages/SmsPrivacy'));
 const SmsTerms = lazy(() => import('@/pages/SmsTerms'));
 const Bills = lazy(() => import('@/pages/Bills'));
-const ContentStudio = lazy(() => import('@/pages/ContentStudio'));
+// MVP AUDIT: moved to future-features/pages/ContentStudio.tsx
+// const ContentStudio = lazy(() => import('@/pages/ContentStudio'));
 const SiteLog = lazy(() => import('@/pages/SiteLog'));
 const Tasks = lazy(() => import('@/pages/Tasks'));
 const DailyDigest = lazy(() => import('@/pages/DailyDigest'));
@@ -85,11 +88,12 @@ const CostCodes = lazy(() => import('@/pages/CostCodes'));
 const Reports = lazy(() => import('@/pages/Reports'));
 const Expenses = lazy(() => import('@/pages/Expenses'));
 const CommsLog = lazy(() => import('@/pages/CommsLog'));
-const DesignBoard = lazy(() => import('@/pages/DesignBoard'));
+// MVP AUDIT: moved to future-features/pages/
+// const DesignBoard = lazy(() => import('@/pages/DesignBoard'));
 const Templates = lazy(() => import('@/pages/Templates'));
-const Playbook = lazy(() => import('@/pages/Playbook'));
-const SocialMedia = lazy(() => import('@/pages/SocialMedia'));
-const Automations = lazy(() => import('@/pages/Automations'));
+// const Playbook = lazy(() => import('@/pages/Playbook'));
+// const SocialMedia = lazy(() => import('@/pages/SocialMedia'));
+// const Automations = lazy(() => import('@/pages/Automations'));
 const MasterTaskLibrary = lazy(() => import('@/pages/MasterTaskLibrary'));
 const TaskListLibrary = lazy(() => import('@/pages/TaskListLibrary'));
 const ProjectBuildPlan = lazy(() => import('@/pages/ProjectBuildPlan'));
@@ -106,8 +110,9 @@ const ProjectMoveInBinder = lazy(() => import('@/pages/ProjectMoveInBinder'));
 const Tools = lazy(() => import('@/pages/Tools'));
 const LumberTakeoff = lazy(() => import('@/pages/LumberTakeoff'));
 const BidCompareTool = lazy(() => import('@/pages/BidCompareTool'));
-const IngestionLab = lazy(() => import('@/pages/IngestionLab'));
-const AiInbox = lazy(() => import('@/pages/AiInbox'));
+// MVP AUDIT: moved to future-features/pages/
+// const IngestionLab = lazy(() => import('@/pages/IngestionLab'));
+// const AiInbox = lazy(() => import('@/pages/AiInbox'));
 
 function Router() {
   // Initialize performance optimizations for faster loading
@@ -158,13 +163,14 @@ function Router() {
         </Suspense>
       </Route>
 
-      {/* Public giveaway page — no auth. Shows the design uploaded via
-          Content Studio → Giveaway Page; the giveaway QR points here. */}
+      {/* MVP AUDIT: Giveaway page moved to future-features/. */}
+      {/*
       <Route path="/giveaway">
         <Suspense fallback={<MinimalSpinner title="Loading" />}>
           <Giveaway />
         </Suspense>
       </Route>
+      */}
 
       {/* Staff link review queue — sub-to-contact link resolution. D-012-h. */}
       <Route path="/admin/link-queue">
@@ -375,63 +381,14 @@ function Router() {
         </ProtectedRoute>
       </Route>
 
-      <Route path="/subscriptions">
-        <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin']} showNotAuthorized>
-            <Suspense
-              fallback={<MinimalSpinner title="Loading Subscriptions" />}
-            >
-              <Subscriptions />
-            </Suspense>
-          </RoleGuard>
-        </ProtectedRoute>
-      </Route>
-
-      <Route path="/api-storage">
-        <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin']} showNotAuthorized>
-            <Suspense fallback={<MinimalSpinner title="Loading API Storage" />}>
-              <ApiStorage />
-            </Suspense>
-          </RoleGuard>
-        </ProtectedRoute>
-      </Route>
-
-      <Route path="/admin/ingestion-lab">
-        <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin']} showNotAuthorized>
-            <Suspense
-              fallback={<MinimalSpinner title="Loading Ingestion Lab" />}
-            >
-              <IngestionLab />
-            </Suspense>
-          </RoleGuard>
-        </ProtectedRoute>
-      </Route>
-
-      <Route path="/admin/ai-inbox">
-        <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin']} showNotAuthorized>
-            <Suspense
-              fallback={<MinimalSpinner title="Loading AI Inbox" />}
-            >
-              <AiInbox />
-            </Suspense>
-          </RoleGuard>
-        </ProtectedRoute>
-      </Route>
-
-      <Route path="/admin/style-library">
-        <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin']} showNotAuthorized>
-            <Suspense
-              fallback={<MinimalSpinner title="Loading Style Library" />}
-            >
-              <StyleLibraryAdmin />
-            </Suspense>
-          </RoleGuard>
-        </ProtectedRoute>
-      </Route>
+      {/* MVP AUDIT (2026-07-04): admin/marketing routes moved to future-features/.
+          Restore by un-comment + moving page files back.
+      <Route path="/subscriptions"> ... <Subscriptions /> ... </Route>
+      <Route path="/api-storage"> ... <ApiStorage /> ... </Route>
+      <Route path="/admin/ingestion-lab"> ... <IngestionLab /> ... </Route>
+      <Route path="/admin/ai-inbox"> ... <AiInbox /> ... </Route>
+      <Route path="/admin/style-library"> ... <StyleLibraryAdmin /> ... </Route>
+      */}
 
       <Route path="/master-tasks">
         <ProtectedRoute>
@@ -477,20 +434,9 @@ function Router() {
         </ProtectedRoute>
       </Route>
 
-      <Route path="/content-studio">
-        <ProtectedRoute>
-          <RoleGuard
-            allowedRoles={['admin', 'gc', 'projectManager']}
-            showNotAuthorized
-          >
-            <Suspense
-              fallback={<MinimalSpinner title="Loading Content Studio" />}
-            >
-              <ContentStudio />
-            </Suspense>
-          </RoleGuard>
-        </ProtectedRoute>
-      </Route>
+      {/* MVP AUDIT: Content Studio moved to future-features/.
+      <Route path="/content-studio"> ... <ContentStudio /> ... </Route>
+      */}
 
       <Route path="/projects/:id/bids">
         <ProtectedRoute>
@@ -1133,20 +1079,9 @@ function Router() {
         </ProtectedRoute>
       </Route>
 
-      <Route path="/design-board">
-        <ProtectedRoute>
-          <RoleGuard
-            allowedRoles={['admin', 'gc', 'designer']}
-            showNotAuthorized
-          >
-            <Suspense
-              fallback={<MinimalSpinner title="Loading Design Board" />}
-            >
-              <DesignBoard />
-            </Suspense>
-          </RoleGuard>
-        </ProtectedRoute>
-      </Route>
+      {/* MVP AUDIT: Design Board moved to future-features/.
+      <Route path="/design-board"> ... <DesignBoard /> ... </Route>
+      */}
 
       <Route path="/templates">
         <ProtectedRoute>
@@ -1158,37 +1093,11 @@ function Router() {
         </ProtectedRoute>
       </Route>
 
-      <Route path="/social-media">
-        <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc']} showNotAuthorized>
-            <Suspense
-              fallback={<MinimalSpinner title="Loading Social Media" />}
-            >
-              <SocialMedia />
-            </Suspense>
-          </RoleGuard>
-        </ProtectedRoute>
-      </Route>
-
-      <Route path="/automations">
-        <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin']} showNotAuthorized>
-            <Suspense fallback={<MinimalSpinner title="Loading Automations" />}>
-              <Automations />
-            </Suspense>
-          </RoleGuard>
-        </ProtectedRoute>
-      </Route>
-
-      <Route path="/playbook">
-        <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc']} showNotAuthorized>
-            <Suspense fallback={<MinimalSpinner title="Loading Playbook" />}>
-              <Playbook />
-            </Suspense>
-          </RoleGuard>
-        </ProtectedRoute>
-      </Route>
+      {/* MVP AUDIT (2026-07-04): moved to future-features/.
+      <Route path="/social-media"> ... <SocialMedia /> ... </Route>
+      <Route path="/automations"> ... <Automations /> ... </Route>
+      <Route path="/playbook"> ... <Playbook /> ... </Route>
+      */}
 
       <Route path="/import-center">
         <ProtectedRoute>
