@@ -1,7 +1,14 @@
 import { useState, useEffect } from 'react';
 import {
-  collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc,
-  doc, serverTimestamp
+  collection,
+  query,
+  orderBy,
+  onSnapshot,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  doc,
+  serverTimestamp,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { AppLayout } from '@/components/layout/AppLayout';
@@ -11,16 +18,41 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { useConfirm } from '@/hooks/use-confirm';
 import { fireTrigger } from '@/lib/notifications';
-import { getDefaultAssigneeForTask, inferTaskKindFromTitle } from '@/lib/taskDefaults';
+import { getDefaultAssigneeForTask } from '@/lib/taskDefaults';
 import {
-  Plus, Search, CheckSquare, MoreVertical, Edit, Trash2, Calendar, User, List, LayoutGrid
+  Plus,
+  Search,
+  CheckSquare,
+  MoreVertical,
+  Edit,
+  Trash2,
+  Calendar,
+  User,
 } from 'lucide-react';
 
 import {
@@ -53,23 +85,36 @@ interface Task {
   updatedAt?: unknown;
 }
 
-type TaskCategory = 'uncategorized' | 'sales' | 'administration' | 'pre_site' | 'site' | 'client';
-const CATEGORY_ORDER: TaskCategory[] = ['uncategorized', 'sales', 'administration', 'pre_site', 'site', 'client'];
+type TaskCategory =
+  | 'uncategorized'
+  | 'sales'
+  | 'administration'
+  | 'pre_site'
+  | 'site'
+  | 'client';
+const CATEGORY_ORDER: TaskCategory[] = [
+  'uncategorized',
+  'sales',
+  'administration',
+  'pre_site',
+  'site',
+  'client',
+];
 const CATEGORY_LABEL: Record<TaskCategory, string> = {
   uncategorized: 'Uncategorized',
-  sales:         'Sales',
+  sales: 'Sales',
   administration: 'Administration',
-  pre_site:      'Pre Site',
-  site:          'Site',
-  client:        'Client',
+  pre_site: 'Pre Site',
+  site: 'Site',
+  client: 'Client',
 };
 const CATEGORY_COLOR: Record<TaskCategory, string> = {
   uncategorized: '#94a3b8',
-  sales:         '#0ea5e9',
+  sales: '#0ea5e9',
   administration: '#0ea5e9',
-  pre_site:      '#ef4444',
-  site:          '#ef4444',
-  client:        '#22c55e',
+  pre_site: '#ef4444',
+  site: '#ef4444',
+  client: '#22c55e',
 };
 
 interface Project {
@@ -103,7 +148,7 @@ const STATUS_COLUMNS: { key: TaskStatus; label: string }[] = [
   { key: 'in_progress', label: 'In Progress' },
   { key: 'awaiting_signoff', label: 'Awaiting sign-off' },
   { key: 'done', label: 'Done' },
-  { key: 'blocked', label: 'Blocked' }
+  { key: 'blocked', label: 'Blocked' },
 ];
 
 function statusBadgeClass(status: TaskStatus): string {
@@ -113,15 +158,24 @@ function statusBadgeClass(status: TaskStatus): string {
 
 function priorityBadgeClass(priority: TaskPriority): string {
   switch (priority) {
-    case 'low': return 'bg-gray-100 text-gray-600';
-    case 'medium': return 'bg-yellow-100 text-yellow-700';
-    case 'high': return 'bg-orange-100 text-orange-700';
-    case 'urgent': return 'bg-red-100 text-red-700';
+    case 'low':
+      return 'bg-gray-100 text-gray-600';
+    case 'medium':
+      return 'bg-yellow-100 text-yellow-700';
+    case 'high':
+      return 'bg-orange-100 text-orange-700';
+    case 'urgent':
+      return 'bg-red-100 text-red-700';
   }
 }
 
 function getInitials(name: string): string {
-  return name.split(' ').map(p => p[0]).join('').toUpperCase().slice(0, 2);
+  return name
+    .split(' ')
+    .map((p) => p[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2);
 }
 
 export default function Tasks() {
@@ -135,7 +189,9 @@ export default function Tasks() {
 // Layout-agnostic body — renders inside whichever layout the caller provides.
 // When `projectId` is set, scopes everything to that project: filters, hides
 // the project picker, prefills new-task form, and drops the project badge.
-export function TasksContent({ projectId: scopedProjectId }: { projectId?: string } = {}) {
+export function TasksContent({
+  projectId: scopedProjectId,
+}: { projectId?: string } = {}) {
   const { toast } = useToast();
   const { user } = useAuth();
   const confirm = useConfirm();
@@ -151,7 +207,9 @@ export function TasksContent({ projectId: scopedProjectId }: { projectId?: strin
   const [users, setUsers] = useState<AppUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const [viewMode, setViewMode] = useState<'kanban' | 'kanban_category' | 'list'>('kanban');
+  const [viewMode, setViewMode] = useState<
+    'kanban' | 'kanban_category' | 'list'
+  >('kanban');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
@@ -159,7 +217,13 @@ export function TasksContent({ projectId: scopedProjectId }: { projectId?: strin
   // Quick-filter chip — one-of {none, mine, by_me, unassigned, week, overdue}.
   // Layered on top of the status/priority/project dropdowns, so the user can
   // drill in further once a chip is active.
-  type QuickFilter = 'none' | 'mine' | 'by_me' | 'unassigned' | 'week' | 'overdue';
+  type QuickFilter =
+    | 'none'
+    | 'mine'
+    | 'by_me'
+    | 'unassigned'
+    | 'week'
+    | 'overdue';
   const [quickFilter, setQuickFilter] = useState<QuickFilter>('none');
 
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -170,17 +234,26 @@ export function TasksContent({ projectId: scopedProjectId }: { projectId?: strin
   // Subscribe to tasks
   useEffect(() => {
     const q = query(collection(db, 'tasks'), orderBy('createdAt', 'desc'));
-    const unsub = onSnapshot(q, (snap) => {
-      setTasks(snap.docs.map(d => ({ id: d.id, ...d.data() } as Task)));
-      setIsLoading(false);
-    }, () => setIsLoading(false));
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        setTasks(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Task));
+        setIsLoading(false);
+      },
+      () => setIsLoading(false)
+    );
     return unsub;
   }, []);
 
   // Subscribe to projects
   useEffect(() => {
     const unsub = onSnapshot(collection(db, 'projects'), (snap) => {
-      setProjects(snap.docs.map(d => ({ id: d.id, name: (d.data() as { name: string }).name })));
+      setProjects(
+        snap.docs.map((d) => ({
+          id: d.id,
+          name: (d.data() as { name: string }).name,
+        }))
+      );
     });
     return unsub;
   }, []);
@@ -188,10 +261,12 @@ export function TasksContent({ projectId: scopedProjectId }: { projectId?: strin
   // Subscribe to users
   useEffect(() => {
     const unsub = onSnapshot(collection(db, 'users'), (snap) => {
-      setUsers(snap.docs.map(d => {
-        const data = d.data() as { name: string; role?: string };
-        return { id: d.id, name: data.name, role: data.role };
-      }));
+      setUsers(
+        snap.docs.map((d) => {
+          const data = d.data() as { name: string; role?: string };
+          return { id: d.id, name: data.name, role: data.role };
+        })
+      );
     });
     return unsub;
   }, []);
@@ -200,7 +275,7 @@ export function TasksContent({ projectId: scopedProjectId }: { projectId?: strin
     setEditingTask(null);
     const base = defaultForm();
     if (scopedProjectId) {
-      const proj = projects.find(p => p.id === scopedProjectId);
+      const proj = projects.find((p) => p.id === scopedProjectId);
       base.projectId = scopedProjectId;
       base.projectName = proj?.name || '';
     }
@@ -217,18 +292,26 @@ export function TasksContent({ projectId: scopedProjectId }: { projectId?: strin
           defaultFallbackUserName: meName,
         });
         if (def.assignedToId) {
-          setFormData(prev => prev.assignedToId
-            ? prev   // user already picked someone — don't clobber
-            : { ...prev, assignedToId: def.assignedToId, assignedToName: def.assignedToName });
+          setFormData((prev) =>
+            prev.assignedToId
+              ? prev // user already picked someone — don't clobber
+              : {
+                  ...prev,
+                  assignedToId: def.assignedToId,
+                  assignedToName: def.assignedToName,
+                }
+          );
         }
       } catch (e) {
         console.warn('[tasks] default-assignee resolve failed', e);
       }
     } else if (meId) {
       // No project context — default to the current user (most likely the GC).
-      setFormData(prev => prev.assignedToId
-        ? prev
-        : { ...prev, assignedToId: meId, assignedToName: meName });
+      setFormData((prev) =>
+        prev.assignedToId
+          ? prev
+          : { ...prev, assignedToId: meId, assignedToName: meName }
+      );
     }
   };
 
@@ -252,13 +335,21 @@ export function TasksContent({ projectId: scopedProjectId }: { projectId?: strin
   };
 
   const handleProjectChange = (projectId: string) => {
-    const proj = projects.find(p => p.id === projectId);
-    setFormData(prev => ({ ...prev, projectId, projectName: proj?.name || '' }));
+    const proj = projects.find((p) => p.id === projectId);
+    setFormData((prev) => ({
+      ...prev,
+      projectId,
+      projectName: proj?.name || '',
+    }));
   };
 
   const handleAssigneeChange = (userId: string) => {
-    const user = users.find(u => u.id === userId);
-    setFormData(prev => ({ ...prev, assignedToId: userId, assignedToName: user?.name || '' }));
+    const user = users.find((u) => u.id === userId);
+    setFormData((prev) => ({
+      ...prev,
+      assignedToId: userId,
+      assignedToName: user?.name || '',
+    }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -270,12 +361,13 @@ export function TasksContent({ projectId: scopedProjectId }: { projectId?: strin
         // Detect a re-assignment so we can notify the new assignee. Only
         // fires when the assigneeId actually changed AND it's not the
         // current user assigning to themselves.
-        const reassigned = formData.assignedToId
-          && formData.assignedToId !== editingTask.assignedToId
-          && formData.assignedToId !== meId;
+        const reassigned =
+          formData.assignedToId &&
+          formData.assignedToId !== editingTask.assignedToId &&
+          formData.assignedToId !== meId;
         await updateDoc(doc(db, 'tasks', editingTask.id), {
           ...formData,
-          updatedAt: serverTimestamp()
+          updatedAt: serverTimestamp(),
         });
         if (reassigned && formData.assignedToId) {
           // Wave-2: route through fireTrigger so SMS/email + per-user prefs apply.
@@ -299,7 +391,7 @@ export function TasksContent({ projectId: scopedProjectId }: { projectId?: strin
           createdById: meId || null,
           createdByName: meName || null,
           createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
+          updatedAt: serverTimestamp(),
         });
         // Notify the assignee on creation unless self-assigned.
         if (formData.assignedToId && formData.assignedToId !== meId) {
@@ -322,8 +414,9 @@ export function TasksContent({ projectId: scopedProjectId }: { projectId?: strin
     } catch (error: unknown) {
       toast({
         title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to save task',
-        variant: 'destructive'
+        description:
+          error instanceof Error ? error.message : 'Failed to save task',
+        variant: 'destructive',
       });
     } finally {
       setIsSaving(false);
@@ -344,20 +437,25 @@ export function TasksContent({ projectId: scopedProjectId }: { projectId?: strin
     } catch (error: unknown) {
       toast({
         title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to delete task',
-        variant: 'destructive'
+        description:
+          error instanceof Error ? error.message : 'Failed to delete task',
+        variant: 'destructive',
       });
     }
   };
 
   const handleStatusChange = async (taskId: string, status: TaskStatus) => {
     try {
-      await updateDoc(doc(db, 'tasks', taskId), { status, updatedAt: serverTimestamp() });
+      await updateDoc(doc(db, 'tasks', taskId), {
+        status,
+        updatedAt: serverTimestamp(),
+      });
     } catch (error: unknown) {
       toast({
         title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to update status',
-        variant: 'destructive'
+        description:
+          error instanceof Error ? error.message : 'Failed to update status',
+        variant: 'destructive',
       });
     }
   };
@@ -366,17 +464,24 @@ export function TasksContent({ projectId: scopedProjectId }: { projectId?: strin
   const todayYMD = new Date().toISOString().slice(0, 10);
   // End-of-week: rolling 7-day window from today. Simpler than week-of-year
   // math and matches how the dashboard "this week" buckets work elsewhere.
-  const endOfWeekYMD = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+  const endOfWeekYMD = new Date(Date.now() + 7 * 86400000)
+    .toISOString()
+    .slice(0, 10);
 
-  const filteredTasks = tasks.filter(t => {
-    const matchSearch = searchTerm === '' ||
+  const filteredTasks = tasks.filter((t) => {
+    const matchSearch =
+      searchTerm === '' ||
       t.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (t.projectName && t.projectName.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (t.assignedToName && t.assignedToName.toLowerCase().includes(searchTerm.toLowerCase()));
+      (t.projectName &&
+        t.projectName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (t.assignedToName &&
+        t.assignedToName.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchStatus = statusFilter === 'all' || t.status === statusFilter;
-    const matchPriority = priorityFilter === 'all' || t.priority === priorityFilter;
+    const matchPriority =
+      priorityFilter === 'all' || t.priority === priorityFilter;
     const matchScoped = !scopedProjectId || t.projectId === scopedProjectId;
-    const matchProject = projectFilter === 'all' || t.projectId === projectFilter;
+    const matchProject =
+      projectFilter === 'all' || t.projectId === projectFilter;
 
     // Quick-filter chip — layered on top of the dropdown filters. Each chip
     // is a one-of (no multi-select) to keep the mental model simple.
@@ -393,410 +498,532 @@ export function TasksContent({ projectId: scopedProjectId }: { projectId?: strin
         break;
       case 'week':
         // Due in the next 7 days, not yet done.
-        matchQuick = !!t.dueDate && t.dueDate >= todayYMD && t.dueDate <= endOfWeekYMD && t.status !== 'done';
+        matchQuick =
+          !!t.dueDate &&
+          t.dueDate >= todayYMD &&
+          t.dueDate <= endOfWeekYMD &&
+          t.status !== 'done';
         break;
       case 'overdue':
         matchQuick = !!t.dueDate && t.dueDate < todayYMD && t.status !== 'done';
         break;
     }
 
-    return matchScoped && matchSearch && matchStatus && matchPriority && matchProject && matchQuick;
+    return (
+      matchScoped &&
+      matchSearch &&
+      matchStatus &&
+      matchPriority &&
+      matchProject &&
+      matchQuick
+    );
   });
 
-  const tasksByStatus = (status: TaskStatus) => filteredTasks.filter(t => t.status === status);
-  const tasksByCategory = (cat: TaskCategory) => filteredTasks.filter(t => (t.category || 'uncategorized') === cat);
+  const tasksByStatus = (status: TaskStatus) =>
+    filteredTasks.filter((t) => t.status === status);
+  const tasksByCategory = (cat: TaskCategory) =>
+    filteredTasks.filter((t) => (t.category || 'uncategorized') === cat);
 
   return (
-      <div className="space-y-6">
-        {/* Header — stacks on mobile so the view-mode toggle and 'Add Task'
+    <div className="space-y-6">
+      {/* Header — stacks on mobile so the view-mode toggle and 'Add Task'
             CTA never push each other off-screen at 390px. */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0">
-            <CheckSquare className="h-6 w-6 flex-shrink-0" />
-            <h1 className="text-2xl font-bold">Tasks</h1>
-            <Badge variant="secondary" className="text-sm">{filteredTasks.length}</Badge>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            {/* View-mode segmented toggle. min-h-[44px] on the shared border
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <CheckSquare className="h-6 w-6 flex-shrink-0" />
+          <h1 className="text-2xl font-bold">Tasks</h1>
+          <Badge variant="secondary" className="text-sm">
+            {filteredTasks.length}
+          </Badge>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* View-mode segmented toggle. min-h-[44px] on the shared border
                 container gives each segment a full touch target while the
                 inner buttons keep their tight visual spacing. */}
-            <div className="inline-flex rounded-md border border-gray-200 overflow-hidden min-h-[44px]">
-              <button
-                type="button"
-                onClick={() => setViewMode('kanban')}
-                className={`px-3 min-w-[64px] text-xs font-medium ${viewMode === 'kanban' ? 'bg-gray-900 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
-                title="By status"
-              >
-                Status
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode('kanban_category')}
-                className={`px-3 min-w-[64px] text-xs font-medium border-l border-gray-200 ${viewMode === 'kanban_category' ? 'bg-gray-900 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
-                title="By category"
-              >
-                Category
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode('list')}
-                className={`px-3 min-w-[64px] text-xs font-medium border-l border-gray-200 ${viewMode === 'list' ? 'bg-gray-900 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
-                title="List"
-              >
-                List
-              </button>
-            </div>
-            <Button
-              onClick={openAddDialog}
-              className="text-white"
-              style={{ backgroundColor: '#C9A96E', borderColor: '#C9A96E' }}
+          <div className="inline-flex rounded-md border border-gray-200 overflow-hidden min-h-[44px]">
+            <button
+              type="button"
+              onClick={() => setViewMode('kanban')}
+              className={`px-3 min-w-[64px] text-xs font-medium ${viewMode === 'kanban' ? 'bg-gray-900 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+              title="By status"
             >
-              <Plus className="h-4 w-4 mr-2" />
-              Add Task
-            </Button>
+              Status
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('kanban_category')}
+              className={`px-3 min-w-[64px] text-xs font-medium border-l border-gray-200 ${viewMode === 'kanban_category' ? 'bg-gray-900 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+              title="By category"
+            >
+              Category
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('list')}
+              className={`px-3 min-w-[64px] text-xs font-medium border-l border-gray-200 ${viewMode === 'list' ? 'bg-gray-900 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+              title="List"
+            >
+              List
+            </button>
           </div>
+          <Button
+            onClick={openAddDialog}
+            className="text-white"
+            style={{ backgroundColor: '#C9A96E', borderColor: '#C9A96E' }}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Add Task
+          </Button>
         </div>
+      </div>
 
-        {/* Filter Bar */}
-        <div className="flex flex-col sm:flex-row gap-3">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <Input
-              placeholder="Search tasks..."
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              className="pl-10"
-            />
-          </div>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-36">
-              <SelectValue placeholder="Status" />
+      {/* Filter Bar */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <Input
+            placeholder="Search tasks..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-36">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Statuses</SelectItem>
+            <SelectItem value="todo">To Do</SelectItem>
+            <SelectItem value="in_progress">In Progress</SelectItem>
+            <SelectItem value="awaiting_signoff">Awaiting sign-off</SelectItem>
+            <SelectItem value="done">Done</SelectItem>
+            <SelectItem value="blocked">Blocked</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={priorityFilter} onValueChange={setPriorityFilter}>
+          <SelectTrigger className="w-36">
+            <SelectValue placeholder="Priority" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Priorities</SelectItem>
+            <SelectItem value="low">Low</SelectItem>
+            <SelectItem value="medium">Medium</SelectItem>
+            <SelectItem value="high">High</SelectItem>
+            <SelectItem value="urgent">Urgent</SelectItem>
+          </SelectContent>
+        </Select>
+        {!scopedProjectId && (
+          <Select value={projectFilter} onValueChange={setProjectFilter}>
+            <SelectTrigger className="w-40">
+              <SelectValue placeholder="Project" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Statuses</SelectItem>
-              <SelectItem value="todo">To Do</SelectItem>
-              <SelectItem value="in_progress">In Progress</SelectItem>
-              <SelectItem value="awaiting_signoff">Awaiting sign-off</SelectItem>
-              <SelectItem value="done">Done</SelectItem>
-              <SelectItem value="blocked">Blocked</SelectItem>
+              <SelectItem value="all">All Projects</SelectItem>
+              {projects.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
-          <Select value={priorityFilter} onValueChange={setPriorityFilter}>
-            <SelectTrigger className="w-36">
-              <SelectValue placeholder="Priority" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Priorities</SelectItem>
-              <SelectItem value="low">Low</SelectItem>
-              <SelectItem value="medium">Medium</SelectItem>
-              <SelectItem value="high">High</SelectItem>
-              <SelectItem value="urgent">Urgent</SelectItem>
-            </SelectContent>
-          </Select>
-          {!scopedProjectId && (
-            <Select value={projectFilter} onValueChange={setProjectFilter}>
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="Project" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Projects</SelectItem>
-                {projects.map(p => (
-                  <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-        </div>
+        )}
+      </div>
 
-        {/* Quick-filter chip row — one-of selection so the mental model
+      {/* Quick-filter chip row — one-of selection so the mental model
             stays simple. Tapping the active chip clears it back to 'none'. */}
-        <div className="flex flex-wrap gap-2 -mt-2">
-          {(
-            [
-              { key: 'mine',       label: 'Assigned to me' },
-              { key: 'by_me',      label: 'Created by me' },
-              { key: 'unassigned', label: 'Unassigned' },
-              { key: 'week',       label: 'Due this week' },
-              { key: 'overdue',    label: 'Overdue' },
-            ] as { key: QuickFilter; label: string }[]
-          ).map(chip => {
-            const active = quickFilter === chip.key;
+      <div className="flex flex-wrap gap-2 -mt-2">
+        {(
+          [
+            { key: 'mine', label: 'Assigned to me' },
+            { key: 'by_me', label: 'Created by me' },
+            { key: 'unassigned', label: 'Unassigned' },
+            { key: 'week', label: 'Due this week' },
+            { key: 'overdue', label: 'Overdue' },
+          ] as { key: QuickFilter; label: string }[]
+        ).map((chip) => {
+          const active = quickFilter === chip.key;
+          return (
+            <button
+              key={chip.key}
+              type="button"
+              onClick={() => setQuickFilter(active ? 'none' : chip.key)}
+              className={`px-3 py-1 text-xs rounded-full border transition-colors ${
+                active
+                  ? 'bg-[#141414] text-white border-[#141414]'
+                  : 'bg-white text-gray-700 border-gray-200 hover:border-[#C9A96E] hover:text-[#141414]'
+              }`}
+            >
+              {chip.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Content */}
+      {isLoading ? (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {STATUS_COLUMNS.map((col) => (
+            <Card key={col.key}>
+              <CardHeader>
+                <CardTitle className="text-sm">{col.label}</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {[1, 2].map((i) => (
+                  <div
+                    key={i}
+                    className="h-20 bg-gray-100 rounded animate-pulse"
+                  />
+                ))}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : viewMode === 'kanban' ? (
+        /* Kanban by Status */
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+          {STATUS_COLUMNS.map((col) => {
+            const colTasks = tasksByStatus(col.key);
             return (
-              <button
-                key={chip.key}
-                type="button"
-                onClick={() => setQuickFilter(active ? 'none' : chip.key)}
-                className={`px-3 py-1 text-xs rounded-full border transition-colors ${
-                  active
-                    ? 'bg-[#141414] text-white border-[#141414]'
-                    : 'bg-white text-gray-700 border-gray-200 hover:border-[#C9A96E] hover:text-[#141414]'
-                }`}
-              >
-                {chip.label}
-              </button>
+              <div key={col.key} className="flex flex-col gap-2">
+                <div className="flex items-center justify-between px-1">
+                  <h3 className="font-semibold text-sm text-gray-700">
+                    {col.label}
+                  </h3>
+                  <Badge variant="secondary" className="text-xs">
+                    {colTasks.length}
+                  </Badge>
+                </div>
+                <div className="space-y-2 min-h-[200px]">
+                  {colTasks.length === 0 ? (
+                    <div className="h-20 border-2 border-dashed border-gray-200 rounded-lg flex items-center justify-center text-sm text-gray-400">
+                      No tasks
+                    </div>
+                  ) : (
+                    colTasks.map((task) => (
+                      <TaskCard
+                        key={task.id}
+                        task={task}
+                        onEdit={openEditDialog}
+                        onDelete={handleDelete}
+                        onStatusChange={handleStatusChange}
+                      />
+                    ))
+                  )}
+                </div>
+              </div>
             );
           })}
         </div>
-
-        {/* Content */}
-        {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            {STATUS_COLUMNS.map(col => (
-              <Card key={col.key}>
-                <CardHeader><CardTitle className="text-sm">{col.label}</CardTitle></CardHeader>
-                <CardContent className="space-y-2">
-                  {[1, 2].map(i => (
-                    <div key={i} className="h-20 bg-gray-100 rounded animate-pulse" />
-                  ))}
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        ) : viewMode === 'kanban' ? (
-          /* Kanban by Status */
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-            {STATUS_COLUMNS.map(col => {
-              const colTasks = tasksByStatus(col.key);
-              return (
-                <div key={col.key} className="flex flex-col gap-2">
-                  <div className="flex items-center justify-between px-1">
-                    <h3 className="font-semibold text-sm text-gray-700">{col.label}</h3>
-                    <Badge variant="secondary" className="text-xs">{colTasks.length}</Badge>
-                  </div>
-                  <div className="space-y-2 min-h-[200px]">
-                    {colTasks.length === 0 ? (
-                      <div className="h-20 border-2 border-dashed border-gray-200 rounded-lg flex items-center justify-center text-sm text-gray-400">
-                        No tasks
-                      </div>
-                    ) : (
-                      colTasks.map(task => (
-                        <TaskCard
-                          key={task.id}
-                          task={task}
-                          onEdit={openEditDialog}
-                          onDelete={handleDelete}
-                          onStatusChange={handleStatusChange}
-                        />
-                      ))
-                    )}
+      ) : viewMode === 'kanban_category' ? (
+        /* Kanban by Category (Jack-style) */
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+          {CATEGORY_ORDER.map((cat) => {
+            const colTasks = tasksByCategory(cat);
+            const color = CATEGORY_COLOR[cat];
+            return (
+              <div key={cat} className="flex flex-col gap-2">
+                <div className="flex flex-col gap-1 px-1">
+                  <div
+                    className="h-1 rounded"
+                    style={{ backgroundColor: color }}
+                  />
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold text-xs text-gray-700">
+                      {CATEGORY_LABEL[cat]}
+                    </h3>
+                    <Badge variant="secondary" className="text-[10px]">
+                      {colTasks.length}
+                    </Badge>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        ) : viewMode === 'kanban_category' ? (
-          /* Kanban by Category (Jack-style) */
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
-            {CATEGORY_ORDER.map(cat => {
-              const colTasks = tasksByCategory(cat);
-              const color = CATEGORY_COLOR[cat];
-              return (
-                <div key={cat} className="flex flex-col gap-2">
-                  <div className="flex flex-col gap-1 px-1">
-                    <div className="h-1 rounded" style={{ backgroundColor: color }} />
-                    <div className="flex items-center justify-between">
-                      <h3 className="font-semibold text-xs text-gray-700">{CATEGORY_LABEL[cat]}</h3>
-                      <Badge variant="secondary" className="text-[10px]">{colTasks.length}</Badge>
+                <div className="space-y-2 min-h-[150px]">
+                  {colTasks.length === 0 ? (
+                    <div className="h-16 border-2 border-dashed border-gray-200 rounded-md flex items-center justify-center text-[11px] text-gray-400">
+                      Empty
                     </div>
-                  </div>
-                  <div className="space-y-2 min-h-[150px]">
-                    {colTasks.length === 0 ? (
-                      <div className="h-16 border-2 border-dashed border-gray-200 rounded-md flex items-center justify-center text-[11px] text-gray-400">
-                        Empty
-                      </div>
-                    ) : (
-                      colTasks.map(task => (
-                        <TaskCard
-                          key={task.id}
-                          task={task}
-                          onEdit={openEditDialog}
-                          onDelete={handleDelete}
-                          onStatusChange={handleStatusChange}
-                        />
-                      ))
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          /* List View */
-          <div className="space-y-2">
-            {filteredTasks.length === 0 ? (
-              <Card>
-                <CardContent className="p-12 text-center">
-                  <CheckSquare className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium mb-2">No tasks found</h3>
-                  <p className="text-gray-600">Add a task or adjust your filters.</p>
-                </CardContent>
-              </Card>
-            ) : (
-              filteredTasks.map(task => (
-                <Card key={task.id} className="hover:shadow-sm transition-shadow">
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-medium truncate">{task.title}</span>
-                          <Badge className={`text-xs ${priorityBadgeClass(task.priority)}`}>{task.priority}</Badge>
-                          <Badge className={`text-xs ${statusBadgeClass(task.status)}`}>{TASK_STATUS_LABELS[task.status] || task.status.replace('_', ' ')}</Badge>
-                          {task.projectName && (
-                            <Badge variant="outline" className="text-xs">{task.projectName}</Badge>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-4 mt-1 text-sm text-gray-500">
-                          {task.assignedToName && (
-                            <span className="flex items-center gap-1">
-                              <User className="h-3 w-3" />
-                              {task.assignedToName}
-                            </span>
-                          )}
-                          {task.dueDate && (
-                            <span className="flex items-center gap-1">
-                              <Calendar className="h-3 w-3" />
-                              {task.dueDate}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <TaskActions task={task} onEdit={openEditDialog} onDelete={handleDelete} onStatusChange={handleStatusChange} />
-                    </div>
-                  </CardContent>
-                </Card>
-              ))
-            )}
-          </div>
-        )}
-
-        {/* Add/Edit Dialog */}
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogContent className="sm:max-w-lg">
-            <DialogHeader>
-              <DialogTitle>{editingTask ? 'Edit Task' : 'Add New Task'}</DialogTitle>
-              <DialogDescription>
-                {editingTask ? 'Update task details' : 'Create a new task'}
-              </DialogDescription>
-            </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <Label htmlFor="task-title">Title *</Label>
-                <Input
-                  id="task-title"
-                  value={formData.title}
-                  onChange={e => setFormData(prev => ({ ...prev, title: e.target.value }))}
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor="task-description">Description</Label>
-                <Textarea
-                  id="task-description"
-                  value={formData.description}
-                  onChange={e => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                  rows={3}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Project</Label>
-                  {scopedProjectId ? (
-                    <Input value={formData.projectName || 'This project'} disabled className="bg-gray-50" />
                   ) : (
-                    <Select value={formData.projectId || 'none'} onValueChange={v => handleProjectChange(v === 'none' ? '' : v)}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select project" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">No project</SelectItem>
-                        {projects.map(p => (
-                          <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    colTasks.map((task) => (
+                      <TaskCard
+                        key={task.id}
+                        task={task}
+                        onEdit={openEditDialog}
+                        onDelete={handleDelete}
+                        onStatusChange={handleStatusChange}
+                      />
+                    ))
                   )}
                 </div>
-                <div>
-                  <Label>Assignee</Label>
-                  <Select value={formData.assignedToId || 'none'} onValueChange={v => handleAssigneeChange(v === 'none' ? '' : v)}>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        /* List View */
+        <div className="space-y-2">
+          {filteredTasks.length === 0 ? (
+            <Card>
+              <CardContent className="p-12 text-center">
+                <CheckSquare className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium mb-2">No tasks found</h3>
+                <p className="text-gray-600">
+                  Add a task or adjust your filters.
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            filteredTasks.map((task) => (
+              <Card key={task.id} className="hover:shadow-sm transition-shadow">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-medium truncate">
+                          {task.title}
+                        </span>
+                        <Badge
+                          className={`text-xs ${priorityBadgeClass(task.priority)}`}
+                        >
+                          {task.priority}
+                        </Badge>
+                        <Badge
+                          className={`text-xs ${statusBadgeClass(task.status)}`}
+                        >
+                          {TASK_STATUS_LABELS[task.status] ||
+                            task.status.replace('_', ' ')}
+                        </Badge>
+                        {task.projectName && (
+                          <Badge variant="outline" className="text-xs">
+                            {task.projectName}
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-4 mt-1 text-sm text-gray-500">
+                        {task.assignedToName && (
+                          <span className="flex items-center gap-1">
+                            <User className="h-3 w-3" />
+                            {task.assignedToName}
+                          </span>
+                        )}
+                        {task.dueDate && (
+                          <span className="flex items-center gap-1">
+                            <Calendar className="h-3 w-3" />
+                            {task.dueDate}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <TaskActions
+                      task={task}
+                      onEdit={openEditDialog}
+                      onDelete={handleDelete}
+                      onStatusChange={handleStatusChange}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            ))
+          )}
+        </div>
+      )}
+
+      {/* Add/Edit Dialog */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {editingTask ? 'Edit Task' : 'Add New Task'}
+            </DialogTitle>
+            <DialogDescription>
+              {editingTask ? 'Update task details' : 'Create a new task'}
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <Label htmlFor="task-title">Title *</Label>
+              <Input
+                id="task-title"
+                value={formData.title}
+                onChange={(e) =>
+                  setFormData((prev) => ({ ...prev, title: e.target.value }))
+                }
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor="task-description">Description</Label>
+              <Textarea
+                id="task-description"
+                value={formData.description}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    description: e.target.value,
+                  }))
+                }
+                rows={3}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Project</Label>
+                {scopedProjectId ? (
+                  <Input
+                    value={formData.projectName || 'This project'}
+                    disabled
+                    className="bg-gray-50"
+                  />
+                ) : (
+                  <Select
+                    value={formData.projectId || 'none'}
+                    onValueChange={(v) =>
+                      handleProjectChange(v === 'none' ? '' : v)
+                    }
+                  >
                     <SelectTrigger>
-                      <SelectValue placeholder="Select assignee" />
+                      <SelectValue placeholder="Select project" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">Unassigned</SelectItem>
-                      {users.map(u => (
-                        <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                      <SelectItem value="none">No project</SelectItem>
+                      {projects.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.name}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Status</Label>
-                  <Select value={formData.status} onValueChange={v => setFormData(prev => ({ ...prev, status: v as TaskStatus }))}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="todo">To Do</SelectItem>
-                      <SelectItem value="in_progress">In Progress</SelectItem>
-                      <SelectItem value="awaiting_signoff">Awaiting sign-off</SelectItem>
-                      <SelectItem value="done">Done</SelectItem>
-                      <SelectItem value="blocked">Blocked</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Priority</Label>
-                  <Select value={formData.priority} onValueChange={v => setFormData(prev => ({ ...prev, priority: v as TaskPriority }))}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="low">Low</SelectItem>
-                      <SelectItem value="medium">Medium</SelectItem>
-                      <SelectItem value="high">High</SelectItem>
-                      <SelectItem value="urgent">Urgent</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                )}
               </div>
               <div>
-                <Label>Category</Label>
-                <Select value={formData.category || 'uncategorized'} onValueChange={v => setFormData(prev => ({ ...prev, category: v as TaskCategory }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                <Label>Assignee</Label>
+                <Select
+                  value={formData.assignedToId || 'none'}
+                  onValueChange={(v) =>
+                    handleAssigneeChange(v === 'none' ? '' : v)
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select assignee" />
+                  </SelectTrigger>
                   <SelectContent>
-                    {CATEGORY_ORDER.map(cat => (
-                      <SelectItem key={cat} value={cat}>{CATEGORY_LABEL[cat]}</SelectItem>
+                    <SelectItem value="none">Unassigned</SelectItem>
+                    {users.map((u) => (
+                      <SelectItem key={u.id} value={u.id}>
+                        {u.name}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="task-due">Due Date</Label>
-                <Input
-                  id="task-due"
-                  type="date"
-                  value={formData.dueDate}
-                  onChange={e => setFormData(prev => ({ ...prev, dueDate: e.target.value }))}
-                />
-              </div>
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-                <Button
-                  type="submit"
-                  disabled={isSaving}
-                  className="text-white"
-                  style={{ backgroundColor: '#C9A96E', borderColor: '#C9A96E' }}
+                <Label>Status</Label>
+                <Select
+                  value={formData.status}
+                  onValueChange={(v) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      status: v as TaskStatus,
+                    }))
+                  }
                 >
-                  {isSaving ? 'Saving...' : (editingTask ? 'Update Task' : 'Create Task')}
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
-      </div>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todo">To Do</SelectItem>
+                    <SelectItem value="in_progress">In Progress</SelectItem>
+                    <SelectItem value="awaiting_signoff">
+                      Awaiting sign-off
+                    </SelectItem>
+                    <SelectItem value="done">Done</SelectItem>
+                    <SelectItem value="blocked">Blocked</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Priority</Label>
+                <Select
+                  value={formData.priority}
+                  onValueChange={(v) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      priority: v as TaskPriority,
+                    }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="low">Low</SelectItem>
+                    <SelectItem value="medium">Medium</SelectItem>
+                    <SelectItem value="high">High</SelectItem>
+                    <SelectItem value="urgent">Urgent</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div>
+              <Label>Category</Label>
+              <Select
+                value={formData.category || 'uncategorized'}
+                onValueChange={(v) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    category: v as TaskCategory,
+                  }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CATEGORY_ORDER.map((cat) => (
+                    <SelectItem key={cat} value={cat}>
+                      {CATEGORY_LABEL[cat]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="task-due">Due Date</Label>
+              <Input
+                id="task-due"
+                type="date"
+                value={formData.dueDate}
+                onChange={(e) =>
+                  setFormData((prev) => ({ ...prev, dueDate: e.target.value }))
+                }
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={isSaving}
+                className="text-white"
+                style={{ backgroundColor: '#C9A96E', borderColor: '#C9A96E' }}
+              >
+                {isSaving
+                  ? 'Saving...'
+                  : editingTask
+                    ? 'Update Task'
+                    : 'Create Task'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }
 
@@ -805,7 +1032,7 @@ function TaskCard({
   task,
   onEdit,
   onDelete,
-  onStatusChange
+  onStatusChange,
 }: {
   task: Task;
   onEdit: (t: Task) => void;
@@ -819,16 +1046,27 @@ function TaskCard({
     >
       <CardContent className="p-3 space-y-2">
         <div className="flex items-start justify-between gap-1">
-          <p className="font-medium text-sm leading-tight flex-1">{task.title}</p>
-          <div onClick={e => e.stopPropagation()}>
-            <TaskActions task={task} onEdit={onEdit} onDelete={onDelete} onStatusChange={onStatusChange} />
+          <p className="font-medium text-sm leading-tight flex-1">
+            {task.title}
+          </p>
+          <div onClick={(e) => e.stopPropagation()}>
+            <TaskActions
+              task={task}
+              onEdit={onEdit}
+              onDelete={onDelete}
+              onStatusChange={onStatusChange}
+            />
           </div>
         </div>
         {task.projectName && (
-          <Badge variant="outline" className="text-xs">{task.projectName}</Badge>
+          <Badge variant="outline" className="text-xs">
+            {task.projectName}
+          </Badge>
         )}
         <div className="flex items-center justify-between">
-          <Badge className={`text-xs ${priorityBadgeClass(task.priority)}`}>{task.priority}</Badge>
+          <Badge className={`text-xs ${priorityBadgeClass(task.priority)}`}>
+            {task.priority}
+          </Badge>
           {task.assignedToName && (
             <div className="h-6 w-6 rounded-full bg-gray-300 flex items-center justify-center text-xs font-semibold text-gray-700">
               {getInitials(task.assignedToName)}
@@ -842,8 +1080,12 @@ function TaskCard({
           </div>
         )}
         {task.status === 'awaiting_signoff' && (
-          <div onClick={e => e.stopPropagation()} className="pt-1">
-            <SignoffActions taskId={task.id} taskName={task.title} projectId={task.projectId} />
+          <div onClick={(e) => e.stopPropagation()} className="pt-1">
+            <SignoffActions
+              taskId={task.id}
+              taskName={task.title}
+              projectId={task.projectId}
+            />
           </div>
         )}
       </CardContent>
@@ -856,7 +1098,7 @@ function TaskActions({
   task,
   onEdit,
   onDelete,
-  onStatusChange
+  onStatusChange,
 }: {
   task: Task;
   onEdit: (t: Task) => void;
@@ -875,10 +1117,14 @@ function TaskActions({
           <Edit className="h-4 w-4 mr-2" />
           Edit
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => onStatusChange(task.id, 'in_progress')}>
+        <DropdownMenuItem
+          onClick={() => onStatusChange(task.id, 'in_progress')}
+        >
           Mark In Progress
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => onStatusChange(task.id, 'awaiting_signoff')}>
+        <DropdownMenuItem
+          onClick={() => onStatusChange(task.id, 'awaiting_signoff')}
+        >
           Mark Ready for Review
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => onStatusChange(task.id, 'done')}>

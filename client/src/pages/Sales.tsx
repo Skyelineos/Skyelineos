@@ -1,8 +1,19 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import {
-  collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot,
-  serverTimestamp, query, orderBy, getDoc, getDocs, setDoc, writeBatch,
+  collection,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  doc,
+  onSnapshot,
+  serverTimestamp,
+  query,
+  orderBy,
+  getDoc,
+  getDocs,
+  setDoc,
+  writeBatch,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { AppLayout } from '@/components/layout/AppLayout';
@@ -13,29 +24,80 @@ import { AddressSearchInput } from '@/components/common/AddressSearchInput';
 import { MapPinPicker } from '@/components/common/MapPinPicker';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { useConfirm } from '@/hooks/use-confirm';
 import { useAuth } from '@/auth/AuthContext';
 import { VcardImportZone } from '@/components/sales/VcardImportZone';
-import { findDuplicateContacts, computeMergeUpdates, type DuplicateMatch } from '@/lib/contacts/duplicateDetection';
-import { DuplicateContactDialog, type DuplicateResolution } from '@/components/contacts/DuplicateContactDialog';
 import {
-  Plus, Search, MoreVertical, Filter, X, ChevronUp, ChevronDown,
-  ExternalLink, FolderOpen, List, LayoutGrid, Settings2, Trash2,
-  ArrowRight, Edit2, User, MapPin, MessageSquare,
+  findDuplicateContacts,
+  computeMergeUpdates,
+  type DuplicateMatch,
+} from '@/lib/contacts/duplicateDetection';
+import {
+  DuplicateContactDialog,
+  type DuplicateResolution,
+} from '@/components/contacts/DuplicateContactDialog';
+import {
+  Plus,
+  Search,
+  MoreVertical,
+  Filter,
+  X,
+  ChevronUp,
+  ChevronDown,
+  ExternalLink,
+  FolderOpen,
+  List,
+  LayoutGrid,
+  Settings2,
+  Trash2,
+  ArrowRight,
+  Edit2,
+  User,
+  MapPin,
+  MessageSquare,
 } from 'lucide-react';
 import { CommunicationDrawer } from '@/components/communications/CommunicationDrawer';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type ProjectType = 'custom_home' | 'remodel' | 'addition' | 'spec' | 'commercial' | 'other';
-type LeadSource  =
-  | 'website' | 'event' | 'ad_campaign' | 'referral'
-  | 'instagram' | 'parade_of_homes' | 'email' | 'phone' | 'other';
+type ProjectType =
+  | 'custom_home'
+  | 'remodel'
+  | 'addition'
+  | 'spec'
+  | 'commercial'
+  | 'other';
+type LeadSource =
+  | 'website'
+  | 'event'
+  | 'ad_campaign'
+  | 'referral'
+  | 'instagram'
+  | 'parade_of_homes'
+  | 'email'
+  | 'phone'
+  | 'other';
 
-interface StageConfig { key: string; label: string; color: string; }
+interface StageConfig {
+  key: string;
+  label: string;
+  color: string;
+}
 
 interface Client {
   id: string;
@@ -81,27 +143,31 @@ interface Client {
   updatedAt?: any;
 }
 
-interface TeamMember { id: string; name: string; email: string; }
+interface TeamMember {
+  id: string;
+  name: string;
+  email: string;
+}
 
 // ─── Default stages (matching Jack's pipeline) ───────────────────────────────
 
 const DEFAULT_STAGES: StageConfig[] = [
-  { key: 'new_lead',        label: 'New Lead',         color: '#64748b' },
-  { key: 'meeting_booked',  label: 'Meeting Booked',   color: '#3b82f6' },
-  { key: 'design_phase',    label: 'Design Phase',     color: '#8b5cf6' },
-  { key: 'in_estimating',   label: 'In Estimating',    color: '#f59e0b' },
-  { key: 'close_to_sign',   label: 'Close to Signing', color: '#C9A96E' },
-  { key: 'won',             label: 'Won',              color: '#22c55e' },
-  { key: 'lost',            label: 'Lost',             color: '#ef4444' },
+  { key: 'new_lead', label: 'New Lead', color: '#64748b' },
+  { key: 'meeting_booked', label: 'Meeting Booked', color: '#3b82f6' },
+  { key: 'design_phase', label: 'Design Phase', color: '#8b5cf6' },
+  { key: 'in_estimating', label: 'In Estimating', color: '#f59e0b' },
+  { key: 'close_to_sign', label: 'Close to Signing', color: '#C9A96E' },
+  { key: 'won', label: 'Won', color: '#22c55e' },
+  { key: 'lost', label: 'Lost', color: '#ef4444' },
 ];
 
 const PROJECT_TYPES: { value: ProjectType; label: string }[] = [
   { value: 'custom_home', label: 'Custom Home' },
-  { value: 'remodel',     label: 'Remodel'     },
-  { value: 'addition',    label: 'Addition'    },
-  { value: 'spec',        label: 'Spec Build'  },
-  { value: 'commercial',  label: 'Commercial'  },
-  { value: 'other',       label: 'Other'       },
+  { value: 'remodel', label: 'Remodel' },
+  { value: 'addition', label: 'Addition' },
+  { value: 'spec', label: 'Spec Build' },
+  { value: 'commercial', label: 'Commercial' },
+  { value: 'other', label: 'Other' },
 ];
 
 // Lead-gen avenues. Keep in sync with SOURCE_LABELS in
@@ -109,72 +175,110 @@ const PROJECT_TYPES: { value: ProjectType; label: string }[] = [
 // functions/src/leads/intakeRoute.ts. `event` and `ad_campaign` pair with the
 // "Source detail" field below so each specific open house / campaign is labeled.
 const LEAD_SOURCES: { value: LeadSource; label: string }[] = [
-  { value: 'website',         label: 'Website'           },
-  { value: 'event',           label: 'Event / Open House' },
-  { value: 'ad_campaign',     label: 'Ad Campaign'       },
-  { value: 'referral',        label: 'Referral'          },
-  { value: 'instagram',       label: 'Instagram / Social' },
-  { value: 'parade_of_homes', label: 'Parade of Homes'   },
-  { value: 'email',           label: 'Email'             },
-  { value: 'phone',           label: 'Phone / Walk-in'   },
-  { value: 'other',           label: 'Other'             },
+  { value: 'website', label: 'Website' },
+  { value: 'event', label: 'Event / Open House' },
+  { value: 'ad_campaign', label: 'Ad Campaign' },
+  { value: 'referral', label: 'Referral' },
+  { value: 'instagram', label: 'Instagram / Social' },
+  { value: 'parade_of_homes', label: 'Parade of Homes' },
+  { value: 'email', label: 'Email' },
+  { value: 'phone', label: 'Phone / Walk-in' },
+  { value: 'other', label: 'Other' },
 ];
 
 // Sources where naming the specific event/campaign matters for ROI tracking.
-const SOURCES_WITH_DETAIL = new Set<LeadSource>(['event', 'ad_campaign', 'parade_of_homes', 'referral']);
+const SOURCES_WITH_DETAIL = new Set<LeadSource>([
+  'event',
+  'ad_campaign',
+  'parade_of_homes',
+  'referral',
+]);
 
 const COLOR_OPTIONS = [
-  '#64748b','#3b82f6','#f59e0b','#8b5cf6','#10b981',
-  '#C9A96E','#22c55e','#ef4444','#ec4899','#06b6d4',
-  '#f97316','#84cc16','#6366f1','#14b8a6','#a855f7',
+  '#64748b',
+  '#3b82f6',
+  '#f59e0b',
+  '#8b5cf6',
+  '#10b981',
+  '#C9A96E',
+  '#22c55e',
+  '#ef4444',
+  '#ec4899',
+  '#06b6d4',
+  '#f97316',
+  '#84cc16',
+  '#6366f1',
+  '#14b8a6',
+  '#a855f7',
 ];
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function stageConfig(key: string, stages: StageConfig[]) {
-  return stages.find(s => s.key === key) ?? { key, label: key, color: '#64748b' };
-}
-
-function fmtBudget(n?: number | null) {
-  if (!n) return null;
-  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1)}M`;
-  if (n >= 1_000)     return `$${(n / 1_000).toFixed(0)}K`;
-  return `$${n}`;
+  return (
+    stages.find((s) => s.key === key) ?? { key, label: key, color: '#64748b' }
+  );
 }
 
 function fmtFull(n?: number | null) {
   if (!n) return '$0';
-  return n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+  return n.toLocaleString('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0,
+  });
 }
 
 function generateKey(label: string) {
-  return label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || `s_${Date.now()}`;
+  return (
+    label
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_|_$/g, '') || `s_${Date.now()}`
+  );
 }
 
 // ─── Edit Stages Modal ───────────────────────────────────────────────────────
 
-function EditStagesModal({ open, onClose, stages, onSave }: {
-  open: boolean; onClose: () => void;
-  stages: StageConfig[]; onSave: (s: StageConfig[]) => Promise<void>;
+function EditStagesModal({
+  open,
+  onClose,
+  stages,
+  onSave,
+}: {
+  open: boolean;
+  onClose: () => void;
+  stages: StageConfig[];
+  onSave: (s: StageConfig[]) => Promise<void>;
 }) {
   const { toast } = useToast();
   const [draft, setDraft] = useState<StageConfig[]>([]);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => { if (open) setDraft(stages.map(s => ({ ...s }))); }, [open, stages]);
+  useEffect(() => {
+    if (open) setDraft(stages.map((s) => ({ ...s })));
+  }, [open, stages]);
 
   const update = (i: number, k: keyof StageConfig, v: string) =>
-    setDraft(d => d.map((s, idx) => idx === i ? { ...s, [k]: v } : s));
+    setDraft((d) => d.map((s, idx) => (idx === i ? { ...s, [k]: v } : s)));
 
-  const swap = (i: number, j: number) => setDraft(d => {
-    const n = [...d]; [n[i], n[j]] = [n[j], n[i]]; return n;
-  });
+  const swap = (i: number, j: number) =>
+    setDraft((d) => {
+      const n = [...d];
+      [n[i], n[j]] = [n[j], n[i]];
+      return n;
+    });
 
   const handleSave = async () => {
     setSaving(true);
-    try { await onSave(draft.filter(s => s.label.trim())); onClose(); }
-    catch (e: any) { toast({ title: 'Error', description: e.message, variant: 'destructive' }); }
-    finally { setSaving(false); }
+    try {
+      await onSave(draft.filter((s) => s.label.trim()));
+      onClose();
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -182,50 +286,101 @@ function EditStagesModal({ open, onClose, stages, onSave }: {
       <DialogContent className="max-w-lg max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Edit Pipeline Stages</DialogTitle>
-          <p className="text-sm text-gray-500">Rename, reorder, add or remove stages.</p>
+          <p className="text-sm text-gray-500">
+            Rename, reorder, add or remove stages.
+          </p>
         </DialogHeader>
         <div className="flex-1 overflow-y-auto space-y-2 py-2">
           {draft.map((stage, i) => (
-            <div key={stage.key} className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
+            <div
+              key={stage.key}
+              className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2"
+            >
               <div className="relative flex-shrink-0">
-                <div className="w-6 h-6 rounded-full cursor-pointer border-2 border-white shadow-sm"
+                <div
+                  className="w-6 h-6 rounded-full cursor-pointer border-2 border-white shadow-sm"
                   style={{ backgroundColor: stage.color }}
-                  onClick={e => (e.currentTarget.nextElementSibling as HTMLInputElement)?.click()} />
-                <input type="color" className="absolute opacity-0 w-0 h-0" value={stage.color}
-                  onChange={e => update(i, 'color', e.target.value)} />
+                  onClick={(e) =>
+                    (
+                      e.currentTarget.nextElementSibling as HTMLInputElement
+                    )?.click()
+                  }
+                />
+                <input
+                  type="color"
+                  className="absolute opacity-0 w-0 h-0"
+                  value={stage.color}
+                  onChange={(e) => update(i, 'color', e.target.value)}
+                />
               </div>
-              <Input className="h-8 text-sm flex-1" value={stage.label}
-                onChange={e => update(i, 'label', e.target.value)} />
+              <Input
+                className="h-8 text-sm flex-1"
+                value={stage.label}
+                onChange={(e) => update(i, 'label', e.target.value)}
+              />
               <div className="flex flex-col gap-0.5">
-                <button onClick={() => swap(i, i - 1)} disabled={i === 0}
-                  className="p-0.5 rounded text-gray-400 hover:text-gray-700 disabled:opacity-20">
+                <button
+                  onClick={() => swap(i, i - 1)}
+                  disabled={i === 0}
+                  className="p-0.5 rounded text-gray-400 hover:text-gray-700 disabled:opacity-20"
+                >
                   <ChevronUp className="h-3.5 w-3.5" />
                 </button>
-                <button onClick={() => swap(i, i + 1)} disabled={i === draft.length - 1}
-                  className="p-0.5 rounded text-gray-400 hover:text-gray-700 disabled:opacity-20">
+                <button
+                  onClick={() => swap(i, i + 1)}
+                  disabled={i === draft.length - 1}
+                  className="p-0.5 rounded text-gray-400 hover:text-gray-700 disabled:opacity-20"
+                >
                   <ChevronDown className="h-3.5 w-3.5" />
                 </button>
               </div>
-              <button onClick={() => draft.length > 1 && setDraft(d => d.filter((_, j) => j !== i))}
+              <button
+                onClick={() =>
+                  draft.length > 1 &&
+                  setDraft((d) => d.filter((_, j) => j !== i))
+                }
                 disabled={draft.length <= 1}
-                className="p-1 rounded text-gray-400 hover:text-red-500 disabled:opacity-20">
+                className="p-1 rounded text-gray-400 hover:text-red-500 disabled:opacity-20"
+              >
                 <X className="h-4 w-4" />
               </button>
             </div>
           ))}
         </div>
         <div className="pt-2 border-t flex flex-wrap gap-1.5 mb-3">
-          {COLOR_OPTIONS.map(c => (
-            <div key={c} className="w-5 h-5 rounded-full cursor-pointer border border-white shadow-sm hover:scale-110 transition-transform"
-              style={{ backgroundColor: c }} />
+          {COLOR_OPTIONS.map((c) => (
+            <div
+              key={c}
+              className="w-5 h-5 rounded-full cursor-pointer border border-white shadow-sm hover:scale-110 transition-transform"
+              style={{ backgroundColor: c }}
+            />
           ))}
         </div>
         <DialogFooter>
-          <Button variant="outline" size="sm" onClick={() => setDraft(d => [...d, { key: generateKey('New Stage') + '_' + Date.now(), label: 'New Stage', color: '#64748b' }])}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              setDraft((d) => [
+                ...d,
+                {
+                  key: generateKey('New Stage') + '_' + Date.now(),
+                  label: 'New Stage',
+                  color: '#64748b',
+                },
+              ])
+            }
+          >
             <Plus className="h-4 w-4 mr-1" /> Add Stage
           </Button>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button style={{ backgroundColor: '#C9A96E', color: '#141414' }} onClick={handleSave} disabled={saving}>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            style={{ backgroundColor: '#C9A96E', color: '#141414' }}
+            onClick={handleSave}
+            disabled={saving}
+          >
             {saving ? 'Saving…' : 'Save'}
           </Button>
         </DialogFooter>
@@ -236,62 +391,118 @@ function EditStagesModal({ open, onClose, stages, onSave }: {
 
 // ─── Link Project Dialog ─────────────────────────────────────────────────────
 
-function LinkProjectDialog({ client, open, onClose, onLinked }: {
-  client: Client; open: boolean; onClose: () => void;
+function LinkProjectDialog({
+  client,
+  open,
+  onClose,
+  onLinked,
+}: {
+  client: Client;
+  open: boolean;
+  onClose: () => void;
   onLinked: (id: string) => void;
 }) {
   const { toast } = useToast();
-  const [projects, setProjects] = useState<{ id: string; name: string; address?: string }[]>([]);
+  const [projects, setProjects] = useState<
+    { id: string; name: string; address?: string }[]
+  >([]);
   const [search, setSearch] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!open) return;
-    return onSnapshot(query(collection(db, 'projects'), orderBy('name', 'asc')), snap =>
-      setProjects(snap.docs.map(d => ({ id: d.id, name: (d.data() as any).name, address: (d.data() as any).address })))
+    return onSnapshot(
+      query(collection(db, 'projects'), orderBy('name', 'asc')),
+      (snap) =>
+        setProjects(
+          snap.docs.map((d) => ({
+            id: d.id,
+            name: (d.data() as any).name,
+            address: (d.data() as any).address,
+          }))
+        )
     );
   }, [open]);
 
-  const filtered = projects.filter(p =>
-    !search || p.name.toLowerCase().includes(search.toLowerCase()) ||
-    (p.address || '').toLowerCase().includes(search.toLowerCase())
+  const filtered = projects.filter(
+    (p) =>
+      !search ||
+      p.name.toLowerCase().includes(search.toLowerCase()) ||
+      (p.address || '').toLowerCase().includes(search.toLowerCase())
   );
 
   const handleLink = async (pid: string) => {
     setSaving(true);
     try {
-      await updateDoc(doc(db, 'clients', client.id), { linkedJobId: pid, updatedAt: serverTimestamp() });
+      await updateDoc(doc(db, 'clients', client.id), {
+        linkedJobId: pid,
+        updatedAt: serverTimestamp(),
+      });
       toast({ title: 'Project linked' });
       onLinked(pid);
     } catch (e: any) {
       toast({ title: 'Error', description: e.message, variant: 'destructive' });
-    } finally { setSaving(false); }
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
-    <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        if (!v) onClose();
+      }}
+    >
       <DialogContent className="max-w-md">
-        <DialogHeader><DialogTitle>Link Project — {client.name}</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <DialogTitle>Link Project — {client.name}</DialogTitle>
+        </DialogHeader>
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <Input className="pl-9" placeholder="Search projects…" value={search} onChange={e => setSearch(e.target.value)} />
+          <Input
+            className="pl-9"
+            placeholder="Search projects…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
         </div>
         <div className="max-h-64 overflow-y-auto space-y-1.5">
-          {filtered.map(p => (
-            <button key={p.id} disabled={saving} onClick={() => handleLink(p.id)}
-              className="w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-lg border border-gray-200 hover:border-[#C9A96E] hover:bg-amber-50 transition-colors group">
+          {filtered.map((p) => (
+            <button
+              key={p.id}
+              disabled={saving}
+              onClick={() => handleLink(p.id)}
+              className="w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-lg border border-gray-200 hover:border-[#C9A96E] hover:bg-amber-50 transition-colors group"
+            >
               <FolderOpen className="w-4 h-4 text-gray-400 group-hover:text-[#C9A96E] flex-shrink-0" />
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-gray-900 truncate">{p.name}</p>
-                {p.address && <p className="text-xs text-gray-500 truncate">{p.address}</p>}
+                <p className="text-sm font-medium text-gray-900 truncate">
+                  {p.name}
+                </p>
+                {p.address && (
+                  <p className="text-xs text-gray-500 truncate">{p.address}</p>
+                )}
               </div>
-              {client.linkedJobId === p.id && <span className="text-xs text-green-600 font-medium">Current</span>}
+              {client.linkedJobId === p.id && (
+                <span className="text-xs text-green-600 font-medium">
+                  Current
+                </span>
+              )}
               <ExternalLink className="w-4 h-4 text-gray-300 group-hover:text-[#C9A96E] flex-shrink-0" />
             </button>
           ))}
-          {filtered.length === 0 && <p className="text-sm text-gray-400 text-center py-6">No projects found</p>}
+          {filtered.length === 0 && (
+            <p className="text-sm text-gray-400 text-center py-6">
+              No projects found
+            </p>
+          )}
         </div>
-        <DialogFooter><Button variant="outline" onClick={onClose}>Cancel</Button></DialogFooter>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -315,7 +526,15 @@ interface LeadPrefill {
   notes?: string;
 }
 
-function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSave }: {
+function LeadDialog({
+  open,
+  editing,
+  stages,
+  teamMembers,
+  prefill,
+  onClose,
+  onSave,
+}: {
   open: boolean;
   editing: Client | null;
   stages: StageConfig[];
@@ -333,19 +552,32 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
   const [showPin, setShowPin] = useState(false);
 
   const blank = {
-    firstName: '', lastName: '',
-    email: '', phone: '', company: '', jobAddress: '', city: '', state: '', zip: '',
-    latitude: null as number | null, longitude: null as number | null,
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    company: '',
+    jobAddress: '',
+    city: '',
+    state: '',
+    zip: '',
+    latitude: null as number | null,
+    longitude: null as number | null,
     // hasSpouse toggles the spouse fields. We keep the three spouse fields in
     // state regardless so toggling off-then-on doesn't wipe entered text;
     // the save handler only emits a spouse object when hasSpouse is true.
     hasSpouse: false,
-    spouseFirstName: '', spouseLastName: '', spouseEmail: '', spousePhone: '',
+    spouseFirstName: '',
+    spouseLastName: '',
+    spouseEmail: '',
+    spousePhone: '',
     stage: stages[0]?.key || 'new_lead',
     projectType: 'custom_home' as ProjectType,
     source: 'referral' as LeadSource,
     sourceDetail: '',
-    budget: '', squareFootage: '', notes: '',
+    budget: '',
+    squareFootage: '',
+    notes: '',
     priority: 'medium' as 'low' | 'medium' | 'high',
     assignedTo: user?.firebaseUid || '',
     assignedToName: user?.name || '',
@@ -372,7 +604,10 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
         // for older records that don't have the split pair yet.
         const fn = editing.firstName ?? '';
         const ln = editing.lastName ?? '';
-        const fallback = fn || ln ? { firstName: fn, lastName: ln } : splitName(editing.name || '');
+        const fallback =
+          fn || ln
+            ? { firstName: fn, lastName: ln }
+            : splitName(editing.name || '');
         setForm({
           firstName: fallback.firstName,
           lastName: fallback.lastName,
@@ -383,11 +618,26 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
           city: editing.city || '',
           state: editing.state || '',
           zip: editing.zip || '',
-          latitude: typeof editing.latitude === 'number' ? editing.latitude : null,
-          longitude: typeof editing.longitude === 'number' ? editing.longitude : null,
-          hasSpouse: !!(editing.spouse && (editing.spouse.name || editing.spouse.firstName)),
-          spouseFirstName: editing.spouse?.firstName || (editing.spouse?.name || '').trim().split(/\s+/)[0] || '',
-          spouseLastName: editing.spouse?.lastName || (editing.spouse?.name || '').trim().split(/\s+/).slice(1).join(' ') || '',
+          latitude:
+            typeof editing.latitude === 'number' ? editing.latitude : null,
+          longitude:
+            typeof editing.longitude === 'number' ? editing.longitude : null,
+          hasSpouse: !!(
+            editing.spouse &&
+            (editing.spouse.name || editing.spouse.firstName)
+          ),
+          spouseFirstName:
+            editing.spouse?.firstName ||
+            (editing.spouse?.name || '').trim().split(/\s+/)[0] ||
+            '',
+          spouseLastName:
+            editing.spouse?.lastName ||
+            (editing.spouse?.name || '')
+              .trim()
+              .split(/\s+/)
+              .slice(1)
+              .join(' ') ||
+            '',
           spouseEmail: editing.spouse?.email || '',
           spousePhone: editing.spouse?.phone || '',
           stage: editing.stage || stages[0]?.key || 'new_lead',
@@ -407,21 +657,25 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
         // mobile contact picker, or the Review Imported Leads wizard).
         setForm({
           ...blank,
-          firstName:   prefill.firstName   ?? blank.firstName,
-          lastName:    prefill.lastName    ?? blank.lastName,
-          email:       prefill.email       ?? blank.email,
-          phone:       prefill.phone       ?? blank.phone,
-          jobAddress:  prefill.jobAddress  ?? blank.jobAddress,
-          city:        prefill.city        ?? blank.city,
-          state:       prefill.state       ?? blank.state,
-          zip:         prefill.zip         ?? blank.zip,
-          hasSpouse:   !!prefill.spouseName,
-          spouseFirstName: (prefill.spouseName || '').trim().split(/\s+/)[0] || blank.spouseFirstName,
-          spouseLastName:  (prefill.spouseName || '').trim().split(/\s+/).slice(1).join(' ') || blank.spouseLastName,
+          firstName: prefill.firstName ?? blank.firstName,
+          lastName: prefill.lastName ?? blank.lastName,
+          email: prefill.email ?? blank.email,
+          phone: prefill.phone ?? blank.phone,
+          jobAddress: prefill.jobAddress ?? blank.jobAddress,
+          city: prefill.city ?? blank.city,
+          state: prefill.state ?? blank.state,
+          zip: prefill.zip ?? blank.zip,
+          hasSpouse: !!prefill.spouseName,
+          spouseFirstName:
+            (prefill.spouseName || '').trim().split(/\s+/)[0] ||
+            blank.spouseFirstName,
+          spouseLastName:
+            (prefill.spouseName || '').trim().split(/\s+/).slice(1).join(' ') ||
+            blank.spouseLastName,
           spouseEmail: prefill.spouseEmail ?? blank.spouseEmail,
           spousePhone: prefill.spousePhone ?? blank.spousePhone,
-          budget:      prefill.budget      ?? blank.budget,
-          notes:       prefill.notes       ?? blank.notes,
+          budget: prefill.budget ?? blank.budget,
+          notes: prefill.notes ?? blank.notes,
         });
       } else {
         setForm(blank);
@@ -436,15 +690,16 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
   // navigator.contacts is supported on Chrome Android (and some Edge mobile).
   // iOS Safari doesn't expose it yet (Apple hasn't shipped the API). When
   // unavailable, we hide the button — paste-as-text still works as fallback.
-  const contactPickerAvailable = typeof window !== 'undefined'
-    && 'contacts' in (navigator as any)
-    && typeof (navigator as any).contacts?.select === 'function';
+  const contactPickerAvailable =
+    typeof window !== 'undefined' &&
+    'contacts' in (navigator as any) &&
+    typeof (navigator as any).contacts?.select === 'function';
 
   const pickFromContacts = async () => {
     try {
       const result = await (navigator as any).contacts.select(
         ['name', 'email', 'tel'],
-        { multiple: false },
+        { multiple: false }
       );
       if (!result || result.length === 0) return;
       const c = result[0];
@@ -456,14 +711,22 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
       const tel = Array.isArray(c.tel) ? c.tel[0] : c.tel;
       if (email) set('email', email);
       if (tel) set('phone', tel);
-      toast({ title: 'Contact imported', description: fullName || 'Filled in from your contacts' });
+      toast({
+        title: 'Contact imported',
+        description: fullName || 'Filled in from your contacts',
+      });
     } catch (e: any) {
       // Permission denied or user cancelled — silent
-      if (e?.name !== 'AbortError') toast({ title: 'Contact picker unavailable', description: e?.message || 'Try entering manually', variant: 'destructive' });
+      if (e?.name !== 'AbortError')
+        toast({
+          title: 'Contact picker unavailable',
+          description: e?.message || 'Try entering manually',
+          variant: 'destructive',
+        });
     }
   };
 
-  const set = (k: string, v: any) => setForm(p => ({ ...p, [k]: v }));
+  const set = (k: string, v: any) => setForm((p) => ({ ...p, [k]: v }));
 
   const addTag = (tag: string) => {
     const t = tag.trim();
@@ -471,14 +734,24 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
     setTagInput('');
   };
 
-  const removeTag = (tag: string) => set('tags', form.tags.filter(t => t !== tag));
+  const removeTag = (tag: string) =>
+    set(
+      'tags',
+      form.tags.filter((t) => t !== tag)
+    );
 
   const handleSave = async () => {
     const fullName = `${form.firstName.trim()} ${form.lastName.trim()}`.trim();
-    if (!fullName) { toast({ title: 'First or last name is required', variant: 'destructive' }); return; }
+    if (!fullName) {
+      toast({
+        title: 'First or last name is required',
+        variant: 'destructive',
+      });
+      return;
+    }
     setSaving(true);
     try {
-      const assignedMember = teamMembers.find(m => m.id === form.assignedTo);
+      const assignedMember = teamMembers.find((m) => m.id === form.assignedTo);
       // Emit a spouse object only when the toggle is on AND there's a name.
       // Toggling off (or leaving the name blank) writes spouse: null so the
       // edit dialog reads cleanly on the next open.
@@ -498,7 +771,7 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
       const result = await onSave({
         name: fullName,
         firstName: form.firstName.trim() || null,
-        lastName:  form.lastName.trim()  || null,
+        lastName: form.lastName.trim() || null,
         email: form.email || null,
         phone: form.phone || null,
         company: form.company || null,
@@ -514,7 +787,9 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
         source: form.source,
         sourceDetail: form.sourceDetail.trim() || null,
         budget: form.budget ? parseFloat(form.budget) : null,
-        squareFootage: form.squareFootage ? parseFloat(form.squareFootage) : null,
+        squareFootage: form.squareFootage
+          ? parseFloat(form.squareFootage)
+          : null,
         notes: form.notes || null,
         priority: form.priority,
         assignedTo: form.assignedTo || null,
@@ -523,12 +798,23 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
       });
       if (result !== false) onClose();
     } catch (e: any) {
-      toast({ title: 'Error saving', description: e.message, variant: 'destructive' });
-    } finally { setSaving(false); }
+      toast({
+        title: 'Error saving',
+        description: e.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
-    <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        if (!v) onClose();
+      }}
+    >
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{editing ? 'Edit Lead' : 'Add New Lead'}</DialogTitle>
@@ -554,36 +840,73 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
           {/* Name — split into first/last */}
           <div>
             <Label>First Name *</Label>
-            <Input value={form.firstName} onChange={e => set('firstName', e.target.value)} placeholder="—" className="placeholder:text-gray-300" />
+            <Input
+              value={form.firstName}
+              onChange={(e) => set('firstName', e.target.value)}
+              placeholder="—"
+              className="placeholder:text-gray-300"
+            />
           </div>
           <div>
             <Label>Last Name *</Label>
-            <Input value={form.lastName} onChange={e => set('lastName', e.target.value)} placeholder="—" className="placeholder:text-gray-300" />
+            <Input
+              value={form.lastName}
+              onChange={(e) => set('lastName', e.target.value)}
+              placeholder="—"
+              className="placeholder:text-gray-300"
+            />
           </div>
 
           {/* Contact */}
           <div>
             <Label>Email</Label>
-            <Input type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="—" className="placeholder:text-gray-300" />
+            <Input
+              type="email"
+              value={form.email}
+              onChange={(e) => set('email', e.target.value)}
+              placeholder="—"
+              className="placeholder:text-gray-300"
+            />
           </div>
           <div>
             <Label>Phone</Label>
-            <Input value={form.phone} onChange={e => set('phone', e.target.value)} placeholder="—" className="placeholder:text-gray-300" />
+            <Input
+              value={form.phone}
+              onChange={(e) => set('phone', e.target.value)}
+              placeholder="—"
+              className="placeholder:text-gray-300"
+            />
           </div>
 
           {/* Company */}
           <div>
-            <Label>Company <span className="text-xs text-gray-400 font-normal">(optional)</span></Label>
-            <Input value={form.company} onChange={e => set('company', e.target.value)} placeholder="—" className="placeholder:text-gray-300" />
+            <Label>
+              Company{' '}
+              <span className="text-xs text-gray-400 font-normal">
+                (optional)
+              </span>
+            </Label>
+            <Input
+              value={form.company}
+              onChange={(e) => set('company', e.target.value)}
+              placeholder="—"
+              className="placeholder:text-gray-300"
+            />
           </div>
 
           {/* Source */}
           <div>
             <Label>Lead Source</Label>
-            <Select value={form.source} onValueChange={v => set('source', v)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+            <Select value={form.source} onValueChange={(v) => set('source', v)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
-                {LEAD_SOURCES.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+                {LEAD_SOURCES.map((s) => (
+                  <SelectItem key={s.value} value={s.value}>
+                    {s.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -593,17 +916,21 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
           {SOURCES_WITH_DETAIL.has(form.source) && (
             <div>
               <Label>
-                {form.source === 'ad_campaign' ? 'Campaign Name'
-                  : form.source === 'referral' ? 'Referred By'
-                  : 'Event Name'}
+                {form.source === 'ad_campaign'
+                  ? 'Campaign Name'
+                  : form.source === 'referral'
+                    ? 'Referred By'
+                    : 'Event Name'}
               </Label>
               <Input
                 value={form.sourceDetail}
-                onChange={e => set('sourceDetail', e.target.value)}
+                onChange={(e) => set('sourceDetail', e.target.value)}
                 placeholder={
-                  form.source === 'ad_campaign' ? 'e.g. Meta Spring Reno'
-                    : form.source === 'referral' ? 'e.g. Jane Smith'
-                    : 'e.g. Parade of Homes 2026'
+                  form.source === 'ad_campaign'
+                    ? 'e.g. Meta Spring Reno'
+                    : form.source === 'referral'
+                      ? 'e.g. Jane Smith'
+                      : 'e.g. Parade of Homes 2026'
                 }
                 className="placeholder:text-gray-300"
               />
@@ -615,7 +942,7 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
             <Label>Job Address</Label>
             <AddressSearchInput
               value={form.jobAddress}
-              onChange={v => set('jobAddress', v)}
+              onChange={(v) => set('jobAddress', v)}
               onSelect={(r) => {
                 set('jobAddress', r.address?.line1 || r.label);
                 if (r.address?.city) set('city', r.address.city);
@@ -631,15 +958,33 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
           <div className="sm:col-span-2 grid grid-cols-6 gap-3">
             <div className="col-span-3">
               <Label>City</Label>
-              <Input value={form.city} onChange={e => set('city', e.target.value)} placeholder="—" className="placeholder:text-gray-300" />
+              <Input
+                value={form.city}
+                onChange={(e) => set('city', e.target.value)}
+                placeholder="—"
+                className="placeholder:text-gray-300"
+              />
             </div>
             <div className="col-span-1">
               <Label>State</Label>
-              <Input value={form.state} onChange={e => set('state', e.target.value.toUpperCase().slice(0, 2))} placeholder="UT" maxLength={2} className="placeholder:text-gray-300" />
+              <Input
+                value={form.state}
+                onChange={(e) =>
+                  set('state', e.target.value.toUpperCase().slice(0, 2))
+                }
+                placeholder="UT"
+                maxLength={2}
+                className="placeholder:text-gray-300"
+              />
             </div>
             <div className="col-span-2">
               <Label>Zip</Label>
-              <Input value={form.zip} onChange={e => set('zip', e.target.value)} placeholder="—" className="placeholder:text-gray-300" />
+              <Input
+                value={form.zip}
+                onChange={(e) => set('zip', e.target.value)}
+                placeholder="—"
+                className="placeholder:text-gray-300"
+              />
             </div>
           </div>
 
@@ -649,22 +994,44 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
               conversion. */}
           <div className="sm:col-span-2">
             {!showPin && form.latitude == null ? (
-              <Button variant="outline" size="sm" onClick={() => setShowPin(true)} className="gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowPin(true)}
+                className="gap-2"
+              >
                 <MapPin className="w-4 h-4" /> Pin job-site on map
               </Button>
             ) : (
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <Label>Job-Site Location {form.latitude != null && <span className="text-green-600 text-xs font-normal">· pin set</span>}</Label>
-                  <Button variant="ghost" size="sm" onClick={() => setShowPin(false)} className="h-7 text-xs text-gray-500">
+                  <Label>
+                    Job-Site Location{' '}
+                    {form.latitude != null && (
+                      <span className="text-green-600 text-xs font-normal">
+                        · pin set
+                      </span>
+                    )}
+                  </Label>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowPin(false)}
+                    className="h-7 text-xs text-gray-500"
+                  >
                     <ChevronUp className="w-3.5 h-3.5 mr-1" /> Hide map
                   </Button>
                 </div>
                 <MapPinPicker
                   latitude={form.latitude}
                   longitude={form.longitude}
-                  address={[form.jobAddress, form.city, form.state, form.zip].filter(Boolean).join(', ')}
-                  onChange={({ latitude, longitude }) => { set('latitude', latitude); set('longitude', longitude); }}
+                  address={[form.jobAddress, form.city, form.state, form.zip]
+                    .filter(Boolean)
+                    .join(', ')}
+                  onChange={({ latitude, longitude }) => {
+                    set('latitude', latitude);
+                    set('longitude', longitude);
+                  }}
                 />
               </div>
             )}
@@ -705,19 +1072,40 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <Label>Spouse First Name</Label>
-                    <Input value={form.spouseFirstName} onChange={e => set('spouseFirstName', e.target.value)} placeholder="—" className="placeholder:text-gray-300" />
+                    <Input
+                      value={form.spouseFirstName}
+                      onChange={(e) => set('spouseFirstName', e.target.value)}
+                      placeholder="—"
+                      className="placeholder:text-gray-300"
+                    />
                   </div>
                   <div>
                     <Label>Spouse Last Name</Label>
-                    <Input value={form.spouseLastName} onChange={e => set('spouseLastName', e.target.value)} placeholder="—" className="placeholder:text-gray-300" />
+                    <Input
+                      value={form.spouseLastName}
+                      onChange={(e) => set('spouseLastName', e.target.value)}
+                      placeholder="—"
+                      className="placeholder:text-gray-300"
+                    />
                   </div>
                   <div>
                     <Label>Spouse Email</Label>
-                    <Input type="email" value={form.spouseEmail} onChange={e => set('spouseEmail', e.target.value)} placeholder="—" className="placeholder:text-gray-300" />
+                    <Input
+                      type="email"
+                      value={form.spouseEmail}
+                      onChange={(e) => set('spouseEmail', e.target.value)}
+                      placeholder="—"
+                      className="placeholder:text-gray-300"
+                    />
                   </div>
                   <div>
                     <Label>Spouse Phone</Label>
-                    <Input value={form.spousePhone} onChange={e => set('spousePhone', e.target.value)} placeholder="—" className="placeholder:text-gray-300" />
+                    <Input
+                      value={form.spousePhone}
+                      onChange={(e) => set('spousePhone', e.target.value)}
+                      placeholder="—"
+                      className="placeholder:text-gray-300"
+                    />
                   </div>
                 </div>
               </div>
@@ -727,29 +1115,56 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
           {/* Budget & Sqft */}
           <div>
             <Label>Budget ($)</Label>
-            <Input type="number" value={form.budget} onChange={e => set('budget', e.target.value)} placeholder="—" className="placeholder:text-gray-300" />
+            <Input
+              type="number"
+              value={form.budget}
+              onChange={(e) => set('budget', e.target.value)}
+              placeholder="—"
+              className="placeholder:text-gray-300"
+            />
           </div>
           <div>
             <Label>Square Footage</Label>
-            <Input type="number" value={form.squareFootage} onChange={e => set('squareFootage', e.target.value)} placeholder="—" className="placeholder:text-gray-300" />
+            <Input
+              type="number"
+              value={form.squareFootage}
+              onChange={(e) => set('squareFootage', e.target.value)}
+              placeholder="—"
+              className="placeholder:text-gray-300"
+            />
           </div>
 
           {/* Project type & stage */}
           <div>
             <Label>Project Type</Label>
-            <Select value={form.projectType} onValueChange={v => set('projectType', v)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+            <Select
+              value={form.projectType}
+              onValueChange={(v) => set('projectType', v)}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
-                {PROJECT_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+                {PROJECT_TYPES.map((t) => (
+                  <SelectItem key={t.value} value={t.value}>
+                    {t.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
           <div>
             <Label>Stage</Label>
-            <Select value={form.stage} onValueChange={v => set('stage', v)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+            <Select value={form.stage} onValueChange={(v) => set('stage', v)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
-                {stages.map(s => <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>)}
+                {stages.map((s) => (
+                  <SelectItem key={s.key} value={s.key}>
+                    {s.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -757,10 +1172,19 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
           {/* Assigned To */}
           <div>
             <Label>Assigned To</Label>
-            <Select value={form.assignedTo} onValueChange={v => set('assignedTo', v)}>
-              <SelectTrigger><SelectValue placeholder="Select team member" /></SelectTrigger>
+            <Select
+              value={form.assignedTo}
+              onValueChange={(v) => set('assignedTo', v)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select team member" />
+              </SelectTrigger>
               <SelectContent>
-                {teamMembers.map(m => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}
+                {teamMembers.map((m) => (
+                  <SelectItem key={m.id} value={m.id}>
+                    {m.name}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -768,8 +1192,13 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
           {/* Priority */}
           <div>
             <Label>Priority</Label>
-            <Select value={form.priority} onValueChange={v => set('priority', v as any)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+            <Select
+              value={form.priority}
+              onValueChange={(v) => set('priority', v as any)}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="low">Low</SelectItem>
                 <SelectItem value="medium">Medium</SelectItem>
@@ -782,36 +1211,66 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
           <div className="sm:col-span-2">
             <Label>Tags</Label>
             <div className="flex gap-2 flex-wrap mb-2">
-              {form.tags.map(t => (
-                <span key={t} className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">
+              {form.tags.map((t) => (
+                <span
+                  key={t}
+                  className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-700"
+                >
                   {t}
-                  <button onClick={() => removeTag(t)} className="hover:text-red-500"><X className="w-3 h-3" /></button>
+                  <button
+                    onClick={() => removeTag(t)}
+                    className="hover:text-red-500"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
                 </span>
               ))}
             </div>
             <div className="flex gap-2">
               <Input
                 value={tagInput}
-                onChange={e => setTagInput(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addTag(tagInput); } }}
+                onChange={(e) => setTagInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    addTag(tagInput);
+                  }
+                }}
                 placeholder="Type a tag and press Enter"
                 className="flex-1"
               />
-              <Button variant="outline" size="sm" onClick={() => addTag(tagInput)}>Add</Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => addTag(tagInput)}
+              >
+                Add
+              </Button>
             </div>
           </div>
 
           {/* Notes */}
           <div className="sm:col-span-2">
             <Label>Notes</Label>
-            <Textarea value={form.notes} onChange={e => set('notes', e.target.value)} rows={3} placeholder="Any notes about this lead…" />
+            <Textarea
+              value={form.notes}
+              onChange={(e) => set('notes', e.target.value)}
+              rows={3}
+              placeholder="Any notes about this lead…"
+            />
           </div>
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button style={{ backgroundColor: '#C9A96E', color: '#141414' }} onClick={handleSave} disabled={saving}>
-            {saving ? 'Saving…' : (editing ? 'Save Changes' : 'Add Lead')}
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            style={{ backgroundColor: '#C9A96E', color: '#141414' }}
+            onClick={handleSave}
+            disabled={saving}
+          >
+            {saving ? 'Saving…' : editing ? 'Save Changes' : 'Add Lead'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -821,7 +1280,15 @@ function LeadDialog({ open, editing, stages, teamMembers, prefill, onClose, onSa
 
 // ─── Create Project + Estimate Dialog ────────────────────────────────────────
 
-function CreateProjectDialog({ client, mode, previousStage, previousStageLabel, onClose, onCreate, onRevert }: {
+function CreateProjectDialog({
+  client,
+  mode,
+  previousStage,
+  previousStageLabel,
+  onClose,
+  onCreate,
+  onRevert,
+}: {
   client: Client;
   mode: 'auto' | 'prompt'; // auto = estimating (required), prompt = optional
   previousStage?: string;
@@ -832,7 +1299,6 @@ function CreateProjectDialog({ client, mode, previousStage, previousStageLabel, 
 }) {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [, setLocation] = useLocation();
   const [saving, setSaving] = useState(false);
   const [reverting, setReverting] = useState(false);
   const [form, setForm] = useState({
@@ -840,7 +1306,7 @@ function CreateProjectDialog({ client, mode, previousStage, previousStageLabel, 
     address: [client.jobAddress, client.city].filter(Boolean).join(', '),
   });
 
-  const set = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }));
+  const set = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
 
   const handleCreate = async () => {
     if (!form.projectName.trim()) return;
@@ -848,7 +1314,9 @@ function CreateProjectDialog({ client, mode, previousStage, previousStageLabel, 
     try {
       // Carry the lead's job-site pin into the project's buildLocation so the
       // jobsite map + directions work immediately on the project overview.
-      const hasPin = typeof client.latitude === 'number' && typeof client.longitude === 'number';
+      const hasPin =
+        typeof client.latitude === 'number' &&
+        typeof client.longitude === 'number';
       const buildLocation = hasPin
         ? {
             addressLine1: client.jobAddress || form.address || '',
@@ -929,7 +1397,12 @@ function CreateProjectDialog({ client, mode, previousStage, previousStageLabel, 
   };
 
   return (
-    <Dialog open onOpenChange={v => { if (!v) onClose(); }}>
+    <Dialog
+      open
+      onOpenChange={(v) => {
+        if (!v) onClose();
+      }}
+    >
       <DialogContent className="max-w-lg w-[calc(100vw-2rem)]">
         <DialogHeader>
           <DialogTitle>
@@ -950,7 +1423,7 @@ function CreateProjectDialog({ client, mode, previousStage, previousStageLabel, 
             <Label>Project Name</Label>
             <Input
               value={form.projectName}
-              onChange={e => set('projectName', e.target.value)}
+              onChange={(e) => set('projectName', e.target.value)}
               placeholder="e.g. Smith Custom Home"
             />
           </div>
@@ -958,15 +1431,19 @@ function CreateProjectDialog({ client, mode, previousStage, previousStageLabel, 
             <Label>Job Address</Label>
             <AddressSearchInput
               value={form.address}
-              onChange={v => set('address', v)}
-              onSelect={(r) => set('address', r.label || r.address?.line1 || '')}
+              onChange={(v) => set('address', v)}
+              onSelect={(r) =>
+                set('address', r.label || r.address?.line1 || '')
+              }
               placeholder="123 Main St, Salt Lake City"
             />
           </div>
         </div>
 
         <div className="bg-amber-50 border border-amber-100 rounded-lg px-3 py-2.5 text-xs text-amber-700">
-          This will create a <strong>Project</strong> in your Jobs list and a <strong>Draft Estimate</strong> in Estimates — both linked to this lead.
+          This will create a <strong>Project</strong> in your Jobs list and a{' '}
+          <strong>Draft Estimate</strong> in Estimates — both linked to this
+          lead.
         </div>
 
         <DialogFooter className="flex flex-col-reverse sm:flex-row sm:flex-wrap sm:justify-end gap-2 pt-2">
@@ -979,10 +1456,17 @@ function CreateProjectDialog({ client, mode, previousStage, previousStageLabel, 
               disabled={reverting || saving}
               onClick={async () => {
                 setReverting(true);
-                try { await onRevert(); }
-                finally { setReverting(false); }
+                try {
+                  await onRevert();
+                } finally {
+                  setReverting(false);
+                }
               }}
-              title={previousStageLabel ? `Move back to ${previousStageLabel}` : 'Move back to previous stage'}
+              title={
+                previousStageLabel
+                  ? `Move back to ${previousStageLabel}`
+                  : 'Move back to previous stage'
+              }
             >
               {reverting ? 'Reverting…' : 'Move back'}
             </Button>
@@ -1022,23 +1506,61 @@ interface Filters {
   assignedTo: string;
   stage: string;
   priority: '' | 'low' | 'medium' | 'high';
-  sort: 'newest' | 'oldest' | 'budget_desc' | 'budget_asc' | 'name_asc' | 'priority';
+  sort:
+    | 'newest'
+    | 'oldest'
+    | 'budget_desc'
+    | 'budget_asc'
+    | 'name_asc'
+    | 'priority';
 }
 
 const EMPTY_FILTERS: Filters = {
-  search: '', budgetMin: '', budgetMax: '', tags: [],
-  assignedTo: '', stage: '', priority: '', sort: 'newest',
+  search: '',
+  budgetMin: '',
+  budgetMax: '',
+  tags: [],
+  assignedTo: '',
+  stage: '',
+  priority: '',
+  sort: 'newest',
 };
 
 // Priority → color used for the card left-stripe + filter chip.
-const PRIORITY_COLORS: Record<string, { stripe: string; bg: string; text: string; label: string }> = {
-  high:   { stripe: '#ef4444', bg: 'bg-red-50',    text: 'text-red-700',    label: 'High' },
-  medium: { stripe: '#f59e0b', bg: 'bg-amber-50',  text: 'text-amber-700',  label: 'Medium' },
-  low:    { stripe: '#94a3b8', bg: 'bg-slate-50',  text: 'text-slate-600',  label: 'Low' },
+const PRIORITY_COLORS: Record<
+  string,
+  { stripe: string; bg: string; text: string; label: string }
+> = {
+  high: {
+    stripe: '#ef4444',
+    bg: 'bg-red-50',
+    text: 'text-red-700',
+    label: 'High',
+  },
+  medium: {
+    stripe: '#f59e0b',
+    bg: 'bg-amber-50',
+    text: 'text-amber-700',
+    label: 'Medium',
+  },
+  low: {
+    stripe: '#94a3b8',
+    bg: 'bg-slate-50',
+    text: 'text-slate-600',
+    label: 'Low',
+  },
 };
 const PRIORITY_RANK: Record<string, number> = { high: 3, medium: 2, low: 1 };
 
-function FilterPanel({ open, filters, onFiltersChange, onClose, stages, teamMembers, allTags }: {
+function FilterPanel({
+  open,
+  filters,
+  onFiltersChange,
+  onClose,
+  stages,
+  teamMembers,
+  allTags,
+}: {
   open: boolean;
   filters: Filters;
   onFiltersChange: (f: Filters) => void;
@@ -1047,11 +1569,18 @@ function FilterPanel({ open, filters, onFiltersChange, onClose, stages, teamMemb
   teamMembers: TeamMember[];
   allTags: string[];
 }) {
-  const set = (k: keyof Filters, v: any) => onFiltersChange({ ...filters, [k]: v });
-  const activeCount = [
-    filters.search, filters.budgetMin, filters.budgetMax,
-    filters.assignedTo, filters.stage, filters.priority, ...filters.tags,
-  ].filter(Boolean).length + (filters.sort !== 'newest' ? 1 : 0);
+  const set = (k: keyof Filters, v: any) =>
+    onFiltersChange({ ...filters, [k]: v });
+  const activeCount =
+    [
+      filters.search,
+      filters.budgetMin,
+      filters.budgetMax,
+      filters.assignedTo,
+      filters.stage,
+      filters.priority,
+      ...filters.tags,
+    ].filter(Boolean).length + (filters.sort !== 'newest' ? 1 : 0);
 
   return (
     <div
@@ -1061,90 +1590,156 @@ function FilterPanel({ open, filters, onFiltersChange, onClose, stages, teamMemb
       <div className="flex items-center justify-between p-5 border-b border-gray-100">
         <div>
           <h2 className="font-semibold text-gray-900">Filter Leads</h2>
-          {activeCount > 0 && <p className="text-xs text-amber-600 mt-0.5">{activeCount} filter{activeCount > 1 ? 's' : ''} active</p>}
+          {activeCount > 0 && (
+            <p className="text-xs text-amber-600 mt-0.5">
+              {activeCount} filter{activeCount > 1 ? 's' : ''} active
+            </p>
+          )}
         </div>
-        <button onClick={onClose} className="p-1 rounded-md hover:bg-gray-100 text-gray-500">
+        <button
+          onClick={onClose}
+          className="p-1 rounded-md hover:bg-gray-100 text-gray-500"
+        >
           <X className="w-5 h-5" />
         </button>
       </div>
 
       {/* Filters */}
       <div className="flex-1 overflow-y-auto p-5 space-y-5">
-
         {/* Search */}
         <div>
-          <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Search</Label>
+          <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+            Search
+          </Label>
           <div className="relative mt-1.5">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <Input className="pl-9" placeholder="Name, email, address…" value={filters.search}
-              onChange={e => set('search', e.target.value)} />
+            <Input
+              className="pl-9"
+              placeholder="Name, email, address…"
+              value={filters.search}
+              onChange={(e) => set('search', e.target.value)}
+            />
           </div>
         </div>
 
         {/* Budget range */}
         <div>
-          <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Budget</Label>
+          <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+            Budget
+          </Label>
           <div className="flex items-center gap-2 mt-1.5">
             <div className="relative flex-1">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
-              <Input className="pl-7" type="number" placeholder="Min" value={filters.budgetMin}
-                onChange={e => set('budgetMin', e.target.value)} />
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
+                $
+              </span>
+              <Input
+                className="pl-7"
+                type="number"
+                placeholder="Min"
+                value={filters.budgetMin}
+                onChange={(e) => set('budgetMin', e.target.value)}
+              />
             </div>
             <span className="text-gray-400 text-sm">–</span>
             <div className="relative flex-1">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
-              <Input className="pl-7" type="number" placeholder="Max" value={filters.budgetMax}
-                onChange={e => set('budgetMax', e.target.value)} />
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
+                $
+              </span>
+              <Input
+                className="pl-7"
+                type="number"
+                placeholder="Max"
+                value={filters.budgetMax}
+                onChange={(e) => set('budgetMax', e.target.value)}
+              />
             </div>
           </div>
         </div>
 
         {/* Assigned To */}
         <div>
-          <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Assigned To</Label>
-          <Select value={filters.assignedTo || 'all'} onValueChange={v => set('assignedTo', v === 'all' ? '' : v)}>
-            <SelectTrigger className="mt-1.5"><SelectValue placeholder="Anyone" /></SelectTrigger>
+          <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+            Assigned To
+          </Label>
+          <Select
+            value={filters.assignedTo || 'all'}
+            onValueChange={(v) => set('assignedTo', v === 'all' ? '' : v)}
+          >
+            <SelectTrigger className="mt-1.5">
+              <SelectValue placeholder="Anyone" />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Anyone</SelectItem>
-              {teamMembers.map(m => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}
+              {teamMembers.map((m) => (
+                <SelectItem key={m.id} value={m.id}>
+                  {m.name}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
 
         {/* Stage */}
         <div>
-          <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Stage</Label>
-          <Select value={filters.stage || 'all'} onValueChange={v => set('stage', v === 'all' ? '' : v)}>
-            <SelectTrigger className="mt-1.5"><SelectValue placeholder="All stages" /></SelectTrigger>
+          <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+            Stage
+          </Label>
+          <Select
+            value={filters.stage || 'all'}
+            onValueChange={(v) => set('stage', v === 'all' ? '' : v)}
+          >
+            <SelectTrigger className="mt-1.5">
+              <SelectValue placeholder="All stages" />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All stages</SelectItem>
-              {stages.map(s => <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>)}
+              {stages.map((s) => (
+                <SelectItem key={s.key} value={s.key}>
+                  {s.label}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
 
         {/* Priority */}
         <div>
-          <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Priority</Label>
-          <Select value={filters.priority || 'all'} onValueChange={v => set('priority', v === 'all' ? '' : v)}>
-            <SelectTrigger className="mt-1.5"><SelectValue placeholder="Any priority" /></SelectTrigger>
+          <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+            Priority
+          </Label>
+          <Select
+            value={filters.priority || 'all'}
+            onValueChange={(v) => set('priority', v === 'all' ? '' : v)}
+          >
+            <SelectTrigger className="mt-1.5">
+              <SelectValue placeholder="Any priority" />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Any priority</SelectItem>
               <SelectItem value="high">
                 <span className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: PRIORITY_COLORS.high.stripe }} />
+                  <span
+                    className="w-2 h-2 rounded-full"
+                    style={{ backgroundColor: PRIORITY_COLORS.high.stripe }}
+                  />
                   High only
                 </span>
               </SelectItem>
               <SelectItem value="medium">
                 <span className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: PRIORITY_COLORS.medium.stripe }} />
+                  <span
+                    className="w-2 h-2 rounded-full"
+                    style={{ backgroundColor: PRIORITY_COLORS.medium.stripe }}
+                  />
                   Medium only
                 </span>
               </SelectItem>
               <SelectItem value="low">
                 <span className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: PRIORITY_COLORS.low.stripe }} />
+                  <span
+                    className="w-2 h-2 rounded-full"
+                    style={{ backgroundColor: PRIORITY_COLORS.low.stripe }}
+                  />
                   Low only
                 </span>
               </SelectItem>
@@ -1155,14 +1750,16 @@ function FilterPanel({ open, filters, onFiltersChange, onClose, stages, teamMemb
         {/* Tags */}
         {allTags.length > 0 && (
           <div>
-            <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Tags</Label>
+            <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+              Tags
+            </Label>
             <div className="flex flex-wrap gap-1.5 mt-1.5">
-              {allTags.map(tag => (
+              {allTags.map((tag) => (
                 <button
                   key={tag}
                   onClick={() => {
                     const next = filters.tags.includes(tag)
-                      ? filters.tags.filter(t => t !== tag)
+                      ? filters.tags.filter((t) => t !== tag)
                       : [...filters.tags, tag];
                     set('tags', next);
                   }}
@@ -1181,9 +1778,16 @@ function FilterPanel({ open, filters, onFiltersChange, onClose, stages, teamMemb
 
         {/* Sort */}
         <div>
-          <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Sort</Label>
-          <Select value={filters.sort} onValueChange={v => set('sort', v as Filters['sort'])}>
-            <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
+          <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+            Sort
+          </Label>
+          <Select
+            value={filters.sort}
+            onValueChange={(v) => set('sort', v as Filters['sort'])}
+          >
+            <SelectTrigger className="mt-1.5">
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="newest">Newest First</SelectItem>
               <SelectItem value="oldest">Oldest First</SelectItem>
@@ -1211,7 +1815,13 @@ function FilterPanel({ open, filters, onFiltersChange, onClose, stages, teamMemb
 
 // ─── Pipeline Card ────────────────────────────────────────────────────────────
 
-function PipelineCard({ client, stages, onEdit, onDelete, onAdvance }: {
+function PipelineCard({
+  client,
+  stages,
+  onEdit,
+  onDelete,
+  onAdvance,
+}: {
   client: Client;
   stages: StageConfig[];
   onEdit: () => void;
@@ -1222,7 +1832,7 @@ function PipelineCard({ client, stages, onEdit, onDelete, onAdvance }: {
   const [linkOpen, setLinkOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [commsOpen, setCommsOpen] = useState(false);
-  const stageIdx = stages.findIndex(s => s.key === client.stage);
+  const stageIdx = stages.findIndex((s) => s.key === client.stage);
   const canAdvance = stageIdx >= 0 && stageIdx < stages.length - 1;
 
   const openProject = () => {
@@ -1230,14 +1840,21 @@ function PipelineCard({ client, stages, onEdit, onDelete, onAdvance }: {
     else setLinkOpen(true);
   };
 
-  const priorityCfg = PRIORITY_COLORS[client.priority || 'medium'] || PRIORITY_COLORS.medium;
+  const priorityCfg =
+    PRIORITY_COLORS[client.priority || 'medium'] || PRIORITY_COLORS.medium;
 
   return (
     <>
       <div
         draggable
-        onDragStart={e => { e.dataTransfer.setData('clientId', client.id); e.dataTransfer.effectAllowed = 'move'; }}
-        onDoubleClick={e => { e.preventDefault(); openProject(); }}
+        onDragStart={(e) => {
+          e.dataTransfer.setData('clientId', client.id);
+          e.dataTransfer.effectAllowed = 'move';
+        }}
+        onDoubleClick={(e) => {
+          e.preventDefault();
+          openProject();
+        }}
         className="bg-white border border-gray-200 rounded-lg px-3 py-2.5 shadow-sm hover:shadow-md hover:border-gray-300 transition-all cursor-grab active:cursor-grabbing group relative"
         style={{ borderLeft: `3px solid ${priorityCfg.stripe}` }}
         title={`Priority: ${priorityCfg.label}`}
@@ -1246,32 +1863,61 @@ function PipelineCard({ client, stages, onEdit, onDelete, onAdvance }: {
             card width directly below. */}
         <div className="absolute top-1.5 right-1.5 z-10">
           <button
-            onClick={e => { e.stopPropagation(); setMenuOpen(m => !m); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              setMenuOpen((m) => !m);
+            }}
             className="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 opacity-0 group-hover:opacity-100 transition-opacity"
           >
             <MoreVertical className="w-4 h-4" />
           </button>
           {menuOpen && (
             <>
-              <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+              <div
+                className="fixed inset-0 z-10"
+                onClick={() => setMenuOpen(false)}
+              />
               <div className="absolute right-0 top-7 z-20 w-44 bg-white border border-gray-200 rounded-lg shadow-lg py-1 text-sm">
-                <button onClick={() => { setMenuOpen(false); openProject(); }}
-                  className="w-full text-left flex items-center gap-2 px-3 py-2 hover:bg-gray-50">
+                <button
+                  onClick={() => {
+                    setMenuOpen(false);
+                    openProject();
+                  }}
+                  className="w-full text-left flex items-center gap-2 px-3 py-2 hover:bg-gray-50"
+                >
                   <ExternalLink className="w-4 h-4" />
                   {client.linkedJobId ? 'Open Project' : 'Link & Open Project'}
                 </button>
-                <button onClick={() => { setMenuOpen(false); onEdit(); }}
-                  className="w-full text-left flex items-center gap-2 px-3 py-2 hover:bg-gray-50">
-                  <Edit2 className="w-4 h-4" />Edit
+                <button
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onEdit();
+                  }}
+                  className="w-full text-left flex items-center gap-2 px-3 py-2 hover:bg-gray-50"
+                >
+                  <Edit2 className="w-4 h-4" />
+                  Edit
                 </button>
-                <button onClick={() => { setMenuOpen(false); setCommsOpen(true); }}
-                  className="w-full text-left flex items-center gap-2 px-3 py-2 hover:bg-gray-50">
-                  <MessageSquare className="w-4 h-4" />Messages
+                <button
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setCommsOpen(true);
+                  }}
+                  className="w-full text-left flex items-center gap-2 px-3 py-2 hover:bg-gray-50"
+                >
+                  <MessageSquare className="w-4 h-4" />
+                  Messages
                 </button>
                 {canAdvance && (
-                  <button onClick={() => { setMenuOpen(false); onAdvance(); }}
-                    className="w-full text-left flex items-center gap-2 px-3 py-2 hover:bg-gray-50">
-                    <ArrowRight className="w-4 h-4" />Advance Stage
+                  <button
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onAdvance();
+                    }}
+                    className="w-full text-left flex items-center gap-2 px-3 py-2 hover:bg-gray-50"
+                  >
+                    <ArrowRight className="w-4 h-4" />
+                    Advance Stage
                   </button>
                 )}
                 {client.email && (
@@ -1285,9 +1931,15 @@ function PipelineCard({ client, stages, onEdit, onDelete, onAdvance }: {
                   />
                 )}
                 <div className="border-t border-gray-100 my-1" />
-                <button onClick={() => { setMenuOpen(false); onDelete(); }}
-                  className="w-full text-left flex items-center gap-2 px-3 py-2 hover:bg-red-50 text-red-600">
-                  <Trash2 className="w-4 h-4" />Delete
+                <button
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onDelete();
+                  }}
+                  className="w-full text-left flex items-center gap-2 px-3 py-2 hover:bg-red-50 text-red-600"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Delete
                 </button>
               </div>
             </>
@@ -1296,16 +1948,25 @@ function PipelineCard({ client, stages, onEdit, onDelete, onAdvance }: {
         {/* Lead name — the headline. Full width, larger, up to three lines
             so a long name doesn't get clipped. pr-7 reserves space for the
             kebab in the top-right. */}
-        <p className="text-base font-bold text-gray-900 leading-snug line-clamp-3 pr-7 [overflow-wrap:normal] [word-break:keep-all] hyphens-none" title={client.name}>
+        <p
+          className="text-base font-bold text-gray-900 leading-snug line-clamp-3 pr-7 [overflow-wrap:normal] [word-break:keep-all] hyphens-none"
+          title={client.name}
+        >
           {client.name}
         </p>
         {client.spouse?.name && (
-          <p className="text-xs text-gray-500 mt-0.5" title={`Spouse: ${client.spouse.name}`}>
+          <p
+            className="text-xs text-gray-500 mt-0.5"
+            title={`Spouse: ${client.spouse.name}`}
+          >
             & {client.spouse.name}
           </p>
         )}
         {client.assignedToName && (
-          <p className="text-xs text-gray-500 truncate mt-1" title={client.assignedToName}>
+          <p
+            className="text-xs text-gray-500 truncate mt-1"
+            title={client.assignedToName}
+          >
             {client.assignedToName}
           </p>
         )}
@@ -1318,8 +1979,13 @@ function PipelineCard({ client, stages, onEdit, onDelete, onAdvance }: {
         {/* Tags */}
         {client.tags && client.tags.length > 0 && (
           <div className="flex flex-wrap gap-1 mt-1.5">
-            {client.tags.slice(0, 3).map(t => (
-              <span key={t} className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{t}</span>
+            {client.tags.slice(0, 3).map((t) => (
+              <span
+                key={t}
+                className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500"
+              >
+                {t}
+              </span>
             ))}
           </div>
         )}
@@ -1334,8 +2000,15 @@ function PipelineCard({ client, stages, onEdit, onDelete, onAdvance }: {
       </div>
 
       {linkOpen && (
-        <LinkProjectDialog client={client} open={linkOpen} onClose={() => setLinkOpen(false)}
-          onLinked={id => { setLinkOpen(false); setLocation(`/projects/${id}`); }} />
+        <LinkProjectDialog
+          client={client}
+          open={linkOpen}
+          onClose={() => setLinkOpen(false)}
+          onLinked={(id) => {
+            setLinkOpen(false);
+            setLocation(`/projects/${id}`);
+          }}
+        />
       )}
       {commsOpen && (
         <CommunicationDrawer
@@ -1350,47 +2023,79 @@ function PipelineCard({ client, stages, onEdit, onDelete, onAdvance }: {
 
 // ─── List Row ─────────────────────────────────────────────────────────────────
 
-function ListRow({ client, stages, onEdit, onDelete }: {
-  client: Client; stages: StageConfig[];
-  onEdit: () => void; onDelete: () => void;
+function ListRow({
+  client,
+  stages,
+  onEdit,
+  onDelete,
+}: {
+  client: Client;
+  stages: StageConfig[];
+  onEdit: () => void;
+  onDelete: () => void;
 }) {
   const [, setLocation] = useLocation();
   const cfg = stageConfig(client.stage, stages);
-  const priorityCfg = PRIORITY_COLORS[client.priority || 'medium'] || PRIORITY_COLORS.medium;
+  const priorityCfg =
+    PRIORITY_COLORS[client.priority || 'medium'] || PRIORITY_COLORS.medium;
   return (
     <div
       className="flex items-center gap-4 bg-white border border-gray-200 rounded-lg px-4 py-3 hover:border-gray-300 transition-colors"
       style={{ borderLeft: `3px solid ${priorityCfg.stripe}` }}
       title={`Priority: ${priorityCfg.label}`}
     >
-      <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: cfg.color }} />
+      <div
+        className="w-2 h-2 rounded-full flex-shrink-0"
+        style={{ backgroundColor: cfg.color }}
+      />
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold text-gray-900 truncate">{client.name}</p>
-        {client.assignedToName && <p className="text-xs text-gray-400">{client.assignedToName}</p>}
+        <p className="text-sm font-semibold text-gray-900 truncate">
+          {client.name}
+        </p>
+        {client.assignedToName && (
+          <p className="text-xs text-gray-400">{client.assignedToName}</p>
+        )}
       </div>
       <div className="hidden sm:flex items-center gap-2 flex-shrink-0">
-        {client.tags?.slice(0, 2).map(t => (
-          <span key={t} className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">{t}</span>
+        {client.tags?.slice(0, 2).map((t) => (
+          <span
+            key={t}
+            className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500"
+          >
+            {t}
+          </span>
         ))}
       </div>
-      <span className="text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0"
-        style={{ backgroundColor: `${cfg.color}18`, color: cfg.color }}>
+      <span
+        className="text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0"
+        style={{ backgroundColor: `${cfg.color}18`, color: cfg.color }}
+      >
         {cfg.label}
       </span>
       {client.budget && (
-        <span className="text-sm font-semibold text-gray-700 flex-shrink-0">{fmtFull(client.budget)}</span>
+        <span className="text-sm font-semibold text-gray-700 flex-shrink-0">
+          {fmtFull(client.budget)}
+        </span>
       )}
       <div className="flex items-center gap-1 flex-shrink-0">
-        <button onClick={onEdit} className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-700">
+        <button
+          onClick={onEdit}
+          className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-700"
+        >
           <Edit2 className="w-4 h-4" />
         </button>
         {client.linkedJobId && (
-          <button onClick={() => setLocation(`/projects/${client.linkedJobId!}`)}
-            className="p-1.5 rounded hover:bg-blue-50 text-blue-400 hover:text-blue-600">
+          <button
+            onClick={() => setLocation(`/projects/${client.linkedJobId!}`)}
+            className="p-1.5 rounded hover:bg-blue-50 text-blue-400 hover:text-blue-600"
+          >
             <ExternalLink className="w-4 h-4" />
           </button>
         )}
-        <button onClick={onDelete} className="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-red-600">
+        <button
+          onClick={onDelete}
+          className="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-red-600"
+        >
           <Trash2 className="w-4 h-4" />
         </button>
       </div>
@@ -1421,7 +2126,9 @@ export default function Sales() {
   const [leadDialogOpen, setLeadDialogOpen] = useState(false);
   const [editStagesOpen, setEditStagesOpen] = useState(false);
   const [editing, setEditing] = useState<Client | null>(null);
-  const [leadPrefill, setLeadPrefill] = useState<LeadPrefill | undefined>(undefined);
+  const [leadPrefill, setLeadPrefill] = useState<LeadPrefill | undefined>(
+    undefined
+  );
 
   // ── Deep-link: open the new-lead dialog with prefilled fields ────────────
   // Triggered by /sales?newLead=1&name=&address=&amount=&email=&phone= — used
@@ -1452,7 +2159,11 @@ export default function Sales() {
 
   // Project creation prompt state. previousStage lets the dialog revert if the
   // drag was a mistake (e.g. user dragged a card to estimating but didn't mean to).
-  const [pendingProject, setPendingProject] = useState<{ client: Client; mode: 'auto' | 'prompt'; previousStage?: string } | null>(null);
+  const [pendingProject, setPendingProject] = useState<{
+    client: Client;
+    mode: 'auto' | 'prompt';
+    previousStage?: string;
+  } | null>(null);
 
   // Drag state
   const [dragOverStage, setDragOverStage] = useState<string | null>(null);
@@ -1460,10 +2171,15 @@ export default function Sales() {
   // ── Stage-change helpers ──────────────────────────────────────────────────
 
   // Returns true if the stage key represents an "estimating" stage
-  const isEstimatingStage = (key: string) => key.toLowerCase().includes('estimat');
+  const isEstimatingStage = (key: string) =>
+    key.toLowerCase().includes('estimat');
 
   // After any stage change, check if we need to create a project
-  const checkProjectCreation = (client: Client, oldStage: string, newStage: string) => {
+  const checkProjectCreation = (
+    client: Client,
+    oldStage: string,
+    newStage: string
+  ) => {
     if (client.linkedJobId) return; // already has a project — skip
     const firstStageKey = stages[0]?.key || '';
     if (isEstimatingStage(newStage)) {
@@ -1482,27 +2198,37 @@ export default function Sales() {
   // the new DEFAULT_STAGES on every load. If detected, the doc is deleted and
   // DEFAULT_STAGES is used. User can re-customize via Edit Stages anytime.
   useEffect(() => {
-    getDoc(doc(db, 'settings', 'pipeline')).then(snap => {
-      if (!snap.exists()) return;
-      const d = snap.data();
-      const stored = d.stages as StageConfig[] | undefined;
-      if (!Array.isArray(stored) || stored.length === 0) return;
+    getDoc(doc(db, 'settings', 'pipeline'))
+      .then((snap) => {
+        if (!snap.exists()) return;
+        const d = snap.data();
+        const stored = d.stages as StageConfig[] | undefined;
+        if (!Array.isArray(stored) || stored.length === 0) return;
 
-      const LEGACY_MARKERS = [
-        'Pre Construction', 'Active Build', 'Punchlist', 'Completed Build',
-        'Final Passed', 'In Punchlist', 'In Punch List', 'Warranty',
-      ];
-      const isLegacy = stored.some(s =>
-        LEGACY_MARKERS.some(m => (s.label || '').toLowerCase().includes(m.toLowerCase()))
-      );
+        const LEGACY_MARKERS = [
+          'Pre Construction',
+          'Active Build',
+          'Punchlist',
+          'Completed Build',
+          'Final Passed',
+          'In Punchlist',
+          'In Punch List',
+          'Warranty',
+        ];
+        const isLegacy = stored.some((s) =>
+          LEGACY_MARKERS.some((m) =>
+            (s.label || '').toLowerCase().includes(m.toLowerCase())
+          )
+        );
 
-      if (isLegacy) {
-        // Remove the legacy doc so DEFAULT_STAGES is used.
-        deleteDoc(doc(db, 'settings', 'pipeline')).catch(() => {});
-        return;  // Keep DEFAULT_STAGES — don't apply the legacy data
-      }
-      setStages(stored);
-    }).catch(() => {});
+        if (isLegacy) {
+          // Remove the legacy doc so DEFAULT_STAGES is used.
+          deleteDoc(doc(db, 'settings', 'pipeline')).catch(() => {});
+          return; // Keep DEFAULT_STAGES — don't apply the legacy data
+        }
+        setStages(stored);
+      })
+      .catch(() => {});
   }, []);
 
   // ── One-time client-stage migration (option a + c from the cleanup conversation) ────
@@ -1519,23 +2245,23 @@ export default function Sales() {
 
         // Map of legacy stage values → new canonical keys
         const STAGE_MAP: Record<string, string> = {
-          'estimating':       'in_estimating',
-          'in_estimating':    'in_estimating',
-          'contract':         'close_to_sign',
-          'close_to_signing': 'close_to_sign',
-          'close_to_sign':    'close_to_sign',
-          'pre_construction': 'won',
-          'preconstruction':  'won',
-          'active_build':     'won',
-          'final_passed':     'won',
-          'completed_build':  'won',
-          'in_punchlist':     'won',
-          'warranty':         'won',
-          'meeting_booked':   'meeting_booked',
-          'design_phase':     'design_phase',
-          'new_lead':         'new_lead',
-          'won':              'won',
-          'lost':             'lost',
+          estimating: 'in_estimating',
+          in_estimating: 'in_estimating',
+          contract: 'close_to_sign',
+          close_to_signing: 'close_to_sign',
+          close_to_sign: 'close_to_sign',
+          pre_construction: 'won',
+          preconstruction: 'won',
+          active_build: 'won',
+          final_passed: 'won',
+          completed_build: 'won',
+          in_punchlist: 'won',
+          warranty: 'won',
+          meeting_booked: 'meeting_booked',
+          design_phase: 'design_phase',
+          new_lead: 'new_lead',
+          won: 'won',
+          lost: 'lost',
         };
 
         // Demo / ghost leads to delete — DISABLED 2026-05-16 after Tyler asked
@@ -1551,7 +2277,7 @@ export default function Sales() {
         for (const d of all.docs) {
           const data = d.data() as any;
           const name = (data.name || '').trim();
-          if (GHOST_NAMES.some(g => name.toLowerCase() === g.toLowerCase())) {
+          if (GHOST_NAMES.some((g) => name.toLowerCase() === g.toLowerCase())) {
             toDelete.push({ id: d.id, ref: d.ref });
             continue;
           }
@@ -1566,7 +2292,11 @@ export default function Sales() {
 
         // Phase 1: bulk update (allowed for any GC role).
         if (mappedCount > 0) {
-          try { await updateBatch.commit(); } catch { /* permission or transient */ }
+          try {
+            await updateBatch.commit();
+          } catch {
+            /* permission or transient */
+          }
         }
 
         // Phase 2: deletes — individually so one permission-denied doesn't
@@ -1574,19 +2304,28 @@ export default function Sales() {
         // for GC users the deletes simply no-op (without breaking the migration).
         let deletedCount = 0;
         for (const d of toDelete) {
-          try { await deleteDoc(d.ref); deletedCount++; } catch { /* swallow */ }
+          try {
+            await deleteDoc(d.ref);
+            deletedCount++;
+          } catch {
+            /* swallow */
+          }
         }
 
         // Only mark migration as done if SOMETHING succeeded, so a partial run
         // (e.g., as GC) can be completed later by an admin.
         if (mappedCount > 0 || deletedCount > 0) {
-          await setDoc(flagRef, {
-            pipelineV2_migrated: deletedCount === toDelete.length,
-            ranAt: serverTimestamp(),
-            mappedCount,
-            deletedCount,
-            pendingDeletes: toDelete.length - deletedCount,
-          }, { merge: true });
+          await setDoc(
+            flagRef,
+            {
+              pipelineV2_migrated: deletedCount === toDelete.length,
+              ranAt: serverTimestamp(),
+              mappedCount,
+              deletedCount,
+              pendingDeletes: toDelete.length - deletedCount,
+            },
+            { merge: true }
+          );
         }
       } catch (e) {
         // Migration failures are non-fatal — page still renders. Don't toast either,
@@ -1599,10 +2338,14 @@ export default function Sales() {
   // Load clients
   useEffect(() => {
     const q = query(collection(db, 'clients'), orderBy('createdAt', 'desc'));
-    return onSnapshot(q, snap => {
-      setClients(snap.docs.map(d => ({ id: d.id, ...d.data() } as Client)));
-      setLoading(false);
-    }, () => setLoading(false));
+    return onSnapshot(
+      q,
+      (snap) => {
+        setClients(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Client));
+        setLoading(false);
+      },
+      () => setLoading(false)
+    );
   }, []);
 
   // Load team members for "Assigned To" — a lead can only be assigned to a
@@ -1612,42 +2355,61 @@ export default function Sales() {
   // variants (project_manager / pm) too.
   useEffect(() => {
     const isPmRole = (v: any) =>
-      ['projectmanager', 'pm'].includes(String(v || '').toLowerCase().replace(/_/g, ''));
+      ['projectmanager', 'pm'].includes(
+        String(v || '')
+          .toLowerCase()
+          .replace(/_/g, '')
+      );
     return onSnapshot(
       query(collection(db, 'users'), orderBy('name', 'asc')),
-      snap => setTeamMembers(
-        snap.docs
-          .map(d => ({ id: d.id, name: (d.data() as any).name || '', email: (d.data() as any).email || '', role: (d.data() as any).role }))
-          .filter(m => m.name)
-          .filter(m => isPmRole(m.role) || m.id === user?.firebaseUid)
-          .map(({ id, name, email }) => ({ id, name, email }))
-      )
+      (snap) =>
+        setTeamMembers(
+          snap.docs
+            .map((d) => ({
+              id: d.id,
+              name: (d.data() as any).name || '',
+              email: (d.data() as any).email || '',
+              role: (d.data() as any).role,
+            }))
+            .filter((m) => m.name)
+            .filter((m) => isPmRole(m.role) || m.id === user?.firebaseUid)
+            .map(({ id, name, email }) => ({ id, name, email }))
+        )
     );
   }, [user?.firebaseUid]);
 
   // All unique tags across clients
-  const allTags = [...new Set(clients.flatMap(c => c.tags || []))].sort();
+  const allTags = [...new Set(clients.flatMap((c) => c.tags || []))].sort();
 
   // Filter + sort
   const applyFilters = (list: Client[]): Client[] => {
     let out = list;
     if (filters.search) {
       const q = filters.search.toLowerCase();
-      out = out.filter(c =>
-        [c.name, c.email, c.phone, c.company, c.jobAddress, c.city]
-          .some(v => v?.toLowerCase().includes(q))
+      out = out.filter((c) =>
+        [c.name, c.email, c.phone, c.company, c.jobAddress, c.city].some((v) =>
+          v?.toLowerCase().includes(q)
+        )
       );
     }
-    if (filters.budgetMin) out = out.filter(c => (c.budget || 0) >= parseFloat(filters.budgetMin));
-    if (filters.budgetMax) out = out.filter(c => (c.budget || 0) <= parseFloat(filters.budgetMax));
-    if (filters.assignedTo) out = out.filter(c => c.assignedTo === filters.assignedTo);
-    if (filters.stage) out = out.filter(c => c.stage === filters.stage);
-    if (filters.priority) out = out.filter(c => (c.priority || 'medium') === filters.priority);
-    if (filters.tags.length > 0) out = out.filter(c => filters.tags.every(t => c.tags?.includes(t)));
+    if (filters.budgetMin)
+      out = out.filter((c) => (c.budget || 0) >= parseFloat(filters.budgetMin));
+    if (filters.budgetMax)
+      out = out.filter((c) => (c.budget || 0) <= parseFloat(filters.budgetMax));
+    if (filters.assignedTo)
+      out = out.filter((c) => c.assignedTo === filters.assignedTo);
+    if (filters.stage) out = out.filter((c) => c.stage === filters.stage);
+    if (filters.priority)
+      out = out.filter((c) => (c.priority || 'medium') === filters.priority);
+    if (filters.tags.length > 0)
+      out = out.filter((c) => filters.tags.every((t) => c.tags?.includes(t)));
     out = [...out].sort((a, b) => {
-      if (filters.sort === 'oldest') return (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0);
-      if (filters.sort === 'budget_desc') return (b.budget || 0) - (a.budget || 0);
-      if (filters.sort === 'budget_asc') return (a.budget || 0) - (b.budget || 0);
+      if (filters.sort === 'oldest')
+        return (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0);
+      if (filters.sort === 'budget_desc')
+        return (b.budget || 0) - (a.budget || 0);
+      if (filters.sort === 'budget_asc')
+        return (a.budget || 0) - (b.budget || 0);
       if (filters.sort === 'name_asc') return a.name.localeCompare(b.name);
       if (filters.sort === 'priority') {
         const ra = PRIORITY_RANK[a.priority || 'medium'] ?? 2;
@@ -1662,20 +2424,33 @@ export default function Sales() {
 
   const filteredClients = applyFilters(clients);
 
-  const activeFilterCount = [
-    filters.search, filters.budgetMin, filters.budgetMax,
-    filters.assignedTo, filters.stage, ...filters.tags,
-  ].filter(Boolean).length + (filters.sort !== 'newest' ? 1 : 0);
+  const activeFilterCount =
+    [
+      filters.search,
+      filters.budgetMin,
+      filters.budgetMax,
+      filters.assignedTo,
+      filters.stage,
+      ...filters.tags,
+    ].filter(Boolean).length + (filters.sort !== 'newest' ? 1 : 0);
 
   // CRUD
   const handleSave = async (data: Partial<Client>) => {
     const prevStage = editing?.stage;
     const prevLinkedJobId = editing?.linkedJobId;
     if (editing) {
-      await updateDoc(doc(db, 'clients', editing.id), { ...data, updatedAt: serverTimestamp() });
+      await updateDoc(doc(db, 'clients', editing.id), {
+        ...data,
+        updatedAt: serverTimestamp(),
+      });
       toast({ title: 'Lead updated' });
       // Check if stage changed in the form
-      if (prevStage && data.stage && prevStage !== data.stage && !prevLinkedJobId) {
+      if (
+        prevStage &&
+        data.stage &&
+        prevStage !== data.stage &&
+        !prevLinkedJobId
+      ) {
         const updatedClient: Client = { ...editing, ...data } as Client;
         checkProjectCreation(updatedClient, prevStage, data.stage);
       }
@@ -1711,20 +2486,29 @@ export default function Sales() {
               description: `Updated “${resolution.match.name}” — no duplicate lead created.`,
             });
           } catch (e: any) {
-            toast({ title: 'Merge failed', description: e?.message || '', variant: 'destructive' });
+            toast({
+              title: 'Merge failed',
+              description: e?.message || '',
+              variant: 'destructive',
+            });
           }
           setEditing(null);
           return;
         }
         // create anyway — fold the "what's different" note into the lead notes.
         if (resolution.differenceNote) {
-          data = { ...data, notes: [data.notes, `Duplicate check: ${resolution.differenceNote}`].filter(Boolean).join('\n') };
+          data = {
+            ...data,
+            notes: [data.notes, `Duplicate check: ${resolution.differenceNote}`]
+              .filter(Boolean)
+              .join('\n'),
+          };
         }
       }
       // Two writes, one batch: a Sales/CRM client row AND a matching contact row
       // (so the new lead also appears in Contacts as type='client'). The two
       // docs cross-reference each other via salesClientId/contactId.
-      const clientRef  = doc(collection(db, 'clients'));
+      const clientRef = doc(collection(db, 'clients'));
       const contactRef = doc(collection(db, 'contacts'));
       const batch = writeBatch(db);
       batch.set(clientRef, {
@@ -1753,7 +2537,12 @@ export default function Sales() {
       toast({ title: 'Lead added — also linked in Contacts' });
       // New lead created directly into estimating
       if (data.stage && isEstimatingStage(data.stage)) {
-        const newClient: Client = { id: clientRef.id, name: data.name || '', stage: data.stage, ...data } as Client;
+        const newClient: Client = {
+          id: clientRef.id,
+          name: data.name || '',
+          stage: data.stage,
+          ...data,
+        } as Client;
         checkProjectCreation(newClient, '', data.stage);
       }
     }
@@ -1773,10 +2562,13 @@ export default function Sales() {
   };
 
   const handleAdvance = async (client: Client) => {
-    const idx = stages.findIndex(s => s.key === client.stage);
+    const idx = stages.findIndex((s) => s.key === client.stage);
     if (idx < 0 || idx >= stages.length - 1) return;
     const newStage = stages[idx + 1].key;
-    await updateDoc(doc(db, 'clients', client.id), { stage: newStage, updatedAt: serverTimestamp() });
+    await updateDoc(doc(db, 'clients', client.id), {
+      stage: newStage,
+      updatedAt: serverTimestamp(),
+    });
     checkProjectCreation(client, client.stage, newStage);
   };
 
@@ -1785,9 +2577,12 @@ export default function Sales() {
     setDragOverStage(null);
     const clientId = e.dataTransfer.getData('clientId');
     if (!clientId) return;
-    const client = clients.find(c => c.id === clientId);
+    const client = clients.find((c) => c.id === clientId);
     if (!client || client.stage === targetStage) return;
-    await updateDoc(doc(db, 'clients', clientId), { stage: targetStage, updatedAt: serverTimestamp() });
+    await updateDoc(doc(db, 'clients', clientId), {
+      stage: targetStage,
+      updatedAt: serverTimestamp(),
+    });
     checkProjectCreation(client, client.stage, targetStage);
   };
 
@@ -1799,15 +2594,17 @@ export default function Sales() {
   // Pipeline total = only leads that actually appear in a known stage column.
   // Older leads stuck on legacy stage names (e.g. "Pre Construction") used to
   // inflate this number despite not being shown anywhere on the board.
-  const _knownStageKeys = new Set(stages.map(s => s.key));
+  const _knownStageKeys = new Set(stages.map((s) => s.key));
   const totalPipeline = filteredClients
-    .filter(c => _knownStageKeys.has(c.stage))
+    .filter((c) => _knownStageKeys.has(c.stage))
     .reduce((s, c) => s + (c.budget || 0), 0);
 
   return (
     <AppLayout>
-      <div className="flex flex-col h-full" style={{ height: 'calc(100vh - 80px)' }}>
-
+      <div
+        className="flex flex-col h-full"
+        style={{ height: 'calc(100vh - 80px)' }}
+      >
         {/* Top Bar — stacks and wraps on mobile so the full action cluster
             (Pipeline toggle, Lead Form, Edit Stages, Filter, Import, +Lead)
             stays on-screen instead of running off the right edge at 390px. */}
@@ -1815,7 +2612,9 @@ export default function Sales() {
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Sales</h1>
             {totalPipeline > 0 && (
-              <p className="text-sm text-gray-500 mt-0.5">Pipeline: {fmtFull(totalPipeline)}</p>
+              <p className="text-sm text-gray-500 mt-0.5">
+                Pipeline: {fmtFull(totalPipeline)}
+              </p>
             )}
           </div>
           <div className="flex items-center gap-2 flex-wrap">
@@ -1852,19 +2651,30 @@ export default function Sales() {
             </Button>
 
             {/* Edit Stages */}
-            <Button variant="outline" size="sm" onClick={() => setEditStagesOpen(true)} className="gap-1.5">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setEditStagesOpen(true)}
+              className="gap-1.5"
+            >
               <Settings2 className="w-4 h-4" />
               <span className="hidden sm:inline">Edit Stages</span>
             </Button>
 
             {/* Filter */}
-            <Button variant="outline" size="sm" onClick={() => setFilterOpen(f => !f)}
-              className={`gap-1.5 relative ${activeFilterCount > 0 ? 'border-[#C9A96E] text-amber-700' : ''}`}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setFilterOpen((f) => !f)}
+              className={`gap-1.5 relative ${activeFilterCount > 0 ? 'border-[#C9A96E] text-amber-700' : ''}`}
+            >
               <Filter className="w-4 h-4" />
               <span className="hidden sm:inline">Filter</span>
               {activeFilterCount > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 w-4 h-4 text-[10px] font-bold rounded-full flex items-center justify-center"
-                  style={{ backgroundColor: '#C9A96E', color: '#141414' }}>
+                <span
+                  className="absolute -top-1.5 -right-1.5 w-4 h-4 text-[10px] font-bold rounded-full flex items-center justify-center"
+                  style={{ backgroundColor: '#C9A96E', color: '#141414' }}
+                >
                   {activeFilterCount}
                 </span>
               )}
@@ -1873,7 +2683,7 @@ export default function Sales() {
             {/* Import vCard */}
             <VcardImportZone
               defaultStage={stages[0]?.key || 'new_lead'}
-              onSinglePrefill={p => {
+              onSinglePrefill={(p) => {
                 setLeadPrefill(p);
                 setEditing(null);
                 setLeadDialogOpen(true);
@@ -1882,7 +2692,10 @@ export default function Sales() {
 
             {/* Add Lead */}
             <Button
-              onClick={() => { setEditing(null); setLeadDialogOpen(true); }}
+              onClick={() => {
+                setEditing(null);
+                setLeadDialogOpen(true);
+              }}
               style={{ backgroundColor: '#C9A96E', color: '#141414' }}
               className="gap-1.5 font-semibold"
             >
@@ -1894,7 +2707,10 @@ export default function Sales() {
 
         {loading ? (
           <div className="flex items-center justify-center h-64">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: '#C9A96E' }} />
+            <div
+              className="animate-spin rounded-full h-8 w-8 border-b-2"
+              style={{ borderColor: '#C9A96E' }}
+            />
           </div>
         ) : viewMode === 'list' ? (
           /* ── List View ──────────────────────────────────────────── */
@@ -1902,9 +2718,14 @@ export default function Sales() {
             {filteredClients.length === 0 ? (
               <div className="text-center py-16">
                 <p className="font-medium text-gray-700">No leads yet</p>
-                <p className="text-sm mt-1 text-gray-500">Add your first lead to start tracking the sales pipeline.</p>
+                <p className="text-sm mt-1 text-gray-500">
+                  Add your first lead to start tracking the sales pipeline.
+                </p>
                 <button
-                  onClick={() => { setEditing(null); setLeadDialogOpen(true); }}
+                  onClick={() => {
+                    setEditing(null);
+                    setLeadDialogOpen(true);
+                  }}
                   className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium"
                   style={{ backgroundColor: '#C9A96E' }}
                 >
@@ -1912,10 +2733,17 @@ export default function Sales() {
                 </button>
               </div>
             ) : (
-              filteredClients.map(c => (
-                <ListRow key={c.id} client={c} stages={stages}
-                  onEdit={() => { setEditing(c); setLeadDialogOpen(true); }}
-                  onDelete={() => handleDelete(c)} />
+              filteredClients.map((c) => (
+                <ListRow
+                  key={c.id}
+                  client={c}
+                  stages={stages}
+                  onEdit={() => {
+                    setEditing(c);
+                    setLeadDialogOpen(true);
+                  }}
+                  onDelete={() => handleDelete(c)}
+                />
               ))
             )}
           </div>
@@ -1926,35 +2754,66 @@ export default function Sales() {
              every stage on the page at once — Tyler's preference. */
           <div
             className="flex md:grid gap-2 md:gap-3 overflow-x-auto md:overflow-x-visible flex-1 pb-4"
-            style={{ gridTemplateColumns: `repeat(${stages.length}, minmax(0, 1fr))` }}
+            style={{
+              gridTemplateColumns: `repeat(${stages.length}, minmax(0, 1fr))`,
+            }}
           >
-            {stages.map(stage => {
-              const stageClients = filteredClients.filter(c => c.stage === stage.key);
-              const stageTotal = stageClients.reduce((s, c) => s + (c.budget || 0), 0);
+            {stages.map((stage) => {
+              const stageClients = filteredClients.filter(
+                (c) => c.stage === stage.key
+              );
+              const stageTotal = stageClients.reduce(
+                (s, c) => s + (c.budget || 0),
+                0
+              );
               const isDropTarget = dragOverStage === stage.key;
 
               return (
                 <div
                   key={stage.key}
                   className="flex-shrink-0 w-64 md:w-auto md:min-w-0 flex flex-col"
-                  onDragOver={e => { e.preventDefault(); setDragOverStage(stage.key); }}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setDragOverStage(stage.key);
+                  }}
                   onDragLeave={() => setDragOverStage(null)}
-                  onDrop={e => handleDrop(e, stage.key)}
+                  onDrop={(e) => handleDrop(e, stage.key)}
                 >
                   {/* Column Header — label is the headline: full width,
                       two-line wrap, larger font. Lead count + total stack
                       below as secondary info. A color stripe across the
                       top edge keeps columns scannable when many stages
                       are visible. */}
-                  <div className={`rounded-t-xl border border-b-0 overflow-hidden transition-colors ${isDropTarget ? 'border-gray-400' : 'border-gray-200'}`}>
-                    <div className="h-1" style={{ backgroundColor: stage.color }} />
-                    <div className="px-3 py-2" style={{ backgroundColor: isDropTarget ? `${stage.color}10` : '#f9fafb' }}>
-                      <p className="text-sm font-bold text-gray-900 leading-snug break-words line-clamp-2" title={stage.label}>
+                  <div
+                    className={`rounded-t-xl border border-b-0 overflow-hidden transition-colors ${isDropTarget ? 'border-gray-400' : 'border-gray-200'}`}
+                  >
+                    <div
+                      className="h-1"
+                      style={{ backgroundColor: stage.color }}
+                    />
+                    <div
+                      className="px-3 py-2"
+                      style={{
+                        backgroundColor: isDropTarget
+                          ? `${stage.color}10`
+                          : '#f9fafb',
+                      }}
+                    >
+                      <p
+                        className="text-sm font-bold text-gray-900 leading-snug break-words line-clamp-2"
+                        title={stage.label}
+                      >
                         {stage.label}
                       </p>
                       <div className="flex items-center justify-between mt-1 text-xs text-gray-500">
-                        <span className="font-medium">{stageClients.length} {stageClients.length === 1 ? 'lead' : 'leads'}</span>
-                        <span className="font-bold" title={`Total: ${fmtFull(stageTotal)}`}>
+                        <span className="font-medium">
+                          {stageClients.length}{' '}
+                          {stageClients.length === 1 ? 'lead' : 'leads'}
+                        </span>
+                        <span
+                          className="font-bold"
+                          title={`Total: ${fmtFull(stageTotal)}`}
+                        >
                           {stageTotal > 0 ? fmtFull(stageTotal) : '$0'}
                         </span>
                       </div>
@@ -1964,20 +2823,29 @@ export default function Sales() {
                   {/* Cards */}
                   <div
                     className={`flex-1 border border-gray-200 rounded-b-xl p-2 space-y-2 min-h-32 transition-colors ${isDropTarget ? 'border-gray-400 bg-gray-50' : 'bg-gray-50'}`}
-                    style={isDropTarget ? { backgroundColor: `${stage.color}08` } : {}}
+                    style={
+                      isDropTarget
+                        ? { backgroundColor: `${stage.color}08` }
+                        : {}
+                    }
                   >
-                    {stageClients.map(c => (
+                    {stageClients.map((c) => (
                       <PipelineCard
                         key={c.id}
                         client={c}
                         stages={stages}
-                        onEdit={() => { setEditing(c); setLeadDialogOpen(true); }}
+                        onEdit={() => {
+                          setEditing(c);
+                          setLeadDialogOpen(true);
+                        }}
                         onDelete={() => handleDelete(c)}
                         onAdvance={() => handleAdvance(c)}
                       />
                     ))}
                     {stageClients.length === 0 && (
-                      <div className={`border-2 border-dashed rounded-lg p-4 text-center transition-all ${isDropTarget ? 'border-gray-400' : 'border-gray-200'}`}>
+                      <div
+                        className={`border-2 border-dashed rounded-lg p-4 text-center transition-all ${isDropTarget ? 'border-gray-400' : 'border-gray-200'}`}
+                      >
                         <p className="text-xs text-gray-400">Drop here</p>
                       </div>
                     )}
@@ -1996,7 +2864,11 @@ export default function Sales() {
         stages={stages}
         teamMembers={teamMembers}
         prefill={leadPrefill}
-        onClose={() => { setLeadDialogOpen(false); setEditing(null); setLeadPrefill(undefined); }}
+        onClose={() => {
+          setLeadDialogOpen(false);
+          setEditing(null);
+          setLeadPrefill(undefined);
+        }}
         onSave={handleSave}
       />
 
@@ -2018,7 +2890,12 @@ export default function Sales() {
       />
 
       {/* Filter panel + backdrop */}
-      {filterOpen && <div className="fixed inset-0 z-30" onClick={() => setFilterOpen(false)} />}
+      {filterOpen && (
+        <div
+          className="fixed inset-0 z-30"
+          onClick={() => setFilterOpen(false)}
+        />
+      )}
       <FilterPanel
         open={filterOpen}
         filters={filters}
@@ -2058,7 +2935,11 @@ export default function Sales() {
               });
               setPendingProject(null);
             } catch (e: any) {
-              toast({ title: 'Revert failed', description: e.message, variant: 'destructive' });
+              toast({
+                title: 'Revert failed',
+                description: e.message,
+                variant: 'destructive',
+              });
             }
           }}
         />
