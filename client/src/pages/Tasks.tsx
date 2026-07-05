@@ -407,33 +407,40 @@ export function TasksContent({ projectId: scopedProjectId }: { projectId?: strin
   const tasksByCategory = (cat: TaskCategory) => filteredTasks.filter(t => (t.category || 'uncategorized') === cat);
 
   return (
-      <div className="space-y-6 p-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <CheckSquare className="h-6 w-6" />
+      <div className="space-y-6">
+        {/* Header — stacks on mobile so the view-mode toggle and 'Add Task'
+            CTA never push each other off-screen at 390px. */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <CheckSquare className="h-6 w-6 flex-shrink-0" />
             <h1 className="text-2xl font-bold">Tasks</h1>
             <Badge variant="secondary" className="text-sm">{filteredTasks.length}</Badge>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="inline-flex rounded-md border border-gray-200 overflow-hidden">
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* View-mode segmented toggle. min-h-[44px] on the shared border
+                container gives each segment a full touch target while the
+                inner buttons keep their tight visual spacing. */}
+            <div className="inline-flex rounded-md border border-gray-200 overflow-hidden min-h-[44px]">
               <button
+                type="button"
                 onClick={() => setViewMode('kanban')}
-                className={`px-2.5 py-1 text-xs ${viewMode === 'kanban' ? 'bg-gray-900 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                className={`px-3 min-w-[64px] text-xs font-medium ${viewMode === 'kanban' ? 'bg-gray-900 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
                 title="By status"
               >
                 Status
               </button>
               <button
+                type="button"
                 onClick={() => setViewMode('kanban_category')}
-                className={`px-2.5 py-1 text-xs border-l border-gray-200 ${viewMode === 'kanban_category' ? 'bg-gray-900 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                className={`px-3 min-w-[64px] text-xs font-medium border-l border-gray-200 ${viewMode === 'kanban_category' ? 'bg-gray-900 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
                 title="By category"
               >
                 Category
               </button>
               <button
+                type="button"
                 onClick={() => setViewMode('list')}
-                className={`px-2.5 py-1 text-xs border-l border-gray-200 ${viewMode === 'list' ? 'bg-gray-900 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                className={`px-3 min-w-[64px] text-xs font-medium border-l border-gray-200 ${viewMode === 'list' ? 'bg-gray-900 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
                 title="List"
               >
                 List

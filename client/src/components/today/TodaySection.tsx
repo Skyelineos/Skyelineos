@@ -29,7 +29,13 @@ export function TodaySection({
           {count > 0 && <Badge variant="secondary" className="text-[10px] h-4">{count}</Badge>}
         </div>
         {viewAllHref && (
-          <Link href={viewAllHref} className="text-xs text-gray-500 hover:text-[#C9A96E] flex items-center gap-0.5">
+          // -mr-2 pulls the tap zone flush with the card edge so the
+          // visible label doesn't drift while padding brings the target
+          // up to 44px on phones.
+          <Link
+            href={viewAllHref}
+            className="text-xs text-gray-500 hover:text-[#C9A96E] flex items-center gap-0.5 -mr-2 px-2 py-2 min-h-[44px] rounded"
+          >
             {viewAllLabel} <ChevronRight className="w-3 h-3" />
           </Link>
         )}

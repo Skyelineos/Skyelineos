@@ -63,6 +63,25 @@ export async function run(h) {
   const shot = (name) =>
     page.screenshot({ path: resolve(SHOT_DIR, `${name}.png`), fullPage: true }).catch(() => {});
 
+  // Wait for either a locator to be visible OR a timeout, whichever comes
+  // first. Never throws — gives Firebase Auth + React Query time to hydrate
+  // and settle before we sample console errors. Firebase Auth restores from
+  // IndexedDB async on page load, so a naive waitForTimeout races with the
+  // very first authenticated fetch and produces 401 console errors on cold
+  // page loads.
+  const waitForReady = async (selector, timeoutMs = 4000) => {
+    try {
+      await page.locator(selector).first().waitFor({ state: 'visible', timeout: timeoutMs });
+    } catch {
+      // Fall through — caller still gets a timeout floor via the outer wait.
+    }
+    // Also let the network go quiet if it happens quickly. Bounded so a
+    // long-poll or websocket never stalls the whole suite.
+    try {
+      await page.waitForLoadState('networkidle', { timeout: 2000 });
+    } catch {}
+  };
+
   const projectName = `E2E Critical Path ${RUN_ID}`;
   let projectId = null;
 
@@ -84,7 +103,11 @@ export async function run(h) {
     await test('dashboard loads without console errors', async () => {
       errors = [];
       await page.goto(`${BASE_URL}/dashboard`, { waitUntil: 'domcontentloaded' });
-      await page.waitForTimeout(2500);
+      // Wait for the app shell to actually render before sampling errors.
+      // 'h1, h2, nav, [role=navigation], main' is broad on purpose — the
+      // dashboard has changed layouts a few times and we just need SOME
+      // top-level chrome to exist before we accept that the page is up.
+      await waitForReady('h1, h2, nav, [role="navigation"], main', 4000);
       await shot('02-dashboard');
       assert(
         errors.length === 0,
@@ -95,7 +118,7 @@ export async function run(h) {
     await test('projects list renders', async () => {
       errors = [];
       await page.goto(`${BASE_URL}/projects`, { waitUntil: 'domcontentloaded' });
-      await page.waitForTimeout(2500);
+      await waitForReady('h1, h2, nav, [role="navigation"], main', 4000);
       await shot('03-projects-list');
       assert(
         errors.length === 0,
@@ -120,7 +143,7 @@ export async function run(h) {
         await page.goto(`${BASE_URL}/projects/${projectId}/${tab}`, {
           waitUntil: 'domcontentloaded',
         });
-        await page.waitForTimeout(2000);
+        await waitForReady('h1, h2, nav, [role="navigation"], main', 4000);
         await shot(`04-project-${tab}`);
         assert(
           errors.length === 0,
@@ -132,7 +155,7 @@ export async function run(h) {
     await test('change orders page renders', async () => {
       errors = [];
       await page.goto(`${BASE_URL}/change-orders`, { waitUntil: 'domcontentloaded' });
-      await page.waitForTimeout(2500);
+      await waitForReady('h1, h2, nav, [role="navigation"], main', 4000);
       await shot('05-change-orders');
       assert(
         errors.length === 0,
@@ -143,7 +166,7 @@ export async function run(h) {
     await test('estimates page renders', async () => {
       errors = [];
       await page.goto(`${BASE_URL}/estimates`, { waitUntil: 'domcontentloaded' });
-      await page.waitForTimeout(2500);
+      await waitForReady('h1, h2, nav, [role="navigation"], main', 4000);
       await shot('06-estimates');
       assert(
         errors.length === 0,
@@ -156,7 +179,7 @@ export async function run(h) {
       await page.goto(`${BASE_URL}/client-portal/estimates?estimateId=fake`, {
         waitUntil: 'domcontentloaded',
       });
-      await page.waitForTimeout(2500);
+      await waitForReady('h1, h2, main, body', 4000);
       const text = (await page.content()).toLowerCase();
       // The route may role-guard-bounce us; what we're checking is that we
       // do NOT hit "Did you forget to add the page to the router?" (the

@@ -23,7 +23,10 @@ import type {
   SmsMessage,
 } from './types';
 
-const MODEL = 'claude-sonnet-4-6';
+// SMS replies are short, conversational, and latency-sensitive → haiku tier.
+// Complex extraction (e.g. expense parse below) stays on haiku too since the
+// output is small structured JSON, not nuanced reasoning.
+const MODEL = 'claude-haiku-4-5';
 const MAX_TOKENS = 512; // SMS replies are short by definition — cap so the
                         // model doesn't pad with paragraphs.
 

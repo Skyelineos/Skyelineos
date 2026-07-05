@@ -1,6 +1,28 @@
 import { QueryClient } from '@tanstack/react-query';
 import { auth } from '@/lib/firebase';
 
+// ── Auth-ready gate ──────────────────────────────────────────────────────────
+// Firebase Auth restores the persisted user from IndexedDB/localStorage
+// ASYNCHRONOUSLY on page load. React Query kicks off queries the moment a
+// component mounts, which used to race and fire requests with no Bearer
+// token → 401 → dashboard errors + E2E flake.
+//
+// waitForAuth() resolves on the first onAuthStateChanged tick (fires with
+// either a user or null). The promise is memoized so every fetch after the
+// first paints is essentially a no-op await.
+let authReadyPromise: Promise<void> | null = null;
+function waitForAuth(): Promise<void> {
+  if (!authReadyPromise) {
+    authReadyPromise = new Promise((resolve) => {
+      const unsubscribe = auth.onAuthStateChanged(() => {
+        unsubscribe();
+        resolve();
+      });
+    });
+  }
+  return authReadyPromise;
+}
+
 // Detect Firebase production environment
 const isFirebaseProduction = () => {
   return window.location.hostname.includes('.web.app') || 
@@ -23,7 +45,12 @@ const defaultFetcher = async (url: string) => {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
-    
+
+    // Wait for Firebase Auth to hydrate from persistence before deciding
+    // whether to attach a Bearer token. Prevents the initial-paint race
+    // where auth.currentUser is still null even though the user is signed in.
+    await waitForAuth();
+
     // Get Firebase ID token and add to Authorization header
     try {
       const currentUser = auth.currentUser;
@@ -214,6 +241,9 @@ export const apiRequest = async (
       'Cache-Control': 'no-cache', // Force refresh
       ...(options.headers as Record<string, string> || {}),
     };
+
+    // Wait for Firebase Auth to hydrate before reading currentUser.
+    await waitForAuth();
 
     // Get Firebase ID token and add to Authorization header
     try {

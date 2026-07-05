@@ -1808,15 +1808,17 @@ export default function Sales() {
     <AppLayout>
       <div className="flex flex-col h-full" style={{ height: 'calc(100vh - 80px)' }}>
 
-        {/* Top Bar */}
-        <div className="flex items-center justify-between gap-3 mb-5 flex-shrink-0">
+        {/* Top Bar — stacks and wraps on mobile so the full action cluster
+            (Pipeline toggle, Lead Form, Edit Stages, Filter, Import, +Lead)
+            stays on-screen instead of running off the right edge at 390px. */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5 flex-shrink-0">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Sales</h1>
             {totalPipeline > 0 && (
               <p className="text-sm text-gray-500 mt-0.5">Pipeline: {fmtFull(totalPipeline)}</p>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {/* Pipeline / List toggle */}
             <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden">
               <button
