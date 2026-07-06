@@ -99,10 +99,13 @@ const TaskListLibrary = lazy(() => import('@/pages/TaskListLibrary'));
 const ProjectBuildPlan = lazy(() => import('@/pages/ProjectBuildPlan'));
 const ProjectCloseout = lazy(() => import('@/pages/ProjectCloseout'));
 const ImportCenter = lazy(() => import('@/pages/ImportCenter'));
+const Acquisitions = lazy(() => import('@/pages/Acquisitions'));
 const ProjectTasks = lazy(() => import('@/pages/ProjectTasks'));
 const ProjectChangeOrders = lazy(() => import('@/pages/ProjectChangeOrders'));
 const ProjectRFIs = lazy(() => import('@/pages/ProjectRFIs'));
-const ProjectCommunications = lazy(() => import('@/pages/ProjectCommunications'));
+const ProjectCommunications = lazy(
+  () => import('@/pages/ProjectCommunications')
+);
 const ProjectSiteLog = lazy(() => import('@/pages/ProjectSiteLog'));
 const ProjectBills = lazy(() => import('@/pages/ProjectBills'));
 const ProjectWalkthroughs = lazy(() => import('@/pages/ProjectWalkthroughs'));
@@ -331,11 +334,11 @@ function Router() {
         </ProtectedRoute>
       </Route>
 
-        <Route path="/tools/bid-compare">
-          <Suspense fallback={<MinimalSpinner title="Loading Bid Leveling" />}>
-            <BidCompareTool />
-          </Suspense>
-        </Route>
+      <Route path="/tools/bid-compare">
+        <Suspense fallback={<MinimalSpinner title="Loading Bid Leveling" />}>
+          <BidCompareTool />
+        </Suspense>
+      </Route>
       <Route path="/tools/lumber">
         <ProtectedRoute>
           <RoleGuard
@@ -426,7 +429,10 @@ function Router() {
 
       <Route path="/expenses">
         <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc', 'projectManager']} showNotAuthorized>
+          <RoleGuard
+            allowedRoles={['admin', 'gc', 'projectManager']}
+            showNotAuthorized
+          >
             <Suspense fallback={<MinimalSpinner title="Loading Expenses" />}>
               <Expenses />
             </Suspense>
@@ -585,7 +591,9 @@ function Router() {
             allowedRoles={['admin', 'gc', 'projectManager']}
             showNotAuthorized
           >
-            <Suspense fallback={<MinimalSpinner title="Loading Communication" />}>
+            <Suspense
+              fallback={<MinimalSpinner title="Loading Communication" />}
+            >
               <ProjectCommunications />
             </Suspense>
           </RoleGuard>
@@ -719,7 +727,14 @@ function Router() {
       <Route path="/messages">
         <ProtectedRoute>
           <RoleGuard
-            allowedRoles={['admin', 'gc', 'projectManager', 'designer', 'subcontractor', 'client']}
+            allowedRoles={[
+              'admin',
+              'gc',
+              'projectManager',
+              'designer',
+              'subcontractor',
+              'client',
+            ]}
             showNotAuthorized
           >
             <Suspense fallback={<MinimalSpinner title="Loading Messages" />}>
@@ -735,7 +750,9 @@ function Router() {
             allowedRoles={['admin', 'gc', 'projectManager']}
             showNotAuthorized
           >
-            <Suspense fallback={<MinimalSpinner title="Loading Communication Center" />}>
+            <Suspense
+              fallback={<MinimalSpinner title="Loading Communication Center" />}
+            >
               <CommunicationCenter />
             </Suspense>
           </RoleGuard>
@@ -964,7 +981,9 @@ function Router() {
             allowedRoles={['admin', 'gc', 'projectManager']}
             showNotAuthorized
           >
-            <Suspense fallback={<MinimalSpinner title="Loading Daily Digest" />}>
+            <Suspense
+              fallback={<MinimalSpinner title="Loading Daily Digest" />}
+            >
               <DailyDigest />
             </Suspense>
           </RoleGuard>
@@ -989,7 +1008,14 @@ function Router() {
       <Route path="/documents">
         <ProtectedRoute>
           <RoleGuard
-            allowedRoles={['admin', 'gc', 'projectManager', 'designer', 'subcontractor', 'client']}
+            allowedRoles={[
+              'admin',
+              'gc',
+              'projectManager',
+              'designer',
+              'subcontractor',
+              'client',
+            ]}
             showNotAuthorized
           >
             <Suspense fallback={<MinimalSpinner title="Loading Documents" />}>
@@ -1040,10 +1066,7 @@ function Router() {
 
       <Route path="/cost-codes">
         <ProtectedRoute>
-          <RoleGuard
-            allowedRoles={['admin', 'gc']}
-            showNotAuthorized
-          >
+          <RoleGuard allowedRoles={['admin', 'gc']} showNotAuthorized>
             <Suspense fallback={<MinimalSpinner title="Loading Cost Codes" />}>
               <CostCodes />
             </Suspense>
@@ -1106,6 +1129,18 @@ function Router() {
               fallback={<MinimalSpinner title="Loading Import Center" />}
             >
               <ImportCenter />
+            </Suspense>
+          </RoleGuard>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/acquisitions">
+        <ProtectedRoute>
+          <RoleGuard allowedRoles={['admin', 'gc']} showNotAuthorized>
+            <Suspense
+              fallback={<MinimalSpinner title="Loading Acquisitions" />}
+            >
+              <Acquisitions />
             </Suspense>
           </RoleGuard>
         </ProtectedRoute>

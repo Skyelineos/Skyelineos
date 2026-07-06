@@ -35,6 +35,7 @@ import {
   Receipt,
   FileSignature,
   Settings,
+  Building2,
 } from 'lucide-react';
 
 interface NavItem {
@@ -53,68 +54,75 @@ const TEAM_NAV: NavGroup[] = [
   {
     label: 'Overview',
     items: [
-      { label: 'Dashboard',    href: '/dashboard', icon: LayoutDashboard },
-      { label: 'Daily Digest', href: '/daily',     icon: ClipboardCheck },
+      { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+      { label: 'Daily Digest', href: '/daily', icon: ClipboardCheck },
     ],
   },
   {
     label: 'Sales & Estimating',
     items: [
-      { label: 'Sales & CRM', href: '/sales',      icon: TrendingUp },
-      { label: 'Estimates',   href: '/estimates',  icon: DollarSign },
-      { label: 'Contracts',   href: '/contracts',  icon: FileSignature },
-      { label: 'Contacts',    href: '/contacts',   icon: Users },
+      { label: 'Sales & CRM', href: '/sales', icon: TrendingUp },
+      { label: 'Estimates', href: '/estimates', icon: DollarSign },
+      { label: 'Contracts', href: '/contracts', icon: FileSignature },
+      { label: 'Contacts', href: '/contacts', icon: Users },
+      { label: 'Acquisitions', href: '/acquisitions', icon: Building2 },
     ],
   },
   {
     label: 'Projects',
     items: [
-      { label: 'Projects',      href: '/projects',      icon: FolderOpen },
-      { label: 'Schedule',      href: '/schedule',      icon: Calendar },
-      { label: 'Tasks',         href: '/tasks',         icon: ClipboardList },
+      { label: 'Projects', href: '/projects', icon: FolderOpen },
+      { label: 'Schedule', href: '/schedule', icon: Calendar },
+      { label: 'Tasks', href: '/tasks', icon: ClipboardList },
       { label: 'Change Orders', href: '/change-orders', icon: GitPullRequest },
-      { label: 'Documents',     href: '/documents',     icon: FileText },
+      { label: 'Documents', href: '/documents', icon: FileText },
     ],
   },
   {
     label: 'Field',
     items: [
-      { label: 'Site Log',  href: '/site-log',  icon: ClipboardCheck },
+      { label: 'Site Log', href: '/site-log', icon: ClipboardCheck },
       { label: 'Timesheet', href: '/timesheet', icon: Clock },
-      { label: 'Safety',    href: '/safety',    icon: ShieldCheck },
-      { label: 'Catalogs',  href: '/catalogs',  icon: BookOpen },
+      { label: 'Safety', href: '/safety', icon: ShieldCheck },
+      { label: 'Catalogs', href: '/catalogs', icon: BookOpen },
       { label: 'Cost Codes', href: '/cost-codes', icon: Hash },
     ],
   },
   {
     label: 'Tools',
-    items: [
-      { label: 'Tools',  href: '/tools', icon: Hammer },
-    ],
+    items: [{ label: 'Tools', href: '/tools', icon: Hammer }],
   },
   {
     label: 'Finance',
     items: [
       { label: 'Financials', href: '/financials', icon: DollarSign },
-      { label: 'Expenses',   href: '/expenses',   icon: Receipt },
-      { label: 'Bills',      href: '/bills',      icon: Receipt },
-      { label: 'Reports',    href: '/reports',    icon: BarChart2 },
+      { label: 'Expenses', href: '/expenses', icon: Receipt },
+      { label: 'Bills', href: '/bills', icon: Receipt },
+      { label: 'Reports', href: '/reports', icon: BarChart2 },
     ],
   },
   {
     label: 'Communication',
     items: [
-      { label: 'Communication Center', href: '/communications', icon: MessagesSquare },
-      { label: 'Messaging', href: '/messages',  icon: MessageSquare },
+      {
+        label: 'Communication Center',
+        href: '/communications',
+        icon: MessagesSquare,
+      },
+      { label: 'Messaging', href: '/messages', icon: MessageSquare },
       { label: 'Comms Log', href: '/comms-log', icon: Radio },
     ],
   },
   {
     label: 'Portals',
     items: [
-      { label: 'Client Portal',        href: '/client-portal',        icon: UserCheck },
-      { label: 'Subcontractor Portal', href: '/subcontractor-portal', icon: HardHat },
-      { label: 'Designer Portal',      href: '/designer-portal',      icon: Palette },
+      { label: 'Client Portal', href: '/client-portal', icon: UserCheck },
+      {
+        label: 'Subcontractor Portal',
+        href: '/subcontractor-portal',
+        icon: HardHat,
+      },
+      { label: 'Designer Portal', href: '/designer-portal', icon: Palette },
     ],
   },
   // MVP AUDIT (2026-07-04): Creative group (Design Board / Content Studio /
@@ -130,13 +138,13 @@ const TEAM_NAV: NavGroup[] = [
   {
     label: 'Management',
     items: [
-      { label: 'Users',          href: '/users',          icon: UserCog },
-      { label: 'Master Tasks',   href: '/master-tasks',   icon: ClipboardList },
-      { label: 'Templates',      href: '/templates',      icon: Hammer },
+      { label: 'Users', href: '/users', icon: UserCog },
+      { label: 'Master Tasks', href: '/master-tasks', icon: ClipboardList },
+      { label: 'Templates', href: '/templates', icon: Hammer },
       // MVP AUDIT: Playbook / Automations / Subscriptions / API Storage /
       // AI Inbox / Ingestion Lab moved to future-features/.
       // { label: 'Playbook',       href: '/playbook',       icon: Lightbulb },
-      { label: 'Import Center',  href: '/import-center',  icon: FileSpreadsheet },
+      { label: 'Import Center', href: '/import-center', icon: FileSpreadsheet },
       // { label: 'Automations',    href: '/automations',    icon: Zap },
       // { label: 'Subscriptions',  href: '/subscriptions',  icon: Wallet },
       // { label: 'API Storage',    href: '/api-storage',    icon: KeyRound },
@@ -147,13 +155,29 @@ const TEAM_NAV: NavGroup[] = [
 ];
 
 // Management section only for admins
-const MANAGEMENT_HREFS = ['/users', '/master-tasks', '/templates', '/playbook', '/automations', '/import-center', '/subscriptions', '/api-storage', '/admin/ai-inbox', '/admin/ingestion-lab'];
+const MANAGEMENT_HREFS = [
+  '/users',
+  '/master-tasks',
+  '/templates',
+  '/playbook',
+  '/automations',
+  '/import-center',
+  '/subscriptions',
+  '/api-storage',
+  '/admin/ai-inbox',
+  '/admin/ingestion-lab',
+  '/acquisitions',
+];
 
 // Portal entries — only admins should see these in the team sidebar, since
 // the portal RoleGuards reject gc/projectManager (they're for the portal
 // users themselves + admin impersonation via AdminPortalControls). Surfacing
 // these to GC/PM previously sent them to the NotAuthorized page on click.
-const PORTAL_HREFS = ['/client-portal', '/subcontractor-portal', '/designer-portal'];
+const PORTAL_HREFS = [
+  '/client-portal',
+  '/subcontractor-portal',
+  '/designer-portal',
+];
 
 // Hrefs whose route's RoleGuard excludes projectManager. We hide these in the
 // PM sidebar instead of regressing them to /not-authorized.
@@ -174,22 +198,18 @@ const PM_RESTRICTED_HREFS = [
 const DESIGNER_NAV: NavGroup[] = [
   {
     label: 'My Work',
-    items: [
-      { label: 'My Projects',  href: '/designer-portal', icon: Palette },
-    ],
+    items: [{ label: 'My Projects', href: '/designer-portal', icon: Palette }],
   },
   {
     label: 'Resources',
     items: [
-      { label: 'Catalogs',     href: '/catalogs',   icon: BookOpen },
-      { label: 'Documents',    href: '/documents',  icon: FileText },
+      { label: 'Catalogs', href: '/catalogs', icon: BookOpen },
+      { label: 'Documents', href: '/documents', icon: FileText },
     ],
   },
   {
     label: 'Communication',
-    items: [
-      { label: 'Messaging',    href: '/messages',   icon: MessageSquare },
-    ],
+    items: [{ label: 'Messaging', href: '/messages', icon: MessageSquare }],
   },
 ];
 
@@ -201,8 +221,12 @@ const SUB_NAV: NavGroup[] = [
   {
     label: 'My Work',
     items: [
-      { label: 'My Jobs',      href: '/subcontractor-portal',          icon: Briefcase },
-      { label: 'Schedule',     href: '/subcontractor-portal/schedule', icon: Calendar },
+      { label: 'My Jobs', href: '/subcontractor-portal', icon: Briefcase },
+      {
+        label: 'Schedule',
+        href: '/subcontractor-portal/schedule',
+        icon: Calendar,
+      },
     ],
   },
   {
@@ -211,14 +235,18 @@ const SUB_NAV: NavGroup[] = [
       // /subcontractor-portal/compliance covers COIs, safety docs, and
       // certifications — the closest in-portal equivalent of the GC's
       // global Safety + Timesheet pages (which subs can't see).
-      { label: 'Compliance',   href: '/subcontractor-portal/compliance', icon: ShieldCheck },
+      {
+        label: 'Compliance',
+        href: '/subcontractor-portal/compliance',
+        icon: ShieldCheck,
+      },
     ],
   },
   {
     label: 'Communication',
     items: [
-      { label: 'Messaging',    href: '/messages',   icon: MessageSquare },
-      { label: 'Documents',    href: '/documents',  icon: FileText },
+      { label: 'Messaging', href: '/messages', icon: MessageSquare },
+      { label: 'Documents', href: '/documents', icon: FileText },
     ],
   },
 ];
@@ -227,15 +255,13 @@ const SUB_NAV: NavGroup[] = [
 const CLIENT_NAV: NavGroup[] = [
   {
     label: 'My Home',
-    items: [
-      { label: 'My Project',   href: '/client-portal', icon: Home },
-    ],
+    items: [{ label: 'My Project', href: '/client-portal', icon: Home }],
   },
   {
     label: 'Communication',
     items: [
-      { label: 'Messaging',    href: '/messages',  icon: MessageSquare },
-      { label: 'Documents',    href: '/documents', icon: FileText },
+      { label: 'Messaging', href: '/messages', icon: MessageSquare },
+      { label: 'Documents', href: '/documents', icon: FileText },
     ],
   },
 ];
@@ -256,12 +282,14 @@ function getNavForRole(role: string, navDisabled: string[]): NavGroup[] {
     // group (those routes are gated to portal users + admin impersonation).
     if (role !== 'admin') {
       base = base
-        .map(g => ({
+        .map((g) => ({
           ...g,
-          items: g.items.filter(i => !PORTAL_HREFS.includes(i.href)),
+          items: g.items.filter((i) => !PORTAL_HREFS.includes(i.href)),
         }))
-        .filter(g => g.items.length > 0)
-        .filter(g => !g.items.every(i => MANAGEMENT_HREFS.includes(i.href)));
+        .filter((g) => g.items.length > 0)
+        .filter(
+          (g) => !g.items.every((i) => MANAGEMENT_HREFS.includes(i.href))
+        );
     }
     // Project managers don't have RoleGuard access to several team routes
     // (estimates, financials, bills, reports, social-media, design-board,
@@ -269,11 +297,11 @@ function getNavForRole(role: string, navDisabled: string[]): NavGroup[] {
     // a click bounce to /not-authorized.
     if (role === 'projectManager' || role === 'project_manager') {
       base = base
-        .map(g => ({
+        .map((g) => ({
           ...g,
-          items: g.items.filter(i => !PM_RESTRICTED_HREFS.includes(i.href)),
+          items: g.items.filter((i) => !PM_RESTRICTED_HREFS.includes(i.href)),
         }))
-        .filter(g => g.items.length > 0);
+        .filter((g) => g.items.length > 0);
     }
   }
 
@@ -281,11 +309,11 @@ function getNavForRole(role: string, navDisabled: string[]): NavGroup[] {
   if (navDisabled.length === 0) return base;
 
   return base
-    .map(g => ({
+    .map((g) => ({
       ...g,
-      items: g.items.filter(i => !navDisabled.includes(i.href)),
+      items: g.items.filter((i) => !navDisabled.includes(i.href)),
     }))
-    .filter(g => g.items.length > 0);
+    .filter((g) => g.items.length > 0);
 }
 
 interface SidebarProps {
@@ -293,13 +321,15 @@ interface SidebarProps {
   onToggle: () => void;
 }
 
-export function Sidebar({ isOpen, onToggle }: SidebarProps) {
+export function Sidebar({ isOpen: _isOpen, onToggle }: SidebarProps) {
   const [location] = useLocation();
   const { user } = useAuth();
   useAutoAdminView();
 
   const role = user?.role || 'client';
-  const navDisabled: string[] = Array.isArray(user?.navDisabled) ? user.navDisabled as string[] : [];
+  const navDisabled: string[] = Array.isArray(user?.navDisabled)
+    ? (user.navDisabled as string[])
+    : [];
   const navGroups = getNavForRole(role, navDisabled);
 
   // Role-aware home destination — wraps the brand title so users can click
@@ -307,13 +337,37 @@ export function Sidebar({ isOpen, onToggle }: SidebarProps) {
   const homeRoute = user?.role ? getDefaultRouteForRole(user.role) : '/';
 
   return (
-    <aside className="flex flex-col h-full w-64 overflow-y-auto" style={{ backgroundColor: 'var(--color-sidebar-bg)' }}>
+    <aside
+      className="flex flex-col h-full w-64 overflow-y-auto"
+      style={{ backgroundColor: 'var(--color-sidebar-bg)' }}
+    >
       {/* Brand header — clickable, returns to role-aware home */}
-      <div className="flex items-center justify-between px-5 py-5 flex-shrink-0" style={{ borderBottom: '1px solid rgba(201,169,110,0.2)' }}>
-        <Link href={homeRoute} className="cursor-pointer transition-opacity hover:opacity-80" aria-label="Go to dashboard">
-          <span className="text-xl font-heading font-semibold text-white block" style={{ letterSpacing: '0.04em' }}>Skyeline Homes</span>
-          <p className="text-xs mt-0.5 font-sans font-light tracking-widest uppercase" style={{ color: '#C9A96E', letterSpacing: '0.15em' }}>
-            {role === 'designer' ? 'Designer Portal' : role === 'client' ? 'Client Portal' : role === 'sub' ? 'Subcontractor Portal' : 'Project Portal'}
+      <div
+        className="flex items-center justify-between px-5 py-5 flex-shrink-0"
+        style={{ borderBottom: '1px solid rgba(201,169,110,0.2)' }}
+      >
+        <Link
+          href={homeRoute}
+          className="cursor-pointer transition-opacity hover:opacity-80"
+          aria-label="Go to dashboard"
+        >
+          <span
+            className="text-xl font-heading font-semibold text-white block"
+            style={{ letterSpacing: '0.04em' }}
+          >
+            Skyeline Homes
+          </span>
+          <p
+            className="text-xs mt-0.5 font-sans font-light tracking-widest uppercase"
+            style={{ color: '#C9A96E', letterSpacing: '0.15em' }}
+          >
+            {role === 'designer'
+              ? 'Designer Portal'
+              : role === 'client'
+                ? 'Client Portal'
+                : role === 'sub'
+                  ? 'Subcontractor Portal'
+                  : 'Project Portal'}
           </p>
         </Link>
         <button
@@ -329,7 +383,13 @@ export function Sidebar({ isOpen, onToggle }: SidebarProps) {
       <nav className="flex-1 px-3 py-5 space-y-6">
         {navGroups.map((group) => (
           <div key={group.label}>
-            <p className="px-3 mb-1.5 text-xs font-sans font-medium uppercase tracking-widest" style={{ color: 'rgba(201,169,110,0.5)', letterSpacing: '0.12em' }}>
+            <p
+              className="px-3 mb-1.5 text-xs font-sans font-medium uppercase tracking-widest"
+              style={{
+                color: 'rgba(201,169,110,0.5)',
+                letterSpacing: '0.12em',
+              }}
+            >
               {group.label}
             </p>
             <ul className="space-y-0.5">
@@ -353,9 +413,14 @@ export function Sidebar({ isOpen, onToggle }: SidebarProps) {
                           ? 'text-white'
                           : 'hover:text-white hover:bg-white/5 active:bg-white/10 active:text-white'
                       )}
-                      style={isActive
-                        ? { backgroundColor: 'rgba(201,169,110,0.15)', color: '#C9A96E', borderLeft: '2px solid #C9A96E' }
-                        : { color: 'rgba(255,255,255,0.55)' }
+                      style={
+                        isActive
+                          ? {
+                              backgroundColor: 'rgba(201,169,110,0.15)',
+                              color: '#C9A96E',
+                              borderLeft: '2px solid #C9A96E',
+                            }
+                          : { color: 'rgba(255,255,255,0.55)' }
                       }
                     >
                       <Icon className="h-4 w-4 flex-shrink-0" />
@@ -370,7 +435,10 @@ export function Sidebar({ isOpen, onToggle }: SidebarProps) {
       </nav>
 
       {/* Bottom: Settings + brand */}
-      <div className="px-3 pb-3 flex-shrink-0" style={{ borderTop: '1px solid rgba(201,169,110,0.15)' }}>
+      <div
+        className="px-3 pb-3 flex-shrink-0"
+        style={{ borderTop: '1px solid rgba(201,169,110,0.15)' }}
+      >
         <Link
           href="/settings"
           className={cn(
@@ -379,15 +447,23 @@ export function Sidebar({ isOpen, onToggle }: SidebarProps) {
               ? 'text-white'
               : 'hover:text-white hover:bg-white/5'
           )}
-          style={location === '/settings'
-            ? { backgroundColor: 'rgba(201,169,110,0.15)', color: '#C9A96E', borderLeft: '2px solid #C9A96E' }
-            : { color: 'rgba(255,255,255,0.55)' }
+          style={
+            location === '/settings'
+              ? {
+                  backgroundColor: 'rgba(201,169,110,0.15)',
+                  color: '#C9A96E',
+                  borderLeft: '2px solid #C9A96E',
+                }
+              : { color: 'rgba(255,255,255,0.55)' }
           }
         >
           <Settings className="h-4 w-4 flex-shrink-0" />
           <span>Settings</span>
         </Link>
-        <p className="text-xs font-sans text-center mt-3" style={{ color: 'rgba(255,255,255,0.2)', letterSpacing: '0.08em' }}>
+        <p
+          className="text-xs font-sans text-center mt-3"
+          style={{ color: 'rgba(255,255,255,0.2)', letterSpacing: '0.08em' }}
+        >
           © {new Date().getFullYear()} Skyeline Homes
         </p>
       </div>
