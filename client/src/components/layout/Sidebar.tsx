@@ -35,7 +35,6 @@ import {
   Receipt,
   FileSignature,
   Settings,
-  Building2,
 } from 'lucide-react';
 
 interface NavItem {
@@ -65,7 +64,6 @@ const TEAM_NAV: NavGroup[] = [
       { label: 'Estimates', href: '/estimates', icon: DollarSign },
       { label: 'Contracts', href: '/contracts', icon: FileSignature },
       { label: 'Contacts', href: '/contacts', icon: Users },
-      { label: 'Acquisitions', href: '/acquisitions', icon: Building2 },
     ],
   },
   {
@@ -166,7 +164,6 @@ const MANAGEMENT_HREFS = [
   '/api-storage',
   '/admin/ai-inbox',
   '/admin/ingestion-lab',
-  '/acquisitions',
 ];
 
 // Portal entries — only admins should see these in the team sidebar, since

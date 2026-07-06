@@ -99,7 +99,6 @@ const TaskListLibrary = lazy(() => import('@/pages/TaskListLibrary'));
 const ProjectBuildPlan = lazy(() => import('@/pages/ProjectBuildPlan'));
 const ProjectCloseout = lazy(() => import('@/pages/ProjectCloseout'));
 const ImportCenter = lazy(() => import('@/pages/ImportCenter'));
-const Acquisitions = lazy(() => import('@/pages/Acquisitions'));
 const ProjectTasks = lazy(() => import('@/pages/ProjectTasks'));
 const ProjectChangeOrders = lazy(() => import('@/pages/ProjectChangeOrders'));
 const ProjectRFIs = lazy(() => import('@/pages/ProjectRFIs'));
@@ -1129,18 +1128,6 @@ function Router() {
               fallback={<MinimalSpinner title="Loading Import Center" />}
             >
               <ImportCenter />
-            </Suspense>
-          </RoleGuard>
-        </ProtectedRoute>
-      </Route>
-
-      <Route path="/acquisitions">
-        <ProtectedRoute>
-          <RoleGuard allowedRoles={['admin', 'gc']} showNotAuthorized>
-            <Suspense
-              fallback={<MinimalSpinner title="Loading Acquisitions" />}
-            >
-              <Acquisitions />
             </Suspense>
           </RoleGuard>
         </ProtectedRoute>
