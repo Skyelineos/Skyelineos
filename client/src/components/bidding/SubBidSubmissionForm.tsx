@@ -1,29 +1,66 @@
 import { useState, useEffect, useRef } from 'react';
 import {
-  collection, addDoc, serverTimestamp, query, where, getDocs, doc, getDoc,
+  collection,
+  addDoc,
+  serverTimestamp,
+  query,
+  where,
+  getDocs,
+  doc,
+  getDoc,
 } from 'firebase/firestore';
-import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '@/lib/firebase';
+import {
+  ref as storageRef,
+  uploadBytesResumable,
+  getDownloadURL,
+} from 'firebase/storage';
+import { db, storage, auth as firebaseAuth } from '@/lib/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { fireTrigger } from '@/lib/notifications';
 import { apiRequest } from '@/lib/queryClient';
-import { auth as firebaseAuth } from '@/lib/firebase';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import {
-  ChevronLeft, FileText, Send, Trash2, Plus, Shield, Building2,
-  AlertCircle, ExternalLink, Paperclip, X, Loader2, Ruler, FileUp, ListChecks,
+  ChevronLeft,
+  FileText,
+  Send,
+  Trash2,
+  Plus,
+  Shield,
+  Building2,
+  AlertCircle,
+  ExternalLink,
+  Paperclip,
+  X,
+  Loader2,
+  Ruler,
+  FileUp,
+  ListChecks,
 } from 'lucide-react';
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
 } from '@/components/ui/dialog';
 import TakeoffStudio from '@/components/takeoff/TakeoffStudio';
-import type { BidRequest, BidLineItem, BidInsurance, ContractorLicense } from './types';
+import type {
+  BidRequest,
+  BidLineItem,
+  BidInsurance,
+  ContractorLicense,
+} from './types';
 import { publishedAddendaForTrades } from '@/lib/ssot/addenda';
 import type { Addendum } from '@/lib/ssot/types';
 import { SsotFileBrowser } from './SsotFileBrowser';
@@ -36,14 +73,22 @@ interface AttachedMeasurement {
   unit: string;
 }
 
-const newId = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+const newId = () =>
+  Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 
 export function SubBidSubmissionForm({
-  request, onClose, alreadySubmitted,
+  request,
+  onClose,
+  alreadySubmitted,
+  onSubmitSuccess,
 }: {
   request: BidRequest;
   onClose: () => void;
   alreadySubmitted: boolean;
+  /** Called after a successful submit (in addition to onClose). Lets the
+   *  magic-link portal page show a dedicated success screen instead of
+   *  navigating away to the portal. */
+  onSubmitSuccess?: () => void;
 }) {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -74,12 +119,15 @@ export function SubBidSubmissionForm({
             w9Filed: !!d.w9Filed,
             insuranceCurrent: !!d.insuranceCurrent,
             agreementSigned: !!d.agreementSigned,
-            contractorLicenseNumber: typeof d.contractorLicenseNumber === 'string'
-              ? d.contractorLicenseNumber.trim()
-              : undefined,
+            contractorLicenseNumber:
+              typeof d.contractorLicenseNumber === 'string'
+                ? d.contractorLicenseNumber.trim()
+                : undefined,
           });
         }
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     })();
   }, [user]);
   const complianceMissing: string[] = [
@@ -96,12 +144,23 @@ export function SubBidSubmissionForm({
 
   // Line items
   const [lines, setLines] = useState<BidLineItem[]>([
-    { id: newId(), description: '', qty: 1, unit: 'lump sum', unitCost: 0, total: 0 },
+    {
+      id: newId(),
+      description: '',
+      qty: 1,
+      unit: 'lump sum',
+      unitCost: 0,
+      total: 0,
+    },
   ]);
   const [notes, setNotes] = useState('');
 
   // PDF quote path
-  const [quoteFile, setQuoteFile] = useState<{ name: string; url: string; storagePath: string } | null>(null);
+  const [quoteFile, setQuoteFile] = useState<{
+    name: string;
+    url: string;
+    storagePath: string;
+  } | null>(null);
   const [quoteTotal, setQuoteTotal] = useState<number>(0);
   const [quoteUploading, setQuoteUploading] = useState(false);
   const [quoteProgress, setQuoteProgress] = useState(0);
@@ -113,7 +172,9 @@ export function SubBidSubmissionForm({
 
   // Project documents (read-only) — anything attached to the project that subs
   // invited to a bid can reference. Loaded when the form mounts.
-  const [projectDocs, setProjectDocs] = useState<{ id: string; name: string; fileUrl: string; category?: string }[]>([]);
+  const [projectDocs, setProjectDocs] = useState<
+    { id: string; name: string; fileUrl: string; category?: string }[]
+  >([]);
 
   // IA-audit gap #3 — client selections attached to THIS trade by the GC
   // when sending the package. Renders inline so subs bid against the exact
@@ -129,7 +190,9 @@ export function SubBidSubmissionForm({
     imageUrl?: string;
     productUrl?: string;
   }
-  const [attachedSelections, setAttachedSelections] = useState<AttachedSelection[]>([]);
+  const [attachedSelections, setAttachedSelections] = useState<
+    AttachedSelection[]
+  >([]);
 
   // Project-level context — address, sqft, scope statement, special
   // considerations. The bid request doc itself only carries the per-trade
@@ -148,17 +211,24 @@ export function SubBidSubmissionForm({
 
   // Compliance
   const [insurance, setInsurance] = useState<BidInsurance>({
-    carrier: '', policyNumber: '', expiration: '',
+    carrier: '',
+    policyNumber: '',
+    expiration: '',
   });
   const [license, setLicense] = useState<ContractorLicense>({
-    number: '', state: 'UT', type: '', expiration: '',
+    number: '',
+    state: 'UT',
+    type: '',
+    expiration: '',
   });
   const [agreementAcknowledged, setAgreementAcknowledged] = useState(false);
 
   const [coiUploading, setCoiUploading] = useState(false);
   const [coiProgress, setCoiProgress] = useState(0);
 
-  const [attachments, setAttachments] = useState<{ name: string; url: string; storagePath: string }[]>([]);
+  const [attachments, setAttachments] = useState<
+    { name: string; url: string; storagePath: string }[]
+  >([]);
   const [attachUploading, setAttachUploading] = useState(false);
   const [attachProgress, setAttachProgress] = useState(0);
 
@@ -174,19 +244,25 @@ export function SubBidSubmissionForm({
     let cancelled = false;
     (async () => {
       try {
-        const found = await publishedAddendaForTrades(request.projectId, [request.trade as string]);
+        const found = await publishedAddendaForTrades(request.projectId, [
+          request.trade as string,
+        ]);
         if (!cancelled) setAddenda(found);
       } catch (e) {
         console.warn('[bid] failed to load addenda', e);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [request.projectId, request.trade]);
 
   // Takeoff: optional measurements the sub takes against the project's plans
   // and chooses to attach to this bid.
   const [takeoffOpen, setTakeoffOpen] = useState(false);
-  const [attachedMeasurements, setAttachedMeasurements] = useState<AttachedMeasurement[]>([]);
+  const [attachedMeasurements, setAttachedMeasurements] = useState<
+    AttachedMeasurement[]
+  >([]);
 
   // Pre-fill from sub's contact profile if available
   useEffect(() => {
@@ -199,7 +275,9 @@ export function SubBidSubmissionForm({
           if (c.insurance) setInsurance(c.insurance);
           if (c.contractorLicense) setLicense(c.contractorLicense);
         }
-      } catch {}
+      } catch {
+        /* ignore — soft-fail, form still works without pre-fill */
+      }
     })();
   }, [subId]);
 
@@ -208,19 +286,25 @@ export function SubBidSubmissionForm({
     if (!request.projectId) return;
     (async () => {
       try {
-        const snap = await getDocs(query(
-          collection(db, 'documents'),
-          where('projectId', '==', request.projectId),
-        ));
-        setProjectDocs(snap.docs.map(d => {
-          const data = d.data() as any;
-          return {
-            id: d.id,
-            name: String(data.name || data.fileName || 'Document'),
-            fileUrl: String(data.fileUrl || ''),
-            category: data.category,
-          };
-        }).filter(d => d.fileUrl));
+        const snap = await getDocs(
+          query(
+            collection(db, 'documents'),
+            where('projectId', '==', request.projectId)
+          )
+        );
+        setProjectDocs(
+          snap.docs
+            .map((d) => {
+              const data = d.data() as any;
+              return {
+                id: d.id,
+                name: String(data.name || data.fileName || 'Document'),
+                fileUrl: String(data.fileUrl || ''),
+                category: data.category,
+              };
+            })
+            .filter((d) => d.fileUrl)
+        );
       } catch {
         // Permission errors here just mean the sub can't see project docs;
         // they can still use the plans attached directly to the bid request.
@@ -235,7 +319,9 @@ export function SubBidSubmissionForm({
   useEffect(() => {
     if (!request.projectId) return;
     const ids: string[] = Array.isArray((request as any).attachedSelectionIds)
-      ? ((request as any).attachedSelectionIds as any[]).filter(x => typeof x === 'string')
+      ? ((request as any).attachedSelectionIds as any[]).filter(
+          (x) => typeof x === 'string'
+        )
       : [];
     if (ids.length === 0) {
       setAttachedSelections([]);
@@ -243,32 +329,48 @@ export function SubBidSubmissionForm({
     }
     (async () => {
       try {
-        const fetches = ids.map(async id => {
-          const snap = await getDoc(doc(db, 'projects', request.projectId, 'selections', id));
+        const fetches = ids.map(async (id) => {
+          const snap = await getDoc(
+            doc(db, 'projects', request.projectId, 'selections', id)
+          );
           if (!snap.exists()) return null;
           const d = snap.data() as any;
           const items: any[] = Array.isArray(d.items) ? d.items : [];
-          const firstItem = items.find(i => i && i.status !== 'removed') || items[0] || {};
+          const firstItem =
+            items.find((i) => i && i.status !== 'removed') || items[0] || {};
           const parts: string[] = [];
           if (firstItem.size) parts.push(String(firstItem.size));
-          if (firstItem.tileLayout) parts.push(`Layout: ${firstItem.tileLayout}`);
+          if (firstItem.tileLayout)
+            parts.push(`Layout: ${firstItem.tileLayout}`);
           if (firstItem.grout) parts.push(`Grout: ${firstItem.grout}`);
           if (d.area) parts.push(String(d.area));
           if (d.room) parts.push(String(d.room));
           const sel: AttachedSelection = {
             id,
             category: typeof d.category === 'string' ? d.category : undefined,
-            productName: typeof firstItem.productName === 'string' ? firstItem.productName : undefined,
-            vendor: typeof firstItem.vendor === 'string' ? firstItem.vendor : undefined,
+            productName:
+              typeof firstItem.productName === 'string'
+                ? firstItem.productName
+                : undefined,
+            vendor:
+              typeof firstItem.vendor === 'string'
+                ? firstItem.vendor
+                : undefined,
             description: parts.length > 0 ? parts.join(' · ') : undefined,
-            imageUrl: Array.isArray(firstItem.imageUrls) && firstItem.imageUrls[0]
-              ? String(firstItem.imageUrls[0])
-              : undefined,
-            productUrl: typeof firstItem.productUrl === 'string' ? firstItem.productUrl : undefined,
+            imageUrl:
+              Array.isArray(firstItem.imageUrls) && firstItem.imageUrls[0]
+                ? String(firstItem.imageUrls[0])
+                : undefined,
+            productUrl:
+              typeof firstItem.productUrl === 'string'
+                ? firstItem.productUrl
+                : undefined,
           };
           return sel;
         });
-        const out = (await Promise.all(fetches)).filter((s): s is AttachedSelection => !!s);
+        const out = (await Promise.all(fetches)).filter(
+          (s): s is AttachedSelection => !!s
+        );
         setAttachedSelections(out);
       } catch (e) {
         console.warn('[sub-bid-form] attached selections load failed', e);
@@ -300,20 +402,37 @@ export function SubBidSubmissionForm({
           });
         }
       } catch (e) {
-        console.warn('[sub-bid-form] project context load failed (permission?)', e);
+        console.warn(
+          '[sub-bid-form] project context load failed (permission?)',
+          e
+        );
       }
     })();
   }, [request.projectId]);
 
-  const addLine = () => setLines(l => [...l, { id: newId(), description: '', qty: 1, unit: 'lump sum', unitCost: 0, total: 0 }]);
-  const removeLine = (id: string) => setLines(l => l.filter(x => x.id !== id));
+  const addLine = () =>
+    setLines((l) => [
+      ...l,
+      {
+        id: newId(),
+        description: '',
+        qty: 1,
+        unit: 'lump sum',
+        unitCost: 0,
+        total: 0,
+      },
+    ]);
+  const removeLine = (id: string) =>
+    setLines((l) => l.filter((x) => x.id !== id));
   const updateLine = (id: string, patch: Partial<BidLineItem>) => {
-    setLines(l => l.map(x => {
-      if (x.id !== id) return x;
-      const next = { ...x, ...patch };
-      next.total = (next.qty || 0) * (next.unitCost || 0);
-      return next;
-    }));
+    setLines((l) =>
+      l.map((x) => {
+        if (x.id !== id) return x;
+        const next = { ...x, ...patch };
+        next.total = (next.qty || 0) * (next.unitCost || 0);
+        return next;
+      })
+    );
   };
 
   const subtotal = lines.reduce((s, l) => s + (l.total || 0), 0);
@@ -327,16 +446,27 @@ export function SubBidSubmissionForm({
       const sref = storageRef(storage, path);
       const task = uploadBytesResumable(sref, file);
       await new Promise<void>((resolve, reject) => {
-        task.on('state_changed',
-          snap => setCoiProgress((snap.bytesTransferred / snap.totalBytes) * 100),
-          reject, () => resolve(),
+        task.on(
+          'state_changed',
+          (snap) =>
+            setCoiProgress((snap.bytesTransferred / snap.totalBytes) * 100),
+          reject,
+          () => resolve()
         );
       });
       const url = await getDownloadURL(sref);
-      setInsurance(i => ({ ...i, certificateUrl: url, certificateStoragePath: path }));
+      setInsurance((i) => ({
+        ...i,
+        certificateUrl: url,
+        certificateStoragePath: path,
+      }));
       toast({ title: 'Insurance certificate uploaded' });
     } catch (e: any) {
-      toast({ title: 'Upload failed', description: e.message, variant: 'destructive' });
+      toast({
+        title: 'Upload failed',
+        description: e.message,
+        variant: 'destructive',
+      });
     } finally {
       setCoiUploading(false);
     }
@@ -351,16 +481,23 @@ export function SubBidSubmissionForm({
       const sref = storageRef(storage, path);
       const task = uploadBytesResumable(sref, file);
       await new Promise<void>((resolve, reject) => {
-        task.on('state_changed',
-          snap => setQuoteProgress((snap.bytesTransferred / snap.totalBytes) * 100),
-          reject, () => resolve(),
+        task.on(
+          'state_changed',
+          (snap) =>
+            setQuoteProgress((snap.bytesTransferred / snap.totalBytes) * 100),
+          reject,
+          () => resolve()
         );
       });
       const url = await getDownloadURL(sref);
       setQuoteFile({ name: file.name, url, storagePath: path });
       toast({ title: 'Quote PDF uploaded' });
     } catch (e: any) {
-      toast({ title: 'Upload failed', description: e.message, variant: 'destructive' });
+      toast({
+        title: 'Upload failed',
+        description: e.message,
+        variant: 'destructive',
+      });
     } finally {
       setQuoteUploading(false);
     }
@@ -375,15 +512,25 @@ export function SubBidSubmissionForm({
       const sref = storageRef(storage, path);
       const task = uploadBytesResumable(sref, file);
       await new Promise<void>((resolve, reject) => {
-        task.on('state_changed',
-          snap => setAttachProgress((snap.bytesTransferred / snap.totalBytes) * 100),
-          reject, () => resolve(),
+        task.on(
+          'state_changed',
+          (snap) =>
+            setAttachProgress((snap.bytesTransferred / snap.totalBytes) * 100),
+          reject,
+          () => resolve()
         );
       });
       const url = await getDownloadURL(sref);
-      setAttachments(a => [...a, { name: file.name, url, storagePath: path }]);
+      setAttachments((a) => [
+        ...a,
+        { name: file.name, url, storagePath: path },
+      ]);
     } catch (e: any) {
-      toast({ title: 'Upload failed', description: e.message, variant: 'destructive' });
+      toast({
+        title: 'Upload failed',
+        description: e.message,
+        variant: 'destructive',
+      });
     } finally {
       setAttachUploading(false);
     }
@@ -391,17 +538,21 @@ export function SubBidSubmissionForm({
 
   const validate = (): string | null => {
     if (bidMode === 'lineItems') {
-      if (lines.length === 0 || lines.every(l => !l.description.trim())) return 'Add at least one line item';
+      if (lines.length === 0 || lines.every((l) => !l.description.trim()))
+        return 'Add at least one line item';
     } else {
       if (!quoteFile) return 'Upload your quote PDF';
       if (!quoteTotal || quoteTotal <= 0) return 'Enter the total bid amount';
     }
-    if (!daysToComplete || daysToComplete <= 0) return 'Enter estimated business days to complete';
+    if (!daysToComplete || daysToComplete <= 0)
+      return 'Enter estimated business days to complete';
     if (!insurance.carrier.trim()) return 'Insurance carrier is required';
-    if (!insurance.policyNumber.trim()) return 'Insurance policy number is required';
+    if (!insurance.policyNumber.trim())
+      return 'Insurance policy number is required';
     if (!insurance.expiration) return 'Insurance expiration date is required';
     if (!license.number.trim()) return 'Contractor license number is required';
-    if (!agreementAcknowledged) return 'You must acknowledge the subcontractor agreement requirement';
+    if (!agreementAcknowledged)
+      return 'You must acknowledge the subcontractor agreement requirement';
     if (addenda.length > 0 && !addendaAcknowledged) {
       return 'Confirm your bid includes the listed changes to the plans';
     }
@@ -420,7 +571,10 @@ export function SubBidSubmissionForm({
     }
     setSubmitting(true);
     try {
-      const validLines = bidMode === 'lineItems' ? lines.filter(l => l.description.trim()) : [];
+      const validLines =
+        bidMode === 'lineItems'
+          ? lines.filter((l) => l.description.trim())
+          : [];
       const lineTotal = validLines.reduce((s, l) => s + (l.total || 0), 0);
       const total = bidMode === 'lineItems' ? lineTotal : quoteTotal;
 
@@ -454,7 +608,10 @@ export function SubBidSubmissionForm({
         agreementAcknowledged: true,
         agreementAcknowledgedAt: serverTimestamp(),
         // Which plan deviations (Addenda) this bid is confirmed to cover.
-        addendaAcknowledged: addenda.map(a => ({ addendumId: a.id, number: a.number })),
+        addendaAcknowledged: addenda.map((a) => ({
+          addendumId: a.id,
+          number: a.number,
+        })),
         status: 'received',
         submittedViaPortal: true,
         // Default visibility off — GC must explicitly toggle on for client.
@@ -488,7 +645,10 @@ export function SubBidSubmissionForm({
           if (resp && (resp as any).ok) serverWroteIt = true;
         }
       } catch (apiErr) {
-        console.warn('[SubBidSubmissionForm] /api/bids/submit failed, falling back to direct Firestore:', apiErr);
+        console.warn(
+          '[SubBidSubmissionForm] /api/bids/submit failed, falling back to direct Firestore:',
+          apiErr
+        );
       }
 
       if (!serverWroteIt) {
@@ -513,10 +673,18 @@ export function SubBidSubmissionForm({
         });
       }
 
-      toast({ title: 'Bid submitted', description: `Total: $${total.toLocaleString()}` });
+      toast({
+        title: 'Bid submitted',
+        description: `Total: $${total.toLocaleString()}`,
+      });
+      onSubmitSuccess?.();
       onClose();
     } catch (e: any) {
-      toast({ title: 'Submit failed', description: e.message, variant: 'destructive' });
+      toast({
+        title: 'Submit failed',
+        description: e.message,
+        variant: 'destructive',
+      });
     } finally {
       setSubmitting(false);
     }
@@ -533,14 +701,16 @@ export function SubBidSubmissionForm({
 
       {/* Required-field legend */}
       <p className="text-xs text-gray-500">
-        Fields marked with <span className="text-red-500 font-bold">*</span> are required.
+        Fields marked with <span className="text-red-500 font-bold">*</span> are
+        required.
       </p>
 
       {alreadySubmitted && (
         <Card className="bg-green-50 border-green-200">
           <CardContent className="p-3 text-sm text-green-900 flex items-center gap-2">
             <Shield className="w-4 h-4" />
-            You've already submitted a bid for this request. Submitting again will create a revised bid.
+            You've already submitted a bid for this request. Submitting again
+            will create a revised bid.
           </CardContent>
         </Card>
       )}
@@ -556,21 +726,33 @@ export function SubBidSubmissionForm({
               Changes to the plans for {request.trade} — read before bidding
             </CardTitle>
             <CardDescription className="text-amber-800">
-              These approved changes affect your scope. Your bid must account for them.
+              These approved changes affect your scope. Your bid must account
+              for them.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
-            {addenda.map(a => (
-              <div key={a.id} className="rounded border border-amber-200 bg-white p-2">
+            {addenda.map((a) => (
+              <div
+                key={a.id}
+                className="rounded border border-amber-200 bg-white p-2"
+              >
                 <div className="flex items-center gap-2">
-                  <Badge variant="outline" className="text-[10px] shrink-0">Addendum {a.number}</Badge>
-                  <span className="font-medium text-sm text-gray-900">{a.title}</span>
+                  <Badge variant="outline" className="text-[10px] shrink-0">
+                    Addendum {a.number}
+                  </Badge>
+                  <span className="font-medium text-sm text-gray-900">
+                    {a.title}
+                  </span>
                   {a.pricingImpact && (
-                    <Badge className="bg-amber-200 text-amber-900 text-[10px] shrink-0">Affects pricing</Badge>
+                    <Badge className="bg-amber-200 text-amber-900 text-[10px] shrink-0">
+                      Affects pricing
+                    </Badge>
                   )}
                 </div>
                 {a.description && (
-                  <p className="text-xs text-gray-600 mt-1 whitespace-pre-wrap">{a.description}</p>
+                  <p className="text-xs text-gray-600 mt-1 whitespace-pre-wrap">
+                    {a.description}
+                  </p>
                 )}
               </div>
             ))}
@@ -579,11 +761,15 @@ export function SubBidSubmissionForm({
                 type="checkbox"
                 className="mt-1"
                 checked={addendaAcknowledged}
-                onChange={e => setAddendaAcknowledged(e.target.checked)}
+                onChange={(e) => setAddendaAcknowledged(e.target.checked)}
               />
               <span>
-                I’ve reviewed {addenda.length === 1 ? 'this change' : `these ${addenda.length} changes`} and
-                my bid includes the revised scope. <span className="text-red-500 font-bold">*</span>
+                I’ve reviewed{' '}
+                {addenda.length === 1
+                  ? 'this change'
+                  : `these ${addenda.length} changes`}{' '}
+                and my bid includes the revised scope.{' '}
+                <span className="text-red-500 font-bold">*</span>
               </span>
             </label>
           </CardContent>
@@ -605,37 +791,66 @@ export function SubBidSubmissionForm({
               {request.projectName || 'Project context'}
             </CardTitle>
             {projectContext.address && (
-              <CardDescription className="text-sm">{projectContext.address}</CardDescription>
+              <CardDescription className="text-sm">
+                {projectContext.address}
+              </CardDescription>
             )}
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex flex-wrap gap-x-6 gap-y-1.5 text-xs">
               {projectContext.squareFootage ? (
-                <span><span className="text-gray-500">Size:</span> <strong>{projectContext.squareFootage.toLocaleString()} sqft</strong></span>
+                <span>
+                  <span className="text-gray-500">Size:</span>{' '}
+                  <strong>
+                    {projectContext.squareFootage.toLocaleString()} sqft
+                  </strong>
+                </span>
               ) : null}
               {projectContext.estimatedBudget ? (
-                <span><span className="text-gray-500">Budget:</span> <strong>${projectContext.estimatedBudget.toLocaleString()}</strong></span>
+                <span>
+                  <span className="text-gray-500">Budget:</span>{' '}
+                  <strong>
+                    ${projectContext.estimatedBudget.toLocaleString()}
+                  </strong>
+                </span>
               ) : null}
               {projectContext.finishTier ? (
-                <span><span className="text-gray-500">Tier:</span> <strong>{projectContext.finishTier}</strong></span>
+                <span>
+                  <span className="text-gray-500">Tier:</span>{' '}
+                  <strong>{projectContext.finishTier}</strong>
+                </span>
               ) : null}
               {projectContext.startDate ? (
-                <span><span className="text-gray-500">Starts:</span> <strong>{projectContext.startDate}</strong></span>
+                <span>
+                  <span className="text-gray-500">Starts:</span>{' '}
+                  <strong>{projectContext.startDate}</strong>
+                </span>
               ) : null}
               {projectContext.targetCompletion ? (
-                <span><span className="text-gray-500">Target finish:</span> <strong>{projectContext.targetCompletion}</strong></span>
+                <span>
+                  <span className="text-gray-500">Target finish:</span>{' '}
+                  <strong>{projectContext.targetCompletion}</strong>
+                </span>
               ) : null}
             </div>
             {projectContext.scopeStatement && (
               <div>
-                <Label className="text-xs uppercase tracking-wide text-gray-500">Project description</Label>
-                <p className="text-sm text-gray-800 whitespace-pre-wrap mt-0.5">{projectContext.scopeStatement}</p>
+                <Label className="text-xs uppercase tracking-wide text-gray-500">
+                  Project description
+                </Label>
+                <p className="text-sm text-gray-800 whitespace-pre-wrap mt-0.5">
+                  {projectContext.scopeStatement}
+                </p>
               </div>
             )}
             {projectContext.specialConsiderations && (
               <div className="bg-amber-50 border border-amber-200 rounded p-2.5">
-                <Label className="text-xs uppercase tracking-wide text-amber-700">Special considerations</Label>
-                <p className="text-sm text-amber-900 whitespace-pre-wrap mt-0.5">{projectContext.specialConsiderations}</p>
+                <Label className="text-xs uppercase tracking-wide text-amber-700">
+                  Special considerations
+                </Label>
+                <p className="text-sm text-amber-900 whitespace-pre-wrap mt-0.5">
+                  {projectContext.specialConsiderations}
+                </p>
               </div>
             )}
           </CardContent>
@@ -651,24 +866,36 @@ export function SubBidSubmissionForm({
                 {request.trade}
                 <Badge variant="outline">{request.projectName}</Badge>
               </CardTitle>
-              <CardDescription>Due {request.dueDate} · From {request.invitedByName}</CardDescription>
+              <CardDescription>
+                Due {request.dueDate} · From {request.invitedByName}
+              </CardDescription>
             </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
           <div>
-            <Label className="text-xs uppercase tracking-wide text-gray-500">Scope of Work</Label>
-            <p className="text-sm text-gray-800 whitespace-pre-wrap">{request.scope}</p>
+            <Label className="text-xs uppercase tracking-wide text-gray-500">
+              Scope of Work
+            </Label>
+            <p className="text-sm text-gray-800 whitespace-pre-wrap">
+              {request.scope}
+            </p>
           </div>
           {request.callouts && (
             <div className="bg-amber-50 border border-amber-200 rounded p-2.5">
-              <Label className="text-xs uppercase tracking-wide text-amber-700">Special Notes / Callouts</Label>
-              <p className="text-sm text-amber-900 whitespace-pre-wrap mt-0.5">{request.callouts}</p>
+              <Label className="text-xs uppercase tracking-wide text-amber-700">
+                Special Notes / Callouts
+              </Label>
+              <p className="text-sm text-amber-900 whitespace-pre-wrap mt-0.5">
+                {request.callouts}
+              </p>
             </div>
           )}
           {request.plans?.length > 0 && (
             <div>
-              <Label className="text-xs uppercase tracking-wide text-gray-500">Plans</Label>
+              <Label className="text-xs uppercase tracking-wide text-gray-500">
+                Plans
+              </Label>
               <div className="flex flex-wrap gap-1.5 mt-1">
                 {request.plans.map((p, i) => (
                   <a
@@ -688,10 +915,14 @@ export function SubBidSubmissionForm({
           )}
           {projectDocs.length > 0 && (
             <div>
-              <Label className="text-xs uppercase tracking-wide text-gray-500">Project Files</Label>
-              <p className="text-[11px] text-gray-500 mb-1">All documents attached to this project — read-only.</p>
+              <Label className="text-xs uppercase tracking-wide text-gray-500">
+                Project Files
+              </Label>
+              <p className="text-[11px] text-gray-500 mb-1">
+                All documents attached to this project — read-only.
+              </p>
               <div className="flex flex-wrap gap-1.5">
-                {projectDocs.map(d => (
+                {projectDocs.map((d) => (
                   <a
                     key={d.id}
                     href={d.fileUrl}
@@ -701,7 +932,11 @@ export function SubBidSubmissionForm({
                   >
                     <FileText className="w-3.5 h-3.5 text-gray-400" />
                     {d.name}
-                    {d.category && <Badge variant="outline" className="text-[10px]">{d.category}</Badge>}
+                    {d.category && (
+                      <Badge variant="outline" className="text-[10px]">
+                        {d.category}
+                      </Badge>
+                    )}
                     <ExternalLink className="w-3 h-3" />
                   </a>
                 ))}
@@ -715,13 +950,15 @@ export function SubBidSubmissionForm({
           {attachedSelections.length > 0 && (
             <div className="rounded-md border border-amber-200 bg-amber-50/70 p-3">
               <Label className="text-xs uppercase tracking-wide text-amber-700">
-                Project Selections for {request.trade} ({attachedSelections.length})
+                Project Selections for {request.trade} (
+                {attachedSelections.length})
               </Label>
               <p className="text-[11px] text-amber-900/80 mb-2">
-                Match these brands + specs in your pricing, or call out alternates in your notes.
+                Match these brands + specs in your pricing, or call out
+                alternates in your notes.
               </p>
               <div className="space-y-2">
-                {attachedSelections.map(s => (
+                {attachedSelections.map((s) => (
                   <div
                     key={s.id}
                     className="flex items-start gap-3 rounded border border-amber-200/60 bg-white p-2"
@@ -741,11 +978,17 @@ export function SubBidSubmissionForm({
                           {s.productName || s.category || 'Selection'}
                         </span>
                         {s.category && (
-                          <Badge variant="outline" className="text-[10px]">{s.category}</Badge>
+                          <Badge variant="outline" className="text-[10px]">
+                            {s.category}
+                          </Badge>
                         )}
                       </div>
                       <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-gray-600 mt-0.5">
-                        {s.vendor && <span><strong>{s.vendor}</strong></span>}
+                        {s.vendor && (
+                          <span>
+                            <strong>{s.vendor}</strong>
+                          </span>
+                        )}
                         {s.description && <span>{s.description}</span>}
                       </div>
                       {s.productUrl && (
@@ -776,7 +1019,9 @@ export function SubBidSubmissionForm({
             Takeoff (Optional)
           </CardTitle>
           <CardDescription>
-            Use the takeoff tool to measure on the plans. Anything you measure can be attached to your bid so the GC sees the same numbers you used to price.
+            Use the takeoff tool to measure on the plans. Anything you measure
+            can be attached to your bid so the GC sees the same numbers you used
+            to price.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -795,14 +1040,21 @@ export function SubBidSubmissionForm({
               </p>
               <div className="space-y-1.5">
                 {attachedMeasurements.map((m, i) => (
-                  <div key={m.id} className="flex items-center justify-between gap-2 text-sm">
+                  <div
+                    key={m.id}
+                    className="flex items-center justify-between gap-2 text-sm"
+                  >
                     <span className="truncate text-gray-800">{m.label}</span>
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <Badge variant="secondary" className="font-mono text-xs">
                         {m.value.toLocaleString()} {m.unit}
                       </Badge>
                       <button
-                        onClick={() => setAttachedMeasurements(list => list.filter((_, j) => j !== i))}
+                        onClick={() =>
+                          setAttachedMeasurements((list) =>
+                            list.filter((_, j) => j !== i)
+                          )
+                        }
                         className="text-gray-400 hover:text-red-600"
                         title="Remove"
                       >
@@ -833,10 +1085,10 @@ export function SubBidSubmissionForm({
               scope={{ kind: 'sub', bidRequestId: request.id }}
               onAttachToBid={(selected) => {
                 // De-dupe by id so attaching twice doesn't double-add.
-                setAttachedMeasurements(prev => {
+                setAttachedMeasurements((prev) => {
                   const merged = [...prev];
-                  selected.forEach(m => {
-                    const idx = merged.findIndex(p => p.id === m.id);
+                  selected.forEach((m) => {
+                    const idx = merged.findIndex((p) => p.id === m.id);
                     if (idx >= 0) merged[idx] = m;
                     else merged.push(m);
                   });
@@ -854,7 +1106,8 @@ export function SubBidSubmissionForm({
         <CardHeader>
           <CardTitle className="text-base">Your Bid</CardTitle>
           <CardDescription>
-            Either upload a finished quote PDF or build a line-item bid here. Pick whichever fits how you already estimate.
+            Either upload a finished quote PDF or build a line-item bid here.
+            Pick whichever fits how you already estimate.
           </CardDescription>
           <div className="flex gap-2 mt-3">
             <Button
@@ -863,7 +1116,11 @@ export function SubBidSubmissionForm({
               size="sm"
               onClick={() => setBidMode('lineItems')}
               className="gap-1.5"
-              style={bidMode === 'lineItems' ? { backgroundColor: '#C9A96E', color: '#141414' } : {}}
+              style={
+                bidMode === 'lineItems'
+                  ? { backgroundColor: '#C9A96E', color: '#141414' }
+                  : {}
+              }
             >
               <ListChecks className="w-4 h-4" />
               Build Estimate
@@ -874,7 +1131,11 @@ export function SubBidSubmissionForm({
               size="sm"
               onClick={() => setBidMode('pdfQuote')}
               className="gap-1.5"
-              style={bidMode === 'pdfQuote' ? { backgroundColor: '#C9A96E', color: '#141414' } : {}}
+              style={
+                bidMode === 'pdfQuote'
+                  ? { backgroundColor: '#C9A96E', color: '#141414' }
+                  : {}
+              }
             >
               <FileUp className="w-4 h-4" />
               Upload PDF Quote
@@ -885,12 +1146,23 @@ export function SubBidSubmissionForm({
           {bidMode === 'pdfQuote' ? (
             <div className="space-y-3">
               <div>
-                <Label htmlFor="quote-file">Quote PDF <span className="text-red-500 font-bold">*</span></Label>
+                <Label htmlFor="quote-file">
+                  Quote PDF <span className="text-red-500 font-bold">*</span>
+                </Label>
                 {quoteFile ? (
                   <div className="flex items-center gap-2 mt-1.5 border rounded p-2 bg-gray-50">
                     <FileText className="w-4 h-4 text-gray-500" />
-                    <span className="text-sm font-medium flex-1 truncate">{quoteFile.name}</span>
-                    <a href={quoteFile.url} target="_blank" rel="noopener noreferrer" className="text-xs text-[#C9A96E] hover:underline">View</a>
+                    <span className="text-sm font-medium flex-1 truncate">
+                      {quoteFile.name}
+                    </span>
+                    <a
+                      href={quoteFile.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-[#C9A96E] hover:underline"
+                    >
+                      View
+                    </a>
                     <button
                       onClick={() => setQuoteFile(null)}
                       className="text-gray-400 hover:text-red-500"
@@ -906,7 +1178,10 @@ export function SubBidSubmissionForm({
                       type="file"
                       accept="application/pdf"
                       className="hidden"
-                      onChange={e => { const f = e.target.files?.[0]; if (f) handleQuoteUpload(f); }}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) handleQuoteUpload(f);
+                      }}
                     />
                     <Button
                       variant="outline"
@@ -915,101 +1190,143 @@ export function SubBidSubmissionForm({
                       className="gap-1.5"
                     >
                       <FileUp className="w-4 h-4" />
-                      {quoteUploading ? `Uploading… ${Math.round(quoteProgress)}%` : 'Upload quote PDF'}
+                      {quoteUploading
+                        ? `Uploading… ${Math.round(quoteProgress)}%`
+                        : 'Upload quote PDF'}
                     </Button>
                   </div>
                 )}
               </div>
               <div className="max-w-xs">
-                <Label htmlFor="quote-total">Total Bid Amount <span className="text-red-500 font-bold">*</span></Label>
+                <Label htmlFor="quote-total">
+                  Total Bid Amount{' '}
+                  <span className="text-red-500 font-bold">*</span>
+                </Label>
                 <div className="relative mt-1.5">
-                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
+                    $
+                  </span>
                   <Input
                     id="quote-total"
                     type="number"
                     value={quoteTotal || ''}
-                    onChange={e => setQuoteTotal(parseFloat(e.target.value) || 0)}
+                    onChange={(e) =>
+                      setQuoteTotal(parseFloat(e.target.value) || 0)
+                    }
                     placeholder="0.00"
                     className="pl-6"
                   />
                 </div>
                 <p className="text-[11px] text-gray-500 mt-1">
-                  This is what shows in the GC's bid comparison. Detail lives in the PDF.
+                  This is what shows in the GC's bid comparison. Detail lives in
+                  the PDF.
                 </p>
               </div>
             </div>
           ) : (
-          <>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left border-b text-xs text-gray-500 uppercase">
-                  <th className="py-2 pr-2">Description</th>
-                  <th className="py-2 pr-2 w-16">Qty</th>
-                  <th className="py-2 pr-2 w-24">Unit</th>
-                  <th className="py-2 pr-2 w-24 text-right">Unit Cost</th>
-                  <th className="py-2 pr-2 w-28 text-right">Total</th>
-                  <th className="py-2 w-8"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {lines.map(l => (
-                  <tr key={l.id} className="border-b last:border-0">
-                    <td className="py-2 pr-2">
-                      <Input
-                        value={l.description}
-                        onChange={e => updateLine(l.id, { description: e.target.value })}
-                        placeholder="Labor / Material / Service"
-                        className="h-8 text-sm"
-                      />
-                    </td>
-                    <td className="py-2 pr-2">
-                      <Input
-                        type="number"
-                        value={l.qty || ''}
-                        onChange={e => updateLine(l.id, { qty: parseFloat(e.target.value) || 0 })}
-                        className="h-8 text-sm"
-                      />
-                    </td>
-                    <td className="py-2 pr-2">
-                      <Input
-                        value={l.unit}
-                        onChange={e => updateLine(l.id, { unit: e.target.value })}
-                        className="h-8 text-sm"
-                      />
-                    </td>
-                    <td className="py-2 pr-2">
-                      <Input
-                        type="number"
-                        value={l.unitCost || ''}
-                        onChange={e => updateLine(l.id, { unitCost: parseFloat(e.target.value) || 0 })}
-                        className="h-8 text-sm text-right"
-                      />
-                    </td>
-                    <td className="py-2 pr-2 text-right font-mono text-gray-700">
-                      ${l.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </td>
-                    <td className="py-2">
-                      <button onClick={() => removeLine(l.id)} className="text-gray-300 hover:text-red-500">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="border-t-2">
-                  <td colSpan={4} className="py-2 text-right font-semibold">Total</td>
-                  <td className="py-2 text-right font-bold text-lg font-mono">${subtotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                  <td></td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-          <Button variant="outline" size="sm" onClick={addLine} className="mt-2 gap-1.5">
-            <Plus className="w-3.5 h-3.5" /> Add line
-          </Button>
-          </>
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left border-b text-xs text-gray-500 uppercase">
+                      <th className="py-2 pr-2">Description</th>
+                      <th className="py-2 pr-2 w-16">Qty</th>
+                      <th className="py-2 pr-2 w-24">Unit</th>
+                      <th className="py-2 pr-2 w-24 text-right">Unit Cost</th>
+                      <th className="py-2 pr-2 w-28 text-right">Total</th>
+                      <th className="py-2 w-8"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lines.map((l) => (
+                      <tr key={l.id} className="border-b last:border-0">
+                        <td className="py-2 pr-2">
+                          <Input
+                            value={l.description}
+                            onChange={(e) =>
+                              updateLine(l.id, { description: e.target.value })
+                            }
+                            placeholder="Labor / Material / Service"
+                            className="h-8 text-sm"
+                          />
+                        </td>
+                        <td className="py-2 pr-2">
+                          <Input
+                            type="number"
+                            value={l.qty || ''}
+                            onChange={(e) =>
+                              updateLine(l.id, {
+                                qty: parseFloat(e.target.value) || 0,
+                              })
+                            }
+                            className="h-8 text-sm"
+                          />
+                        </td>
+                        <td className="py-2 pr-2">
+                          <Input
+                            value={l.unit}
+                            onChange={(e) =>
+                              updateLine(l.id, { unit: e.target.value })
+                            }
+                            className="h-8 text-sm"
+                          />
+                        </td>
+                        <td className="py-2 pr-2">
+                          <Input
+                            type="number"
+                            value={l.unitCost || ''}
+                            onChange={(e) =>
+                              updateLine(l.id, {
+                                unitCost: parseFloat(e.target.value) || 0,
+                              })
+                            }
+                            className="h-8 text-sm text-right"
+                          />
+                        </td>
+                        <td className="py-2 pr-2 text-right font-mono text-gray-700">
+                          $
+                          {l.total.toLocaleString(undefined, {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                        </td>
+                        <td className="py-2">
+                          <button
+                            onClick={() => removeLine(l.id)}
+                            className="text-gray-300 hover:text-red-500"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t-2">
+                      <td colSpan={4} className="py-2 text-right font-semibold">
+                        Total
+                      </td>
+                      <td className="py-2 text-right font-bold text-lg font-mono">
+                        $
+                        {subtotal.toLocaleString(undefined, {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                      </td>
+                      <td></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={addLine}
+                className="mt-2 gap-1.5"
+              >
+                <Plus className="w-3.5 h-3.5" /> Add line
+              </Button>
+            </>
           )}
         </CardContent>
       </Card>
@@ -1019,7 +1336,8 @@ export function SubBidSubmissionForm({
         <CardContent className="pt-6 space-y-3">
           <div className="max-w-xs">
             <Label htmlFor="days-to-complete">
-              Estimated business days from start to finish <span className="text-red-500 font-bold">*</span>
+              Estimated business days from start to finish{' '}
+              <span className="text-red-500 font-bold">*</span>
             </Label>
             <Input
               id="days-to-complete"
@@ -1027,19 +1345,26 @@ export function SubBidSubmissionForm({
               min={1}
               step={1}
               value={daysToComplete || ''}
-              onChange={e => setDaysToComplete(parseInt(e.target.value, 10) || 0)}
+              onChange={(e) =>
+                setDaysToComplete(parseInt(e.target.value, 10) || 0)
+              }
               placeholder="e.g. 10"
               className="mt-1.5"
             />
-            <p className="text-[11px] text-gray-500 mt-1">A close guess is fine — the GC uses this to slot your work into the schedule.</p>
+            <p className="text-[11px] text-gray-500 mt-1">
+              A close guess is fine — the GC uses this to slot your work into
+              the schedule.
+            </p>
           </div>
           <div>
-            <Label htmlFor="notes">What's included, what's not (optional)</Label>
+            <Label htmlFor="notes">
+              What's included, what's not (optional)
+            </Label>
             <Textarea
               id="notes"
               rows={2}
               value={notes}
-              onChange={e => setNotes(e.target.value)}
+              onChange={(e) => setNotes(e.target.value)}
               placeholder="Anything excluded, conditions, alternates, or assumptions"
             />
           </div>
@@ -1049,7 +1374,13 @@ export function SubBidSubmissionForm({
               {attachments.map((a, i) => (
                 <Badge key={i} variant="secondary" className="gap-1">
                   <FileText className="w-3 h-3" /> {a.name}
-                  <button onClick={() => setAttachments(arr => arr.filter((_, j) => j !== i))}><X className="w-3 h-3" /></button>
+                  <button
+                    onClick={() =>
+                      setAttachments((arr) => arr.filter((_, j) => j !== i))
+                    }
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
                 </Badge>
               ))}
             </div>
@@ -1057,11 +1388,22 @@ export function SubBidSubmissionForm({
               ref={fileInputRef}
               type="file"
               className="hidden"
-              onChange={e => { const f = e.target.files?.[0]; if (f) handleAttachUpload(f); }}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) handleAttachUpload(f);
+              }}
             />
-            <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={attachUploading} className="gap-1.5">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={attachUploading}
+              className="gap-1.5"
+            >
               <Paperclip className="w-3.5 h-3.5" />
-              {attachUploading ? `${Math.round(attachProgress)}%` : 'Attach file'}
+              {attachUploading
+                ? `${Math.round(attachProgress)}%`
+                : 'Attach file'}
             </Button>
           </div>
         </CardContent>
@@ -1074,21 +1416,48 @@ export function SubBidSubmissionForm({
             <Shield className="w-4 h-4 text-blue-500" />
             Insurance
           </CardTitle>
-          <CardDescription className="text-xs">Required for all submitted bids.</CardDescription>
+          <CardDescription className="text-xs">
+            Required for all submitted bids.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label htmlFor="ins-carrier">Carrier <span className="text-red-500 font-bold">*</span></Label>
-              <Input id="ins-carrier" value={insurance.carrier} onChange={e => setInsurance(i => ({ ...i, carrier: e.target.value }))} />
+              <Label htmlFor="ins-carrier">
+                Carrier <span className="text-red-500 font-bold">*</span>
+              </Label>
+              <Input
+                id="ins-carrier"
+                value={insurance.carrier}
+                onChange={(e) =>
+                  setInsurance((i) => ({ ...i, carrier: e.target.value }))
+                }
+              />
             </div>
             <div>
-              <Label htmlFor="ins-policy">Policy # <span className="text-red-500 font-bold">*</span></Label>
-              <Input id="ins-policy" value={insurance.policyNumber} onChange={e => setInsurance(i => ({ ...i, policyNumber: e.target.value }))} />
+              <Label htmlFor="ins-policy">
+                Policy # <span className="text-red-500 font-bold">*</span>
+              </Label>
+              <Input
+                id="ins-policy"
+                value={insurance.policyNumber}
+                onChange={(e) =>
+                  setInsurance((i) => ({ ...i, policyNumber: e.target.value }))
+                }
+              />
             </div>
             <div>
-              <Label htmlFor="ins-exp">Expiration <span className="text-red-500 font-bold">*</span></Label>
-              <Input id="ins-exp" type="date" value={insurance.expiration} onChange={e => setInsurance(i => ({ ...i, expiration: e.target.value }))} />
+              <Label htmlFor="ins-exp">
+                Expiration <span className="text-red-500 font-bold">*</span>
+              </Label>
+              <Input
+                id="ins-exp"
+                type="date"
+                value={insurance.expiration}
+                onChange={(e) =>
+                  setInsurance((i) => ({ ...i, expiration: e.target.value }))
+                }
+              />
             </div>
             <div>
               <Label>Certificate (COI)</Label>
@@ -1097,17 +1466,33 @@ export function SubBidSubmissionForm({
                 type="file"
                 accept="application/pdf,image/*"
                 className="hidden"
-                onChange={e => { const f = e.target.files?.[0]; if (f) handleCoiUpload(f); }}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) handleCoiUpload(f);
+                }}
               />
               {insurance.certificateUrl ? (
                 <div className="flex items-center gap-2 mt-1.5">
                   <Badge variant="secondary" className="gap-1">
                     <FileText className="w-3 h-3" /> Uploaded
                   </Badge>
-                  <a href={insurance.certificateUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-[#C9A96E] hover:underline">view</a>
+                  <a
+                    href={insurance.certificateUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-[#C9A96E] hover:underline"
+                  >
+                    view
+                  </a>
                 </div>
               ) : (
-                <Button variant="outline" size="sm" onClick={() => coiInputRef.current?.click()} disabled={coiUploading} className="gap-1.5 mt-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => coiInputRef.current?.click()}
+                  disabled={coiUploading}
+                  className="gap-1.5 mt-1"
+                >
                   <Paperclip className="w-3.5 h-3.5" />
                   {coiUploading ? `${Math.round(coiProgress)}%` : 'Upload COI'}
                 </Button>
@@ -1128,16 +1513,39 @@ export function SubBidSubmissionForm({
         <CardContent>
           <div className="grid grid-cols-3 gap-3">
             <div className="col-span-1">
-              <Label htmlFor="lic-num">License # <span className="text-red-500 font-bold">*</span></Label>
-              <Input id="lic-num" value={license.number} onChange={e => setLicense(l => ({ ...l, number: e.target.value }))} />
+              <Label htmlFor="lic-num">
+                License # <span className="text-red-500 font-bold">*</span>
+              </Label>
+              <Input
+                id="lic-num"
+                value={license.number}
+                onChange={(e) =>
+                  setLicense((l) => ({ ...l, number: e.target.value }))
+                }
+              />
             </div>
             <div className="col-span-1">
-              <Label htmlFor="lic-state">State <span className="text-red-500 font-bold">*</span></Label>
-              <Input id="lic-state" value={license.state} onChange={e => setLicense(l => ({ ...l, state: e.target.value }))} />
+              <Label htmlFor="lic-state">
+                State <span className="text-red-500 font-bold">*</span>
+              </Label>
+              <Input
+                id="lic-state"
+                value={license.state}
+                onChange={(e) =>
+                  setLicense((l) => ({ ...l, state: e.target.value }))
+                }
+              />
             </div>
             <div className="col-span-1">
               <Label htmlFor="lic-exp">Expiration</Label>
-              <Input id="lic-exp" type="date" value={license.expiration || ''} onChange={e => setLicense(l => ({ ...l, expiration: e.target.value }))} />
+              <Input
+                id="lic-exp"
+                type="date"
+                value={license.expiration || ''}
+                onChange={(e) =>
+                  setLicense((l) => ({ ...l, expiration: e.target.value }))
+                }
+              />
             </div>
           </div>
         </CardContent>
@@ -1146,25 +1554,33 @@ export function SubBidSubmissionForm({
       {/* Agreement acknowledgment */}
       <Card className="border-amber-300 bg-amber-50">
         <CardContent className="pt-5">
-          <label className="flex items-start gap-3 cursor-pointer">
+          {/* Use a div+label pair to satisfy jsx-a11y: the visible heading text
+              is the accessible label for the checkbox. */}
+          <div className="flex items-start gap-3 cursor-pointer">
             <input
+              id="agreement-acknowledged-checkbox"
               type="checkbox"
               checked={agreementAcknowledged}
-              onChange={e => setAgreementAcknowledged(e.target.checked)}
+              onChange={(e) => setAgreementAcknowledged(e.target.checked)}
               className="mt-1"
             />
-            <div className="flex-1">
+            <label
+              htmlFor="agreement-acknowledged-checkbox"
+              className="flex-1 cursor-pointer"
+            >
               <p className="text-sm font-semibold text-amber-900 flex items-center gap-1.5">
                 <AlertCircle className="w-4 h-4" />
                 Subcontractor Agreement Acknowledgment
               </p>
               <p className="text-xs text-amber-800 mt-1">
-                I acknowledge that <strong>if this bid is awarded</strong>, I will be required to sign Skyeline Homes' standard
-                subcontractor agreement, provide a current Certificate of Insurance, and meet all license and safety requirements
+                I acknowledge that <strong>if this bid is awarded</strong>, I
+                will be required to sign Skyeline Homes' standard subcontractor
+                agreement, provide a current Certificate of Insurance, and meet
+                all license and safety requirements
                 <strong> before any work begins on site</strong>.
               </p>
-            </div>
-          </label>
+            </label>
+          </div>
         </CardContent>
       </Card>
 
@@ -1181,8 +1597,8 @@ export function SubBidSubmissionForm({
               Verification needed before Skyeline can award this work
             </p>
             <p className="text-xs text-amber-800 mt-0.5">
-              You can submit your bid now. Skyeline can't award the job until these are on file:{' '}
-              {complianceMissing.join(', ')}.
+              You can submit your bid now. Skyeline can't award the job until
+              these are on file: {complianceMissing.join(', ')}.
             </p>
             <a
               href="/subcontractor-portal/compliance"
@@ -1196,14 +1612,20 @@ export function SubBidSubmissionForm({
 
       {/* Submit */}
       <div className="flex justify-end gap-2 pt-2">
-        <Button variant="outline" onClick={onClose}>Cancel</Button>
+        <Button variant="outline" onClick={onClose}>
+          Cancel
+        </Button>
         <Button
           onClick={handleSubmit}
           disabled={submitting}
           className="gap-2 text-white"
           style={{ backgroundColor: '#22c55e' }}
         >
-          {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+          {submitting ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Send className="w-4 h-4" />
+          )}
           {submitting ? 'Submitting…' : 'Submit Bid'}
         </Button>
       </div>

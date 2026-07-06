@@ -15,15 +15,27 @@
 import { useEffect, useState } from 'react';
 import { useParams, useLocation } from 'wouter';
 import { useAuth } from '@/auth/AuthContext';
-import { auth, db } from '@/lib/firebase';
-import { doc, getDoc } from 'firebase/firestore';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
-  Building2, Loader2, AlertTriangle, CheckCircle2, Clock, FileText, ShieldCheck, Download,
+  Building2,
+  Loader2,
+  AlertTriangle,
+  CheckCircle2,
+  Clock,
+  FileText,
+  Download,
 } from 'lucide-react';
+import { SubBidSubmissionForm } from '@/components/bidding/SubBidSubmissionForm';
+import type { BidRequest } from '@/components/bidding/types';
 
 interface BidPlan {
   name: string;
@@ -75,23 +87,18 @@ interface BidContext {
   tokenExpired: boolean;
 }
 
-interface SubCompliance {
-  w9Filed?: boolean;
-  insuranceCurrent?: boolean;
-  agreementSigned?: boolean;
-  contractorLicenseNumber?: string;     // D-016: fourth required item, gates award
-}
-
 export default function BidRespond() {
   const params = useParams<{ token: string }>();
   const token = params?.token;
   const [, setLocation] = useLocation();
-  const { user, isAuthenticated, loading: authLoading } = useAuth();
+  const { isAuthenticated, loading: authLoading } = useAuth();
 
   const [ctx, setCtx] = useState<BidContext | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [compliance, setCompliance] = useState<SubCompliance>({});
+  // Track whether the inline SubBidSubmissionForm has been submitted so we
+  // can show a success screen without navigating away.
+  const [formSubmitted, setFormSubmitted] = useState(false);
 
   // Fetch bid context on mount
   useEffect(() => {
@@ -102,10 +109,14 @@ export default function BidRespond() {
     }
     (async () => {
       try {
-        const res = await fetch(`/api/bid-requests/by-token/${encodeURIComponent(token)}`);
+        const res = await fetch(
+          `/api/bid-requests/by-token/${encodeURIComponent(token)}`
+        );
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
-          setError(body?.error || `Could not load bid request (status ${res.status})`);
+          setError(
+            body?.error || `Could not load bid request (status ${res.status})`
+          );
           setLoading(false);
           return;
         }
@@ -119,63 +130,19 @@ export default function BidRespond() {
     })();
   }, [token]);
 
-  // Load compliance flags if signed-in sub. Used for the advisory checklist —
-  // NOT a gate on bid submission (D-016: gating moved to award time only).
-  const uid = (user as any)?.firebaseUid || (user as any)?.id?.toString();
-  useEffect(() => {
-    if (!isAuthenticated || !uid) return;
-    (async () => {
-      try {
-        const snap = await getDoc(doc(db, 'users', uid));
-        if (snap.exists()) {
-          const d = snap.data() as any;
-          setCompliance({
-            w9Filed: !!d.w9Filed,
-            insuranceCurrent: !!d.insuranceCurrent,
-            agreementSigned: !!d.agreementSigned,
-            contractorLicenseNumber: typeof d.contractorLicenseNumber === 'string'
-              ? d.contractorLicenseNumber.trim()
-              : undefined,
-          });
-        }
-      } catch {
-        /* best effort */
-      }
-    })();
-  }, [isAuthenticated, uid]);
-
-  // Inline license-number save (writes to users/{uid} — Firestore rules allow
-  // a signed-in user to write their own user doc, so no API endpoint needed).
-  const [licenseInput, setLicenseInput] = useState('');
-  const [savingLicense, setSavingLicense] = useState(false);
-  useEffect(() => {
-    if (compliance.contractorLicenseNumber && !licenseInput) {
-      setLicenseInput(compliance.contractorLicenseNumber);
-    }
-  }, [compliance.contractorLicenseNumber, licenseInput]);
-  async function saveLicense() {
-    if (!uid) return;
-    const trimmed = licenseInput.trim();
-    if (!trimmed) return;
-    setSavingLicense(true);
-    try {
-      const { updateDoc, serverTimestamp } = await import('firebase/firestore');
-      await updateDoc(doc(db, 'users', uid), {
-        contractorLicenseNumber: trimmed,
-        contractorLicenseUpdatedAt: serverTimestamp(),
-      });
-      setCompliance(prev => ({ ...prev, contractorLicenseNumber: trimmed }));
-    } catch (e) {
-      console.error('save license failed', e);
-    } finally {
-      setSavingLicense(false);
-    }
-  }
+  // Compliance state and license-number save are handled inside
+  // SubBidSubmissionForm itself, so they are no longer needed in this wrapper.
 
   // ── States ────────────────────────────────────────────────────────────────
 
   if (loading || authLoading) {
-    return <PageFrame><Centered><Loader2 className="h-8 w-8 animate-spin" /></Centered></PageFrame>;
+    return (
+      <PageFrame>
+        <Centered>
+          <Loader2 className="h-8 w-8 animate-spin" />
+        </Centered>
+      </PageFrame>
+    );
   }
 
   if (error || !ctx) {
@@ -191,7 +158,8 @@ export default function BidRespond() {
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground">
-              If you believe this link should still be valid, contact the Skyeline Homes team directly.
+              If you believe this link should still be valid, contact the
+              Skyeline Homes team directly.
             </p>
           </CardContent>
         </Card>
@@ -209,8 +177,9 @@ export default function BidRespond() {
               <CardTitle>This bid invitation has expired</CardTitle>
             </div>
             <CardDescription>
-              The window to respond to this bid request has closed. If you'd still like to submit a bid,
-              reply to the original email or text and we'll re-open the request.
+              The window to respond to this bid request has closed. If you'd
+              still like to submit a bid, reply to the original email or text
+              and we'll re-open the request.
             </CardDescription>
           </CardHeader>
         </Card>
@@ -220,7 +189,10 @@ export default function BidRespond() {
 
   const dueDate = new Date(ctx.dueByDate);
   const dueDateLabel = dueDate.toLocaleDateString(undefined, {
-    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
   });
 
   // ── Header: project + scope ──────────────────────────────────────────────
@@ -231,7 +203,11 @@ export default function BidRespond() {
         <div className="flex items-start justify-between gap-4">
           <div>
             <CardTitle className="text-2xl">
-              {ctx.type === 'general' ? 'Bid request' : (ctx.stage === 'final' ? 'Updated bid request' : 'Bid request')}
+              {ctx.type === 'general'
+                ? 'Bid request'
+                : ctx.stage === 'final'
+                  ? 'Updated bid request'
+                  : 'Bid request'}
             </CardTitle>
             <CardDescription className="mt-1 text-base">
               Hi {ctx.vendor.vendorName} — Skyeline Homes
@@ -277,11 +253,21 @@ export default function BidRespond() {
         {ctx.type === 'general' && ctx.tierGuidance && (
           <div className="pt-3 border-t space-y-3">
             <div className="text-sm text-muted-foreground">
-              Skyeline builds a step above standard builder grade. We bid at three tiers:
+              Skyeline builds a step above standard builder grade. We bid at
+              three tiers:
             </div>
-            <TierRow label="Parade Home Level" description={ctx.tierGuidance.parade} />
-            <TierRow label="Mid Luxury Level" description={ctx.tierGuidance.midLuxury} />
-            <TierRow label="Low Luxury Level" description={ctx.tierGuidance.lowLuxury} />
+            <TierRow
+              label="Parade Home Level"
+              description={ctx.tierGuidance.parade}
+            />
+            <TierRow
+              label="Mid Luxury Level"
+              description={ctx.tierGuidance.midLuxury}
+            />
+            <TierRow
+              label="Low Luxury Level"
+              description={ctx.tierGuidance.lowLuxury}
+            />
           </div>
         )}
 
@@ -299,18 +285,32 @@ export default function BidRespond() {
               </div>
               {ctx.scope && (
                 <div className="mb-3">
-                  <div className="text-xs uppercase tracking-wide text-amber-800/70 mb-1">Scope of Work</div>
-                  <pre className="text-sm whitespace-pre-wrap font-sans text-amber-950 leading-relaxed">{ctx.scope}</pre>
+                  <div className="text-xs uppercase tracking-wide text-amber-800/70 mb-1">
+                    Scope of Work
+                  </div>
+                  <pre className="text-sm whitespace-pre-wrap font-sans text-amber-950 leading-relaxed">
+                    {ctx.scope}
+                  </pre>
                 </div>
               )}
               {ctx.callouts && (
-                <div className={ctx.scope ? 'pt-3 border-t border-amber-200/60' : ''}>
-                  <div className="text-xs uppercase tracking-wide text-amber-800/70 mb-1">Notes from Skyeline</div>
-                  <pre className="text-sm whitespace-pre-wrap font-sans text-amber-950 leading-relaxed">{ctx.callouts}</pre>
+                <div
+                  className={
+                    ctx.scope ? 'pt-3 border-t border-amber-200/60' : ''
+                  }
+                >
+                  <div className="text-xs uppercase tracking-wide text-amber-800/70 mb-1">
+                    Notes from Skyeline
+                  </div>
+                  <pre className="text-sm whitespace-pre-wrap font-sans text-amber-950 leading-relaxed">
+                    {ctx.callouts}
+                  </pre>
                 </div>
               )}
               {!ctx.scope && !ctx.callouts && ctx.customMessage && (
-                <pre className="text-sm whitespace-pre-wrap font-sans text-amber-950 leading-relaxed">{ctx.customMessage}</pre>
+                <pre className="text-sm whitespace-pre-wrap font-sans text-amber-950 leading-relaxed">
+                  {ctx.customMessage}
+                </pre>
               )}
             </div>
           </div>
@@ -338,9 +338,13 @@ export default function BidRespond() {
                   <div className="flex items-center gap-3 min-w-0 flex-1">
                     <FileText className="h-4 w-4 text-stone-500 shrink-0" />
                     <div className="min-w-0">
-                      <div className="text-sm font-medium text-stone-900 truncate">{p.name}</div>
+                      <div className="text-sm font-medium text-stone-900 truncate">
+                        {p.name}
+                      </div>
                       {typeof p.size === 'number' && p.size > 0 && (
-                        <div className="text-xs text-stone-500">{formatFileSize(p.size)}</div>
+                        <div className="text-xs text-stone-500">
+                          {formatFileSize(p.size)}
+                        </div>
                       )}
                     </div>
                   </div>
@@ -350,7 +354,12 @@ export default function BidRespond() {
                     variant="outline"
                     className="gap-1.5 shrink-0"
                   >
-                    <a href={p.url} target="_blank" rel="noopener noreferrer" download={p.name}>
+                    <a
+                      href={p.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      download={p.name}
+                    >
                       <Download className="h-3.5 w-3.5" />
                       Download
                     </a>
@@ -374,11 +383,14 @@ export default function BidRespond() {
               <div className="flex items-start gap-2 mb-3">
                 <FileText className="h-4 w-4 text-amber-700 mt-0.5 shrink-0" />
                 <div className="font-semibold text-sm text-amber-900">
-                  Project Selections{ctx.trade ? ` for ${ctx.trade}` : ''} ({ctx.selections.length})
+                  Project Selections{ctx.trade ? ` for ${ctx.trade}` : ''} (
+                  {ctx.selections.length})
                 </div>
               </div>
               <p className="text-xs text-amber-900/80 mb-3">
-                Bid against these specific products. Brand, model, and finish are what the client picked — match these in your pricing or call out alternates.
+                Bid against these specific products. Brand, model, and finish
+                are what the client picked — match these in your pricing or call
+                out alternates.
               </p>
               <div className="space-y-2">
                 {ctx.selections.map((s) => (
@@ -401,11 +413,17 @@ export default function BidRespond() {
                           {s.productName || s.category || 'Selection'}
                         </span>
                         {s.category && (
-                          <Badge variant="outline" className="text-[10px]">{s.category}</Badge>
+                          <Badge variant="outline" className="text-[10px]">
+                            {s.category}
+                          </Badge>
                         )}
                       </div>
                       <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-stone-600 mt-0.5">
-                        {s.vendor && <span><strong>{s.vendor}</strong></span>}
+                        {s.vendor && (
+                          <span>
+                            <strong>{s.vendor}</strong>
+                          </span>
+                        )}
                         {s.description && <span>{s.description}</span>}
                       </div>
                       {s.productUrl && (
@@ -445,12 +463,15 @@ export default function BidRespond() {
               <CardTitle>Bid submitted</CardTitle>
             </div>
             <CardDescription>
-              We received your bid for this request. The Skyeline team will review and follow up.
+              We received your bid for this request. The Skyeline team will
+              review and follow up.
             </CardDescription>
           </CardHeader>
           {isAuthenticated && (
             <CardContent>
-              <Button onClick={() => setLocation('/subcontractor-portal')}>Go to your portal</Button>
+              <Button onClick={() => setLocation('/subcontractor-portal')}>
+                Go to your portal
+              </Button>
             </CardContent>
           )}
         </Card>
@@ -461,28 +482,37 @@ export default function BidRespond() {
   // Not signed in: prompt sign-in / sign-up, preserving the token in ?next=
   if (!isAuthenticated) {
     const next = encodeURIComponent(`/bid/respond/${token}`);
-    const email = ctx.vendor.email ? `&email=${encodeURIComponent(ctx.vendor.email)}` : '';
+    const email = ctx.vendor.email
+      ? `&email=${encodeURIComponent(ctx.vendor.email)}`
+      : '';
     const signInUrl = `/sign-in?next=${next}${email}&bidToken=${encodeURIComponent(token!)}`;
     return (
       <PageFrame>
         {header}
         <Card className="max-w-3xl mx-auto">
           <CardHeader>
-            <CardTitle>Submit through your Skyeline Subcontractor Portal</CardTitle>
+            <CardTitle>
+              Submit through your Skyeline Subcontractor Portal
+            </CardTitle>
             <CardDescription>
-              Sign in if you already have a portal account, or create one — it's quick.
-              Once you're in, you'll be able to submit bids, view awarded contracts, and receive
-              project updates.
+              Sign in if you already have a portal account, or create one — it's
+              quick. Once you're in, you'll be able to submit bids, view awarded
+              contracts, and receive project updates.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            <Button size="lg" className="w-full" onClick={() => setLocation(signInUrl)}>
+            <Button
+              size="lg"
+              className="w-full"
+              onClick={() => setLocation(signInUrl)}
+            >
               Sign in or create account
             </Button>
             <p className="text-xs text-muted-foreground">
-              You can submit your bid as soon as you sign in. W-9, Certificate of Insurance,
-              Subcontractor Agreement, and contractor license number are needed before Skyeline
-              can award the work — but you don't need them on file to submit a bid.
+              You can submit your bid as soon as you sign in. W-9, Certificate
+              of Insurance, Subcontractor Agreement, and contractor license
+              number are needed before Skyeline can award the work — but you
+              don't need them on file to submit a bid.
             </p>
           </CardContent>
         </Card>
@@ -490,108 +520,73 @@ export default function BidRespond() {
     );
   }
 
-  // Signed in. Per D-016, bid submission is NOT gated on compliance any more —
-  // we render the response CTA unconditionally + an advisory compliance section.
-  // The award endpoint is the gate.
-  const allComplianceOk = !!(
-    compliance.w9Filed &&
-    compliance.insuranceCurrent &&
-    compliance.agreementSigned &&
-    compliance.contractorLicenseNumber
-  );
+  // Signed in. Embed the full SubBidSubmissionForm inline so the sub can
+  // complete and submit their bid without navigating away to the portal.
+  // Map the BidContext from the token endpoint → BidRequest shape.
+  const bidRequest: BidRequest = {
+    id: ctx.bidRequestId,
+    projectId: ctx.projectId,
+    projectName: ctx.projectName || '',
+    trade: ctx.trade || ctx.selectionTitle || 'Trade',
+    scope: ctx.scope || ctx.selectionSpecs || ctx.selectionTitle || '',
+    callouts: ctx.callouts || ctx.customMessage || undefined,
+    plans: (ctx.plans || []).map((p) => ({
+      name: p.name,
+      url: p.url,
+      storagePath: p.storagePath || '',
+    })),
+    dueDate: ctx.dueByDate ? ctx.dueByDate.slice(0, 10) : '',
+    invitedSubIds: ctx.vendor.contactId ? [ctx.vendor.contactId] : [],
+    invitedByUserId: '',
+    invitedByName: ctx.requesterName || 'Skyeline Homes',
+    status: 'open',
+  };
+
+  if (formSubmitted) {
+    return (
+      <PageFrame>
+        {header}
+        <Card className="max-w-3xl mx-auto">
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <CheckCircle2 className="h-6 w-6 text-green-600" />
+              <CardTitle>Bid submitted!</CardTitle>
+            </div>
+            <CardDescription>
+              Your bid has been received by Skyeline Homes. The team will review
+              and follow up with you within a few business days.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button onClick={() => setLocation('/subcontractor-portal')}>
+              View your portal
+            </Button>
+          </CardContent>
+        </Card>
+      </PageFrame>
+    );
+  }
 
   return (
     <PageFrame>
       {header}
-
-      {/* Primary action — always available to any signed-in sub. */}
-      <Card className="max-w-3xl mx-auto mb-4">
-        <CardHeader>
-          <div className="flex items-center gap-3">
-            <CheckCircle2 className="h-6 w-6 text-green-600" />
-            <CardTitle>Ready to submit your bid</CardTitle>
-          </div>
-          <CardDescription>
-            Open your portal to enter your bid amount{ctx.type === 'general' ? ', tier breakdown, ' : ' '}
-            and lead time.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <Button
-            size="lg"
-            className="w-full"
-            onClick={() => setLocation(`/subcontractor-portal/bid-requests`)}
-          >
-            Open my portal & submit bid
-          </Button>
-        </CardContent>
-      </Card>
-
-      {/* Advisory compliance section — NOT a wall. */}
-      <Card className="max-w-3xl mx-auto">
-        <CardHeader>
-          <div className="flex items-center gap-3">
-            <ShieldCheck className={`h-6 w-6 ${allComplianceOk ? 'text-green-600' : 'text-amber-600'}`} />
-            <CardTitle className="text-base">
-              {allComplianceOk ? 'You\'re fully verified' : 'Verification needed before award'}
-            </CardTitle>
-          </div>
-          <CardDescription>
-            {allComplianceOk
-              ? 'All four items are on file. If Skyeline awards your bid, the contract can be issued right away.'
-              : 'You can submit your bid now — but Skyeline can\'t award the work until these four items are on file.'}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <ChecklistRow done={!!compliance.w9Filed} label="W-9 tax form" />
-          <ChecklistRow done={!!compliance.insuranceCurrent} label="Certificate of Insurance (general liability + workers' comp)" />
-          <ChecklistRow done={!!compliance.agreementSigned} label="Signed Subcontractor Agreement" />
-          <ChecklistRow
-            done={!!compliance.contractorLicenseNumber}
-            label={
-              compliance.contractorLicenseNumber
-                ? `Contractor license — ${compliance.contractorLicenseNumber}`
-                : 'Contractor license number'
-            }
-          />
-
-          {/* Inline editor for the license number — the one thing the sub can
-              resolve right here without an upload UI (those land in Phase 1D
-              Slice 3). For W-9 / COI / Agreement we show status only. */}
-          <div className="pt-3 border-t mt-3 space-y-2">
-            <label className="text-sm font-medium block">
-              {compliance.contractorLicenseNumber ? 'Update' : 'Add'} your contractor license number
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={licenseInput}
-                onChange={(e) => setLicenseInput(e.target.value)}
-                placeholder="e.g. CA Lic# 1234567"
-                className="flex-1 px-3 py-2 border rounded-md text-sm"
-              />
-              <Button
-                onClick={saveLicense}
-                disabled={
-                  savingLicense ||
-                  !licenseInput.trim() ||
-                  licenseInput.trim() === (compliance.contractorLicenseNumber || '')
-                }
-              >
-                {savingLicense ? 'Saving…' : 'Save'}
-              </Button>
-            </div>
-          </div>
-
-          <p className="text-xs text-muted-foreground pt-2">
-            W-9, Certificate of Insurance, and Subcontractor Agreement uploads land in your portal
-            soon. For now Skyeline will collect those by email or in person — submit your bid first.
-          </p>
-        </CardContent>
-      </Card>
+      <div className="max-w-3xl mx-auto">
+        <SubBidSubmissionForm
+          request={bidRequest}
+          onClose={() => setLocation('/subcontractor-portal/bid-requests')}
+          alreadySubmitted={ctx.vendor.alreadyResponded}
+          onSubmitSuccess={() => setFormSubmitted(true)}
+        />
+      </div>
     </PageFrame>
   );
 }
+
+// ── helpers ──────────────────────────────────────────────────────────────
+// NOTE: The old compliance advisory block has been replaced with the inline
+// SubBidSubmissionForm. Award-time compliance is enforced server-side by
+// /api/bids/award (D-016). The SubBidSubmissionForm itself still shows the
+// advisory banner internally.
 
 // ── helpers ──────────────────────────────────────────────────────────────
 
@@ -601,7 +596,9 @@ function PageFrame({ children }: { children: React.ReactNode }) {
       <div className="max-w-4xl mx-auto">
         <div className="flex items-center gap-2 mb-6">
           <Building2 className="h-6 w-6" />
-          <span className="font-semibold text-lg">Skyeline Homes — Subcontractor Portal</span>
+          <span className="font-semibold text-lg">
+            Skyeline Homes — Subcontractor Portal
+          </span>
         </div>
         {children}
       </div>
@@ -610,13 +607,25 @@ function PageFrame({ children }: { children: React.ReactNode }) {
 }
 
 function Centered({ children }: { children: React.ReactNode }) {
-  return <div className="flex items-center justify-center min-h-[40vh]">{children}</div>;
+  return (
+    <div className="flex items-center justify-center min-h-[40vh]">
+      {children}
+    </div>
+  );
 }
 
-function TierRow({ label, description }: { label: string; description: string }) {
+function TierRow({
+  label,
+  description,
+}: {
+  label: string;
+  description: string;
+}) {
   return (
     <div className="flex gap-3">
-      <Badge variant="secondary" className="shrink-0 mt-0.5">{label}</Badge>
+      <Badge variant="secondary" className="shrink-0 mt-0.5">
+        {label}
+      </Badge>
       <p className="text-sm text-muted-foreground">{description}</p>
     </div>
   );
@@ -626,17 +635,4 @@ function formatFileSize(bytes: number): string {
   if (!bytes || bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-}
-
-function ChecklistRow({ done, label }: { done: boolean; label: string }) {
-  return (
-    <div className="flex items-center gap-2 text-sm">
-      {done ? (
-        <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
-      ) : (
-        <div className="h-4 w-4 rounded-full border-2 border-muted-foreground/40 shrink-0" />
-      )}
-      <span className={done ? 'text-muted-foreground line-through' : ''}>{label}</span>
-    </div>
-  );
 }
