@@ -1,17 +1,17 @@
-import * as React from "react"
-import { X } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { TradeTypeComboBox } from "./TradeTypeComboBox"
+import * as React from 'react';
+import { X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { TradeTypeComboBox } from './TradeTypeComboBox';
 
 // Note: outer Button (Add) imported above is intentional — only the per-chip
 // remove uses a plain <button> for sizing.
 
 interface MultiTradeSelectorProps {
-  value?: string[]
-  onValueChange: (trades: string[]) => void
-  className?: string
-  disabled?: boolean
+  value?: string[];
+  onValueChange: (trades: string[]) => void;
+  className?: string;
+  disabled?: boolean;
 }
 
 export function MultiTradeSelector({
@@ -20,27 +20,27 @@ export function MultiTradeSelector({
   className,
   disabled = false,
 }: MultiTradeSelectorProps) {
-  const [selectedTrades, setSelectedTrades] = React.useState<string[]>(value)
-  const [currentTrade, setCurrentTrade] = React.useState<string>("")
+  const [selectedTrades, setSelectedTrades] = React.useState<string[]>(value);
+  const [currentTrade, setCurrentTrade] = React.useState<string>('');
 
   React.useEffect(() => {
-    setSelectedTrades(value)
-  }, [value])
+    setSelectedTrades(value);
+  }, [value]);
 
   const handleAddTrade = (trade: string) => {
     if (trade && !selectedTrades.includes(trade)) {
-      const newTrades = [...selectedTrades, trade]
-      setSelectedTrades(newTrades)
-      onValueChange(newTrades)
-      setCurrentTrade("")
+      const newTrades = [...selectedTrades, trade];
+      setSelectedTrades(newTrades);
+      onValueChange(newTrades);
+      setCurrentTrade('');
     }
-  }
+  };
 
   const handleRemoveTrade = (tradeToRemove: string) => {
-    const newTrades = selectedTrades.filter(trade => trade !== tradeToRemove)
-    setSelectedTrades(newTrades)
-    onValueChange(newTrades)
-  }
+    const newTrades = selectedTrades.filter((trade) => trade !== tradeToRemove);
+    setSelectedTrades(newTrades);
+    onValueChange(newTrades);
+  };
 
   return (
     <div className={className}>
@@ -77,7 +77,10 @@ export function MultiTradeSelector({
             <div className="flex-1 min-w-0">
               <TradeTypeComboBox
                 value={currentTrade}
-                onValueChange={setCurrentTrade}
+                onValueChange={(trade) => {
+                  setCurrentTrade(trade);
+                  if (trade) handleAddTrade(trade);
+                }}
                 className="w-full"
               />
             </div>
@@ -94,9 +97,11 @@ export function MultiTradeSelector({
         )}
 
         {selectedTrades.length === 0 && disabled && (
-          <span className="text-sm text-muted-foreground">No trades specified</span>
+          <span className="text-sm text-muted-foreground">
+            No trades specified
+          </span>
         )}
       </div>
     </div>
-  )
+  );
 }

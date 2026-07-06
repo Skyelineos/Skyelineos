@@ -1,17 +1,66 @@
-import { useState, useEffect } from 'react';
-import { collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
+import { useState, useEffect, useMemo } from 'react';
+import {
+  collection,
+  query,
+  orderBy,
+  onSnapshot,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  doc,
+  getDoc,
+  serverTimestamp,
+  writeBatch,
+} from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { findDuplicateContacts, computeMergeUpdates, type DuplicateMatch } from '@/lib/contacts/duplicateDetection';
-import { DuplicateContactDialog, type DuplicateResolution } from '@/components/contacts/DuplicateContactDialog';
+import {
+  findDuplicateContacts,
+  computeMergeUpdates,
+  type DuplicateMatch,
+} from '@/lib/contacts/duplicateDetection';
+import {
+  DuplicateContactDialog,
+  type DuplicateResolution,
+} from '@/components/contacts/DuplicateContactDialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
-import { Users, Search, Download, Upload, Plus, TrendingUp, Building, UserCheck, Wrench, Edit, Trash2, Mail, Phone, MoreVertical, User, Star } from 'lucide-react';
+import {
+  Users,
+  Search,
+  Download,
+  Upload,
+  Plus,
+  TrendingUp,
+  Building,
+  UserCheck,
+  Wrench,
+  Edit,
+  Trash2,
+  Mail,
+  Phone,
+  MoreVertical,
+  User,
+  Star,
+} from 'lucide-react';
 import { StarRating } from '@/components/common/StarRating';
 import PreferredCategoriesEditor from '@/components/contacts/PreferredCategoriesEditor';
 import { MultiTradeSelector } from '@/components/contacts/MultiTradeSelector';
@@ -22,7 +71,12 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { PageHeader } from '@/components/common/PageHeader';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 interface Contact {
   id: string;
@@ -55,6 +109,19 @@ interface TradeFormData {
   isActive: boolean;
 }
 
+// Internal Skyeline staff roles — grouped under the "Team Members" tile/filter.
+const TEAM_ROLES = [
+  'team',
+  'employee',
+  'gc',
+  'admin',
+  'project_manager',
+  'projectmanager',
+  'staff',
+];
+const isTeamRole = (role?: string) =>
+  TEAM_ROLES.includes((role || '').toLowerCase());
+
 export default function Contacts() {
   const [activeTab, setActiveTab] = useState('contacts');
   const [searchTerm, setSearchTerm] = useState('');
@@ -84,7 +151,7 @@ export default function Contacts() {
   const [tradeFormData, setTradeFormData] = useState<TradeFormData>({
     name: '',
     description: '',
-    isActive: true
+    isActive: true,
   });
 
   // Contact form data state. `trades` is the source of truth (multi-trade);
@@ -114,14 +181,16 @@ export default function Contacts() {
 
   // Sales pipeline stages (kept in sync with NewClientModal/Sales). Loaded from
   // settings/salesStages on mount; falls back to defaults.
-  const [salesStages, setSalesStages] = useState<{ key: string; label: string; color: string }[]>([
-    { key: 'new_lead',        label: 'New Lead',         color: '#64748b' },
-    { key: 'meeting_booked',  label: 'Meeting Booked',   color: '#3b82f6' },
-    { key: 'design_phase',    label: 'Design Phase',     color: '#8b5cf6' },
-    { key: 'in_estimating',   label: 'In Estimating',    color: '#f59e0b' },
-    { key: 'close_to_sign',   label: 'Close to Signing', color: '#C9A96E' },
-    { key: 'won',             label: 'Won',              color: '#22c55e' },
-    { key: 'lost',            label: 'Lost',             color: '#ef4444' },
+  const [salesStages, setSalesStages] = useState<
+    { key: string; label: string; color: string }[]
+  >([
+    { key: 'new_lead', label: 'New Lead', color: '#64748b' },
+    { key: 'meeting_booked', label: 'Meeting Booked', color: '#3b82f6' },
+    { key: 'design_phase', label: 'Design Phase', color: '#8b5cf6' },
+    { key: 'in_estimating', label: 'In Estimating', color: '#f59e0b' },
+    { key: 'close_to_sign', label: 'Close to Signing', color: '#C9A96E' },
+    { key: 'won', label: 'Won', color: '#22c55e' },
+    { key: 'lost', label: 'Lost', color: '#ef4444' },
   ]);
 
   const { toast } = useToast();
@@ -139,24 +208,34 @@ export default function Contacts() {
   // Subscribe to contacts
   useEffect(() => {
     const q = query(collection(db, 'contacts'), orderBy('createdAt', 'desc'));
-    const unsub = onSnapshot(q, (snap) => {
-      setContacts(snap.docs.map(d => ({ id: d.id, ...d.data() } as Contact)));
-      setIsLoading(false);
-    }, () => {
-      setIsLoading(false);
-    });
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        setContacts(
+          snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Contact)
+        );
+        setIsLoading(false);
+      },
+      () => {
+        setIsLoading(false);
+      }
+    );
     return unsub;
   }, []);
 
   // Subscribe to trades
   useEffect(() => {
     const q = query(collection(db, 'trades'), orderBy('name'));
-    const unsub = onSnapshot(q, (snap) => {
-      setTrades(snap.docs.map(d => ({ id: d.id, ...d.data() } as Trade)));
-      setIsLoadingTrades(false);
-    }, () => {
-      setIsLoadingTrades(false);
-    });
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        setTrades(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Trade));
+        setIsLoadingTrades(false);
+      },
+      () => {
+        setIsLoadingTrades(false);
+      }
+    );
     return unsub;
   }, []);
 
@@ -166,7 +245,11 @@ export default function Contacts() {
       try {
         const snap = await getDoc(doc(db, 'settings', 'pipeline'));
         const data = snap.exists() ? snap.data() : null;
-        if (data?.stages && Array.isArray(data.stages) && data.stages.length > 0) {
+        if (
+          data?.stages &&
+          Array.isArray(data.stages) &&
+          data.stages.length > 0
+        ) {
           setSalesStages(data.stages);
         }
       } catch {
@@ -178,8 +261,15 @@ export default function Contacts() {
   // Reset contact form
   const resetContactForm = () => {
     setNewContactFormData({
-      firstName: '', lastName: '', email: '', phone: '', company: '',
-      role: 'client', trades: [], salesStage: '', sendInvite: false,
+      firstName: '',
+      lastName: '',
+      email: '',
+      phone: '',
+      company: '',
+      role: 'client',
+      trades: [],
+      salesStage: '',
+      sendInvite: false,
     });
   };
 
@@ -194,7 +284,11 @@ export default function Contacts() {
     try {
       await updateDoc(doc(db, 'contacts', id), { rating });
     } catch (e: any) {
-      toast({ title: 'Could not update rating', description: e?.message, variant: 'destructive' });
+      toast({
+        title: 'Could not update rating',
+        description: e?.message,
+        variant: 'destructive',
+      });
     }
   };
 
@@ -210,7 +304,7 @@ export default function Contacts() {
       toast({
         title: 'Error',
         description: `Failed to delete contact: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        variant: 'destructive'
+        variant: 'destructive',
       });
     }
   };
@@ -224,7 +318,8 @@ export default function Contacts() {
     if (validRole === 'client' && !newContactFormData.salesStage) {
       toast({
         title: 'Sales pipeline stage required',
-        description: 'Pick where this client sits in the sales pipeline before saving.',
+        description:
+          'Pick where this client sits in the sales pipeline before saving.',
         variant: 'destructive',
       });
       return;
@@ -232,10 +327,14 @@ export default function Contacts() {
 
     // Subs and vendors must have at least one trade so the bid-package flow
     // can target them by specialty. Multiple trades are allowed.
-    if ((validRole === 'subcontractor' || validRole === 'vendor') && newContactFormData.trades.length === 0) {
+    if (
+      (validRole === 'subcontractor' || validRole === 'vendor') &&
+      newContactFormData.trades.length === 0
+    ) {
       toast({
         title: 'Trade required',
-        description: 'Add at least one trade so this sub/vendor can be matched to bid packages.',
+        description:
+          'Add at least one trade so this sub/vendor can be matched to bid packages.',
         variant: 'destructive',
       });
       return;
@@ -273,7 +372,11 @@ export default function Contacts() {
               : `“${resolution.match.name}” already had everything — nothing to change.`,
           });
         } catch (e: any) {
-          toast({ title: 'Merge failed', description: e?.message || '', variant: 'destructive' });
+          toast({
+            title: 'Merge failed',
+            description: e?.message || '',
+            variant: 'destructive',
+          });
         }
         resetContactForm();
         setShowAddModal(false);
@@ -285,17 +388,18 @@ export default function Contacts() {
     // Optimistic UX: close the modal immediately so the user isn't stuck
     // watching a spinner. The write keeps running in the background and we
     // toast either success or failure once it resolves.
+    setIsSavingContact(true);
     const formSnapshot = { ...newContactFormData };
     resetContactForm();
     setShowAddModal(false);
-    setIsSavingContact(false);
     try {
       if (validRole === 'client') {
         // Dual-write: contact + matching CRM client doc, cross-referenced.
         const batch = writeBatch(db);
         const contactRef = doc(collection(db, 'contacts'));
-        const clientRef  = doc(collection(db, 'clients'));
-        const fullName = `${formSnapshot.firstName} ${formSnapshot.lastName}`.trim();
+        const clientRef = doc(collection(db, 'clients'));
+        const fullName =
+          `${formSnapshot.firstName} ${formSnapshot.lastName}`.trim();
         batch.set(contactRef, {
           firstName: formSnapshot.firstName,
           lastName: formSnapshot.lastName,
@@ -330,7 +434,9 @@ export default function Contacts() {
           updatedAt: serverTimestamp(),
         });
         await batch.commit();
-        const stageLabel = salesStages.find(s => s.key === formSnapshot.salesStage)?.label || formSnapshot.salesStage;
+        const stageLabel =
+          salesStages.find((s) => s.key === formSnapshot.salesStage)?.label ||
+          formSnapshot.salesStage;
         toast({
           title: 'Contact added',
           description: `Client created — also placed in Sales at "${stageLabel}".`,
@@ -339,9 +445,14 @@ export default function Contacts() {
         // Portal invite is opt-in for clients: only send when the box is
         // checked. Unready leads just sit in the pipeline for nurture. Email
         // when we have one; otherwise text the invite to their phone.
-        if (formSnapshot.sendInvite && (formSnapshot.email || formSnapshot.phone)) {
+        if (
+          formSnapshot.sendInvite &&
+          (formSnapshot.email || formSnapshot.phone)
+        ) {
           try {
-            const { sendPortalInviteEmail, sendPortalInviteSms } = await import('@/lib/portalInvite');
+            const { sendPortalInviteEmail, sendPortalInviteSms } = await import(
+              '@/lib/portalInvite'
+            );
             if (formSnapshot.email) {
               const { templateName } = await sendPortalInviteEmail({
                 contactId: contactRef.id,
@@ -351,7 +462,10 @@ export default function Contacts() {
                 invitedBy: user?.email || '',
                 preferStage: 'lead',
               });
-              toast({ title: 'Portal invite sent', description: `Emailed “${templateName}” to ${formSnapshot.email}.` });
+              toast({
+                title: 'Portal invite sent',
+                description: `Emailed “${templateName}” to ${formSnapshot.email}.`,
+              });
             } else {
               await sendPortalInviteSms({
                 contactId: contactRef.id,
@@ -360,14 +474,22 @@ export default function Contacts() {
                 firstName: formSnapshot.firstName,
                 invitedBy: user?.email || '',
               });
-              toast({ title: 'Portal invite texted', description: `Sent a sign-up link to ${formSnapshot.phone}.` });
+              toast({
+                title: 'Portal invite texted',
+                description: `Sent a sign-up link to ${formSnapshot.phone}.`,
+              });
             }
           } catch (e: any) {
-            toast({ title: 'Invite not sent', description: e?.message || '', variant: 'destructive' });
+            toast({
+              title: 'Invite not sent',
+              description: e?.message || '',
+              variant: 'destructive',
+            });
           }
         }
       } else {
-        const fullName = `${formSnapshot.firstName} ${formSnapshot.lastName}`.trim();
+        const fullName =
+          `${formSnapshot.firstName} ${formSnapshot.lastName}`.trim();
         const newRef = await addDoc(collection(db, 'contacts'), {
           firstName: formSnapshot.firstName,
           lastName: formSnapshot.lastName,
@@ -383,7 +505,10 @@ export default function Contacts() {
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         });
-        toast({ title: 'Contact added', description: `${fullName} added to contacts.` });
+        toast({
+          title: 'Contact added',
+          description: `${fullName} added to contacts.`,
+        });
         if (formSnapshot.sendInvite && formSnapshot.email) {
           // Send a real portal-invite email (SendGrid) using the default
           // template for a new contact. No mail client involved.
@@ -397,9 +522,16 @@ export default function Contacts() {
               invitedBy: user?.email || '',
               preferStage: 'lead',
             });
-            toast({ title: 'Portal invite sent', description: `Emailed “${templateName}” to ${formSnapshot.email}.` });
+            toast({
+              title: 'Portal invite sent',
+              description: `Emailed “${templateName}” to ${formSnapshot.email}.`,
+            });
           } catch (e: any) {
-            toast({ title: 'Invite not sent', description: e?.message || '', variant: 'destructive' });
+            toast({
+              title: 'Invite not sent',
+              description: e?.message || '',
+              variant: 'destructive',
+            });
           }
         }
       }
@@ -408,9 +540,12 @@ export default function Contacts() {
       console.error('Add contact failed:', error);
       toast({
         title: 'Could not add contact',
-        description: error instanceof Error ? error.message : 'Failed to add contact',
+        description:
+          error instanceof Error ? error.message : 'Failed to add contact',
         variant: 'destructive',
       });
+    } finally {
+      setIsSavingContact(false);
     }
   };
 
@@ -423,7 +558,7 @@ export default function Contacts() {
       await addDoc(collection(db, 'trades'), {
         ...tradeFormData,
         createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
+        updatedAt: serverTimestamp(),
       });
       setIsTradeDialogOpen(false);
       setTradeFormData({ name: '', description: '', isActive: true });
@@ -431,8 +566,9 @@ export default function Contacts() {
     } catch (error: unknown) {
       toast({
         title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to create trade',
-        variant: 'destructive'
+        description:
+          error instanceof Error ? error.message : 'Failed to create trade',
+        variant: 'destructive',
       });
     } finally {
       setIsSavingTrade(false);
@@ -441,7 +577,11 @@ export default function Contacts() {
 
   const handleEditTrade = (trade: Trade) => {
     setEditingTrade(trade);
-    setTradeFormData({ name: trade.name, description: trade.description, isActive: trade.isActive });
+    setTradeFormData({
+      name: trade.name,
+      description: trade.description,
+      isActive: trade.isActive,
+    });
     setIsTradeDialogOpen(true);
   };
 
@@ -452,7 +592,7 @@ export default function Contacts() {
     try {
       await updateDoc(doc(db, 'trades', editingTrade.id), {
         ...tradeFormData,
-        updatedAt: serverTimestamp()
+        updatedAt: serverTimestamp(),
       });
       setIsTradeDialogOpen(false);
       setEditingTrade(null);
@@ -461,8 +601,9 @@ export default function Contacts() {
     } catch (error: unknown) {
       toast({
         title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to update trade',
-        variant: 'destructive'
+        description:
+          error instanceof Error ? error.message : 'Failed to update trade',
+        variant: 'destructive',
       });
     } finally {
       setIsSavingTrade(false);
@@ -470,15 +611,17 @@ export default function Contacts() {
   };
 
   const handleDeleteTrade = async (trade: Trade) => {
-    if (!confirm(`Are you sure you want to delete the trade "${trade.name}"?`)) return;
+    if (!confirm(`Are you sure you want to delete the trade "${trade.name}"?`))
+      return;
     try {
       await deleteDoc(doc(db, 'trades', trade.id));
       toast({ title: 'Success', description: 'Trade deleted successfully' });
     } catch (error: unknown) {
       toast({
         title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to delete trade',
-        variant: 'destructive'
+        description:
+          error instanceof Error ? error.message : 'Failed to delete trade',
+        variant: 'destructive',
       });
     }
   };
@@ -491,61 +634,86 @@ export default function Contacts() {
 
   // Derived data
   const filteredTrades = trades.filter((trade) => {
-    const matchesSearch = tradeSearchTerm === '' ||
+    const matchesSearch =
+      tradeSearchTerm === '' ||
       trade.name.toLowerCase().includes(tradeSearchTerm.toLowerCase()) ||
       trade.description.toLowerCase().includes(tradeSearchTerm.toLowerCase());
     return matchesSearch;
   });
 
-  // Internal Skyeline staff roles — grouped under the "Team Members" tile/filter.
-  const TEAM_ROLES = ['team', 'employee', 'gc', 'admin', 'project_manager', 'projectmanager', 'staff'];
-  const isTeamRole = (role?: string) => TEAM_ROLES.includes((role || '').toLowerCase());
-
-  const filteredContacts = contacts.filter((contact) => {
-    const matchesSearch = searchTerm === '' ||
-      contact.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      contact.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (contact.company && contact.company.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      contact.role?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (contact.trade && contact.trade.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (Array.isArray((contact as any).trades) && (contact as any).trades.some((t: string) =>
-        typeof t === 'string' && t.toLowerCase().includes(searchTerm.toLowerCase())
-      ));
-    const matchesRole = roleFilter === 'all'
-      ? true
-      : roleFilter === 'team'
-        ? isTeamRole(contact.role)
-        : contact.role?.toLowerCase() === roleFilter.toLowerCase();
-    const matchesCompany = companyFilter === 'all' || contact.company === companyFilter;
-    return matchesSearch && matchesRole && matchesCompany;
-  }).sort((a, b) => {
-    // Alphabetical by name — primary sort. Fall back to email if name is empty.
-    const aKey = String(a.name || a.email || '').toLowerCase();
-    const bKey = String(b.name || b.email || '').toLowerCase();
-    return aKey.localeCompare(bKey);
-  });
+  const filteredContacts = useMemo(
+    () =>
+      contacts
+        .filter((contact) => {
+          const matchesSearch =
+            searchTerm === '' ||
+            contact.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            contact.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (contact.company &&
+              contact.company
+                .toLowerCase()
+                .includes(searchTerm.toLowerCase())) ||
+            contact.role?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (contact.trade &&
+              contact.trade.toLowerCase().includes(searchTerm.toLowerCase())) ||
+            (Array.isArray((contact as any).trades) &&
+              (contact as any).trades.some(
+                (t: string) =>
+                  typeof t === 'string' &&
+                  t.toLowerCase().includes(searchTerm.toLowerCase())
+              ));
+          const matchesRole =
+            roleFilter === 'all'
+              ? true
+              : roleFilter === 'team'
+                ? isTeamRole(contact.role)
+                : contact.role?.toLowerCase() === roleFilter.toLowerCase();
+          const matchesCompany =
+            companyFilter === 'all' || contact.company === companyFilter;
+          return matchesSearch && matchesRole && matchesCompany;
+        })
+        .sort((a, b) => {
+          // Alphabetical by name — primary sort. Fall back to email if name is empty.
+          const aKey = String(a.name || a.email || '').toLowerCase();
+          const bKey = String(b.name || b.email || '').toLowerCase();
+          return aKey.localeCompare(bKey);
+        }),
+    [contacts, searchTerm, roleFilter, companyFilter]
+  );
 
   const uniqueRoles = Array.from(new Set(contacts.map((c) => c.role))).sort();
-  const uniqueCompanies = Array.from(new Set(contacts.map((c) => c.company).filter(Boolean))).sort();
+  const uniqueCompanies = Array.from(
+    new Set(contacts.map((c) => c.company).filter(Boolean))
+  ).sort();
 
   const summaryStats = {
     total: contacts.length,
     clients: contacts.filter((c) => c.role.toLowerCase() === 'client').length,
-    subcontractors: contacts.filter((c) => c.role.toLowerCase() === 'subcontractor').length,
-    suppliers: contacts.filter((c) => c.role.toLowerCase() === 'supplier').length,
+    subcontractors: contacts.filter(
+      (c) => c.role.toLowerCase() === 'subcontractor'
+    ).length,
+    suppliers: contacts.filter((c) => c.role.toLowerCase() === 'supplier')
+      .length,
     team: contacts.filter((c) => isTeamRole(c.role)).length,
-    active: contacts.filter((c) => c.isActive).length
+    active: contacts.filter((c) => c.isActive).length,
   };
 
   const getRoleColor = (role: string) => {
     switch (role.toLowerCase()) {
-      case 'client': return 'bg-blue-100 text-blue-800 border-blue-200';
-      case 'subcontractor': return 'bg-orange-100 text-orange-800 border-orange-200';
-      case 'supplier': return 'bg-purple-100 text-purple-800 border-purple-200';
-      case 'vendor': return 'bg-green-100 text-green-800 border-green-200';
-      case 'architect': return 'bg-indigo-100 text-indigo-800 border-indigo-200';
-      case 'engineer': return 'bg-cyan-100 text-cyan-800 border-cyan-200';
-      default: return 'bg-gray-100 text-gray-800 border-gray-200';
+      case 'client':
+        return 'bg-blue-100 text-blue-800 border-blue-200';
+      case 'subcontractor':
+        return 'bg-orange-100 text-orange-800 border-orange-200';
+      case 'supplier':
+        return 'bg-purple-100 text-purple-800 border-purple-200';
+      case 'vendor':
+        return 'bg-green-100 text-green-800 border-green-200';
+      case 'architect':
+        return 'bg-indigo-100 text-indigo-800 border-indigo-200';
+      case 'engineer':
+        return 'bg-cyan-100 text-cyan-800 border-cyan-200';
+      default:
+        return 'bg-gray-100 text-gray-800 border-gray-200';
     }
   };
 
@@ -554,15 +722,20 @@ export default function Contacts() {
     const csvContent = [
       headers.join(','),
       ...filteredContacts.map((contact) => {
-        const arr: string[] = Array.isArray((contact as any).trades) ? (contact as any).trades : [];
-        const tradesStr = arr.length > 0 ? arr.join('; ') : (contact.trade || '');
+        const arr: string[] = Array.isArray((contact as any).trades)
+          ? (contact as any).trades
+          : [];
+        const tradesStr = arr.length > 0 ? arr.join('; ') : contact.trade || '';
         return [
-          contact.name, contact.email, contact.phone || '',
-          contact.company || '', contact.role,
+          contact.name,
+          contact.email,
+          contact.phone || '',
+          contact.company || '',
+          contact.role,
           // Wrap in quotes since trades are joined by `;` (CSV-safe).
           `"${tradesStr.replace(/"/g, '""')}"`,
         ].join(',');
-      })
+      }),
     ].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
@@ -608,24 +781,32 @@ export default function Contacts() {
           icon={<Users className="h-6 w-6" />}
           actions={
             <div className="flex items-center gap-2 flex-shrink-0">
-            <Button
-              variant={activeTab === 'contacts' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setActiveTab('contacts')}
-              className={activeTab === 'contacts' ? 'bg-[var(--accent-color)] text-white hover:bg-[var(--accent-color)]/90' : ''}
-            >
-              <Users className="h-4 w-4 mr-2" />
-              Contacts
-            </Button>
-            <Button
-              variant={activeTab === 'trades' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setActiveTab('trades')}
-              className={activeTab === 'trades' ? 'bg-[var(--accent-color)] text-white hover:bg-[var(--accent-color)]/90' : ''}
-            >
-              <Wrench className="h-4 w-4 mr-2" />
-              Trades
-            </Button>
+              <Button
+                variant={activeTab === 'contacts' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setActiveTab('contacts')}
+                className={
+                  activeTab === 'contacts'
+                    ? 'bg-[var(--accent-color)] text-white hover:bg-[var(--accent-color)]/90'
+                    : ''
+                }
+              >
+                <Users className="h-4 w-4 mr-2" />
+                Contacts
+              </Button>
+              <Button
+                variant={activeTab === 'trades' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setActiveTab('trades')}
+                className={
+                  activeTab === 'trades'
+                    ? 'bg-[var(--accent-color)] text-white hover:bg-[var(--accent-color)]/90'
+                    : ''
+                }
+              >
+                <Wrench className="h-4 w-4 mr-2" />
+                Trades
+              </Button>
             </div>
           }
         />
@@ -633,8 +814,12 @@ export default function Contacts() {
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <div className="hidden">
             <TabsList className="hidden">
-              <TabsTrigger value="contacts" className="hidden">Contacts</TabsTrigger>
-              <TabsTrigger value="trades" className="hidden">Trades</TabsTrigger>
+              <TabsTrigger value="contacts" className="hidden">
+                Contacts
+              </TabsTrigger>
+              <TabsTrigger value="trades" className="hidden">
+                Trades
+              </TabsTrigger>
             </TabsList>
           </div>
 
@@ -649,14 +834,20 @@ export default function Contacts() {
                   <Download className="h-4 w-4 mr-2" />
                   Export CSV
                 </Button>
-                <Button variant="outline" onClick={() => setShowImportModal(true)}>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowImportModal(true)}
+                >
                   <Upload className="h-4 w-4 mr-2" />
                   Import CSV/Excel
                 </Button>
                 <Button
                   onClick={() => setShowAddModal(true)}
                   className="min-w-[120px] min-h-[40px] text-white"
-                  style={{ backgroundColor: 'var(--accent-color)', border: '1px solid var(--accent-color)' }}
+                  style={{
+                    backgroundColor: 'var(--accent-color)',
+                    border: '1px solid var(--accent-color)',
+                  }}
                 >
                   <Plus className="h-4 w-4 mr-2" />
                   Add Contact
@@ -675,7 +866,9 @@ export default function Contacts() {
                     <TrendingUp className="h-4 w-4 text-blue-600" />
                     <div>
                       <p className="text-sm text-gray-600">Total</p>
-                      <p className="text-xl font-semibold">{summaryStats.total}</p>
+                      <p className="text-xl font-semibold">
+                        {summaryStats.total}
+                      </p>
                     </div>
                   </div>
                 </CardContent>
@@ -689,7 +882,9 @@ export default function Contacts() {
                     <UserCheck className="h-4 w-4 text-green-600" />
                     <div>
                       <p className="text-sm text-gray-600">Clients</p>
-                      <p className="text-xl font-semibold">{summaryStats.clients}</p>
+                      <p className="text-xl font-semibold">
+                        {summaryStats.clients}
+                      </p>
                     </div>
                   </div>
                 </CardContent>
@@ -703,7 +898,9 @@ export default function Contacts() {
                     <Wrench className="h-4 w-4 text-orange-600" />
                     <div>
                       <p className="text-sm text-gray-600">Subcontractors</p>
-                      <p className="text-xl font-semibold">{summaryStats.subcontractors}</p>
+                      <p className="text-xl font-semibold">
+                        {summaryStats.subcontractors}
+                      </p>
                     </div>
                   </div>
                 </CardContent>
@@ -717,7 +914,9 @@ export default function Contacts() {
                     <Building className="h-4 w-4 text-purple-600" />
                     <div>
                       <p className="text-sm text-gray-600">Suppliers</p>
-                      <p className="text-xl font-semibold">{summaryStats.suppliers}</p>
+                      <p className="text-xl font-semibold">
+                        {summaryStats.suppliers}
+                      </p>
                     </div>
                   </div>
                 </CardContent>
@@ -731,7 +930,9 @@ export default function Contacts() {
                     <User className="h-4 w-4 text-slate-600" />
                     <div>
                       <p className="text-sm text-gray-600">Team Members</p>
-                      <p className="text-xl font-semibold">{summaryStats.team}</p>
+                      <p className="text-xl font-semibold">
+                        {summaryStats.team}
+                      </p>
                     </div>
                   </div>
                 </CardContent>
@@ -745,7 +946,9 @@ export default function Contacts() {
                     <Users className="h-4 w-4 text-indigo-600" />
                     <div>
                       <p className="text-sm text-gray-600">Active</p>
-                      <p className="text-xl font-semibold">{summaryStats.active}</p>
+                      <p className="text-xl font-semibold">
+                        {summaryStats.active}
+                      </p>
                     </div>
                   </div>
                 </CardContent>
@@ -769,8 +972,10 @@ export default function Contacts() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Roles</SelectItem>
-                  {uniqueRoles.map(role => (
-                    <SelectItem key={role} value={role}>{role}</SelectItem>
+                  {uniqueRoles.map((role) => (
+                    <SelectItem key={role} value={role}>
+                      {role}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -780,8 +985,10 @@ export default function Contacts() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Companies</SelectItem>
-                  {uniqueCompanies.map(company => (
-                    <SelectItem key={company} value={company!}>{company}</SelectItem>
+                  {uniqueCompanies.map((company) => (
+                    <SelectItem key={company} value={company!}>
+                      {company}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -793,20 +1000,30 @@ export default function Contacts() {
                 <Card>
                   <CardContent className="p-12 text-center">
                     <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">No contacts found</h3>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">
+                      No contacts found
+                    </h3>
                     <p className="text-gray-600 mb-4">
-                      {searchTerm ? 'Try adjusting your search terms' : 'Get started by adding a contact or importing from CSV/Excel'}
+                      {searchTerm
+                        ? 'Try adjusting your search terms'
+                        : 'Get started by adding a contact or importing from CSV/Excel'}
                     </p>
                     {!searchTerm && (
                       <div className="flex justify-center space-x-2">
-                        <Button variant="outline" onClick={() => setShowImportModal(true)}>
+                        <Button
+                          variant="outline"
+                          onClick={() => setShowImportModal(true)}
+                        >
                           <Upload className="h-4 w-4 mr-2" />
                           Import Contacts
                         </Button>
                         <Button
                           onClick={() => setShowAddModal(true)}
                           className="text-white"
-                          style={{ backgroundColor: 'var(--accent-color)', borderColor: 'var(--accent-color)' }}
+                          style={{
+                            backgroundColor: 'var(--accent-color)',
+                            borderColor: 'var(--accent-color)',
+                          }}
                         >
                           <Plus className="h-4 w-4 mr-2" />
                           Add Contact
@@ -817,34 +1034,68 @@ export default function Contacts() {
                 </Card>
               ) : (
                 filteredContacts.map((contact) => (
-                  <Card key={contact.id} className="hover:shadow-md transition-shadow cursor-pointer">
+                  <Card
+                    key={contact.id}
+                    className="hover:shadow-md transition-shadow cursor-pointer"
+                  >
                     <CardContent className="p-4">
                       <div className="flex items-center justify-between">
                         <div
                           className="flex items-center space-x-4 flex-1 cursor-pointer"
                           onClick={() => handleContactClick(contact)}
                         >
-                          <div className={`w-1 h-12 rounded-full ${getRoleColor(contact.role).split(' ')[0]}`}></div>
+                          <div
+                            className={`w-1 h-12 rounded-full ${getRoleColor(contact.role).split(' ')[0]}`}
+                          ></div>
                           <div className="flex-1">
                             <div className="flex items-center space-x-3">
-                              <h3 className="font-semibold text-base">{contact.name}</h3>
-                              <Badge className={`text-xs ${getRoleColor(contact.role)}`} variant="secondary">
+                              <h3 className="font-semibold text-base">
+                                {contact.name}
+                              </h3>
+                              <Badge
+                                className={`text-xs ${getRoleColor(contact.role)}`}
+                                variant="secondary"
+                              >
                                 {contact.role}
                               </Badge>
                             </div>
                             <div className="flex items-center space-x-4 mt-1 text-sm text-gray-600">
                               {contact.company && (
-                                <span className="font-medium text-gray-800">{contact.company}</span>
+                                <span className="font-medium text-gray-800">
+                                  {contact.company}
+                                </span>
                               )}
                               {(() => {
-                                const role = String(contact.role || '').toLowerCase();
-                                if (role !== 'subcontractor' && role !== 'vendor') return null;
-                                const arr = Array.isArray((contact as any).trades) ? (contact as any).trades : [];
-                                const display: string[] = arr.length > 0
-                                  ? arr.filter((t: any) => typeof t === 'string' && t.trim())
-                                  : (contact.trade ? [contact.trade] : []);
+                                const role = String(
+                                  contact.role || ''
+                                ).toLowerCase();
+                                if (
+                                  role !== 'subcontractor' &&
+                                  role !== 'vendor'
+                                )
+                                  return null;
+                                const arr = Array.isArray(
+                                  (contact as any).trades
+                                )
+                                  ? (contact as any).trades
+                                  : [];
+                                const display: string[] =
+                                  arr.length > 0
+                                    ? arr.filter(
+                                        (t: any) =>
+                                          typeof t === 'string' && t.trim()
+                                      )
+                                    : contact.trade
+                                      ? [contact.trade]
+                                      : [];
                                 return display.map((t: string) => (
-                                  <Badge key={t} variant="outline" className="text-xs">{t}</Badge>
+                                  <Badge
+                                    key={t}
+                                    variant="outline"
+                                    className="text-xs"
+                                  >
+                                    {t}
+                                  </Badge>
                                 ));
                               })()}
                               <span>{contact.email}</span>
@@ -854,10 +1105,21 @@ export default function Contacts() {
                         </div>
                         <div className="flex items-center space-x-1">
                           {(() => {
-                            const role = String(contact.role || '').toLowerCase();
-                            if (role !== 'subcontractor' && role !== 'sub' && role !== 'vendor') return null;
+                            const role = String(
+                              contact.role || ''
+                            ).toLowerCase();
+                            if (
+                              role !== 'subcontractor' &&
+                              role !== 'sub' &&
+                              role !== 'vendor'
+                            )
+                              return null;
                             return (
-                              <div onClick={(e) => e.stopPropagation()} className="mr-2" title="Sub rating">
+                              <div
+                                onClick={(e) => e.stopPropagation()}
+                                className="mr-2"
+                                title="Sub rating"
+                              >
                                 <StarRating
                                   value={(contact as any).rating || 0}
                                   size={16}
@@ -902,16 +1164,32 @@ export default function Contacts() {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleEditContact(contact); }}>
+                              <DropdownMenuItem
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleEditContact(contact);
+                                }}
+                              >
                                 <Edit className="h-4 w-4 mr-2" />
                                 Edit Contact
                               </DropdownMenuItem>
-                              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleContactClick(contact); }}>
+                              <DropdownMenuItem
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleContactClick(contact);
+                                }}
+                              >
                                 <User className="h-4 w-4 mr-2" />
                                 View Details
                               </DropdownMenuItem>
-                              {(contact.role === 'subcontractor' || contact.role === 'vendor') && (
-                                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setPreferredFor(contact); }}>
+                              {(contact.role === 'subcontractor' ||
+                                contact.role === 'vendor') && (
+                                <DropdownMenuItem
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setPreferredFor(contact);
+                                  }}
+                                >
                                   <Star className="h-4 w-4 mr-2" />
                                   Preferred Categories
                                 </DropdownMenuItem>
@@ -919,7 +1197,11 @@ export default function Contacts() {
                               <DropdownMenuItem
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  if (confirm('Are you sure you want to delete this contact?')) {
+                                  if (
+                                    confirm(
+                                      'Are you sure you want to delete this contact?'
+                                    )
+                                  ) {
                                     handleDeleteContact(contact.id);
                                   }
                                 }}
@@ -954,7 +1236,12 @@ export default function Contacts() {
                       <Input
                         id="firstName"
                         value={newContactFormData.firstName}
-                        onChange={(e) => setNewContactFormData(prev => ({ ...prev, firstName: e.target.value }))}
+                        onChange={(e) =>
+                          setNewContactFormData((prev) => ({
+                            ...prev,
+                            firstName: e.target.value,
+                          }))
+                        }
                         required
                       />
                     </div>
@@ -963,7 +1250,12 @@ export default function Contacts() {
                       <Input
                         id="lastName"
                         value={newContactFormData.lastName}
-                        onChange={(e) => setNewContactFormData(prev => ({ ...prev, lastName: e.target.value }))}
+                        onChange={(e) =>
+                          setNewContactFormData((prev) => ({
+                            ...prev,
+                            lastName: e.target.value,
+                          }))
+                        }
                         required
                       />
                     </div>
@@ -975,7 +1267,12 @@ export default function Contacts() {
                         id="email"
                         type="email"
                         value={newContactFormData.email}
-                        onChange={(e) => setNewContactFormData(prev => ({ ...prev, email: e.target.value }))}
+                        onChange={(e) =>
+                          setNewContactFormData((prev) => ({
+                            ...prev,
+                            email: e.target.value,
+                          }))
+                        }
                         required
                       />
                     </div>
@@ -985,7 +1282,12 @@ export default function Contacts() {
                         id="phone"
                         type="tel"
                         value={newContactFormData.phone}
-                        onChange={(e) => setNewContactFormData(prev => ({ ...prev, phone: e.target.value }))}
+                        onChange={(e) =>
+                          setNewContactFormData((prev) => ({
+                            ...prev,
+                            phone: e.target.value,
+                          }))
+                        }
                       />
                     </div>
                   </div>
@@ -995,15 +1297,17 @@ export default function Contacts() {
                       <Select
                         value={newContactFormData.role}
                         onValueChange={(value) => {
-                          const isVendorish = value === 'subcontractor' || value === 'vendor';
+                          const isVendorish =
+                            value === 'subcontractor' || value === 'vendor';
                           const isDesigner = value === 'designer';
                           // Designers and vendors both have a company/business
                           // name. Trades are sub/vendor only.
-                          setNewContactFormData(prev => ({
+                          setNewContactFormData((prev) => ({
                             ...prev,
                             role: value,
-                            company: (isVendorish || isDesigner) ? prev.company : '',
-                            trades:  isVendorish ? prev.trades  : [],
+                            company:
+                              isVendorish || isDesigner ? prev.company : '',
+                            trades: isVendorish ? prev.trades : [],
                           }));
                         }}
                       >
@@ -1012,7 +1316,9 @@ export default function Contacts() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="client">Client</SelectItem>
-                          <SelectItem value="subcontractor">Subcontractor</SelectItem>
+                          <SelectItem value="subcontractor">
+                            Subcontractor
+                          </SelectItem>
                           <SelectItem value="vendor">Vendor</SelectItem>
                           <SelectItem value="designer">Designer</SelectItem>
                           <SelectItem value="employee">Employee</SelectItem>
@@ -1022,7 +1328,9 @@ export default function Contacts() {
                     </div>
                   </div>
                   {(() => {
-                    const isVendorish = newContactFormData.role === 'subcontractor' || newContactFormData.role === 'vendor';
+                    const isVendorish =
+                      newContactFormData.role === 'subcontractor' ||
+                      newContactFormData.role === 'vendor';
                     const isDesigner = newContactFormData.role === 'designer';
                     const showCompany = isVendorish || isDesigner;
                     const isClient = newContactFormData.role === 'client';
@@ -1036,22 +1344,36 @@ export default function Contacts() {
                             <Input
                               id="company"
                               value={newContactFormData.company}
-                              onChange={(e) => setNewContactFormData(prev => ({ ...prev, company: e.target.value }))}
-                              placeholder={isDesigner ? 'e.g. Skyeline Design' : ''}
+                              onChange={(e) =>
+                                setNewContactFormData((prev) => ({
+                                  ...prev,
+                                  company: e.target.value,
+                                }))
+                              }
+                              placeholder={
+                                isDesigner ? 'e.g. Skyeline Design' : ''
+                              }
                             />
                           </div>
                         )}
                         {isVendorish && (
                           <div>
                             <Label>
-                              Trades / Specialties <span className="text-red-500">*</span>
+                              Trades / Specialties{' '}
+                              <span className="text-red-500">*</span>
                             </Label>
                             <MultiTradeSelector
                               value={newContactFormData.trades}
-                              onValueChange={(trades) => setNewContactFormData(prev => ({ ...prev, trades }))}
+                              onValueChange={(trades) =>
+                                setNewContactFormData((prev) => ({
+                                  ...prev,
+                                  trades,
+                                }))
+                              }
                             />
                             <p className="text-[11px] text-gray-500 mt-1">
-                              Add every trade this sub/vendor covers — each one makes them eligible for that trade's bid packages.
+                              Add every trade this sub/vendor covers — each one
+                              makes them eligible for that trade's bid packages.
                             </p>
                           </div>
                         )}
@@ -1062,20 +1384,29 @@ export default function Contacts() {
                               Sales Pipeline Stage *
                             </Label>
                             <p className="text-xs text-gray-500 mb-2">
-                              Required for clients — every client has to live somewhere in the pipeline.
+                              Required for clients — every client has to live
+                              somewhere in the pipeline.
                             </p>
                             <Select
                               value={newContactFormData.salesStage}
-                              onValueChange={(v) => setNewContactFormData(prev => ({ ...prev, salesStage: v }))}
+                              onValueChange={(v) =>
+                                setNewContactFormData((prev) => ({
+                                  ...prev,
+                                  salesStage: v,
+                                }))
+                              }
                             >
                               <SelectTrigger id="salesStage">
                                 <SelectValue placeholder="Where in the pipeline?" />
                               </SelectTrigger>
                               <SelectContent>
-                                {salesStages.map(s => (
+                                {salesStages.map((s) => (
                                   <SelectItem key={s.key} value={s.key}>
                                     <span className="flex items-center gap-2">
-                                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
+                                      <span
+                                        className="w-2 h-2 rounded-full"
+                                        style={{ backgroundColor: s.color }}
+                                      />
                                       {s.label}
                                     </span>
                                   </SelectItem>
@@ -1087,29 +1418,54 @@ export default function Contacts() {
                       </>
                     );
                   })()}
-                  <label className="flex items-start gap-2 p-3 border rounded-lg bg-amber-50/40 border-amber-200 cursor-pointer">
+                  <label
+                    htmlFor="sendInviteCheck"
+                    aria-label="Send portal login invite now"
+                    className="flex items-start gap-2 p-3 border rounded-lg bg-amber-50/40 border-amber-200 cursor-pointer"
+                  >
                     <input
+                      id="sendInviteCheck"
                       type="checkbox"
                       checked={newContactFormData.sendInvite}
-                      onChange={e => setNewContactFormData(prev => ({ ...prev, sendInvite: e.target.checked }))}
+                      onChange={(e) =>
+                        setNewContactFormData((prev) => ({
+                          ...prev,
+                          sendInvite: e.target.checked,
+                        }))
+                      }
                       className="mt-1"
                     />
                     <div className="text-sm">
-                      <p className="font-medium text-amber-900">Send portal login invite now</p>
+                      <p className="font-medium text-amber-900">
+                        Send portal login invite now
+                      </p>
                       <p className="text-xs text-amber-700/80">
-                        Emails them a sign-up link to create their portal account. Leave unchecked for leads you're still nurturing — you can invite them later from the contact or project.
+                        Emails them a sign-up link to create their portal
+                        account. Leave unchecked for leads you're still
+                        nurturing — you can invite them later from the contact
+                        or project.
                       </p>
                     </div>
                   </label>
                   <DialogFooter>
-                    <Button type="button" variant="outline" onClick={() => { resetContactForm(); setShowAddModal(false); }}>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        resetContactForm();
+                        setShowAddModal(false);
+                      }}
+                    >
                       Cancel
                     </Button>
                     <Button
                       type="submit"
                       disabled={isSavingContact}
                       className="text-white"
-                      style={{ backgroundColor: 'var(--accent-color)', borderColor: 'var(--accent-color)' }}
+                      style={{
+                        backgroundColor: 'var(--accent-color)',
+                        borderColor: 'var(--accent-color)',
+                      }}
                     >
                       {isSavingContact ? 'Adding...' : 'Add Contact'}
                     </Button>
@@ -1128,7 +1484,12 @@ export default function Contacts() {
               <Button
                 onClick={() => setIsTradeDialogOpen(true)}
                 className="text-white"
-                style={{ minWidth: '120px', minHeight: '40px', backgroundColor: 'var(--accent-color)', borderColor: 'var(--accent-color)' }}
+                style={{
+                  minWidth: '120px',
+                  minHeight: '40px',
+                  backgroundColor: 'var(--accent-color)',
+                  borderColor: 'var(--accent-color)',
+                }}
               >
                 <Plus className="h-4 w-4 mr-2" />
                 Add Trade
@@ -1163,15 +1524,22 @@ export default function Contacts() {
                 <Card>
                   <CardContent className="p-12 text-center">
                     <Wrench className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">No trades found</h3>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">
+                      No trades found
+                    </h3>
                     <p className="text-gray-600 mb-4">
-                      {tradeSearchTerm ? 'Try adjusting your search terms' : 'Get started by adding your first trade'}
+                      {tradeSearchTerm
+                        ? 'Try adjusting your search terms'
+                        : 'Get started by adding your first trade'}
                     </p>
                     {!tradeSearchTerm && (
                       <Button
                         onClick={() => setIsTradeDialogOpen(true)}
                         className="text-white"
-                        style={{ backgroundColor: 'var(--accent-color)', borderColor: 'var(--accent-color)' }}
+                        style={{
+                          backgroundColor: 'var(--accent-color)',
+                          borderColor: 'var(--accent-color)',
+                        }}
                       >
                         <Plus className="h-4 w-4 mr-2" />
                         Add Trade
@@ -1181,25 +1549,40 @@ export default function Contacts() {
                 </Card>
               ) : (
                 filteredTrades.map((trade) => (
-                  <Card key={trade.id} className="hover:shadow-md transition-shadow">
+                  <Card
+                    key={trade.id}
+                    className="hover:shadow-md transition-shadow"
+                  >
                     <CardContent className="p-4">
                       <div className="flex items-center justify-between">
                         <div className="flex-1">
                           <div className="flex items-center space-x-2 mb-1">
                             <h4 className="font-medium">{trade.name}</h4>
-                            <Badge variant={trade.isActive ? 'default' : 'secondary'}>
+                            <Badge
+                              variant={trade.isActive ? 'default' : 'secondary'}
+                            >
                               {trade.isActive ? 'Active' : 'Inactive'}
                             </Badge>
                           </div>
                           {trade.description && (
-                            <p className="text-sm text-gray-600">{trade.description}</p>
+                            <p className="text-sm text-gray-600">
+                              {trade.description}
+                            </p>
                           )}
                         </div>
                         <div className="flex items-center space-x-2">
-                          <Button variant="outline" size="sm" onClick={() => handleEditTrade(trade)}>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleEditTrade(trade)}
+                          >
                             <Edit className="h-4 w-4" />
                           </Button>
-                          <Button variant="outline" size="sm" onClick={() => handleDeleteTrade(trade)}>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleDeleteTrade(trade)}
+                          >
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
@@ -1211,31 +1594,58 @@ export default function Contacts() {
             </div>
 
             {/* Trade Form Dialog */}
-            <Dialog open={isTradeDialogOpen} onOpenChange={(open) => { if (!open) resetTradeForm(); setIsTradeDialogOpen(open); }}>
+            <Dialog
+              open={isTradeDialogOpen}
+              onOpenChange={(open) => {
+                if (!open) resetTradeForm();
+                setIsTradeDialogOpen(open);
+              }}
+            >
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>{editingTrade ? 'Edit Trade' : 'Add New Trade'}</DialogTitle>
+                  <DialogTitle>
+                    {editingTrade ? 'Edit Trade' : 'Add New Trade'}
+                  </DialogTitle>
                   <DialogDescription>
-                    {editingTrade ? 'Update trade information' : 'Add a new trade specialty'}
+                    {editingTrade
+                      ? 'Update trade information'
+                      : 'Add a new trade specialty'}
                   </DialogDescription>
                 </DialogHeader>
-                <form onSubmit={editingTrade ? handleUpdateTrade : handleCreateTrade} className="space-y-4">
+                <form
+                  onSubmit={
+                    editingTrade ? handleUpdateTrade : handleCreateTrade
+                  }
+                  className="space-y-4"
+                >
                   <div>
                     <Label htmlFor="trade-name">Trade Name</Label>
                     <Input
                       id="trade-name"
                       value={tradeFormData.name}
-                      onChange={(e) => setTradeFormData({ ...tradeFormData, name: e.target.value })}
+                      onChange={(e) =>
+                        setTradeFormData({
+                          ...tradeFormData,
+                          name: e.target.value,
+                        })
+                      }
                       placeholder="e.g., Electrical, Plumbing, HVAC"
                       required
                     />
                   </div>
                   <div>
-                    <Label htmlFor="trade-description">Description (Optional)</Label>
+                    <Label htmlFor="trade-description">
+                      Description (Optional)
+                    </Label>
                     <Input
                       id="trade-description"
                       value={tradeFormData.description}
-                      onChange={(e) => setTradeFormData({ ...tradeFormData, description: e.target.value })}
+                      onChange={(e) =>
+                        setTradeFormData({
+                          ...tradeFormData,
+                          description: e.target.value,
+                        })
+                      }
                       placeholder="Brief description of the trade"
                     />
                   </div>
@@ -1244,22 +1654,38 @@ export default function Contacts() {
                       type="checkbox"
                       id="trade-active"
                       checked={tradeFormData.isActive}
-                      onChange={(e) => setTradeFormData({ ...tradeFormData, isActive: e.target.checked })}
+                      onChange={(e) =>
+                        setTradeFormData({
+                          ...tradeFormData,
+                          isActive: e.target.checked,
+                        })
+                      }
                       className="rounded"
                     />
                     <Label htmlFor="trade-active">Active</Label>
                   </div>
                   <DialogFooter>
-                    <Button type="button" variant="outline" onClick={resetTradeForm}>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={resetTradeForm}
+                    >
                       Cancel
                     </Button>
                     <Button
                       type="submit"
                       disabled={isSavingTrade}
                       className="text-white"
-                      style={{ backgroundColor: 'var(--accent-color)', borderColor: 'var(--accent-color)' }}
+                      style={{
+                        backgroundColor: 'var(--accent-color)',
+                        borderColor: 'var(--accent-color)',
+                      }}
                     >
-                      {isSavingTrade ? 'Saving...' : (editingTrade ? 'Update Trade' : 'Add Trade')}
+                      {isSavingTrade
+                        ? 'Saving...'
+                        : editingTrade
+                          ? 'Update Trade'
+                          : 'Add Trade'}
                     </Button>
                   </DialogFooter>
                 </form>
@@ -1307,7 +1733,11 @@ export default function Contacts() {
           <PreferredCategoriesEditor
             contactId={preferredFor.id}
             contactName={preferredFor.name || preferredFor.company || 'Vendor'}
-            initial={Array.isArray((preferredFor as any).preferredCategories) ? (preferredFor as any).preferredCategories : []}
+            initial={
+              Array.isArray((preferredFor as any).preferredCategories)
+                ? (preferredFor as any).preferredCategories
+                : []
+            }
             open={!!preferredFor}
             onClose={() => setPreferredFor(null)}
           />
