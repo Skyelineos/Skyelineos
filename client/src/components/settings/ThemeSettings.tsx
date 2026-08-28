@@ -18,7 +18,7 @@ const brandColors = [
 ];
 
 // Quick access colors for easy selection (brand colors + common options)
-const QUICK_COLORS = [...brandColors, '#2F80ED', '#27AE60', '#E74C3C'];
+const QUICK_COLORS = [...brandColors, '#C9A96E', '#27AE60', '#E74C3C'];
 
 export function ThemeSettings() {
   const { accentColor, setAccentColor, isLoading, hasCloudSync } = useTheme();
@@ -230,7 +230,7 @@ export function ThemeSettings() {
                 setHasUnsavedChanges(color !== accentColor);
               }}
               className="flex-1 px-3 py-2 border border-gray-200 rounded-md bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
-              placeholder="#2F80ED"
+              placeholder="#C9A96E"
             />
           </div>
           <p className="text-xs text-gray-500 mt-2">

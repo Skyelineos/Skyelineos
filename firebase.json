@@ -1,5 +1,6 @@
 {
   "hosting": {
+    "site": "skyelineos",
     "public": "dist/public",
     "ignore": [
       "firebase.json",
@@ -13,6 +14,10 @@
       },
       {
         "source": "/api/**",
+        "function": "api"
+      },
+      {
+        "source": "/socket.io/**",
         "function": "api"
       },
       {

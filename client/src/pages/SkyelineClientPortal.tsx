@@ -43,6 +43,8 @@ import ClientSelectionsTimeline from '@/components/client/ClientSelectionsTimeli
 import ChangeOrdersTab from '@/components/client-portal/ChangeOrdersTab';
 import EstimatesTab from '@/components/client-portal/EstimatesTab';
 import ClientFinancials from '@/components/client-portal/ClientFinancials';
+import ClientTimeline from '@/components/client-portal/ClientTimeline';
+import ClientDecisions from '@/components/client-portal/ClientDecisions';
 import ClientSiteLog from '@/components/site-log/ClientSiteLog';
 import { ClientTodayFeed } from '@/components/today/ClientTodayFeed';
 import { ScheduleTimeline } from '@/components/schedule/ScheduleTimeline';
@@ -93,6 +95,7 @@ interface FirestoreProject {
 const TABS = [
   { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { key: 'schedule', label: 'Schedule', icon: CalendarClock },
+  { key: 'decisions', label: 'Decisions', icon: ClipboardCheck },
   { key: 'financials', label: 'Financials', icon: DollarSign },
   { key: 'design', label: 'Design Studio', icon: Sparkles },
   { key: 'design-review', label: 'Design Review', icon: PencilRuler },
@@ -399,6 +402,13 @@ export default function SkyelineClientPortal() {
               clientName={clientFullName}
             />
           );
+        case 'decisions':
+          return (
+            <ClientTabPreview
+              tab={'schedule' as any}
+              onStartInspiration={goInspiration}
+            />
+          );
         case 'schedule':
         case 'financials':
         case 'change-orders':
@@ -505,24 +515,23 @@ export default function SkyelineClientPortal() {
 
       case 'schedule':
         return (
-          <div className="p-6 space-y-6 max-w-3xl">
-            {/* Live phase progress — what's done, what's now, what's next.
-                Client audience hides assignee names + condenses task lists. */}
-            {selectedProjectId && (
-              <ProjectProgressView
-                projectId={selectedProjectId}
-                audience="client"
-              />
-            )}
-            {selectedProject?.estimatedSchedule ? (
+          <div className="p-4 sm:p-6 space-y-6 max-w-3xl">
+            {/* Pillar 2: Timeline Clarity — current phase banner, milestone
+                list, projected completion, and recent progress updates. */}
+            <ClientTimeline projectId={selectedProjectId} />
+
+            {/* If a GC-published estimated schedule exists, show the detailed
+                trade-level timeline beneath the milestone view. */}
+            {selectedProject?.estimatedSchedule && (
               <div className="rounded-xl border border-gray-200 bg-white p-5">
+                <h3 className="font-semibold text-gray-700 mb-3 text-sm">Trade Schedule</h3>
                 {(() => {
                   const at = (selectedProject as any)
                     .estimatedSchedulePublishedAt;
                   const ms = at?.toMillis?.() ?? (at ? Date.parse(at) : NaN);
                   return Number.isFinite(ms) ? (
                     <p className="text-xs text-gray-400 mb-3">
-                      Updated{' '}
+                      Published{' '}
                       {new Date(ms).toLocaleDateString('en-US', {
                         month: 'short',
                         day: 'numeric',
@@ -535,20 +544,24 @@ export default function SkyelineClientPortal() {
                   schedule={selectedProject.estimatedSchedule}
                 />
               </div>
-            ) : (
-              <div className="flex items-center justify-center h-64 text-center">
-                <div>
-                  <CalendarClock className="h-8 w-8 text-gray-300 mx-auto mb-3" />
-                  <p className="text-gray-500 font-medium">
-                    Your schedule isn't ready yet
-                  </p>
-                  <p className="text-sm text-gray-400 mt-1">
-                    Your estimated build timeline will appear here once your
-                    estimate is finalized.
-                  </p>
-                </div>
-              </div>
             )}
+          </div>
+        );
+
+      case 'decisions':
+        return (
+          <div className="p-4 sm:p-6 max-w-3xl">
+            {/* Pillar 3: Decision Clarity — what needs a decision RIGHT NOW */}
+            <div className="mb-6">
+              <h1 className="font-heading text-2xl font-bold text-gray-900">Your Decisions</h1>
+              <p className="text-sm text-gray-500 mt-1">
+                Everything that needs your input to keep the build on track.
+              </p>
+            </div>
+            <ClientDecisions
+              projectId={selectedProjectId}
+              onNavigate={handleNavigate}
+            />
           </div>
         );
 

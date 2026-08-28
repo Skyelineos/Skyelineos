@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import {
   CheckCircle2, Clock, AlertTriangle, ChevronRight,
-  Calendar, DollarSign, Home, Wrench, Palette, Sparkles
+  Calendar, DollarSign, Home, Wrench, Palette, Sparkles,
+  TrendingUp, ClipboardCheck, Timer
 } from 'lucide-react';
 
 import { CLIENT_PHASES as PHASES } from '@/lib/clientPhases';
@@ -120,8 +121,108 @@ export default function ClientDashboard({ projectId, project, onNavigate }: Clie
   const startDate = project?.startDate ? new Date(project.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
   const estCompletion = project?.estimatedCompletion ? new Date(project.estimatedCompletion).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
 
+  // Days to estimated completion
+  const daysToCompletion: number | null = (() => {
+    if (!project?.estimatedCompletion) return null;
+    const target = new Date(project.estimatedCompletion);
+    target.setHours(0, 0, 0, 0);
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    return Math.ceil((target.getTime() - now.getTime()) / 86400000);
+  })();
+
   return (
     <div className="p-6 space-y-6">
+
+      {/* ── Three-Pillar Quick Stats ─────────────────────────────────── */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {/* Pillar 1: Financial Health */}
+        <button
+          onClick={() => onNavigate('financials')}
+          className="group text-left rounded-2xl border p-4 transition-all hover:shadow-md hover:-translate-y-0.5"
+          style={{ backgroundColor: '#FAFAF6', borderColor: 'rgba(201,169,110,0.3)' }}
+        >
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center"
+              style={{ backgroundColor: 'rgba(201,169,110,0.12)' }}>
+              <DollarSign className="w-4 h-4" style={{ color: '#C9A96E' }} />
+            </div>
+            <span className="text-xs font-medium uppercase tracking-widest text-gray-500">Financials</span>
+          </div>
+          <p className="font-heading text-2xl font-bold text-gray-900">
+            {currentTotal > 0 ? `$${(currentTotal / 1000).toFixed(0)}k` : '—'}
+          </p>
+          <p className="text-xs text-gray-500 mt-0.5">Contract value</p>
+          <div className="mt-2 flex items-center gap-1 text-xs font-medium group-hover:underline"
+            style={{ color: '#8a6a3a' }}>
+            View financials <ChevronRight className="w-3 h-3" />
+          </div>
+        </button>
+
+        {/* Pillar 2: Timeline */}
+        <button
+          onClick={() => onNavigate('schedule')}
+          className="group text-left rounded-2xl border p-4 transition-all hover:shadow-md hover:-translate-y-0.5"
+          style={{ backgroundColor: '#FAFAF6', borderColor: 'rgba(201,169,110,0.3)' }}
+        >
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center"
+              style={{ backgroundColor: 'rgba(201,169,110,0.12)' }}>
+              <TrendingUp className="w-4 h-4" style={{ color: '#C9A96E' }} />
+            </div>
+            <span className="text-xs font-medium uppercase tracking-widest text-gray-500">Timeline</span>
+          </div>
+          <p className="font-heading text-2xl font-bold text-gray-900">
+            {daysToCompletion !== null
+              ? daysToCompletion < 0 ? 'Past est.' : `${daysToCompletion}d`
+              : progress > 0 ? `${progress}%`
+              : '—'}
+          </p>
+          <p className="text-xs text-gray-500 mt-0.5">
+            {daysToCompletion !== null
+              ? daysToCompletion < 0 ? 'Past estimate' : 'Days to completion'
+              : 'Build progress'}
+          </p>
+          <div className="mt-2 flex items-center gap-1 text-xs font-medium group-hover:underline"
+            style={{ color: '#8a6a3a' }}>
+            View schedule <ChevronRight className="w-3 h-3" />
+          </div>
+        </button>
+
+        {/* Pillar 3: Open Decisions */}
+        <button
+          onClick={() => onNavigate('decisions')}
+          className="group text-left rounded-2xl border p-4 transition-all hover:shadow-md hover:-translate-y-0.5"
+          style={{
+            backgroundColor: totalActions > 0 ? '#fffbeb' : '#FAFAF6',
+            borderColor: totalActions > 0 ? 'rgba(217,119,6,0.4)' : 'rgba(201,169,110,0.3)',
+          }}
+        >
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center"
+              style={{ backgroundColor: totalActions > 0 ? 'rgba(217,119,6,0.1)' : 'rgba(201,169,110,0.12)' }}>
+              <ClipboardCheck className="w-4 h-4"
+                style={{ color: totalActions > 0 ? '#d97706' : '#C9A96E' }} />
+            </div>
+            <span className="text-xs font-medium uppercase tracking-widest text-gray-500">Decisions</span>
+          </div>
+          <p className="font-heading text-2xl font-bold"
+            style={{ color: totalActions > 0 ? '#d97706' : '#141414' }}>
+            {totalActions}
+          </p>
+          <p className="text-xs mt-0.5"
+            style={{ color: totalActions > 0 ? '#92400e' : '#6b7280' }}>
+            {totalActions === 0 ? 'All caught up 🎉' :
+             totalActions === 1 ? 'Item needs your input' :
+             'Items need your input'}
+          </p>
+          <div className="mt-2 flex items-center gap-1 text-xs font-medium group-hover:underline"
+            style={{ color: totalActions > 0 ? '#92400e' : '#8a6a3a' }}>
+            {totalActions > 0 ? 'Make decisions' : 'View all'} <ChevronRight className="w-3 h-3" />
+          </div>
+        </button>
+      </div>
+
       {/* Action Items Banner */}
       {totalActions > 0 && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center justify-between">

@@ -168,7 +168,7 @@ export function UserPreferencesDialog({ open, onOpenChange }: UserPreferencesDia
                           title="Current accent color"
                         />
                         <div className="flex flex-wrap gap-2">
-                          {['#2F80ED', '#27AE60', '#E74C3C', '#F39C12', '#9B59B6', '#657179', '#c1b49f'].map((color) => (
+                          {['#C9A96E', '#27AE60', '#E74C3C', '#F39C12', '#9B59B6', '#657179', '#c1b49f'].map((color) => (
                             <button
                               key={color}
                               onClick={() => {

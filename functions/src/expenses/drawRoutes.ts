@@ -21,7 +21,7 @@
 
 import type { Express } from 'express';
 import * as admin from 'firebase-admin';
-import sgMail from '@sendgrid/mail';
+import { Resend } from 'resend';
 import { pushDrawToQbo } from '../qbo/expenseSync';
 import { requireFinance } from '../middleware/rbac';
 import { requireProjectAccess } from '../middleware/requireProjectAccess';
@@ -758,29 +758,29 @@ export function registerDrawRoutes(
 
         let emailSent = false;
         let emailError: string | undefined;
-        const sendgridKey = process.env.SENDGRID_API_KEY;
-        const sendgridFrom = process.env.SENDGRID_FROM_EMAIL;
-        if (sendgridKey && sendgridFrom && toList.length > 0) {
+        const resendKey = process.env.RESEND_API_KEY;
+        if (resendKey && toList.length > 0) {
           try {
-            sgMail.setApiKey(sendgridKey);
-            await sgMail.send({
+            const resend = new Resend(resendKey);
+            const { error: resendError } = await resend.emails.send({
+              from: 'Skyeline Homes <tyler@skyelinehomes.com>',
               to: toList,
-              from: sendgridFrom,
               subject,
               text,
               html,
             });
+            if (resendError) throw new Error(resendError.message);
             emailSent = true;
           } catch (e: any) {
             emailError = e?.message || String(e);
-            console.error('[draw-periods/submit] sendgrid error:', emailError);
+            console.error('[draw-periods/submit] resend error:', emailError);
           }
         } else if (toList.length === 0) {
           emailError =
             'No client or bank email on file — draw marked submitted, no email sent.';
         } else {
           emailError =
-            'SendGrid not configured (SENDGRID_API_KEY / SENDGRID_FROM_EMAIL missing).';
+            'Resend not configured (RESEND_API_KEY missing).';
         }
 
         // Mark submitted regardless of email outcome — the period state advances

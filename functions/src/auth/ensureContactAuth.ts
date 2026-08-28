@@ -19,13 +19,12 @@
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { defineSecret } from 'firebase-functions/params';
 import * as admin from 'firebase-admin';
-import sgMail from '@sendgrid/mail';
+import { Resend } from 'resend';
 
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore();
 
-const SENDGRID_API_KEY = defineSecret('SENDGRID_API_KEY');
-const SENDGRID_FROM_EMAIL = defineSecret('SENDGRID_FROM_EMAIL');
+const RESEND_API_KEY = defineSecret('RESEND_API_KEY');
 const APP_BASE_URL = defineSecret('APP_BASE_URL'); // e.g. https://skyelineos.web.app
 
 function deriveUserRole(contactRole: string | undefined): string {
@@ -90,23 +89,23 @@ async function createAccountAndInvite(email: string, name: string): Promise<stri
 
   // Send the invite (a working password-set link that lands them in the portal).
   try {
-    const apiKey = SENDGRID_API_KEY.value();
-    const fromEmail = SENDGRID_FROM_EMAIL.value();
+    const apiKey = RESEND_API_KEY.value();
     const base = APP_BASE_URL.value() || 'https://skyelineos.web.app';
-    if (!apiKey || !fromEmail) {
-      console.warn('[ensureContactAuth] SendGrid not configured — account created but invite not emailed for', email);
+    if (!apiKey) {
+      console.warn('[ensureContactAuth] RESEND_API_KEY not configured — account created but invite not emailed for', email);
       return uid;
     }
     // Continue URL must be an authorized domain in Firebase Auth settings.
     const link = await admin.auth().generatePasswordResetLink(email, { url: `${base}/sign-in` });
-    sgMail.setApiKey(apiKey);
-    await sgMail.send({
+    const resend = new Resend(apiKey);
+    const { error: resendError } = await resend.emails.send({
+      from: 'Skyeline Homes <tyler@skyelinehomes.com>',
       to: email,
-      from: { email: fromEmail, name: 'Skyeline Homes' },
       subject: "You're invited to the Skyeline Homes portal",
       text: `Hi ${name || 'there'},\n\nYou've been added to the Skyeline Homes portal. Set your password to activate your account:\n${link}\n\nAfter that, sign in any time at ${base}/sign-in — you'll land in your portal automatically.\n\n— Skyeline Homes`,
       html: inviteEmailHtml(name, link, base),
     });
+    if (resendError) throw new Error(resendError.message);
   } catch (err) {
     console.error('[ensureContactAuth] invite email failed for', email, err);
   }
@@ -114,7 +113,7 @@ async function createAccountAndInvite(email: string, name: string): Promise<stri
 }
 
 export const ensureContactAuthAccount = onDocumentWritten(
-  { document: 'contacts/{contactId}', secrets: [SENDGRID_API_KEY, SENDGRID_FROM_EMAIL, APP_BASE_URL] },
+  { document: 'contacts/{contactId}', secrets: [RESEND_API_KEY, APP_BASE_URL] },
   async (event) => {
     const after = event.data?.after?.data() as any;
     if (!after) return; // deleted

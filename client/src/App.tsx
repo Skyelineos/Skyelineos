@@ -13,6 +13,7 @@ import { BrandingProvider } from '@/contexts/BrandingContext';
 import { NotificationCenter } from '@/components/notifications/NotificationCenter';
 import { PushNotificationPrompt } from '@/components/notifications/PushNotificationPrompt';
 import { QuickExpenseFAB } from '@/components/expenses/QuickExpenseFAB';
+import { FeedbackButton } from '@/components/FeedbackButton';
 import ProtectedRoute from '@/auth/ProtectedRoute';
 import { RoleGuard } from '@/components/auth/RoleGuard';
 import { RoleBasedRedirect } from '@/components/auth/RoleBasedRedirect';
@@ -71,6 +72,7 @@ const ProjectTakeoff = lazy(() => import('@/pages/ProjectTakeoff'));
 // const StyleLibraryAdmin = lazy(() => import('@/pages/StyleLibraryAdmin'));
 const LearnMore = lazy(() => import('@/pages/LearnMore'));
 // const Giveaway = lazy(() => import('@/pages/Giveaway'));
+const GuestFeedback = lazy(() => import('@/pages/GuestFeedback'));
 const SmsPrivacy = lazy(() => import('@/pages/SmsPrivacy'));
 const SmsTerms = lazy(() => import('@/pages/SmsTerms'));
 const Bills = lazy(() => import('@/pages/Bills'));
@@ -153,6 +155,13 @@ function Router() {
       {/* Public SMS Privacy Policy + Terms — no auth. Linked from the Twilio
           A2P 10DLC campaign registration; carriers fetch these URLs to verify
           the required SMS disclosures. */}
+      {/* Public guest feedback form — no auth required */}
+      <Route path="/feedback">
+        <Suspense fallback={<MinimalSpinner title="Loading" />}>
+          <GuestFeedback />
+        </Suspense>
+      </Route>
+
       <Route path="/sms-privacy">
         <Suspense fallback={<MinimalSpinner title="Loading" />}>
           <SmsPrivacy />
@@ -1216,6 +1225,7 @@ function AppContent() {
       <NotificationCenter />
       <PushNotificationPrompt />
       <QuickExpenseFAB />
+      <FeedbackButton />
     </>
   );
 }

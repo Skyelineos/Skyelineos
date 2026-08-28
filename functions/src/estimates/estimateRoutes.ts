@@ -24,7 +24,7 @@
 //   under the root eslint import-plugin config (false positive); tsc validates them.
 import type { Express } from 'express';
 import * as admin from 'firebase-admin';
-import sgMail from '@sendgrid/mail';
+import { Resend } from 'resend';
 import { fireTriggerForMany } from '../notifications/fireTrigger';
 import { resolveClientOfProject } from '../notifications/audienceResolvers';
 import { requireProjectAccess } from '../middleware/requireProjectAccess';
@@ -206,11 +206,9 @@ export function registerEstimateRoutes(
           });
       }
 
-      // SendGrid init (mirror bidPackageDispatchRoute).
-      const sendgridKey = process.env.SENDGRID_API_KEY;
-      const sendgridFrom = process.env.SENDGRID_FROM_EMAIL;
-      const sendgridReady = !!(sendgridKey && sendgridFrom);
-      if (sendgridReady) sgMail.setApiKey(sendgridKey!);
+      // Resend init.
+      const resendKey = process.env.RESEND_API_KEY;
+      const resendReady = !!resendKey;
 
       // Optionally fetch the PDF from Storage so we can attach it directly.
       let attachment:
@@ -305,24 +303,32 @@ export function registerEstimateRoutes(
 
       let emailSent = false;
       let emailError: string | undefined;
-      if (sendgridReady) {
+      if (resendReady) {
         try {
-          await sgMail.send({
+          const resend = new Resend(resendKey!);
+          const emailPayload: any = {
+            from: 'Skyeline Homes <tyler@skyelinehomes.com>',
             to: recipientEmail,
-            from: sendgridFrom!,
             subject,
             text,
             html,
-            ...(attachment ? { attachments: [attachment] } : {}),
-          });
+          };
+          if (attachment) {
+            emailPayload.attachments = [{
+              filename: attachment.filename,
+              content: attachment.content,
+            }];
+          }
+          const { error: resendError } = await resend.emails.send(emailPayload);
+          if (resendError) throw new Error(resendError.message);
           emailSent = true;
         } catch (e: any) {
           emailError = e?.message || String(e);
-          console.error('[sendEstimate] sendgrid error:', emailError);
+          console.error('[sendEstimate] resend error:', emailError);
         }
       } else {
         emailError =
-          'SendGrid not configured (SENDGRID_API_KEY / SENDGRID_FROM_EMAIL missing).';
+          'Resend not configured (RESEND_API_KEY missing).';
       }
 
       // Update estimate doc.

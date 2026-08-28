@@ -10,7 +10,7 @@
 import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import { defineSecret } from 'firebase-functions/params';
 import * as admin from 'firebase-admin';
-import sgMail from '@sendgrid/mail';
+import { Resend } from 'resend';
 import twilio from 'twilio';
 import { toE164, isSmsOptedOut } from './sms';
 import { sendPushNotification } from './fcmService';
@@ -18,8 +18,7 @@ import { sendPushNotification } from './fcmService';
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore();
 
-const SENDGRID_API_KEY = defineSecret('SENDGRID_API_KEY');
-const SENDGRID_FROM_EMAIL = defineSecret('SENDGRID_FROM_EMAIL');
+const RESEND_API_KEY = defineSecret('RESEND_API_KEY');
 const TWILIO_ACCOUNT_SID = defineSecret('TWILIO_ACCOUNT_SID');
 const TWILIO_AUTH_TOKEN = defineSecret('TWILIO_AUTH_TOKEN');
 const TWILIO_FROM_NUMBER = defineSecret('TWILIO_FROM_NUMBER');
@@ -95,7 +94,7 @@ function shouldSendPush(user: UserDoc, kind: string): boolean {
 export const dispatchNotification = onDocumentCreated(
   {
     document: 'notifications/{notificationId}',
-    secrets: [SENDGRID_API_KEY, SENDGRID_FROM_EMAIL, TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER, APP_BASE_URL],
+    secrets: [RESEND_API_KEY, TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER, APP_BASE_URL],
   },
   async (event) => {
     const snap = event.data;
@@ -156,26 +155,26 @@ async function sendAll(
   let smsSent = false;
   let pushSent = false;
 
-  // Email via SendGrid. Org channel directive can suppress; otherwise per-user pref.
+  // Email via Resend. Org channel directive can suppress; otherwise per-user pref.
   const emailAllowedByOrg = notif.channels?.email !== false;
   if (recipient.email && emailAllowedByOrg && shouldSendEmail(recipient, notif.kind)) {
     try {
-      const apiKey = SENDGRID_API_KEY.value();
-      const fromEmail = SENDGRID_FROM_EMAIL.value();
-      if (apiKey && fromEmail) {
-        sgMail.setApiKey(apiKey);
+      const apiKey = RESEND_API_KEY.value();
+      if (apiKey) {
+        const resend = new Resend(apiKey);
         const link = notif.link
           ? `${APP_BASE_URL.value() || 'https://skyelineos.web.app'}${notif.link}`
           : undefined;
         const subject = notif.emailSubject || notif.title;
         const bodyText = notif.emailBody || notif.body || '';
-        await sgMail.send({
+        const { error: resendError } = await resend.emails.send({
+          from: 'Skyeline Homes <tyler@skyelinehomes.com>',
           to: recipient.email,
-          from: { email: fromEmail, name: 'Skyeline Homes' },
           subject,
           text: `${bodyText}${link ? `\n\nOpen: ${link}` : ''}\n\n— Skyeline Homes`,
           html: buildEmailHtml({ ...notif, title: subject, body: bodyText }, link),
         });
+        if (resendError) throw new Error(resendError.message);
         emailSent = true;
       }
     } catch (e: any) {

@@ -27,6 +27,13 @@ export interface Channel {
   lastMessageText?: string;
 }
 
+export interface ChatAttachment {
+  url: string;
+  type: 'image' | 'video';
+  name: string;
+  size?: number;
+}
+
 export interface ChatMessage {
   id: string;
   text: string;
@@ -34,7 +41,7 @@ export interface ChatMessage {
   authorName: string;
   authorRole?: string;
   mentions?: string[];     // uids/tradeIds @-tagged (Phase 2 notifications)
-  attachments?: { name: string; url: string }[];
+  attachments?: ChatAttachment[];
   createdAt?: any;
 }
 
@@ -44,10 +51,11 @@ const messagesCol = (projectId: string, channelId: string) =>
 
 // Default channels seeded per project. `client` = visible to the homeowner too.
 const DEFAULT_CHANNELS: { name: string; kind: ChannelKind; client: boolean }[] = [
-  { name: 'general', kind: 'general', client: true },
-  { name: 'design',  kind: 'design',  client: true },
-  { name: 'budget',  kind: 'budget',  client: true },
-  { name: 'field',   kind: 'field',   client: false }, // internal team coordination
+  { name: 'general',  kind: 'general', client: true },
+  { name: 'design',   kind: 'design',  client: true },
+  { name: 'budget',   kind: 'budget',  client: true },
+  { name: 'field',    kind: 'field',   client: false }, // internal team coordination
+  { name: 'internal', kind: 'custom',  client: false }, // team-only back-channel
 ];
 
 export function listenChannels(projectId: string, cb: (rows: Channel[]) => void) {
@@ -117,22 +125,32 @@ export async function addChannelMembers(projectId: string, channelId: string, ui
 export async function sendMessage(
   projectId: string,
   channelId: string,
-  msg: { text: string; authorUid: string; authorName: string; authorRole?: string; mentions?: string[] },
+  msg: {
+    text: string;
+    authorUid: string;
+    authorName: string;
+    authorRole?: string;
+    mentions?: string[];
+    attachments?: ChatAttachment[];
+  },
 ): Promise<void> {
   const text = msg.text.trim();
-  if (!text) return;
+  // Allow send if there's text OR attachments.
+  if (!text && !msg.attachments?.length) return;
   await addDoc(messagesCol(projectId, channelId), {
     text,
     authorUid: msg.authorUid,
     authorName: msg.authorName,
     ...(msg.authorRole ? { authorRole: msg.authorRole } : {}),
     ...(msg.mentions?.length ? { mentions: msg.mentions } : {}),
+    ...(msg.attachments?.length ? { attachments: msg.attachments } : {}),
     createdAt: serverTimestamp(),
   });
   // Denormalize last-message onto the channel for the list preview.
+  const preview = text || (msg.attachments?.length ? `📎 ${msg.attachments[0].name}` : '');
   await updateDoc(doc(db, 'projects', projectId, 'channels', channelId), {
     lastMessageAt: serverTimestamp(),
-    lastMessageText: text.slice(0, 140),
+    lastMessageText: preview.slice(0, 140),
   }).catch(() => {});
 }
 

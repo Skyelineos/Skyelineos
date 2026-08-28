@@ -33,7 +33,7 @@
 // Auth: routes are gated by the top-level /api authMiddleware in index.ts.
 
 import * as admin from 'firebase-admin';
-import sgMail from '@sendgrid/mail';
+import { Resend } from 'resend';
 import {
   UTAH_COUNTY_CONTRACTORS,
   TRADES,
@@ -480,13 +480,12 @@ export async function sendSolicitationEmail(
     };
   }
 
-  const sendgridKey = process.env.SENDGRID_API_KEY;
-  const fromEmail = DEFAULT_FROM_EMAIL || process.env.SENDGRID_FROM_EMAIL;
-  if (!sendgridKey) {
+  const resendKey = process.env.RESEND_API_KEY;
+  if (!resendKey) {
     return {
       id: solicitationId,
       sent: false,
-      error: 'SendGrid not configured (SENDGRID_API_KEY missing)',
+      error: 'Resend not configured (RESEND_API_KEY missing)',
       newStatus: record.status,
     };
   }
@@ -499,7 +498,6 @@ export async function sendSolicitationEmail(
     };
   }
 
-  sgMail.setApiKey(sendgridKey);
   const address = project.address || record.projectAddress || 'a Skyeline jobsite';
   const args: EmailBuildArgs = {
     contractorName: record.contractorName,
@@ -510,17 +508,16 @@ export async function sendSolicitationEmail(
   };
 
   try {
-    await sgMail.send({
+    const resend = new Resend(resendKey);
+    const { error: resendError } = await resend.emails.send({
+      from: 'Skyeline Homes <tyler@skyelinehomes.com>',
       to: record.contractorEmail,
-      from: {
-        email: fromEmail || DEFAULT_FROM_EMAIL,
-        name: 'Tyler Rhoton — Skyeline Homes',
-      },
       replyTo: 'tyler@skyelinehomes.com',
       subject: buildSolicitationSubject(String(record.trade), address),
       text: buildSolicitationText(args),
       html: buildSolicitationHtml(args),
     });
+    if (resendError) throw new Error(resendError.message);
   } catch (e: any) {
     return {
       id: solicitationId,

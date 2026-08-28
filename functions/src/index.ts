@@ -90,6 +90,8 @@ async function authMiddleware(req: any, res: any, next: any) {
 //
 // (The QBO OAuth callback is at /qbo/oauth/callback — not under /api — so it's
 // outside this gate entirely.)
+import { registerContactFormHandler }   from './contactFormHandler';
+import { registerGuestFeedbackRoute, registerFeedbackRoutes } from './feedback/feedbackRoutes';
 import { registerSmsInboundRoute }      from './notifications/smsInboundRoute';
 import { registerBidTokenEndpoint }     from './bids/bidTokenEndpoint';
 import { registerLeadIntakeRoute }      from './leads/intakeRoute';
@@ -107,6 +109,8 @@ import { registerSmsWebhookRoute }      from './sms/routes';
 // Public (Twilio signature is the gate). Mounted BEFORE the /api auth
 // middleware so Twilio's POSTs aren't rejected for missing JWTs.
 import { registerVoiceRoutes }          from './voice/voiceRoutes';
+registerContactFormHandler(app);           // POST /api/contact — public, no auth
+registerGuestFeedbackRoute(app);           // POST /api/feedback/guest — public, no auth
 registerSmsInboundRoute(app, admin.firestore());
 registerSmsWebhookRoute(app, admin.firestore());
 registerVoiceRoutes(app, admin.firestore());
@@ -175,6 +179,9 @@ registerAiInboxReviewRoutes(app, db); // /api/ai-inbox/{status,:id/approve,:id/r
 import { registerCommunicationAiRoutes } from './communications/routes';
 registerCommunicationAiRoutes(app, db); // /api/communications/threads/:id/{analyze,summarize} + /summarize-project
 
+import { registerDesignerAiActionsRoute } from './designer/aiActionsRoute';
+registerDesignerAiActionsRoute(app, db); // POST /api/designer/ai/:action
+
 // Google Places proxy — address autocomplete for the jobsite "Set pin" flow.
 // Key stays server-side (Secret Manager); see places/placesRoutes.ts.
 registerPlacesRoutes(app);           // GET /api/places/{autocomplete,details}
@@ -189,7 +196,8 @@ registerTaskSignoffRoute(app, db);   // POST /api/tasks/:taskId/signoff  (GC/PM/
 registerDailyWorkflowRoutes(app, db); // /api/projects/:id/daily-workflow, /api/daily-digest, /api/project-tasks/*, /api/material-orders/*
 registerEstimateRoutes(app, db);     // POST /api/estimates/:id/{send-to-client,client-response}
 registerExpenseRoutes(app, db);      // /api/expenses/{capture,:id,:id/reconcile} + /api/projects/:id/expenses
-registerDrawRoutes(app, db);         // /api/projects/:id/draw-periods{,/current,/:periodId/{submit,mark-paid,reconcile}}
+registerDrawRoutes(app, db);
+registerFeedbackRoutes(app);         // POST /api/feedback (authenticated, with optional screenshot upload)
 
 // Real Firestore API endpoints
 // Global project list — staff only. Clients/subs use per-project endpoints.
@@ -1055,6 +1063,63 @@ app.delete('/api/estimates/:id', requireStaff, async (req: any, res: any) => {
   } catch (error) {
     console.error('❌ Delete estimate error:', error);
     res.status(500).json({ error: 'Failed to delete estimate' });
+  }
+});
+
+// Update (partial merge) an estimate — staff only.
+// Accepts any subset of: name, status, lineItems, totalCost, totalSubCost,
+// markup, notes. Merges into the existing Firestore doc so callers only need
+// to send changed fields.
+app.put('/api/estimates/:id', requireStaff, async (req: any, res: any) => {
+  try {
+    const estimateId = String(req.params.id || '').trim();
+    if (!estimateId) {
+      return res.status(400).json({ error: 'Invalid estimate ID' });
+    }
+
+    const estRef = db.collection('estimates').doc(estimateId);
+    const estSnap = await estRef.get();
+    if (!estSnap.exists) {
+      return res.status(404).json({ error: 'Estimate not found' });
+    }
+
+    // Whitelist the fields callers are allowed to overwrite via this endpoint.
+    // Internal fields (sentAt, sentBy, clientResponse*) are mutated only by
+    // their dedicated sub-routes and must not be overridable here.
+    const ALLOWED_FIELDS = new Set([
+      'name',
+      'status',
+      'lineItems',
+      'totalCost',
+      'totalSubCost',
+      'markup',
+      'notes',
+    ]);
+
+    const body: Record<string, unknown> = req.body || {};
+    const updateData: Record<string, unknown> = {};
+    for (const key of ALLOWED_FIELDS) {
+      if (Object.prototype.hasOwnProperty.call(body, key)) {
+        updateData[key] = body[key];
+      }
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({
+        error: 'No updatable fields provided. Accepted: name, status, lineItems, totalCost, totalSubCost, markup, notes.',
+      });
+    }
+
+    updateData.updatedAt = admin.firestore.FieldValue.serverTimestamp();
+
+    await estRef.update(updateData);
+
+    const updated = await estRef.get();
+    console.log(`✅ Updated estimate: ${estimateId}`);
+    return res.json({ id: updated.id, ...updated.data() });
+  } catch (error: any) {
+    console.error('❌ Update estimate error:', error);
+    return res.status(500).json({ error: error?.message || 'Failed to update estimate' });
   }
 });
 
@@ -2379,6 +2444,298 @@ registerSmsStaffRoutes(app, admin.firestore());
 import { registerVoiceAgentRoutes } from './voice/voiceAgentRoute';
 registerVoiceAgentRoutes(app, admin.firestore());
 
+// ── Financial API routes (P1 stubs — return Firestore data or empty arrays) ─
+// These routes are called by CompanyFinancialDashboard, CashFlowForecastTab,
+// SubcontractorPaymentsTab, PerProjectAccountingTab, EnhancedFinancialDashboard, etc.
+// Full implementations can be layered in later; stubs stop the 404 cascade.
+
+app.get('/api/financial/enhanced-summary', requireFinance, async (req: any, res: any) => {
+  try {
+    const [projectsSnap, estimatesSnap, expensesSnap, purchaseOrdersSnap] = await Promise.all([
+      db.collection('projects').get(),
+      db.collection('estimates').get(),
+      // expenses live as subcollections: projects/{projectId}/expenses/{id}
+      db.collectionGroup('expenses').get(),
+      db.collection('purchaseOrders').get(),
+    ]);
+
+    const projects = projectsSnap.docs.map(d => d.data());
+    const estimates = estimatesSnap.docs.map(d => d.data());
+
+    // Revenue = sum of project contract values (actualCost takes precedence over estimate)
+    const totalRevenue = projects.reduce((s: number, p: any) => s + (p.contractValue || p.actualCost || p.estimatedBudget || 0), 0);
+
+    // Costs = sum of actual recorded expenses + approved purchase orders
+    const totalExpenses = expensesSnap.docs.reduce((s: number, d: any) => {
+      const data = d.data();
+      return s + (typeof data.amount === 'number' ? data.amount : 0);
+    }, 0);
+
+    const totalPOs = purchaseOrdersSnap.docs.reduce((s: number, d: any) => {
+      const data = d.data();
+      // Only count approved/issued POs as committed costs
+      if (!['approved', 'issued', 'received', 'paid'].includes(data.status)) return s;
+      return s + (typeof data.totalAmount === 'number' ? data.totalAmount :
+                  typeof data.amount === 'number' ? data.amount : 0);
+    }, 0);
+
+    const totalCosts = totalExpenses + totalPOs;
+    // True only if at least one expense or PO record was found
+    const hasCostData = expensesSnap.size > 0 || purchaseOrdersSnap.size > 0;
+
+    // Derived metrics — only meaningful when we have cost data
+    const grossProfit = hasCostData ? totalRevenue - totalCosts : null;
+    const profitMargin = (hasCostData && totalRevenue > 0)
+      ? ((totalRevenue - totalCosts) / totalRevenue)
+      : null;
+    // Cash flow: revenue collected minus costs paid out (best approximation without a proper A/R ledger)
+    const cashFlow = hasCostData ? grossProfit : null;
+
+    res.json({
+      totalRevenue,
+      totalCosts,
+      grossProfit,
+      profitMargin,       // decimal (e.g. 0.22 = 22%) or null when no cost data
+      cashFlow,           // null when no cost data
+      hasCostData,        // boolean — frontend uses this to show "No cost data" vs a computed value
+      activeProjects: projects.filter((p: any) => p.status === 'active' || p.status === 'in_progress').length,
+      completedProjects: projects.filter((p: any) => p.status === 'completed').length,
+      totalEstimatesValue: estimates.reduce((s: number, e: any) => s + (e.totalCost || e.totalAmount || 0), 0),
+      cashPosition: 0,  // reserved for future bank-balance integration
+    });
+  } catch (e) { res.json({}); }
+});
+
+app.get('/api/financial/budget-variances', requireFinance, async (req: any, res: any) => {
+  try {
+    const snap = await db.collection('projects').get();
+    const variances = snap.docs.map(d => {
+      const p = d.data();
+      return {
+        projectId: d.id,
+        projectName: p.name || 'Unknown',
+        budgeted: p.estimatedBudget || 0,
+        actual: p.actualCost || 0,
+        variance: (p.estimatedBudget || 0) - (p.actualCost || 0),
+      };
+    });
+    res.json(variances);
+  } catch (e) { res.json([]); }
+});
+
+app.get('/api/financial/profitability-trends', requireFinance, async (_req: any, res: any) => {
+  // Return empty array — frontend expects an array and calls .map() on this response
+  res.json([]);
+});
+
+app.get('/api/financial/cash-flow-analysis/:projectId', requireFinance, async (req: any, res: any) => {
+  res.json({ inflows: [], outflows: [], netCashFlow: 0, projectId: req.params.projectId });
+});
+
+app.get('/api/financial/cash-flow-analysis', requireFinance, async (_req: any, res: any) => {
+  // Return empty array — frontend expects an array and calls .map() on this response
+  res.json([]);
+});
+
+app.post('/api/financial/cash-flow-forecasts', requireFinance, async (_req: any, res: any) => {
+  res.status(201).json({ id: 'stub', message: 'Cash flow forecast saved' });
+});
+
+app.get('/api/financial/cash-flow-forecasts/:projectId', requireFinance, async (req: any, res: any) => {
+  res.json([]);
+});
+
+app.get('/api/financial/company-summary', requireFinance, async (_req: any, res: any) => {
+  try {
+    const snap = await db.collection('projects').get();
+    const projects = snap.docs.map(d => d.data());
+    res.json({
+      totalRevenue: projects.reduce((s: number, p: any) => s + (p.actualCost || p.estimatedBudget || 0), 0),
+      activeProjects: projects.filter((p: any) => p.status === 'active' || p.status === 'in_progress').length,
+      pendingPayments: 0,
+      overdueInvoices: 0,
+    });
+  } catch (e) { res.json({}); }
+});
+
+// ── Invoices (sub-contractor invoice stub) ───────────────────────────────────
+// The sub-invoice flow uses /financials in Firestore; these stubs satisfy the
+// frontend queries until a dedicated invoice collection is implemented.
+
+app.get('/api/invoices', requireFinance, async (_req: any, res: any) => {
+  try {
+    const snap = await db.collection('financials')
+      .where('type', '==', 'invoice')
+      .orderBy('createdAt', 'desc')
+      .get();
+    const invoices = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    res.json(invoices);
+  } catch (e) { res.json([]); }
+});
+
+app.get('/api/invoices/project/:projectId', requireProjectAccess, async (req: any, res: any) => {
+  try {
+    const snap = await db.collection('financials')
+      .where('projectId', '==', req.params.projectId)
+      .where('type', '==', 'invoice')
+      .orderBy('createdAt', 'desc')
+      .get();
+    res.json(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+  } catch (e) { res.json([]); }
+});
+
+app.post('/api/invoices/:id/payments', requireFinance, async (req: any, res: any) => {
+  try {
+    const invoiceRef = db.collection('financials').doc(req.params.id);
+    const invoiceSnap = await invoiceRef.get();
+    if (!invoiceSnap.exists) return res.status(404).json({ error: 'Invoice not found' });
+    const payment = { ...req.body, recordedAt: admin.firestore.FieldValue.serverTimestamp() };
+    await invoiceRef.update({
+      payments: admin.firestore.FieldValue.arrayUnion(payment),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    res.status(201).json({ success: true, payment });
+  } catch (e) { res.status(500).json({ error: 'Failed to record payment' }); }
+});
+
+app.post('/api/invoices/:id/link-po/:poId', requireFinance, async (req: any, res: any) => {
+  try {
+    await db.collection('financials').doc(req.params.id).update({
+      linkedPoId: req.params.poId,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: 'Failed to link PO' }); }
+});
+
+// ── Purchase Orders ──────────────────────────────────────────────────────────
+
+app.get('/api/purchase-orders', requireStaff, async (_req: any, res: any) => {
+  try {
+    const snap = await db.collection('purchaseOrders').orderBy('createdAt', 'desc').get();
+    res.json(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+  } catch (e) { res.json([]); }
+});
+
+app.get('/api/purchase-orders/project/:projectId', requireProjectAccess, async (req: any, res: any) => {
+  try {
+    const snap = await db.collection('purchaseOrders')
+      .where('projectId', '==', req.params.projectId)
+      .orderBy('createdAt', 'desc')
+      .get();
+    res.json(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+  } catch (e) { res.json([]); }
+});
+
+app.get('/api/purchase-orders/available/:projectId', requireProjectAccess, async (req: any, res: any) => {
+  try {
+    const snap = await db.collection('purchaseOrders')
+      .where('projectId', '==', req.params.projectId)
+      .where('status', 'in', ['draft', 'sent'])
+      .get();
+    res.json(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+  } catch (e) { res.json([]); }
+});
+
+app.get('/api/purchase-orders/subcontractor/:subId', requireStaff, async (req: any, res: any) => {
+  try {
+    const snap = await db.collection('purchaseOrders')
+      .where('subId', '==', req.params.subId)
+      .orderBy('createdAt', 'desc')
+      .get();
+    res.json(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+  } catch (e) { res.json([]); }
+});
+
+app.post('/api/purchase-orders/:poId/send', requireStaff, async (req: any, res: any) => {
+  try {
+    await db.collection('purchaseOrders').doc(req.params.poId).update({
+      status: 'sent',
+      sentAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: 'Failed to send PO' }); }
+});
+
+app.post('/api/purchase-orders/:poId/sign', requireProjectAccess, async (req: any, res: any) => {
+  try {
+    await db.collection('purchaseOrders').doc(req.params.poId).update({
+      status: 'signed',
+      signedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: 'Failed to sign PO' }); }
+});
+
+// ── Client Payments ──────────────────────────────────────────────────────────
+
+app.get('/api/client-payments', requireFinance, async (_req: any, res: any) => {
+  try {
+    const snap = await db.collection('financials')
+      .where('type', '==', 'client-payment')
+      .orderBy('createdAt', 'desc')
+      .get();
+    res.json(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+  } catch (e) { res.json([]); }
+});
+
+app.post('/api/client-payments', requireFinance, async (req: any, res: any) => {
+  try {
+    const ref = await db.collection('financials').add({
+      ...req.body,
+      type: 'client-payment',
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    const doc = await ref.get();
+    res.status(201).json({ id: doc.id, ...doc.data() });
+  } catch (e) { res.status(500).json({ error: 'Failed to create payment' }); }
+});
+
+app.put('/api/client-payments/:id', requireFinance, async (req: any, res: any) => {
+  try {
+    await db.collection('financials').doc(req.params.id).update({
+      ...req.body,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: 'Failed to update payment' }); }
+});
+
+app.delete('/api/client-payments/:id', requireFinance, async (req: any, res: any) => {
+  try {
+    await db.collection('financials').doc(req.params.id).delete();
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: 'Failed to delete payment' }); }
+});
+
+// ── Estimates: approved (top-level, not project-scoped) ──────────────────────
+
+app.get('/api/estimates/approved', requireStaff, async (_req: any, res: any) => {
+  try {
+    const snap = await db.collection('estimates')
+      .where('status', '==', 'approved')
+      .orderBy('updatedAt', 'desc')
+      .get();
+    res.json(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+  } catch (e) { res.json([]); }
+});
+
+// ── Chat (legacy stub) ──────────────────────────────────────────────────────
+// The ChatThread component uses /api/chat/* from a legacy implementation.
+// Stubs return empty data so the UI doesn't error; real-time messaging uses
+// Firestore channels (/api/communications) going forward.
+
+app.get('/api/chat/threads/:threadId/messages', async (req: any, res: any) => {
+  res.json({ messages: [], nextCursor: null, total: 0 });
+});
+
+app.post('/api/chat/messages', async (req: any, res: any) => {
+  res.status(201).json({ id: Date.now(), content: req.body?.content || '', createdAt: new Date().toISOString() });
+});
+
 // Catch-all 404 — must come AFTER all route registrations (QBO routes above included)
 app.use('*', (req: any, res: any) => {
   console.log(`❌ 404 - API endpoint not found: ${req.method} ${req.originalUrl}`);
@@ -2387,6 +2744,41 @@ app.use('*', (req: any, res: any) => {
     method: req.method,
     path: req.originalUrl,
     timestamp: new Date().toISOString(),
+  });
+});
+
+// ── Socket.IO server (polling transport only) ───────────────────────────────────
+// Firebase Hosting CDN layer cannot upgrade WebSocket connections, so we use
+// HTTP long-polling. The /socket.io/** rewrite in firebase.json routes these
+// polling requests to this function.
+// Note: Cloud Run may run multiple instances; in-memory socket state is NOT
+// shared across instances. For small teams this is acceptable.
+const httpModule = require('http');
+const { Server: SocketIOServer } = require('socket.io');
+
+const httpServer = httpModule.createServer(app);
+const io = new SocketIOServer(httpServer, {
+  cors: { origin: true, methods: ['GET', 'POST'] },
+  transports: ['polling'],
+  allowEIO3: true,
+});
+
+io.on('connection', (socket: any) => {
+  console.log('[Socket.IO] Client connected:', socket.id);
+
+  // Relay schedule / task real-time events between connected clients
+  socket.on('scheduleUpdated', (data: any) => {
+    socket.broadcast.emit('scheduleUpdated', data);
+  });
+  socket.on('taskStatusChanged', (data: any) => {
+    socket.broadcast.emit('taskStatusChanged', data);
+  });
+  socket.on('dependencyChanged', (data: any) => {
+    socket.broadcast.emit('dependencyChanged', data);
+  });
+
+  socket.on('disconnect', () => {
+    console.log('[Socket.IO] Client disconnected:', socket.id);
   });
 });
 
@@ -2411,8 +2803,7 @@ exports.api = onRequest(
       'GOOGLE_MAPS_API_KEY',
       // Bid request route (/api/bid-requests/send) reads these via process.env.
       // Same secret names as the standalone dispatchNotification function uses.
-      'SENDGRID_API_KEY',
-      'SENDGRID_FROM_EMAIL',
+      'RESEND_API_KEY',
       'TWILIO_ACCOUNT_SID',
       'TWILIO_AUTH_TOKEN',
       'TWILIO_FROM_NUMBER',
@@ -2420,6 +2811,10 @@ exports.api = onRequest(
       // against this URL. Set after deploy: e.g. https://skyelineos.web.app/api/sms/webhook.
       // When unset the validator falls back to the host header.
       'TWILIO_WEBHOOK_URL',
+      // 10DLC Messaging Service SID (MG...). When set, all outbound SMS from
+      // smsService.sendSms route through this campaign instead of the raw From
+      // number. Required for 10DLC compliance once the campaign is approved.
+      'TWILIO_MESSAGING_SERVICE_SID',
       'APP_BASE_URL',
       // Crestview Solace lead-intake form (/api/leads/intake) shared secret.
       'LEAD_INTAKE_SECRET',
@@ -2427,11 +2822,17 @@ exports.api = onRequest(
       // and the shared bearer the workflow uses to post results back.
       'GH_DISPATCH_TOKEN',
       'QA_REPORT_TOKEN',
+      // Feedback system — immediate Telegram pings to Tyler on new submissions.
+      'TELEGRAM_BOT_TOKEN',
+      'TELEGRAM_CHAT_ID',
     ],
     memory: '512MiB',
     timeoutSeconds: 540, // Reels can take 30-90s to process
   },
-  app,
+  // Route through the http.Server so Socket.IO can intercept /socket.io/**
+  // polling requests before Express sees them. Non-socket requests pass
+  // through to Express as before.
+  (req: any, res: any) => httpServer.emit('request', req, res),
 );
 
 

@@ -44,6 +44,23 @@ export interface BidLineItem {
   notes?: string;
 }
 
+// Sub-declared pricing build-up (percentages) + the derived, server-authored
+// snapshot. See client/src/lib/bidPricing.ts for the math.
+export interface BidPricing {
+  markupPct: number;    // sub's profit %
+  overheadPct: number;  // sub's operating overhead %
+  taxPct: number;       // sales/use tax %
+}
+
+export interface BidPricingSnapshot extends BidPricing {
+  baseSubtotal: number;
+  overheadAmt: number;
+  markupAmt: number;
+  preTax: number;
+  taxAmt: number;
+  total: number;
+}
+
 export interface BidInsurance {
   carrier: string;
   policyNumber: string;
@@ -77,6 +94,11 @@ export interface PortalBid {
   subtotal: number;
   taxAmount?: number;
   totalAmount: number;
+  // Line-item build-up the sub declared (markup/overhead/tax percentages) and
+  // the server-computed, immutable snapshot of the resulting totals. Present
+  // only for lineItems-mode bids; pdfQuote bids carry a flat totalAmount.
+  pricing?: BidPricing;
+  pricingSnapshot?: BidPricingSnapshot;
   notes?: string;
   attachments?: { name: string; url: string; storagePath: string }[];
   // Compliance

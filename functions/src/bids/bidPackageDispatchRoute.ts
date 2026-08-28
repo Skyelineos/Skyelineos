@@ -22,7 +22,7 @@
 
 import type { Express } from 'express';
 import * as admin from 'firebase-admin';
-import sgMail from '@sendgrid/mail';
+import { Resend } from 'resend';
 import twilio from 'twilio';
 import { randomBytes } from 'crypto';
 import { toE164, isSmsOptedOut } from '../notifications/sms';
@@ -192,11 +192,12 @@ function buildPackageEmailHtml(args: {
       <p style="font-size:15px;line-height:1.55;">Skyeline Homes is requesting bids on the following trade${trades.length === 1 ? '' : 's'} for <strong>${escapeHtml(projectName)}</strong>. The scope, instructions, and plans for each are below — open the portal to submit your bid.</p>
       ${tradeSections}
       <p style="margin:28px 0;">
-        <a href="${link}" style="background:#C9A96E;color:#141414;text-decoration:none;padding:14px 28px;border-radius:6px;font-weight:600;display:inline-block;font-size:15px;">View in Skyeline OS</a>
+        <a href="${link}" style="background:#C9A96E;color:#141414;text-decoration:none;padding:14px 28px;border-radius:6px;font-weight:600;display:inline-block;font-size:15px;">Submit your bid / Enviar su oferta</a>
       </p>
-      <p style="color:#777;font-size:13px;margin:0 0 24px 0;">First time bidding with Skyeline? The button above will walk you through a quick sign-up and required document upload (W-9, Certificate of Insurance, Subcontractor Agreement).</p>
+      <p style="color:#777;font-size:13px;margin:0 0 4px 0;">First time bidding with Skyeline? The button above will walk you through a quick sign-up and required document upload (W-9, Certificate of Insurance, Subcontractor Agreement).</p>
+      <p style="color:#777;font-size:13px;margin:0 0 24px 0;">Español: Skyeline Homes solicita ofertas para ${trades.length === 1 ? 'el siguiente oficio' : 'los siguientes oficios'} de <strong>${escapeHtml(projectName)}</strong>. El alcance, las instrucciones y los planos de cada uno aparecen arriba. ¿Primera vez ofertando con Skyeline? El botón lo guiará para registrarse y subir sus documentos (W-9, Certificado de Seguro, Acuerdo de Subcontratista).</p>
       <hr style="border:none;border-top:1px solid #eee;margin:32px 0 12px 0;">
-      <p style="font-size:11px;color:#999;text-align:center;margin:0;">Skyeline Homes · This is an automated notification.</p>
+      <p style="font-size:11px;color:#999;text-align:center;margin:0;">Skyeline Homes · This is an automated notification. / Esta es una notificación automática.</p>
     </div>
   `;
 }
@@ -253,6 +254,20 @@ function buildPackageEmailText(args: {
     '',
     `Thanks,`,
     requesterName || 'The Skyeline Homes Team',
+    '',
+    '— — — — — — — — — — Español — — — — — — — — — —',
+    '',
+    `Hola ${vendorName},`,
+    '',
+    `Skyeline Homes solicita ofertas para ${trades.length === 1 ? 'el siguiente oficio' : 'los siguientes oficios'} de ${projectName}: ${trades.join(', ')}. El alcance, las notas y los planos de cada oficio aparecen arriba.`,
+    '',
+    `Abra el alcance completo y envíe su oferta a través de su Portal de Subcontratistas de Skyeline:`,
+    `→ ${link}`,
+    '',
+    `¿Primera vez ofertando con Skyeline? El enlace de arriba lo guiará para registrarse y subir sus documentos (W-9, Certificado de Seguro, Acuerdo de Subcontratista).`,
+    '',
+    `Gracias,`,
+    requesterName || 'El equipo de Skyeline Homes',
   ].join('\n');
 }
 
@@ -271,7 +286,7 @@ function buildPackageSms(args: {
 }): string {
   const { projectName, trades, link } = args;
   const tradeList = trades.length === 1 ? trades[0] : `${trades.length} trades (${trades.join(', ')})`;
-  return `Skyeline Homes bid request — ${tradeList} on ${projectName}. Submit in your portal: ${link}`;
+  return `Skyeline Homes bid request — ${tradeList} on ${projectName}. Submit in your portal: ${link} · Solicitud de oferta de Skyeline — ${tradeList} en ${projectName}. Envíe en su portal.`;
 }
 
 export function registerBidPackageDispatchRoute(
@@ -475,13 +490,10 @@ export function registerBidPackageDispatchRoute(
       const packageName = pkg.name || `Bid Package — ${projectName}`;
       const requesterName = data.requesterName || pkg.createdByName || undefined;
 
-      // SendGrid + Twilio init (same pattern as sendBidRequestRoute — isolate
-      // Twilio init so a bad SID doesn't kill email).
+      // Resend + Twilio init (isolate Twilio init so a bad SID doesn't kill email).
       const appBaseUrl = normalizeBaseUrl(process.env.APP_BASE_URL);
-      const sendgridKey = process.env.SENDGRID_API_KEY;
-      const sendgridFrom = process.env.SENDGRID_FROM_EMAIL;
-      const sendgridReady = !!(sendgridKey && sendgridFrom);
-      if (sendgridReady) sgMail.setApiKey(sendgridKey!);
+      const resendKey = process.env.RESEND_API_KEY;
+      const resendReady = !!resendKey;
 
       const twilioSid = process.env.TWILIO_ACCOUNT_SID;
       const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN;
@@ -520,12 +532,13 @@ export function registerBidPackageDispatchRoute(
           continue;
         }
 
-        if (bundle.email && sendgridReady && allowInviteEmail) {
+        if (bundle.email && resendReady && allowInviteEmail) {
           try {
-            await sgMail.send({
+            const resend = new Resend(resendKey);
+            const { error: resendError } = await resend.emails.send({
+              from: 'Skyeline Homes <tyler@skyelinehomes.com>',
               to: bundle.email,
-              from: sendgridFrom!,
-              subject: `New bid request — ${projectName}`,
+              subject: `New bid request / Nueva solicitud de oferta — ${projectName}`,
               text: buildPackageEmailText({
                 vendorName: bundle.vendorName,
                 projectName,
@@ -544,13 +557,17 @@ export function registerBidPackageDispatchRoute(
                 packageName,
               }),
             });
-            result.email = { sent: true };
-            sentEmails += 1;
+            if (resendError) {
+              result.email = { sent: false, error: resendError.message };
+            } else {
+              result.email = { sent: true };
+              sentEmails += 1;
+            }
           } catch (e: any) {
             result.email = { sent: false, error: e?.message || String(e) };
           }
-        } else if (bundle.email && !sendgridReady) {
-          result.email = { sent: false, error: 'SendGrid not configured' };
+        } else if (bundle.email && !resendReady) {
+          result.email = { sent: false, error: 'Resend not configured' };
         }
 
         if (bundle.phone && twilioClient && allowInviteSms) {

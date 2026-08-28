@@ -62,7 +62,10 @@ export function useAuth(): AuthContextType {
     name: auth.user.name,
     firstName: auth.user.name?.split(' ')[0],
     lastName: auth.user.name?.split(' ').slice(1).join(' ') || undefined,
-    permissions: auth.user.permissions || []
+    permissions: auth.user.permissions || [],
+    // Expose firebaseUid so messaging + any caller that needs the real Firebase
+    // Auth UID (not the legacy numeric id) can access it without importing AuthContext.
+    firebaseUid: auth.user.firebaseUid,
   } : null;
 
   // Note: login method not directly implemented as Firebase handles authentication

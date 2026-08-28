@@ -361,12 +361,24 @@ export const PdfCanvas = forwardRef<PdfCanvasHandle, PdfCanvasProps>(function Pd
 
     if (!off) return;
 
-    // The offscreen image is at renderedAtScaleRef.current PDF-points-per-pixel.
-    // We want to display PDF coords transformed by scaleRef + tx/ty.
-    // drawImage takes the offscreen at its natural pixel resolution; canvas
-    // scale converts those pixels to display.
+    // The offscreen image is at renderedAtScaleRef.current PDF-points-per-pixel,
+    // AND the offscreen already has `dpr` baked into its pixel dimensions (it was
+    // rendered with the `transform: [dpr, 0, 0, dpr, 0, 0]` option so each PDF
+    // unit occupies `effectiveScale * dpr` offscreen pixels).
+    //
+    // To map the offscreen onto the visible canvas:
+    //   offscreen px → backing-store px  via scale = imgScale (NOT dpr × imgScale)
+    //   backing-store → CSS              via  ÷ dpr  (browser handles this)
+    //
+    // Using `dpr * imgScale` was a bug: it applied dpr a second time, making the
+    // visual PDF render dpr× too large on retina screens (MacBook Pro etc, dpr=2).
+    // Standard-scale calibrations (pdfUnitsPerLinearUnit based on true PDF pts)
+    // then measured dpr× too large, while manual two-point calibration happened to
+    // self-correct because both click coords were inflated by the same dpr factor.
+    //
+    // The translation (e, f) is in backing-store pixels so it still needs dpr.
     const imgScale = scaleRef.current / renderedAtScaleRef.current;
-    ctx.setTransform(dpr * imgScale, 0, 0, dpr * imgScale, dpr * txRef.current, dpr * tyRef.current);
+    ctx.setTransform(imgScale, 0, 0, imgScale, dpr * txRef.current, dpr * tyRef.current);
     ctx.drawImage(off, 0, 0);
     // Reset for cleanliness.
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);

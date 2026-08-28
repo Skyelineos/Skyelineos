@@ -186,6 +186,7 @@ export default function SubcontractorPortal() {
   // Which assigned project the RFIs tab is scoped to (subs can be on several).
   const [rfiProjectId, setRfiProjectId] = useState<string>('');
   const [msgProjectId, setMsgProjectId] = useState<string>('');
+  const [acknowledgingPoId, setAcknowledgingPoId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!effectiveUid) { setLoading(false); return; }
@@ -252,6 +253,31 @@ export default function SubcontractorPortal() {
     return () => unsubs.forEach(u => u());
   }, [effectiveUid]);
 
+  // ── PO acknowledgment ────────────────────────────────────────────────────
+  async function handleAcknowledgePO(po: FSPO) {
+    setAcknowledgingPoId(po.id);
+    try {
+      await updateDoc(doc(db, 'purchaseOrders', po.id), {
+        acknowledgedAt: serverTimestamp(),
+        status: 'acknowledged',
+        acknowledgedByUid: effectiveUid,
+        acknowledgedByName: userName,
+      });
+      toast({
+        title: 'PO Accepted',
+        description: `Purchase order${po.poNumber ? ` #${po.poNumber}` : ''} acknowledged. The GC has been notified.`,
+      });
+    } catch (e: any) {
+      toast({
+        title: 'Could not acknowledge PO',
+        description: e?.message || 'Try again in a moment.',
+        variant: 'destructive',
+      });
+    } finally {
+      setAcknowledgingPoId(null);
+    }
+  }
+
   // ── Derived stats ────────────────────────────────────────────────────────
   const activeProjects = projects.filter(p => p.status !== 'completed' && p.status !== 'cancelled');
   const openBids = bids.filter(b => b.status === 'pending' || b.status === 'submitted');
@@ -291,14 +317,62 @@ export default function SubcontractorPortal() {
 
   const renderDashboard = () => (
     <div className="space-y-4 md:space-y-6">
+      {/* Quick Actions hub */}
+      <Card className="rounded-xl border-[#C9A96E]/40 bg-[#FFF8E7]/50">
+        <CardContent className="p-4 md:p-5">
+          <p className="text-xs uppercase tracking-widest text-[#8a6a2c] font-semibold mb-3">Quick Actions</p>
+          <div className="flex flex-wrap gap-3">
+            <Button
+              className="gap-2 font-semibold min-h-[44px]"
+              style={{ backgroundColor: '#C9A96E', color: '#141414' }}
+              onClick={() => setLocation('/subcontractor-portal/bid-requests')}
+            >
+              <Send className="w-4 h-4" /> Respond to a Bid Request
+              {openBids.length > 0 && (
+                <span className="ml-1 bg-[#141414] text-[#C9A96E] text-xs font-bold px-1.5 py-0.5 rounded-full">
+                  {openBids.length}
+                </span>
+              )}
+            </Button>
+            <Button
+              className="gap-2 font-semibold min-h-[44px]"
+              style={{ backgroundColor: '#C9A96E', color: '#141414' }}
+              onClick={() => setLocation('/subcontractor-portal/pay-app')}
+            >
+              <DollarSign className="w-4 h-4" /> Submit an Invoice
+            </Button>
+            <Button
+              className="gap-2 font-semibold min-h-[44px]"
+              style={{ backgroundColor: '#C9A96E', color: '#141414' }}
+              onClick={() => setLocation('/subcontractor-portal/purchase-orders')}
+            >
+              <FileText className="w-4 h-4" /> View My POs
+              {purchaseOrders.filter(po => po.status !== 'acknowledged' && po.status !== 'signed').length > 0 && (
+                <span className="ml-1 bg-[#141414] text-[#C9A96E] text-xs font-bold px-1.5 py-0.5 rounded-full">
+                  {purchaseOrders.filter(po => po.status !== 'acknowledged' && po.status !== 'signed').length}
+                </span>
+              )}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
       <SubTodayFeed />
 
       {/* Stat cards — unified with the GC dashboard's design language. */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
-        <StatCard label="Active Projects" value={activeProjects.length} icon={Building} accent="gold" />
-        <StatCard label="Open Bids" value={openBids.length} icon={Briefcase} accent="gold" />
-        <StatCard label="Pending Invoices" value={pendingInvoices.length} icon={FileText} accent="amber" />
-        <StatCard label="Paid This Month" value={fmtMoney(paidThisMonth)} icon={DollarSign} accent="green" />
+        <div className="cursor-pointer" onClick={() => setLocation('/subcontractor-portal/bid-requests')}>
+          <StatCard label="Open Bid Requests" value={openBids.length} icon={Briefcase} accent="gold" />
+        </div>
+        <div className="cursor-pointer" onClick={() => setLocation('/subcontractor-portal/bids')}>
+          <StatCard label="Submitted Bids" value={bids.filter(b => b.status === 'submitted' || b.status === 'pending').length} icon={Send} accent="gold" />
+        </div>
+        <div className="cursor-pointer" onClick={() => setLocation('/subcontractor-portal/pay-app')}>
+          <StatCard label="Pending Invoices" value={pendingInvoices.length} icon={FileText} accent="amber" />
+        </div>
+        <div className="cursor-pointer" onClick={() => setLocation('/subcontractor-portal/purchase-orders')}>
+          <StatCard label="Active POs" value={purchaseOrders.length} icon={DollarSign} accent="green" />
+        </div>
       </div>
 
       {/* Compliance alert */}
@@ -768,29 +842,64 @@ export default function SubcontractorPortal() {
         </Card>
       ) : (
         <div className="space-y-3">
-          {purchaseOrders.map(po => (
-            <Card key={po.id}>
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-semibold text-gray-900">
-                      {po.poNumber ? `PO #${po.poNumber}` : 'Purchase Order'}
-                    </p>
-                    {po.projectName && <p className="text-sm text-gray-500">{po.projectName}</p>}
-                    {po.issuedAt && <p className="text-xs text-gray-400 mt-0.5">Issued {fmt(po.issuedAt)}</p>}
+          {purchaseOrders.map(po => {
+            const isAcknowledged = po.status === 'acknowledged' || po.status === 'signed';
+            const isAcknowledging = acknowledgingPoId === po.id;
+            return (
+              <Card key={po.id} className={isAcknowledged ? 'border-green-200 bg-green-50/30' : ''}>
+                <CardContent className="p-4">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-gray-900">
+                        {po.poNumber ? `PO #${po.poNumber}` : 'Purchase Order'}
+                      </p>
+                      {po.projectName && <p className="text-sm text-gray-500">{po.projectName}</p>}
+                      {po.issuedAt && <p className="text-xs text-gray-400 mt-0.5">Issued {fmt(po.issuedAt)}</p>}
+                    </div>
+                    <div className="flex items-center gap-3 flex-wrap justify-end">
+                      <div className="text-right">
+                        <p className="font-bold text-gray-900">{fmtMoney(po.amount)}</p>
+                        {po.status && (
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${
+                            isAcknowledged
+                              ? 'bg-green-100 text-green-700'
+                              : 'bg-amber-100 text-amber-700'
+                          }`}>
+                            {po.status === 'acknowledged' ? '✓ Acknowledged' : po.status}
+                          </span>
+                        )}
+                      </div>
+                      {!isAcknowledged && (
+                        <Button
+                          size="sm"
+                          disabled={isAcknowledging}
+                          onClick={() => handleAcknowledgePO(po)}
+                          className="gap-1.5 min-h-[44px] md:min-h-0 font-semibold"
+                          style={{ backgroundColor: '#C9A96E', color: '#141414' }}
+                        >
+                          {isAcknowledging ? (
+                            <>
+                              <div className="w-3.5 h-3.5 border-2 border-t-transparent rounded-full animate-spin" />
+                              Accepting…
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircle className="w-3.5 h-3.5" /> Accept PO
+                            </>
+                          )}
+                        </Button>
+                      )}
+                      {isAcknowledged && (
+                        <div className="flex items-center gap-1 text-sm text-green-600 font-medium">
+                          <CheckCircle className="w-4 h-4" /> Accepted
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-bold text-gray-900">{fmtMoney(po.amount)}</p>
-                    {po.status && (
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
-                        {po.status}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>

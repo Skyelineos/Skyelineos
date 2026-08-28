@@ -266,6 +266,9 @@ export interface SendSmsOptions {
   // Override the From number (rare — multi-number setups). Defaults to
   // TWILIO_FROM_NUMBER from Secret Manager.
   fromOverride?: string;
+  // Override the MessagingService SID (rare). Defaults to
+  // TWILIO_MESSAGING_SERVICE_SID from Secret Manager when set.
+  messagingServiceSidOverride?: string;
 }
 
 export interface SendSmsResult {
@@ -283,6 +286,13 @@ export async function sendSms(
 ): Promise<SendSmsResult> {
   const sid = (process.env.TWILIO_ACCOUNT_SID || '').trim();
   const token = (process.env.TWILIO_AUTH_TOKEN || '').trim();
+  // Prefer MessagingServiceSid (required for 10DLC campaign sends). Fall back
+  // to the From number for direct sends (e.g. when no MSS SID is configured).
+  const messagingServiceSid = (
+    opts.messagingServiceSidOverride ||
+    process.env.TWILIO_MESSAGING_SERVICE_SID ||
+    ''
+  ).trim();
   const from = (opts.fromOverride || process.env.TWILIO_FROM_NUMBER || '').trim();
   const to = toE164(opts.to);
   const body = opts.skipBrandPrefix ? opts.body.trim() : withBrand(opts.body);
@@ -290,7 +300,8 @@ export async function sendSms(
   if (!to) {
     return { ok: false, skipped: 'invalid_number', error: `Invalid recipient: "${opts.to}"` };
   }
-  if (!sid || !token || !from) {
+  // Need account SID + token, AND either a messaging service SID or a from number.
+  if (!sid || !token || (!messagingServiceSid && !from)) {
     // Log the attempt anyway so the staff UI shows the draft. Status='failed'.
     const messageId = await logMessage(db, {
       direction: 'outbound',
@@ -331,7 +342,16 @@ export async function sendSms(
 
   try {
     const client = twilio(sid, token);
-    const sent = await client.messages.create({ to, from, body: safeBody });
+    // Use MessagingServiceSid when available (required for 10DLC campaign
+    // compliance). When both are set, MSS takes precedence over From so Twilio
+    // routes through the approved campaign.
+    const createParams: Record<string, string> = { to, body: safeBody };
+    if (messagingServiceSid) {
+      createParams.messagingServiceSid = messagingServiceSid;
+    } else {
+      createParams.from = from;
+    }
+    const sent = await client.messages.create(createParams as any);
     const status = mapTwilioStatus(sent.status);
     const messageId = await logMessage(db, {
       direction: 'outbound',

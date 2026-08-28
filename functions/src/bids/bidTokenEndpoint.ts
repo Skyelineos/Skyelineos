@@ -18,9 +18,30 @@ import * as admin from 'firebase-admin';
 
 interface PublicBidPlan {
   name: string;
-  url: string;          // long-lived Firebase Storage download URL
+  url: string;          // short-lived (1h) v4 signed read URL when a storagePath
+                        // is known; falls back to the stored download URL only
+                        // when the plan predates storagePath capture.
   storagePath?: string;
   size?: number;
+}
+
+// Mint a short-lived (1 hour) signed read URL for a plan so a leaked link
+// stops working within the hour instead of granting permanent file access.
+// Best-effort: if signing fails (missing file / IAM), we fall back to the
+// caller-provided long-lived URL so the sub can still see their plans.
+async function signPlanUrl(storagePath: string, fallbackUrl: string): Promise<string> {
+  try {
+    const file = admin.storage().bucket().file(storagePath);
+    const [url] = await file.getSignedUrl({
+      action: 'read',
+      expires: Date.now() + 60 * 60 * 1000, // 1h
+      version: 'v4',
+    });
+    return url;
+  } catch (e: any) {
+    console.warn('[bidToken] signed URL failed for', storagePath, e?.message || e);
+    return fallbackUrl;
+  }
 }
 
 // Public-safe shape of a client selection. Subs see only what they need to
@@ -147,14 +168,22 @@ export function registerBidTokenEndpoint(app: Express, db: admin.firestore.Fires
       // refs the sub doesn't need, keep download url + filename + size for the
       // UI listing.
       const rawPlans = Array.isArray(br.plans) ? (br.plans as any[]) : [];
-      const publicPlans: PublicBidPlan[] = rawPlans
-        .filter(p => p && typeof p.url === 'string' && p.url)
-        .map(p => ({
-          name: typeof p.name === 'string' && p.name ? p.name : 'Plan',
-          url: String(p.url),
-          storagePath: typeof p.storagePath === 'string' ? p.storagePath : undefined,
-          size: typeof p.size === 'number' ? p.size : undefined,
-        }));
+      const publicPlans: PublicBidPlan[] = await Promise.all(
+        rawPlans
+          .filter(p => p && typeof p.url === 'string' && p.url)
+          .map(async p => {
+            const storagePath = typeof p.storagePath === 'string' ? p.storagePath : undefined;
+            const url = storagePath
+              ? await signPlanUrl(storagePath, String(p.url))
+              : String(p.url);
+            return {
+              name: typeof p.name === 'string' && p.name ? p.name : 'Plan',
+              url,
+              storagePath,
+              size: typeof p.size === 'number' ? p.size : undefined,
+            };
+          }),
+      );
 
       // Resolve attached selection IDs into public-safe records. The token IS
       // the auth for this view — any sub holding a valid invite token to this

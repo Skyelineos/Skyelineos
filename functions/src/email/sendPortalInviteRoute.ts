@@ -1,6 +1,6 @@
 import type { Express } from 'express';
 import * as admin from 'firebase-admin';
-import sgMail from '@sendgrid/mail';
+import { Resend } from 'resend';
 import twilio from 'twilio';
 import { toE164, isSmsOptedOut } from '../notifications/sms';
 
@@ -81,10 +81,9 @@ export function registerSendPortalInviteRoute(
         return res.status(422).json({ error: 'Template has no body' });
       }
 
-      // 4. SendGrid config.
-      const apiKey = process.env.SENDGRID_API_KEY;
-      const fromEmail = process.env.SENDGRID_FROM_EMAIL;
-      if (!apiKey || !fromEmail) {
+      // 4. Resend config.
+      const apiKey = process.env.RESEND_API_KEY;
+      if (!apiKey) {
         return res.status(503).json({ error: 'Email sending is not configured' });
       }
 
@@ -102,14 +101,15 @@ export function registerSendPortalInviteRoute(
         `This invitation is valid for 30 days.\n— The Skyeline Homes Team`;
 
       // 6. Send.
-      sgMail.setApiKey(apiKey);
-      await sgMail.send({
+      const resend = new Resend(apiKey);
+      const { error: resendError } = await resend.emails.send({
+        from: 'Skyeline Homes <tyler@skyelinehomes.com>',
         to,
-        from: { email: fromEmail, name: 'Skyeline Homes' },
         subject,
         text,
         html,
       });
+      if (resendError) throw new Error(resendError.message);
 
       // 7. Best-effort audit on the invite token doc.
       try {

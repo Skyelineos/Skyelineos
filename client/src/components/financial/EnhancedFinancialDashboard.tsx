@@ -83,22 +83,28 @@ export default function EnhancedFinancialDashboard({ projectId }: EnhancedFinanc
   const calculateEnhancedKPIs = () => {
     const totalRevenue = financialData?.totalRevenue || 0;
     const totalCosts = financialData?.totalCosts || 0;
-    const grossProfit = totalRevenue - totalCosts;
-    const profitMargin = totalRevenue > 0 ? (grossProfit / totalRevenue) * 100 : 0;
-    const roi = totalCosts > 0 ? (grossProfit / totalCosts) * 100 : 0;
-    const cashFlow = financialData?.cashFlow || 0;
+    // hasCostData: false means the backend found no expense/PO records yet
+    // In that case profitMargin and cashFlow are null — show "No data" instead of misleading 100%
+    const hasCostData = financialData?.hasCostData !== false && (totalCosts > 0 || financialData?.hasCostData === true);
+    const grossProfit = hasCostData ? totalRevenue - totalCosts : null;
+    const profitMargin = hasCostData && totalRevenue > 0 ? ((totalRevenue - totalCosts) / totalRevenue) * 100 : null;
+    const roi = hasCostData && totalCosts > 0 ? ((totalRevenue - totalCosts) / totalCosts) * 100 : null;
+    const cashFlow = financialData?.cashFlow !== null && financialData?.cashFlow !== undefined
+      ? financialData.cashFlow
+      : hasCostData ? grossProfit : null;
     const burnRate = financialData?.burnRate || 0;
-    const runwayMonths = burnRate > 0 ? Math.abs(cashFlow / burnRate) : 0;
+    const runwayMonths = burnRate > 0 && cashFlow !== null ? Math.abs(cashFlow / burnRate) : null;
 
     return {
       totalRevenue,
       totalCosts,
       grossProfit,
-      profitMargin,
-      roi,
-      cashFlow,
+      profitMargin,   // null = no cost data recorded yet
+      roi,            // null = no cost data recorded yet
+      cashFlow,       // null = no cost data recorded yet
       burnRate,
-      runwayMonths,
+      runwayMonths,   // null = no cost data recorded yet
+      hasCostData,
       activeProjects: projects.length,
       completedProjects: projects.filter(p => p.status === 'completed').length,
       overdueProjects: projects.filter(p => new Date(p.targetCompletion) < new Date()).length,
@@ -108,7 +114,8 @@ export default function EnhancedFinancialDashboard({ projectId }: EnhancedFinanc
   const kpis = calculateEnhancedKPIs();
 
   // Chart data preparations
-  const cashFlowChartData = cashFlowData.map((item: any) => ({
+  // Guard: API may return an object instead of array; always coerce to array before mapping
+  const cashFlowChartData = (Array.isArray(cashFlowData) ? cashFlowData : []).map((item: any) => ({
     month: item.month,
     income: item.totalIncome,
     expenses: item.totalExpenses,
@@ -116,7 +123,7 @@ export default function EnhancedFinancialDashboard({ projectId }: EnhancedFinanc
     cumulative: item.cumulativeCashFlow
   }));
 
-  const profitabilityChartData = profitabilityData.map((item: any) => ({
+  const profitabilityChartData = (Array.isArray(profitabilityData) ? profitabilityData : []).map((item: any) => ({
     project: item.projectName,
     margin: item.profitMargin,
     revenue: item.revenue,
@@ -174,7 +181,7 @@ export default function EnhancedFinancialDashboard({ projectId }: EnhancedFinanc
               <div>
                 <p className="text-sm font-medium text-green-600">Profit Margin</p>
                 <p className="text-2xl font-bold text-green-900">
-                  {kpis.profitMargin.toFixed(1)}%
+                  {kpis.profitMargin !== null ? `${kpis.profitMargin.toFixed(1)}%` : 'No cost data'}
                 </p>
                 <div className="flex items-center mt-2">
                   <Target className="h-4 w-4 text-green-500 mr-1" />
@@ -192,16 +199,16 @@ export default function EnhancedFinancialDashboard({ projectId }: EnhancedFinanc
               <div>
                 <p className="text-sm font-medium text-orange-600">Cash Flow</p>
                 <p className="text-2xl font-bold text-orange-900">
-                  ${Math.abs(kpis.cashFlow).toLocaleString()}
+                  {kpis.cashFlow !== null ? `$${Math.abs(kpis.cashFlow).toLocaleString()}` : 'No cost data'}
                 </p>
                 <div className="flex items-center mt-2">
-                  {kpis.cashFlow >= 0 ? (
+                  {kpis.cashFlow !== null && kpis.cashFlow >= 0 ? (
                     <TrendingUp className="h-4 w-4 text-green-500 mr-1" />
                   ) : (
                     <TrendingDown className="h-4 w-4 text-red-500 mr-1" />
                   )}
                   <span className="text-sm text-gray-600">
-                    {kpis.runwayMonths.toFixed(1)} months runway
+                    {kpis.runwayMonths !== null ? `${kpis.runwayMonths.toFixed(1)} months runway` : 'Record expenses to calculate runway'}
                   </span>
                 </div>
               </div>
@@ -216,7 +223,7 @@ export default function EnhancedFinancialDashboard({ projectId }: EnhancedFinanc
               <div>
                 <p className="text-sm font-medium text-purple-600">ROI</p>
                 <p className="text-2xl font-bold text-purple-900">
-                  {kpis.roi.toFixed(1)}%
+                  {kpis.roi !== null ? `${kpis.roi.toFixed(1)}%` : 'No cost data'}
                 </p>
                 <div className="flex items-center mt-2">
                   <Calculator className="h-4 w-4 text-purple-500 mr-1" />

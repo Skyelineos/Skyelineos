@@ -17,7 +17,7 @@
 
 import type { Express } from 'express';
 import * as admin from 'firebase-admin';
-import sgMail from '@sendgrid/mail';
+import { Resend } from 'resend';
 import twilio from 'twilio';
 import crypto from 'crypto';
 import { toE164, isSmsOptedOut } from '../notifications/sms';
@@ -134,10 +134,9 @@ interface BuildBodyArgs {
 }
 
 function buildGeneralEmailBody({ vendorName, link, data, replyByDate }: BuildBodyArgs): string {
-  const trade = data.trade || 'this trade';
   const projectName = data.projectName || 'a Skyeline project';
   const guidance = data.tierGuidance || DEFAULT_TIER_GUIDANCE;
-  return [
+  const en = [
     `Hi ${vendorName},`,
     '',
     `We're prepping bids for ${projectName} — a new build by Skyeline Homes. Since we're early in the selection process, we'd like a general bid from you at our three quality tiers, so we have working numbers as the homeowner finalizes selections.`,
@@ -159,6 +158,31 @@ function buildGeneralEmailBody({ vendorName, link, data, replyByDate }: BuildBod
     `Thanks,`,
     data.requesterName || 'The Skyeline Homes Team',
   ].filter(Boolean).join('\n');
+
+  const es = [
+    `Hola ${vendorName},`,
+    '',
+    `Estamos preparando ofertas para ${projectName} — una casa nueva de Skyeline Homes. Como estamos al inicio del proceso de selección, nos gustaría una oferta general en nuestros tres niveles de calidad, para tener números de referencia mientras el propietario finaliza sus selecciones.`,
+    '',
+    `Cada casa de Skyeline se construye un nivel por encima del estándar, y los tres niveles reflejan eso:`,
+    '',
+    `• Nivel Parade Home — ${guidance.parade}`,
+    `• Nivel Lujo Medio — ${guidance.midLuxury}`,
+    `• Nivel Lujo Básico — ${guidance.lowLuxury}`,
+    '',
+    `Usted responderá a través de su Portal de Subcontratistas de Skyeline. Si aún no tiene una cuenta, el enlace de abajo lo guiará para registrarse y subir sus documentos.`,
+    '',
+    `→ Enviar su oferta: ${link}`,
+    '',
+    data.customMessage ? `Notas: ${data.customMessage}` : '',
+    '',
+    `Por favor responda antes del ${replyByDate.toLocaleDateString()}. Responda a este correo si tiene preguntas.`,
+    '',
+    `Gracias,`,
+    data.requesterName || 'El equipo de Skyeline Homes',
+  ].filter(Boolean).join('\n');
+
+  return `${en}\n\n— — — — — — — — — — Español — — — — — — — — — —\n\n${es}`;
 }
 
 // ── HTML email assembly ─────────────────────────────────────────────────
@@ -189,6 +213,12 @@ interface EmailBodyResult {
   html: string;     // styled body
 }
 
+// Visual separator between the English and Spanish halves of a bilingual
+// email body. Bilingual is non-negotiable for Skyeline's subs (mixed EN/ES),
+// so every invitation carries both languages rather than guessing preference.
+const langDivider =
+  '<div style="display:flex;align-items:center;gap:10px;margin:26px 0 18px 0;color:#8a6a2c;font-size:11px;text-transform:uppercase;letter-spacing:1px;"><span style="flex:1;height:1px;background:#EAE5DC;"></span>Español<span style="flex:1;height:1px;background:#EAE5DC;"></span></div>';
+
 function wrapEmailHtml(args: {
   title: string;
   requesterName?: string;
@@ -208,11 +238,12 @@ function wrapEmailHtml(args: {
       ${fromLine}
       <div style="color:#222;font-size:15px;line-height:1.55;">${bodyHtml}</div>
       <p style="margin:28px 0;">
-        <a href="${link}" style="background:#C9A96E;color:#141414;text-decoration:none;padding:14px 28px;border-radius:6px;font-weight:600;display:inline-block;font-size:15px;">View in Skyeline OS</a>
+        <a href="${link}" style="background:#C9A96E;color:#141414;text-decoration:none;padding:14px 28px;border-radius:6px;font-weight:600;display:inline-block;font-size:15px;">Submit your bid / Enviar su oferta</a>
       </p>
-      <p style="color:#777;font-size:13px;margin:0 0 24px 0;">Please respond by ${escapeHtml(replyByDate.toLocaleDateString())}. If you don't have a portal account yet, the button above will walk you through sign-up and document upload (W-9, Certificate of Insurance, Subcontractor Agreement).</p>
+      <p style="color:#777;font-size:13px;margin:0 0 6px 0;">Please respond by ${escapeHtml(replyByDate.toLocaleDateString())}. If you don't have a portal account yet, the button above walks you through sign-up and document upload (W-9, Certificate of Insurance, Subcontractor Agreement).</p>
+      <p style="color:#777;font-size:13px;margin:0 0 24px 0;">Por favor responda antes del ${escapeHtml(replyByDate.toLocaleDateString())}. Si aún no tiene una cuenta en el portal, el botón de arriba lo guiará para registrarse y subir sus documentos (W-9, Certificado de Seguro, Acuerdo de Subcontratista).</p>
       <hr style="border:none;border-top:1px solid #eee;margin:32px 0 12px 0;">
-      <p style="font-size:11px;color:#999;text-align:center;margin:0;">Skyeline Homes · This is an automated notification.</p>
+      <p style="font-size:11px;color:#999;text-align:center;margin:0;">Skyeline Homes · This is an automated notification. / Esta es una notificación automática.</p>
     </div>
   `;
 }
@@ -227,15 +258,24 @@ function buildItemEmailBody({ vendorName, link, data, replyByDate }: BuildBodyAr
   const isPackageScope = !data.selectionTitle && !!(data.trade && data.scope);
 
   let opener: string;
+  let openerEs: string;
   if (isPackageScope) {
     opener = `We're putting together bids on ${data.trade} for ${projectName} and would like your number. Scope and timeline are below.`;
+    openerEs = `Estamos reuniendo ofertas de ${data.trade} para ${projectName} y nos gustaría su precio. El alcance y el plazo están abajo.`;
   } else if (stage === 'rough') {
     opener = `We're working up early numbers for ${projectName}. Could you send a rough bid based on the plans?`;
+    openerEs = `Estamos calculando números preliminares para ${projectName}. ¿Podría enviarnos una oferta preliminar basada en los planos?`;
   } else {
     opener = `The specs on ${data.selectionTitle} are now locked. Could you update your previous bid with final pricing?`;
+    openerEs = `Las especificaciones de ${data.selectionTitle} ya están definidas. ¿Podría actualizar su oferta anterior con el precio final?`;
   }
 
-  return [
+  const plansBlock = (langLabel: string) =>
+    (Array.isArray(data.plans) && data.plans.length > 0)
+      ? `\n${langLabel}:\n${data.plans.map(p => `  • ${p.name || 'Plan'} — ${p.url}`).join('\n')}`
+      : '';
+
+  const en = [
     `Hi ${vendorName},`,
     '',
     opener,
@@ -245,9 +285,7 @@ function buildItemEmailBody({ vendorName, link, data, replyByDate }: BuildBodyAr
     data.selectionTitle ? `Item: ${data.selectionTitle}` : '',
     data.selectionSpecs ? `Specs:\n${data.selectionSpecs}` : '',
     data.callouts ? `\nNotes: ${data.callouts}` : (data.customMessage ? `\nNotes: ${data.customMessage}` : ''),
-    (Array.isArray(data.plans) && data.plans.length > 0)
-      ? `\nPlans / Documents:\n${data.plans.map(p => `  • ${p.name || 'Plan'} — ${p.url}`).join('\n')}`
-      : '',
+    plansBlock('Plans / Documents'),
     '',
     `Submit your bid through your Skyeline Subcontractor Portal:`,
     `→ ${link}`,
@@ -257,6 +295,29 @@ function buildItemEmailBody({ vendorName, link, data, replyByDate }: BuildBodyAr
     `Thanks,`,
     data.requesterName || 'The Skyeline Homes Team',
   ].filter(Boolean).join('\n');
+
+  const es = [
+    `Hola ${vendorName},`,
+    '',
+    openerEs,
+    '',
+    isPackageScope ? `Oficio: ${data.trade}` : '',
+    isPackageScope ? `Alcance del trabajo:\n${data.scope}` : '',
+    data.selectionTitle ? `Artículo: ${data.selectionTitle}` : '',
+    data.selectionSpecs ? `Especificaciones:\n${data.selectionSpecs}` : '',
+    data.callouts ? `\nNotas: ${data.callouts}` : (data.customMessage ? `\nNotas: ${data.customMessage}` : ''),
+    plansBlock('Planos / Documentos'),
+    '',
+    `Envíe su oferta a través de su Portal de Subcontratistas de Skyeline:`,
+    `→ ${link}`,
+    '',
+    `Por favor responda antes del ${replyByDate.toLocaleDateString()}. Si aún no tiene una cuenta en el portal, el enlace lo guiará para registrarse y subir sus documentos (W-9, Certificado de Seguro, Acuerdo de Subcontratista).`,
+    '',
+    `Gracias,`,
+    data.requesterName || 'El equipo de Skyeline Homes',
+  ].filter(Boolean).join('\n');
+
+  return `${en}\n\n— — — — — — — — — — Español — — — — — — — — — —\n\n${es}`;
 }
 
 function buildEmailBody(args: BuildBodyArgs): string {
@@ -283,6 +344,15 @@ function buildGeneralEmailHtml(args: BuildBodyArgs): string {
       <li style="margin-bottom:6px;"><strong>Low Luxury Level</strong> — ${escapeHtml(guidance.lowLuxury)}</li>
     </ul>
     ${data.customMessage ? `<p style="background:#FAFAF6;border-left:3px solid #C9A96E;padding:10px 14px;margin:16px 0;color:#444;">${escapeHtml(data.customMessage)}</p>` : ''}
+    ${langDivider}
+    <p>Estamos preparando ofertas para <strong>${escapeHtml(projectName)}</strong> — una casa nueva de Skyeline Homes. Como estamos al inicio del proceso de selección, nos gustaría una oferta general en nuestros tres niveles de calidad, para tener números de referencia mientras el propietario finaliza sus selecciones.</p>
+    <p>Cada casa de Skyeline se construye un nivel por encima del estándar, y los tres niveles reflejan eso:</p>
+    <ul style="margin:12px 0 12px 18px;padding:0;">
+      <li style="margin-bottom:6px;"><strong>Nivel Parade Home</strong> — ${escapeHtml(guidance.parade)}</li>
+      <li style="margin-bottom:6px;"><strong>Nivel Lujo Medio</strong> — ${escapeHtml(guidance.midLuxury)}</li>
+      <li style="margin-bottom:6px;"><strong>Nivel Lujo Básico</strong> — ${escapeHtml(guidance.lowLuxury)}</li>
+    </ul>
+    ${data.customMessage ? `<p style="background:#FAFAF6;border-left:3px solid #C9A96E;padding:10px 14px;margin:16px 0;color:#444;">${escapeHtml(data.customMessage)}</p>` : ''}
   `;
   return wrapEmailHtml({
     title: `Bid request — ${data.trade || 'trade'} — ${projectName}`,
@@ -300,25 +370,35 @@ function buildItemEmailHtml(args: BuildBodyArgs): string {
   const stage = data.stage ?? 'rough';
 
   let opener: string;
+  let openerEs: string;
   if (isPackageScope) {
     opener = `<p>We're putting together bids on <strong>${escapeHtml(data.trade!)}</strong> for <strong>${escapeHtml(projectName)}</strong> and would like your number. Scope is below.</p>`;
+    openerEs = `<p>Estamos reuniendo ofertas de <strong>${escapeHtml(data.trade!)}</strong> para <strong>${escapeHtml(projectName)}</strong> y nos gustaría su precio. El alcance está abajo.</p>`;
   } else if (stage === 'rough') {
     opener = `<p>We're working up early numbers for <strong>${escapeHtml(projectName)}</strong>. Could you send a rough bid based on the plans?</p>`;
+    openerEs = `<p>Estamos calculando números preliminares para <strong>${escapeHtml(projectName)}</strong>. ¿Podría enviarnos una oferta preliminar basada en los planos?</p>`;
   } else {
     opener = `<p>The specs on <strong>${escapeHtml(data.selectionTitle || 'this item')}</strong> are now locked. Could you update your previous bid with final pricing?</p>`;
+    openerEs = `<p>Las especificaciones de <strong>${escapeHtml(data.selectionTitle || 'este artículo')}</strong> ya están definidas. ¿Podría actualizar su oferta anterior con el precio final?</p>`;
   }
 
-  const detailRows: string[] = [];
-  if (isPackageScope) {
-    detailRows.push(`<tr><td style="padding:6px 14px 6px 0;color:#666;font-size:13px;width:90px;">Trade</td><td style="padding:6px 0;font-size:14px;">${escapeHtml(data.trade!)}</td></tr>`);
-    detailRows.push(`<tr><td style="padding:6px 14px 6px 0;color:#666;font-size:13px;vertical-align:top;">Scope</td><td style="padding:6px 0;font-size:14px;white-space:pre-wrap;">${escapeHtml(data.scope!)}</td></tr>`);
-  } else {
-    if (data.selectionTitle) detailRows.push(`<tr><td style="padding:6px 14px 6px 0;color:#666;font-size:13px;width:90px;">Item</td><td style="padding:6px 0;font-size:14px;">${escapeHtml(data.selectionTitle)}</td></tr>`);
-    if (data.selectionSpecs) detailRows.push(`<tr><td style="padding:6px 14px 6px 0;color:#666;font-size:13px;vertical-align:top;">Specs</td><td style="padding:6px 0;font-size:14px;white-space:pre-wrap;">${escapeHtml(data.selectionSpecs)}</td></tr>`);
-  }
-  const detailTable = detailRows.length > 0
-    ? `<table style="border-collapse:collapse;margin:12px 0;"><tbody>${detailRows.join('')}</tbody></table>`
-    : '';
+  // Build a detail table for a given (label-pair) language. rowLabels maps the
+  // two possible rows to their localized headers.
+  const detailTableFor = (labels: { trade: string; scope: string; item: string; specs: string }): string => {
+    const rows: string[] = [];
+    if (isPackageScope) {
+      rows.push(`<tr><td style="padding:6px 14px 6px 0;color:#666;font-size:13px;width:90px;">${labels.trade}</td><td style="padding:6px 0;font-size:14px;">${escapeHtml(data.trade!)}</td></tr>`);
+      rows.push(`<tr><td style="padding:6px 14px 6px 0;color:#666;font-size:13px;vertical-align:top;">${labels.scope}</td><td style="padding:6px 0;font-size:14px;white-space:pre-wrap;">${escapeHtml(data.scope!)}</td></tr>`);
+    } else {
+      if (data.selectionTitle) rows.push(`<tr><td style="padding:6px 14px 6px 0;color:#666;font-size:13px;width:90px;">${labels.item}</td><td style="padding:6px 0;font-size:14px;">${escapeHtml(data.selectionTitle)}</td></tr>`);
+      if (data.selectionSpecs) rows.push(`<tr><td style="padding:6px 14px 6px 0;color:#666;font-size:13px;vertical-align:top;">${labels.specs}</td><td style="padding:6px 0;font-size:14px;white-space:pre-wrap;">${escapeHtml(data.selectionSpecs)}</td></tr>`);
+    }
+    return rows.length > 0
+      ? `<table style="border-collapse:collapse;margin:12px 0;"><tbody>${rows.join('')}</tbody></table>`
+      : '';
+  };
+  const detailTable = detailTableFor({ trade: 'Trade', scope: 'Scope', item: 'Item', specs: 'Specs' });
+  const detailTableEs = detailTableFor({ trade: 'Oficio', scope: 'Alcance', item: 'Artículo', specs: 'Especificaciones' });
 
   const note = data.callouts || data.customMessage;
   const noteHtml = note
@@ -326,17 +406,24 @@ function buildItemEmailHtml(args: BuildBodyArgs): string {
     : '';
 
   // Plan download buttons — surfaced inline so subs can grab the PDFs without
-  // opening the portal first. Storage URLs are long-lived; the invite token
-  // remains the auth on the response page.
+  // opening the portal first. Storage URLs are long-lived here in the email;
+  // the portal serves short-lived signed URLs, and the invite token remains
+  // the auth on the response page.
   const plans = Array.isArray(data.plans) ? data.plans : [];
-  const plansHtml = plans.length > 0
-    ? `<div style="margin:14px 0 4px 0;">
-        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.6px;color:#8a6a2c;margin-bottom:6px;">Plans / Documents (${plans.length})</div>
+  const plansHtmlFor = (heading: string): string =>
+    plans.length > 0
+      ? `<div style="margin:14px 0 4px 0;">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.6px;color:#8a6a2c;margin-bottom:6px;">${heading} (${plans.length})</div>
         ${plans.map(p => `<div style="margin:0 0 6px 0;"><a href="${p.url}" style="display:inline-block;background:#ffffff;border:1px solid #C9A96E;color:#141414;text-decoration:none;padding:8px 14px;border-radius:4px;font-size:13px;font-weight:500;">⬇ ${escapeHtml(p.name || 'Plan')}${typeof p.size === 'number' && p.size > 0 ? ` <span style="color:#888;font-weight:400;">(${formatBytesLocal(p.size)})</span>` : ''}</a></div>`).join('')}
       </div>`
-    : '';
+      : '';
+  const plansHtml = plansHtmlFor('Plans / Documents');
+  const plansHtmlEs = plansHtmlFor('Planos / Documentos');
 
-  const inner = opener + detailTable + noteHtml + plansHtml;
+  const inner =
+    opener + detailTable + noteHtml + plansHtml +
+    langDivider +
+    openerEs + detailTableEs + plansHtmlEs;
 
   // Subject-style title for the header
   let title: string;
@@ -363,36 +450,34 @@ function buildEmailHtml(args: BuildBodyArgs): string {
     : buildItemEmailHtml(args);
 }
 
-function buildSms({ vendorName, link, data, replyByDate, type }: BuildBodyArgs): string {
+function buildSms({ link, data, replyByDate, type }: BuildBodyArgs): string {
   const projectName = data.projectName || 'Skyeline project';
+  const due = replyByDate.toLocaleDateString();
+  // Bilingual, kept tight. Twilio concatenates past 160 chars — acceptable
+  // for a mixed EN/ES subcontractor base where we can't rely on stored
+  // language preference.
   if (type === 'general') {
     const trade = data.trade || 'trade';
-    return `Skyeline Homes bid request — ${trade} for ${projectName}. Three-tier general bid needed by ${replyByDate.toLocaleDateString()}. Submit in your portal: ${link}`;
+    return `Skyeline Homes bid request — ${trade} for ${projectName}, due ${due}. Submit in your portal: ${link} · Solicitud de oferta de Skyeline — ${trade} para ${projectName}, antes del ${due}. Envíe en su portal.`;
   }
-  // type='item': package-scope vs. selection-specific
   const isPackageScope = !data.selectionTitle && !!(data.trade && data.scope);
-  if (isPackageScope) {
-    return `Skyeline Homes bid request — ${data.trade} on ${projectName}. Due ${replyByDate.toLocaleDateString()}. Submit in your portal: ${link}`;
-  }
-  if (data.stage === 'final') {
-    return `Skyeline — ${projectName}: ${data.selectionTitle} specs locked. Submit updated bid in portal: ${link}`;
-  }
-  return `Hi ${vendorName}, Skyeline Homes bid request${data.selectionTitle ? ` on ${data.selectionTitle}` : ''} for ${projectName}. Reply by ${replyByDate.toLocaleDateString()}. Submit in portal: ${link}`;
+  const subject = isPackageScope ? data.trade : (data.selectionTitle || 'item');
+  return `Skyeline Homes bid request — ${subject} on ${projectName}, due ${due}. Submit in your portal: ${link} · Solicitud de oferta de Skyeline — ${subject} en ${projectName}, antes del ${due}. Envíe en su portal.`;
 }
 
 function buildEmailSubject(data: RequestPayload, type: BidRequestType): string {
   const projectName = data.projectName || 'Skyeline project';
   if (type === 'general') {
-    return `Bid request — ${data.trade || 'trade'} — ${projectName}`;
+    return `Bid request / Solicitud de oferta — ${data.trade || 'trade'} — ${projectName}`;
   }
   // type='item': package-scope vs. selection-specific
   const isPackageScope = !data.selectionTitle && !!(data.trade && data.scope);
   if (isPackageScope) {
-    return `Bid request — ${data.trade} — ${projectName}`;
+    return `Bid request / Solicitud de oferta — ${data.trade} — ${projectName}`;
   }
   return data.stage === 'final'
-    ? `Updated bid request — ${data.selectionTitle} (specs locked) — ${projectName}`
-    : `Rough bid request — ${data.selectionTitle || 'item'} — ${projectName}`;
+    ? `Updated bid request / Oferta actualizada — ${data.selectionTitle} — ${projectName}`
+    : `Bid request / Solicitud de oferta — ${data.selectionTitle || 'item'} — ${projectName}`;
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -471,14 +556,12 @@ export function registerBidRequestRoute(app: Express, db: admin.firestore.Firest
       }));
 
       // External integrations
-      const sendgridKey = process.env.SENDGRID_API_KEY;
-      const sendgridFrom = process.env.SENDGRID_FROM_EMAIL;
+      const resendKey = process.env.RESEND_API_KEY;
       const twilioSid = process.env.TWILIO_ACCOUNT_SID;
       const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN;
       const twilioFrom = process.env.TWILIO_FROM_NUMBER;
 
-      const sendgridReady = !!(sendgridKey && sendgridFrom);
-      if (sendgridReady) sgMail.setApiKey(sendgridKey!);
+      const resendReady = !!resendKey;
 
       // Twilio init can THROW synchronously if accountSid doesn't start with 'AC'
       // (Twilio SDK validation). A bad secret value would crash the entire
@@ -525,18 +608,23 @@ export function registerBidRequestRoute(app: Express, db: admin.firestore.Firest
         };
 
         if (v.email && allowInviteEmail) {
-          if (!sendgridReady) {
-            r.email = { sent: false, error: 'SendGrid not configured' };
+          if (!resendReady) {
+            r.email = { sent: false, error: 'Resend not configured' };
           } else {
             try {
-              await sgMail.send({
+              const resend = new Resend(resendKey);
+              const { error: resendError } = await resend.emails.send({
+                from: 'Skyeline Homes <tyler@skyelinehomes.com>',
                 to: v.email,
-                from: sendgridFrom!,
                 subject,
                 text: buildEmailBody(builderArgs),
                 html: buildEmailHtml(builderArgs),
               });
-              r.email = { sent: true };
+              if (resendError) {
+                r.email = { sent: false, error: resendError.message };
+              } else {
+                r.email = { sent: true };
+              }
             } catch (e: any) {
               r.email = { sent: false, error: e?.message || String(e) };
             }

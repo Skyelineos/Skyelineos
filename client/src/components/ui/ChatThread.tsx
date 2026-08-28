@@ -8,6 +8,17 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { useEventSocket } from '@/hooks/useEventSocket';
+import { auth } from '@/lib/firebase';
+
+// Helper: get Firebase auth token for raw fetch calls
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  try {
+    const token = await auth.currentUser?.getIdToken();
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+  } catch {}
+  return headers;
+}
 
 interface Message {
   id: number;
@@ -85,12 +96,15 @@ export function ChatThread({ threadId, threadTitle, className = '' }: ChatThread
   } = useInfiniteQuery({
     queryKey: ['chat-messages', threadId],
     queryFn: async ({ pageParam }) => {
+      const headers = await getAuthHeaders();
       const response = await fetch(`/api/chat/threads/${threadId}/messages?${new URLSearchParams({
         cursor: pageParam?.toString() || '',
         limit: '20'
-      })}`);
+      })}`, { headers });
       
       if (!response.ok) {
+        // Return empty data gracefully if chat endpoint isn't available yet
+        if (response.status === 404 || response.status === 401) return { messages: [], nextCursor: null };
         throw new Error('Failed to fetch messages');
       }
       
@@ -111,16 +125,20 @@ export function ChatThread({ threadId, threadTitle, className = '' }: ChatThread
       formData.append('content', content);
       formData.append('threadId', threadId);
       
-      attachments.forEach((file, index) => {
+      attachments.forEach((file) => {
         formData.append(`attachments`, file);
       });
 
+      // Get auth token (omit Content-Type — FormData sets its own boundary)
+      const authToken = await auth.currentUser?.getIdToken().catch(() => null);
       const response = await fetch('/api/chat/messages', {
         method: 'POST',
         body: formData,
+        headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
       });
 
       if (!response.ok) {
+        if (response.status === 404) throw new Error('Chat endpoint not available');
         throw new Error('Failed to send message');
       }
 

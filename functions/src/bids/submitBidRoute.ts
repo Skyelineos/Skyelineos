@@ -24,6 +24,7 @@
 import type { Express } from 'express';
 import * as admin from 'firebase-admin';
 import { fireTrigger } from '../notifications/fireTrigger';
+import { computeBidPricing } from './bidPricing';
 
 interface SubmitBidPayload {
   bidRequestId: string;
@@ -108,6 +109,26 @@ export function registerSubmitBidRoute(app: Express, db: admin.firestore.Firesto
       // Don't let the caller override the security-relevant fields.
       delete bidPayload.awardedAt;
       delete bidPayload.awardedByUserId;
+
+      // Authoritative pricing recompute. For line-item bids we NEVER trust the
+      // client's totalAmount — we recompute it from the persisted line items
+      // and the sub's declared build-up (overhead/profit/tax), then store an
+      // immutable snapshot. A tampered POST that inflates or deflates the total
+      // is silently corrected here. pdfQuote bids have no line items, so their
+      // flat totalAmount is left as submitted.
+      if (bidPayload.bidMode === 'lineItems') {
+        const lines = Array.isArray(bidPayload.lineItems) ? bidPayload.lineItems : [];
+        const snapshot = computeBidPricing(lines, bidPayload.pricing || undefined);
+        bidPayload.pricing = {
+          markupPct: snapshot.markupPct,
+          overheadPct: snapshot.overheadPct,
+          taxPct: snapshot.taxPct,
+        };
+        bidPayload.pricingSnapshot = snapshot;
+        bidPayload.subtotal = snapshot.baseSubtotal;
+        bidPayload.taxAmount = snapshot.taxAmt;
+        bidPayload.totalAmount = snapshot.total;
+      }
 
       const batch = db.batch();
       batch.set(bidRef, bidPayload);

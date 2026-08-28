@@ -60,7 +60,9 @@ import type {
   BidLineItem,
   BidInsurance,
   ContractorLicense,
+  BidPricing,
 } from './types';
+import { computeBidPricing } from '@/lib/bidPricing';
 import { publishedAddendaForTrades } from '@/lib/ssot/addenda';
 import type { Addendum } from '@/lib/ssot/types';
 import { SsotFileBrowser } from './SsotFileBrowser';
@@ -96,6 +98,8 @@ export function SubBidSubmissionForm({
   const coiInputRef = useRef<HTMLInputElement>(null);
 
   const subId = user?.id?.toString() || user?.email || '';
+  // Firebase UID — used as the canonical `subId` field that the portal queries on.
+  const firebaseUid = (user as any)?.firebaseUid || user?.id?.toString() || '';
 
   // Compliance status — loaded for the advisory banner, but per D-016 it is
   // NOT a gate on bid submission. The submit button works for any signed-in
@@ -154,6 +158,15 @@ export function SubBidSubmissionForm({
     },
   ]);
   const [notes, setNotes] = useState('');
+
+  // Line-item build-up: the sub can layer overhead %, profit (markup) %, and
+  // tax % on top of raw line costs to reach their bid number. All default to
+  // 0, so a sub who just enters line totals still bids exactly the subtotal.
+  const [pricing, setPricing] = useState<BidPricing>({
+    markupPct: 0,
+    overheadPct: 0,
+    taxPct: 0,
+  });
 
   // PDF quote path
   const [quoteFile, setQuoteFile] = useState<{
@@ -436,6 +449,16 @@ export function SubBidSubmissionForm({
   };
 
   const subtotal = lines.reduce((s, l) => s + (l.total || 0), 0);
+  // Live build-up preview. Mirrors what the server recomputes at submit time
+  // (functions/src/bids/bidPricing.ts) so the number shown here IS the bid.
+  const pricingSnapshot = computeBidPricing(lines, pricing);
+  const hasBuildUp =
+    pricing.overheadPct > 0 || pricing.markupPct > 0 || pricing.taxPct > 0;
+  const money = (n: number) =>
+    n.toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
 
   const handleCoiUpload = async (file: File) => {
     if (!user) return;
@@ -575,8 +598,10 @@ export function SubBidSubmissionForm({
         bidMode === 'lineItems'
           ? lines.filter((l) => l.description.trim())
           : [];
-      const lineTotal = validLines.reduce((s, l) => s + (l.total || 0), 0);
-      const total = bidMode === 'lineItems' ? lineTotal : quoteTotal;
+      // Line-item bids get the full build-up (overhead + profit + tax); the
+      // server recomputes this from the persisted lines and is authoritative.
+      const snapshot = computeBidPricing(validLines, pricing);
+      const total = bidMode === 'lineItems' ? snapshot.total : quoteTotal;
 
       const bidPayload: Record<string, any> = {
         bidRequestId: request.id,
@@ -584,6 +609,9 @@ export function SubBidSubmissionForm({
         projectName: request.projectName || '',
         trade: request.trade,
         subContactId: subId,
+        // `subId` is queried by the sub portal's My Bids tab. Write it as the
+        // Firebase UID so onSnapshot(where('subId','==', effectiveUid)) resolves.
+        subId: firebaseUid,
         // T0-3 DEPENDENCY: `user.id` is the Firebase Auth uid at runtime
         // (see client/src/hooks/use-auth.ts). Before the T0-3 fix this wrote
         // literal "0" for every sub. Downstream (bid match, award emails)
@@ -595,8 +623,15 @@ export function SubBidSubmissionForm({
         subEmail: user.email || '',
         bidMode,
         lineItems: validLines,
-        subtotal: total,
+        // Raw cost of the lines, before build-up. For pdfQuote mode there are
+        // no lines, so subtotal collapses to the flat quote total.
+        subtotal: bidMode === 'lineItems' ? snapshot.baseSubtotal : total,
+        taxAmount: bidMode === 'lineItems' ? snapshot.taxAmt : 0,
         totalAmount: total,
+        // Sub-declared build-up + client-side preview snapshot. The server
+        // overwrites pricingSnapshot with its own recompute (immutable record).
+        pricing: bidMode === 'lineItems' ? pricing : null,
+        pricingSnapshot: bidMode === 'lineItems' ? snapshot : null,
         // Estimated business days from start to finish (sub's best guess —
         // gives the GC a schedulable number when comparing bids).
         daysToComplete: Math.round(daysToComplete),
@@ -1326,6 +1361,124 @@ export function SubBidSubmissionForm({
               >
                 <Plus className="w-3.5 h-3.5" /> Add line
               </Button>
+
+              {/* Markup / overhead / tax build-up. Optional — leave at 0 to
+                  bid the raw subtotal. The GC only ever sees your final total. */}
+              <div className="mt-4 rounded-lg border border-[#C9A96E]/40 bg-[#FFF8E7]/40 p-3">
+                <p className="text-xs uppercase tracking-wide text-[#8a6a2c] font-semibold mb-2">
+                  Markup &amp; Tax (optional)
+                </p>
+                <p className="text-[11px] text-gray-500 mb-3">
+                  Add your overhead, profit, and tax on top of the line costs.
+                  Everything shows as one bid total to Skyeline — your rates
+                  stay private.
+                </p>
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <Label htmlFor="overhead-pct" className="text-xs">
+                      Overhead %
+                    </Label>
+                    <Input
+                      id="overhead-pct"
+                      type="number"
+                      min={0}
+                      step="0.1"
+                      value={pricing.overheadPct || ''}
+                      onChange={(e) =>
+                        setPricing((p) => ({
+                          ...p,
+                          overheadPct: parseFloat(e.target.value) || 0,
+                        }))
+                      }
+                      placeholder="0"
+                      className="h-8 text-sm mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="markup-pct" className="text-xs">
+                      Profit / Markup %
+                    </Label>
+                    <Input
+                      id="markup-pct"
+                      type="number"
+                      min={0}
+                      step="0.1"
+                      value={pricing.markupPct || ''}
+                      onChange={(e) =>
+                        setPricing((p) => ({
+                          ...p,
+                          markupPct: parseFloat(e.target.value) || 0,
+                        }))
+                      }
+                      placeholder="0"
+                      className="h-8 text-sm mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="tax-pct" className="text-xs">
+                      Tax %
+                    </Label>
+                    <Input
+                      id="tax-pct"
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={pricing.taxPct || ''}
+                      onChange={(e) =>
+                        setPricing((p) => ({
+                          ...p,
+                          taxPct: parseFloat(e.target.value) || 0,
+                        }))
+                      }
+                      placeholder="0"
+                      className="h-8 text-sm mt-1"
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-3 border-t border-[#C9A96E]/30 pt-2 space-y-1 text-sm">
+                  <div className="flex justify-between text-gray-600">
+                    <span>Subtotal (line costs)</span>
+                    <span className="font-mono">
+                      ${money(pricingSnapshot.baseSubtotal)}
+                    </span>
+                  </div>
+                  {hasBuildUp && (
+                    <>
+                      {pricing.overheadPct > 0 && (
+                        <div className="flex justify-between text-gray-600">
+                          <span>Overhead ({pricing.overheadPct}%)</span>
+                          <span className="font-mono">
+                            ${money(pricingSnapshot.overheadAmt)}
+                          </span>
+                        </div>
+                      )}
+                      {pricing.markupPct > 0 && (
+                        <div className="flex justify-between text-gray-600">
+                          <span>Profit / Markup ({pricing.markupPct}%)</span>
+                          <span className="font-mono">
+                            ${money(pricingSnapshot.markupAmt)}
+                          </span>
+                        </div>
+                      )}
+                      {pricing.taxPct > 0 && (
+                        <div className="flex justify-between text-gray-600">
+                          <span>Tax ({pricing.taxPct}%)</span>
+                          <span className="font-mono">
+                            ${money(pricingSnapshot.taxAmt)}
+                          </span>
+                        </div>
+                      )}
+                    </>
+                  )}
+                  <div className="flex justify-between border-t pt-1.5 mt-1.5 font-bold text-[#141414]">
+                    <span>Your bid total</span>
+                    <span className="font-mono text-lg">
+                      ${money(pricingSnapshot.total)}
+                    </span>
+                  </div>
+                </div>
+              </div>
             </>
           )}
         </CardContent>

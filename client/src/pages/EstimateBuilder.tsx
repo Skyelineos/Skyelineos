@@ -37,6 +37,7 @@ import {
 } from 'lucide-react';
 import { lazy, Suspense } from 'react';
 import { MinimalSpinner } from '@/components/layout/MinimalSpinner';
+import { buildEstimateTemplate, TEMPLATE_SECTIONS } from '@/data/estimateTemplate';
 
 const TakeoffStudio = lazy(() => import('@/components/takeoff/TakeoffStudio'));
 const PortalBidsPanel = lazy(() =>
@@ -928,6 +929,7 @@ function EstimateModal({
   prefillProject?: { id: string; name: string } | null;
 }) {
   const defaultItems = () => FALLBACK_TRADES.slice(0, 5).map(t => newLineItem(t));
+  const templateItems = () => buildEstimateTemplate() as LineItem[];
   const { toast } = useToast();
 
   const [activeTab, setActiveTab]   = useState<EstimateTab>('details');
@@ -943,6 +945,12 @@ function EstimateModal({
   const [notes, setNotes]           = useState('');
   const [validUntil, setValidUntil] = useState('');
   const [items, setItems]           = useState<LineItem[]>(defaultItems());
+  // Whether a new estimate should be pre-loaded with the 62-item standard template.
+  // Only relevant when editing === null (new estimate). Persists across re-renders
+  // so the user's toggle choice survives typing the title, etc.
+  const [useTemplate, setUseTemplate] = useState<boolean>(true);
+  // Load-template confirmation (for existing estimates)
+  const [loadTemplateConfirmOpen, setLoadTemplateConfirmOpen] = useState(false);
   // Files attached via "Import from PDF" inside the Scope of Work table. Stays
   // append-only — every imported sub PDF stays attached for audit.
   const [attachments, setAttachments] = useState<EstimateAttachment[]>([]);
@@ -1010,9 +1018,12 @@ function EstimateModal({
       setTaxPct(0);
       setNotes('');
       setValidUntil('');
-      setItems(defaultItems());
+      // Show the "Start from template?" banner for new estimates (items start empty).
+      setItems([]);
       setAttachments([]);
     }
+    setUseTemplate(!editing);
+    setLoadTemplateConfirmOpen(false);
     setActiveTab('details');
     setMeasuringItemId(null);
     setSelectionPromptItemId(null);
@@ -1244,6 +1255,46 @@ function EstimateModal({
         {/* ── Details tab (or new estimate) ── */}
         {(!editing || activeTab === 'details') && (
         <div className="px-6 py-4 space-y-6">
+          {/* ── "Start from template?" banner — new estimates only, dismiss-once ── */}
+          {!editing && useTemplate && (
+            <div
+              className="rounded-xl border p-4 flex items-start gap-4"
+              style={{ borderColor: 'rgba(201,169,110,0.5)', backgroundColor: 'rgba(201,169,110,0.06)' }}
+            >
+              <FileText className="w-5 h-5 mt-0.5 flex-shrink-0" style={{ color: '#C9A96E' }} />
+              <div className="flex-1 min-w-0">
+                <p className="font-heading text-base font-semibold text-gray-900">Start from template?</p>
+                <p className="text-sm text-gray-500 mt-1">
+                  Pre-fill with 62 standard line items from your Skyeline estimate structure.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0 mt-0.5">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-sm"
+                  onClick={() => setUseTemplate(false)}
+                >
+                  Start Blank
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-8 text-sm font-semibold"
+                  style={{ backgroundColor: '#C9A96E', color: '#141414' }}
+                  onClick={() => {
+                    setItems(templateItems());
+                    setExpandedTrades(new Set(TEMPLATE_SECTIONS));
+                    setUseTemplate(false);
+                    toast({ title: '62 template items loaded', description: 'Fill in costs for each line item.' });
+                  }}
+                >
+                  Use Template
+                </Button>
+              </div>
+            </div>
+          )}
           {/* Header fields */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="sm:col-span-2 space-y-1.5">
@@ -1397,6 +1448,19 @@ function EstimateModal({
                     Assign a project to enable PDF import
                   </span>
                 )}
+                {/* Load Template — lets Tyler reset an existing estimate to the standard template */}
+                {editing && (
+                  <button
+                    type="button"
+                    onClick={() => setLoadTemplateConfirmOpen(true)}
+                    className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-full border border-dashed text-gray-700 hover:bg-amber-50 transition-colors"
+                    style={{ borderColor: 'rgba(201,169,110,0.6)' }}
+                    title="Replace all items with the 62-item Skyeline standard template"
+                  >
+                    <FileText className="w-3 h-3" />
+                    Load Template
+                  </button>
+                )}
                 {attachments.length > 0 && (
                   <span
                     className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600"
@@ -1451,52 +1515,72 @@ function EstimateModal({
             )}
 
             <div className="space-y-1">
-              {grouped.map(({ label, items: tradeItems }) => (
-                <div key={label}>
-                  <div className="flex items-center gap-2 w-full py-1.5 px-1 hover:bg-gray-50 rounded group">
-                    <button
-                      type="button"
-                      className="flex items-center gap-2 flex-1 text-left min-w-0"
-                      onClick={() => setExpandedTrades(prev => {
-                        const next = new Set(prev);
-                        next.has(label) ? next.delete(label) : next.add(label);
-                        return next;
-                      })}
+              {grouped.map(({ label, items: tradeItems }) => {
+                const isSection = TEMPLATE_SECTIONS.includes(label);
+                return (
+                  <div key={label}>
+                    {/* Section header — template sections get gold accent + font-heading + item count */}
+                    <div
+                      className={`flex items-center gap-2 w-full rounded transition-colors ${
+                        isSection ? 'py-2 px-2' : 'py-1.5 px-1 hover:bg-gray-50 group'
+                      }`}
+                      style={isSection ? {
+                        backgroundColor: 'rgba(201,169,110,0.08)',
+                        borderLeft: '3px solid rgba(201,169,110,0.5)',
+                      } : {}}
                     >
-                      {expandedTrades.has(label)
-                        ? <ChevronDown className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
-                        : <ChevronRight className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
-                      }
-                      <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide truncate">{label}</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={e => {
-                        e.stopPropagation();
-                        setExpandedTrades(prev => {
+                      <button
+                        type="button"
+                        className="flex items-center gap-2 flex-1 text-left min-w-0"
+                        onClick={() => setExpandedTrades(prev => {
                           const next = new Set(prev);
-                          next.add(label);
+                          next.has(label) ? next.delete(label) : next.add(label);
                           return next;
-                        });
-                        addItem(label);
-                      }}
-                      className="text-[11px] px-2 py-0.5 rounded-full border border-dashed text-gray-500 hover:text-amber-900 hover:bg-amber-50 transition-colors flex-shrink-0"
-                      style={{ borderColor: 'rgba(201,169,110,0.4)' }}
-                      title={`Add another ${label} line (e.g. split material / labor / equipment)`}
-                    >
-                      + line
-                    </button>
-                    <span className="text-xs text-gray-400 ml-1 flex-shrink-0">{fmt(tradeItems.reduce((s, i) => s + i.total, 0))}</span>
-                  </div>
-                  {expandedTrades.has(label) && (
-                    <div className="ml-5 border-l border-gray-100 pl-3">
-                      {tradeItems.map(item => (
-                        <LineItemRow key={item.id} item={item} onChange={changeItem} onDelete={deleteItem} onMeasure={setMeasuringItemId} tradeOptions={firestoreTrades} globalMarkupPct={markupPct} projectBids={projectBids} />
-                      ))}
+                        })}
+                      >
+                        {expandedTrades.has(label)
+                          ? <ChevronDown className={`h-3.5 w-3.5 flex-shrink-0 ${isSection ? 'text-amber-700' : 'text-gray-400'}`} />
+                          : <ChevronRight className={`h-3.5 w-3.5 flex-shrink-0 ${isSection ? 'text-amber-700' : 'text-gray-400'}`} />
+                        }
+                        <span className={isSection
+                          ? 'font-heading text-sm font-semibold text-gray-900 truncate'
+                          : 'text-xs font-semibold text-gray-600 uppercase tracking-wide truncate'
+                        }>{label}</span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0 ${
+                          isSection ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-500'
+                        }`}>
+                          {tradeItems.length}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={e => {
+                          e.stopPropagation();
+                          setExpandedTrades(prev => {
+                            const next = new Set(prev);
+                            next.add(label);
+                            return next;
+                          });
+                          addItem(label);
+                        }}
+                        className="text-[11px] px-2 py-0.5 rounded-full border border-dashed text-gray-500 hover:text-amber-900 hover:bg-amber-50 transition-colors flex-shrink-0"
+                        style={{ borderColor: 'rgba(201,169,110,0.4)' }}
+                        title={`Add another ${label} line`}
+                      >
+                        + line
+                      </button>
+                      <span className="text-xs text-gray-400 ml-1 flex-shrink-0">{fmt(tradeItems.reduce((s, i) => s + i.total, 0))}</span>
                     </div>
-                  )}
-                </div>
-              ))}
+                    {expandedTrades.has(label) && (
+                      <div className={`border-l border-gray-100 pl-3 ${isSection ? 'ml-6' : 'ml-5'}`}>
+                        {tradeItems.map(item => (
+                          <LineItemRow key={item.id} item={item} onChange={changeItem} onDelete={deleteItem} onMeasure={setMeasuringItemId} tradeOptions={firestoreTrades} globalMarkupPct={markupPct} projectBids={projectBids} />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
 
             {/* Add line item buttons by trade */}
@@ -1590,6 +1674,35 @@ function EstimateModal({
             style={{ backgroundColor: '#C9A96E', color: '#141414' }}
           >
             {saving ? 'Saving...' : editing ? 'Save Changes' : 'Create Estimate'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    {/* ── Load Template confirmation ── */}
+    <Dialog open={loadTemplateConfirmOpen} onOpenChange={setLoadTemplateConfirmOpen}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="font-heading">Load template?</DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-gray-600 py-2">
+          This will replace all {items.length} existing line item{items.length !== 1 ? 's' : ''} with
+          the 62-item Skyeline standard template. This cannot be undone unless you cancel without saving.
+        </p>
+        <DialogFooter className="gap-2 sm:gap-0">
+          <Button variant="outline" onClick={() => setLoadTemplateConfirmOpen(false)}>
+            Cancel
+          </Button>
+          <Button
+            style={{ backgroundColor: '#C9A96E', color: '#141414', fontWeight: 600 }}
+            onClick={() => {
+              setItems(templateItems());
+              setExpandedTrades(new Set(TEMPLATE_SECTIONS));
+              setLoadTemplateConfirmOpen(false);
+              toast({ title: 'Template loaded', description: '62 standard items added. Fill in costs for each line.' });
+            }}
+          >
+            Load Template
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -2078,8 +2191,9 @@ export function EstimateBuilderContent({ projectId, projectName, embedded = fals
             <Button variant="outline" className="flex items-center gap-1.5 px-3">
               <SlidersHorizontal className="h-4 w-4" /> Filter
             </Button>
-            <Button variant="accent" onClick={() => { setEditing(null); setModalOpen(true); }}
-              className="flex items-center gap-2">
+            <Button onClick={() => { setEditing(null); setModalOpen(true); }}
+              className="flex items-center gap-2"
+              style={{ backgroundColor: '#C9A96E', color: '#141414', borderColor: '#C9A96E' }}>
               <Plus className="h-4 w-4" /> Estimate
             </Button>
           </div>

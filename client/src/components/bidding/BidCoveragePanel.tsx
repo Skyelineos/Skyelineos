@@ -18,8 +18,9 @@ import { apiRequest } from '@/lib/queryClient';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Send, AlertCircle, CheckCircle2, Clock, FileSearch, Inbox, RefreshCw } from 'lucide-react';
+import { Send, AlertCircle, CheckCircle2, Clock, FileSearch, Inbox, RefreshCw, ChevronRight } from 'lucide-react';
 import { SendBidPackageModal } from './SendBidPackageModal';
+import { BidDetailSlideOver } from './BidDetailSlideOver';
 
 type CoverageStatus = 'MISSING' | 'INVITED' | 'SUBMITTED' | 'ANALYZED' | 'AWARDED';
 
@@ -61,12 +62,15 @@ function fmtMoney(n: number | null): string {
 }
 
 const STATUS_META: Record<CoverageStatus, { label: string; dot: string; badge: string; icon: typeof Inbox }> = {
-  MISSING:   { label: 'Missing',   dot: 'bg-red-500',    badge: 'bg-red-100 text-red-700 border-red-200',           icon: AlertCircle },
+  MISSING:   { label: 'Missing',   dot: 'bg-gray-400',   badge: 'bg-gray-100 text-gray-500 border-gray-200',        icon: AlertCircle },
   INVITED:   { label: 'Invited',   dot: 'bg-amber-500',  badge: 'bg-amber-100 text-amber-700 border-amber-200',     icon: Clock },
   SUBMITTED: { label: 'Submitted', dot: 'bg-blue-500',   badge: 'bg-blue-100 text-blue-700 border-blue-200',        icon: Inbox },
   ANALYZED:  { label: 'Analyzed',  dot: 'bg-purple-500', badge: 'bg-purple-100 text-purple-700 border-purple-200',  icon: FileSearch },
   AWARDED:   { label: 'Awarded',   dot: 'bg-green-500',  badge: 'bg-green-100 text-green-700 border-green-200',     icon: CheckCircle2 },
 };
+
+// Statuses that have actual bids to review in the slide-over.
+const CLICKABLE_STATUSES: CoverageStatus[] = ['SUBMITTED', 'ANALYZED', 'AWARDED'];
 
 export function BidCoveragePanel({ projectId }: Props) {
   const [data, setData] = useState<CoverageResponse | null>(null);
@@ -74,6 +78,7 @@ export function BidCoveragePanel({ projectId }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [sendModalOpen, setSendModalOpen] = useState(false);
+  const [slideOver, setSlideOver] = useState<{ bidRequestId: string; label: string } | null>(null);
 
   async function load(silent = false) {
     if (!projectId) return;
@@ -214,10 +219,27 @@ export function BidCoveragePanel({ projectId }: Props) {
             {trades.map((row) => {
               const meta = STATUS_META[row.status];
               const Icon = meta.icon;
+              const isClickable = CLICKABLE_STATUSES.includes(row.status) && !!row.bidRequestId;
               return (
                 <div
                   key={row.trade}
-                  className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50"
+                  role={isClickable ? 'button' : undefined}
+                  tabIndex={isClickable ? 0 : undefined}
+                  onClick={() => {
+                    if (isClickable && row.bidRequestId) {
+                      setSlideOver({ bidRequestId: row.bidRequestId, label: row.label });
+                    }
+                  }}
+                  onKeyDown={e => {
+                    if (isClickable && (e.key === 'Enter' || e.key === ' ') && row.bidRequestId) {
+                      setSlideOver({ bidRequestId: row.bidRequestId, label: row.label });
+                    }
+                  }}
+                  className={`flex items-center gap-3 px-4 py-3 transition-colors ${
+                    isClickable
+                      ? 'cursor-pointer hover:bg-amber-50/60 hover:border-l-2 hover:border-l-[#C9A96E]'
+                      : 'hover:bg-gray-50'
+                  }`}
                 >
                   <span
                     className={`w-2 h-2 rounded-full flex-shrink-0 ${meta.dot}`}
@@ -238,14 +260,22 @@ export function BidCoveragePanel({ projectId }: Props) {
                     </div>
                     {row.status !== 'MISSING' && (
                       <div className="text-[11px] text-gray-500 mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
-                        {row.vendorCount > 0 && <span>{row.vendorCount} vendor{row.vendorCount === 1 ? '' : 's'}</span>}
+                        {row.vendorCount > 0 && (
+                          <span className="font-medium text-gray-700">
+                            {row.vendorCount} vendor{row.vendorCount === 1 ? '' : 's'}
+                          </span>
+                        )}
                         {row.lowestBid !== null && row.status !== 'AWARDED' && (
-                          <span>Low: {fmtMoney(row.lowestBid)}</span>
+                          <span>
+                            Low: <span className="font-medium" style={{ color: '#C9A96E' }}>{fmtMoney(row.lowestBid)}</span>
+                          </span>
                         )}
                         {row.status === 'AWARDED' && (
                           <>
                             {row.awardedTo && <span className="text-green-700 font-medium">{row.awardedTo}</span>}
-                            {row.awardedBid !== null && <span>{fmtMoney(row.awardedBid)}</span>}
+                            {row.awardedBid !== null && (
+                              <span className="font-medium" style={{ color: '#C9A96E' }}>{fmtMoney(row.awardedBid)}</span>
+                            )}
                           </>
                         )}
                       </div>
@@ -256,12 +286,15 @@ export function BidCoveragePanel({ projectId }: Props) {
                     <Button
                       size="sm"
                       variant="outline"
-                      className="h-7 text-[11px] border-red-200 text-red-700 hover:bg-red-50"
-                      onClick={() => setSendModalOpen(true)}
+                      className="h-7 text-[11px] border-gray-300 text-gray-600 hover:bg-gray-50"
+                      onClick={e => { e.stopPropagation(); setSendModalOpen(true); }}
                     >
                       <Send className="w-3 h-3 mr-1" />
                       Request Bid
                     </Button>
+                  )}
+                  {isClickable && (
+                    <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />
                   )}
                 </div>
               );
@@ -277,6 +310,15 @@ export function BidCoveragePanel({ projectId }: Props) {
         open={sendModalOpen}
         projectId={projectId}
         onClose={handleSendModalClose}
+      />
+
+      {/* Bid detail slide-over — opens when GC clicks a trade row with bids */}
+      <BidDetailSlideOver
+        open={!!slideOver}
+        projectId={projectId}
+        bidRequestId={slideOver?.bidRequestId ?? null}
+        tradeLabel={slideOver?.label ?? ''}
+        onClose={() => { setSlideOver(null); void load(true); }}
       />
     </>
   );

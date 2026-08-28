@@ -75,3 +75,4 @@ drizzle/
 
 # symlinked node_modules too (gitignore had dir-only match)
 node_modules
+.jarvis-credentials.json

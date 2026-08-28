@@ -774,6 +774,23 @@ service cloud.firestore {
       allow delete: if isAdmin() || isGC();
     }
 
+    // Expenses — project cost receipts captured by GC/subs. Financial data;
+    // read-blocked for PM (isGCOnly). Stored as a subcollection under each project.
+    // collectionGroup queries (Expenses.tsx) also require this rule.
+    match /projects/{projectId}/expenses/{expenseId} {
+      allow read: if isGCOnly();
+      allow create: if isGC();
+      allow update: if isGCOnly();
+      allow delete: if isAdmin() || isGCOnly();
+    }
+
+    // Collection-group rule for collectionGroup('expenses') queries
+    // (the Expenses.tsx page uses getDocs(collectionGroup(db, 'expenses'))).
+    match /{path=**}/expenses/{expenseId} {
+      allow read: if isGCOnly();
+      allow write: if isGCOnly();
+    }
+
     // Draws (payment milestones) — clients can read their project's draws; GC manages.
     // Draws — financial. Read-blocked for PM (isGCOnly). Designer + the
     // project's client keep read access.

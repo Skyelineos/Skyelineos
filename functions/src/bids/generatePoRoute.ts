@@ -10,7 +10,7 @@
 
 import type { Express } from 'express';
 import * as admin from 'firebase-admin';
-import * as sgMail from '@sendgrid/mail';
+import { Resend } from 'resend';
 import { requireBidsStaff } from '../middleware/rbac';
 import { requireProjectAccess } from '../middleware/requireProjectAccess';
 
@@ -159,14 +159,13 @@ export function registerPoRoutes(
       const appBaseUrl = process.env.APP_BASE_URL || 'https://skyelineos.web.app';
       const poLink = `${appBaseUrl}/subcontractor-portal/purchase-orders/${poId}`;
 
-      // SendGrid send
-      const sgApiKey = process.env.SENDGRID_API_KEY;
-      const fromEmail = process.env.SENDGRID_FROM_EMAIL || 'notifications@skyelinehomes.com';
-      if (sgApiKey) {
-        sgMail.setApiKey(sgApiKey);
-        await sgMail.send({
+      // Resend email send
+      const resendApiKey = process.env.RESEND_API_KEY;
+      if (resendApiKey) {
+        const resend = new Resend(resendApiKey);
+        const { error: resendError } = await resend.emails.send({
+          from: 'Skyeline Homes <tyler@skyelinehomes.com>',
           to: po.vendorEmail,
-          from: { email: fromEmail, name: 'Skyeline Homes' },
           subject: `Purchase Order ${po.poNumber} — ${po.projectName}`,
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -204,8 +203,9 @@ export function registerPoRoutes(
             </div>
           `,
         });
+        if (resendError) throw new Error(resendError.message);
       } else {
-        console.warn('[PO send] SENDGRID_API_KEY not set — email skipped');
+        console.warn('[PO send] RESEND_API_KEY not set — email skipped');
       }
 
       await poRef.update({

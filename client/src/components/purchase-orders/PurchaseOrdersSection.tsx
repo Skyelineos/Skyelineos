@@ -5,6 +5,12 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Eye, FileText, Download, CheckCircle, Clock, Send } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
+import { auth } from '@/lib/firebase';
+
+async function authedFetch(url: string): Promise<Response> {
+  const token = await auth.currentUser?.getIdToken().catch(() => null);
+  return fetch(url, token ? { headers: { Authorization: `Bearer ${token}` } } : {});
+}
 
 interface PurchaseOrder {
   id: string;
@@ -41,7 +47,7 @@ export default function PurchaseOrdersSection({ projectId }: PurchaseOrdersSecti
   const { data: projectPOs = [], isLoading: isLoadingProject, refetch: refetchProject } = useQuery<any>({
     queryKey: ['/api/purchase-orders/project', projectId],
     queryFn: async () => {
-      const response = await fetch(`/api/purchase-orders/project/${projectId}`);
+      const response = await authedFetch(`/api/purchase-orders/project/${projectId}`);
       if (!response.ok) throw new Error('Failed to fetch project purchase orders');
       return response.json();
     }
@@ -51,7 +57,7 @@ export default function PurchaseOrdersSection({ projectId }: PurchaseOrdersSecti
   const { data: allPOs = [], isLoading: isLoadingAll, refetch: refetchAll } = useQuery<any>({
     queryKey: ['/api/purchase-orders'],
     queryFn: async () => {
-      const response = await fetch('/api/purchase-orders');
+      const response = await authedFetch('/api/purchase-orders');
       if (!response.ok) throw new Error('Failed to fetch all purchase orders');
       return response.json();
     },

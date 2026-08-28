@@ -91,7 +91,7 @@ export const AI_ACTIONS: AiActionDef[] = [
 
 export interface AiActionResult {
   ok: boolean;
-  placeholder: true;
+  placeholder: boolean;
   message: string;
 }
 
@@ -102,20 +102,36 @@ export interface AiActionContext {
   moodBoardId?: string;
 }
 
-/**
- * Placeholder runner. Returns a "coming soon" result without calling any model.
- * Swap the body for a fetch() to a future `/api/designer/ai/:action` route.
- */
 export async function runAiAction(
   action: AiActionKey,
-  _ctx: AiActionContext
+  ctx: AiActionContext
 ): Promise<AiActionResult> {
   const def = AI_ACTIONS.find((a) => a.key === action);
-  // Simulate async so callers can show a spinner without special-casing.
-  await new Promise((r) => setTimeout(r, 250));
+
+  const res = await fetch(`/api/designer/ai/${action}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      projectId: ctx.projectId,
+      roomId: ctx.roomId,
+      roomName: ctx.roomName,
+      moodBoardId: ctx.moodBoardId,
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Request failed' }));
+    return {
+      ok: false,
+      placeholder: false,
+      message: err.error || `${def?.label ?? action} failed`,
+    };
+  }
+
+  const data = await res.json();
   return {
     ok: true,
-    placeholder: true,
-    message: `${def?.label ?? action} — AI assistance is coming soon. This action is wired and ready; the model backend isn't connected yet.`,
+    placeholder: false,
+    message: data.result || 'Done.',
   };
 }

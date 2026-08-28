@@ -13,9 +13,10 @@ function getSocket(): Socket {
     
     socket = io(url, {
       path: '/socket.io',
-      transports: ['websocket', 'polling'],
+      // Firebase Hosting doesn't support WebSocket upgrades on the CDN layer.
+      // Polling transport works via HTTP rewrites in firebase.json → api function.
+      transports: ['polling'],
       forceNew: true,
-      // Development mode - no auth token needed due to server bypass
     });
 
     socket.on('connect', () => {

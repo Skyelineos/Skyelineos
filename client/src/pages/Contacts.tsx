@@ -787,7 +787,7 @@ export default function Contacts() {
                 onClick={() => setActiveTab('contacts')}
                 className={
                   activeTab === 'contacts'
-                    ? 'bg-[var(--accent-color)] text-white hover:bg-[var(--accent-color)]/90'
+                    ? 'bg-[#C9A96E] text-white hover:bg-[#B8935A]'
                     : ''
                 }
               >
@@ -800,7 +800,7 @@ export default function Contacts() {
                 onClick={() => setActiveTab('trades')}
                 className={
                   activeTab === 'trades'
-                    ? 'bg-[var(--accent-color)] text-white hover:bg-[var(--accent-color)]/90'
+                    ? 'bg-[#C9A96E] text-white hover:bg-[#B8935A]'
                     : ''
                 }
               >
@@ -845,8 +845,8 @@ export default function Contacts() {
                   onClick={() => setShowAddModal(true)}
                   className="min-w-[120px] min-h-[40px] text-white"
                   style={{
-                    backgroundColor: 'var(--accent-color)',
-                    border: '1px solid var(--accent-color)',
+                    backgroundColor: '#C9A96E',
+                    border: '1px solid #C9A96E',
                   }}
                 >
                   <Plus className="h-4 w-4 mr-2" />
