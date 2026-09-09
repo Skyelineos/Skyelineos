@@ -114,15 +114,15 @@ interface ApInvoice {
 }
 
 interface Summary {
-  grandTotal: number;         // total of all non-rejected invoices
-  outstandingTotal: number;   // unpaid + partial
-  paidThisMonth: number;      // paid this calendar month
-  thisMonthTotal: number;     // all invoices this month
-  pendingCount: number;       // pending_review count
+  grandTotal: number;
+  outstandingTotal: number;
+  paidThisMonth: number;
+  thisMonthTotal: number;
+  pendingCount: number;
   unpaidCount: number;
   paidCount: number;
   topTrade: { trade: string; total: number } | null;
-  byJob: Array<{ job: string; total: number; count: number; byTrade: Record<string, number> }>;
+  byJob: Array<{ job: string; total: number; unpaidTotal: number; paidTotal: number; count: number; unpaidCount: number; paidCount: number; byTrade: Record<string, number> }>;
   byTrade: Array<{ trade: string; total: number; count: number }>;
 }
 
@@ -432,6 +432,9 @@ export default function AccountsPayable() {
   const [projectOptions, setProjectOptions] = useState<ProjectOption[]>([]);
   const projectsLoadedRef = useRef(false);
 
+  // All active projects for By Job tab
+  const [allProjects, setAllProjects] = useState<ProjectOption[]>([]);
+
   // Inline create-job form state
   const [newJobName, setNewJobName] = useState('');
   const [newJobAddress, setNewJobAddress] = useState('');
@@ -455,10 +458,10 @@ export default function AccountsPayable() {
   }, []);
 
   useEffect(() => { loadAll(); }, [loadAll]);
+  useEffect(() => { loadProjects(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Load live project list ────────────────────────────────────────────────
   const loadProjects = useCallback(async () => {
-    if (projectsLoadedRef.current) return;
     try {
       const data = await apiFetch('/api/projects');
       const items: ProjectOption[] = (data || []).map((p: any) => ({
@@ -467,15 +470,14 @@ export default function AccountsPayable() {
         address: p.address || p.location || '',
         status: p.status || '',
       })).filter((p: ProjectOption) => p.name);
-      if (items.length > 0) {
-        setProjectOptions(items);
-        projectsLoadedRef.current = true;
-      } else {
-        // Fallback to hardcoded list if Firestore is empty
-        setProjectOptions(FALLBACK_PROJECTS.map((n) => ({ id: n, name: n })));
-      }
+      const list = items.length > 0 ? items : FALLBACK_PROJECTS.map((n) => ({ id: n, name: n }));
+      setProjectOptions(list);
+      setAllProjects(list);
+      projectsLoadedRef.current = true;
     } catch {
-      setProjectOptions(FALLBACK_PROJECTS.map((n) => ({ id: n, name: n })));
+      const fallback = FALLBACK_PROJECTS.map((n) => ({ id: n, name: n }));
+      setProjectOptions(fallback);
+      setAllProjects(fallback);
     }
   }, []);
 
@@ -576,7 +578,6 @@ export default function AccountsPayable() {
   };
 
   const openEdit = (invoice: ApInvoice, field: 'job' | 'trade') => {
-    if (field === 'job') loadProjects(); // ensure live project list is loaded
     setNewJobName('');
     setNewJobAddress('');
     setEditState({
@@ -1005,56 +1006,147 @@ export default function AccountsPayable() {
               <div className="flex items-center justify-center h-40">
                 <RefreshCw className="h-6 w-6 animate-spin" style={{ color: BRAND_GOLD }} />
               </div>
-            ) : !summary || summary.byJob.length === 0 ? (
-              <div className="text-center py-16 text-muted-foreground text-sm">
-                No job data available
-              </div>
             ) : (
-              <div className="grid gap-4">
-                {summary.byJob.map((jobRow) => {
-                  const tradeEntries = Object.entries(jobRow.byTrade).sort(([, a], [, b]) => b - a);
+              <>
+                {/* Unassigned invoices banner */}
+                {(() => {
+                  const unassigned = invoices.filter(inv => !inv.jobName && inv.status !== 'rejected');
+                  if (!unassigned.length) return null;
                   return (
-                    <Card key={jobRow.job} className="border-0 shadow-sm">
-                      <CardContent className="pt-4 pb-4">
-                        <div className="flex items-start justify-between mb-3">
-                          <div>
-                            <p className="font-heading font-semibold text-base" style={{ color: BRAND_BLACK }}>
-                              {jobRow.job}
-                            </p>
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                              {jobRow.count} invoice{jobRow.count !== 1 ? 's' : ''}
-                            </p>
-                          </div>
-                          <p className="text-xl font-semibold" style={{ color: BRAND_GOLD }}>
-                            {fmt(jobRow.total)}
-                          </p>
-                        </div>
-                        {tradeEntries.length > 0 && (
-                          <div className="space-y-1.5">
-                            {tradeEntries.map(([trade, amount]) => {
-                              const pct = jobRow.total > 0 ? (amount / jobRow.total) * 100 : 0;
-                              return (
-                                <div key={trade} className="flex items-center gap-3">
-                                  <span className="text-xs text-muted-foreground w-36 truncate">{trade}</span>
-                                  <div className="flex-1 bg-gray-100 rounded-full h-1.5 overflow-hidden">
-                                    <div
-                                      className="h-full rounded-full transition-all"
-                                      style={{ width: `${pct}%`, backgroundColor: BRAND_GOLD }}
-                                    />
-                                  </div>
-                                  <span className="text-xs font-medium w-20 text-right" style={{ color: BRAND_BLACK }}>
-                                    {fmt(amount)}
-                                  </span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
+                    <div
+                      className="flex items-center justify-between px-4 py-3 rounded-lg border"
+                      style={{ background: '#fff8f0', borderColor: '#f97316aa' }}
+                    >
+                      <div className="flex items-center gap-2">
+                        <AlertCircle className="h-4 w-4" style={{ color: '#f97316' }} />
+                        <span className="text-sm font-medium" style={{ color: '#7c2d12' }}>
+                          {unassigned.length} invoice{unassigned.length !== 1 ? 's' : ''} not assigned to a job
+                        </span>
+                      </div>
+                      <button
+                        className="text-xs px-3 py-1 rounded border font-medium"
+                        style={{ color: '#f97316', borderColor: '#f97316aa' }}
+                        onClick={() => { setActiveTab('invoices'); setFilterJob(''); }}
+                      >
+                        Review →
+                      </button>
+                    </div>
                   );
-                })}
-              </div>
+                })()}
+
+                {/* All active projects */}
+                <div className="grid gap-3">
+                  {(() => {
+                    // Merge live project list with invoice summary data
+                    const invoiceByJob = Object.fromEntries(
+                      (summary?.byJob || []).map(j => [j.job, j])
+                    );
+                    // Build full list: all projects + any invoice jobs not in project list
+                    const projectNames = new Set(allProjects.map(p => p.name));
+                    const extraJobNames = (summary?.byJob || [])
+                      .filter(j => j.job !== 'Unassigned' && !projectNames.has(j.job))
+                      .map(j => j.job);
+                    const allJobNames = [
+                      ...allProjects.map(p => p.name),
+                      ...extraJobNames,
+                    ];
+
+                    return allJobNames.map((jobName) => {
+                      const jobData = invoiceByJob[jobName];
+                      const unpaid = jobData?.unpaidTotal ?? 0;
+                      const paid   = jobData?.paidTotal ?? 0;
+                      const total  = jobData?.total ?? 0;
+                      const count  = jobData?.count ?? 0;
+                      const proj   = allProjects.find(p => p.name === jobName);
+                      const tradeEntries = Object.entries(jobData?.byTrade || {}).sort(([, a], [, b]) => (b as number) - (a as number));
+                      const hasInvoices  = count > 0;
+
+                      return (
+                        <Card
+                          key={jobName}
+                          className="border-0 shadow-sm"
+                          style={{ opacity: hasInvoices ? 1 : 0.75 }}
+                        >
+                          <CardContent className="pt-4 pb-4">
+                            {/* Header row */}
+                            <div className="flex items-start justify-between mb-2">
+                              <div>
+                                <p className="font-heading font-semibold text-base" style={{ color: BRAND_BLACK }}>
+                                  {jobName}
+                                </p>
+                                {proj?.address && (
+                                  <p className="text-xs text-muted-foreground">{proj.address}</p>
+                                )}
+                                <p className="text-xs text-muted-foreground mt-0.5">
+                                  {hasInvoices
+                                    ? `${count} invoice${count !== 1 ? 's' : ''}`
+                                    : <span className="italic">No invoices yet — accepting bills</span>
+                                  }
+                                </p>
+                              </div>
+                              <div className="text-right">
+                                {hasInvoices ? (
+                                  <>
+                                    <p className="text-xl font-semibold" style={{ color: BRAND_GOLD }}>{fmt(total)}</p>
+                                    <div className="flex items-center gap-2 mt-1 justify-end">
+                                      {unpaid > 0 && (
+                                        <span className="text-xs px-1.5 py-0.5 rounded-full font-medium" style={{ background: '#fee2e2', color: '#991b1b' }}>
+                                          {fmt(unpaid)} unpaid
+                                        </span>
+                                      )}
+                                      {paid > 0 && (
+                                        <span className="text-xs px-1.5 py-0.5 rounded-full font-medium" style={{ background: '#dcfce7', color: '#15803d' }}>
+                                          {fmt(paid)} paid
+                                        </span>
+                                      )}
+                                    </div>
+                                  </>
+                                ) : (
+                                  <span className="text-xs px-2 py-1 rounded-full" style={{ background: '#f3f4f6', color: '#9ca3af' }}>$0.00</span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Trade breakdown bars */}
+                            {tradeEntries.length > 0 && (
+                              <div className="space-y-1.5 mt-3">
+                                {tradeEntries.map(([trade, amount]) => {
+                                  const pct = total > 0 ? ((amount as number) / total) * 100 : 0;
+                                  return (
+                                    <div key={trade} className="flex items-center gap-3">
+                                      <span className="text-xs text-muted-foreground w-32 truncate">{trade}</span>
+                                      <div className="flex-1 bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                                        <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: BRAND_GOLD }} />
+                                      </div>
+                                      <span className="text-xs font-medium w-20 text-right" style={{ color: BRAND_BLACK }}>{fmt(amount as number)}</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+
+                            {/* No-invoice CTA */}
+                            {!hasInvoices && (
+                              <div className="mt-2 pt-2 border-t" style={{ borderColor: 'rgba(0,0,0,0.06)' }}>
+                                <p className="text-xs text-muted-foreground">
+                                  Assign invoices to this job from the{' '}
+                                  <button
+                                    className="underline"
+                                    style={{ color: BRAND_GOLD }}
+                                    onClick={() => { setActiveTab('invoices'); }}
+                                  >
+                                    Invoices tab
+                                  </button>
+                                </p>
+                              </div>
+                            )}
+                          </CardContent>
+                        </Card>
+                      );
+                    });
+                  })()}
+                </div>
+              </>
             )}
           </div>
         )}

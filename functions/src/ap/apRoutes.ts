@@ -337,7 +337,7 @@ export function registerApRoutes(
         .where('status', 'in', ['auto_approved', 'approved', 'pending_review'])
         .get();
 
-      const byJob: Record<string, { total: number; count: number; byTrade: Record<string, number> }> = {};
+      const byJob: Record<string, { total: number; unpaidTotal: number; paidTotal: number; count: number; unpaidCount: number; paidCount: number; byTrade: Record<string, number> }> = {};
       const byTrade: Record<string, { total: number; count: number }> = {};
       let grandTotal = 0;
       let outstandingTotal = 0;  // unpaid + partial
@@ -370,10 +370,17 @@ export function registerApRoutes(
         }
 
         // By job
-        if (!byJob[job]) byJob[job] = { total: 0, count: 0, byTrade: {} };
+        if (!byJob[job]) byJob[job] = { total: 0, unpaidTotal: 0, paidTotal: 0, count: 0, unpaidCount: 0, paidCount: 0, byTrade: {} };
         byJob[job].total += amt;
         byJob[job].count += 1;
         byJob[job].byTrade[trade] = (byJob[job].byTrade[trade] || 0) + amt;
+        if (paymentStatus === 'paid') {
+          byJob[job].paidTotal += amt;
+          byJob[job].paidCount += 1;
+        } else {
+          byJob[job].unpaidTotal += amt;
+          byJob[job].unpaidCount += 1;
+        }
 
         // By trade
         if (!byTrade[trade]) byTrade[trade] = { total: 0, count: 0 };
@@ -394,7 +401,7 @@ export function registerApRoutes(
         topTrade: topTrade ? { trade: topTrade[0], total: topTrade[1].total } : null,
         byJob: Object.entries(byJob)
           .map(([job, v]) => ({ job, ...v }))
-          .sort((a, b) => b.total - a.total),
+          .sort((a, b) => b.unpaidTotal - a.unpaidTotal),
         byTrade: Object.entries(byTrade)
           .map(([trade, v]) => ({ trade, ...v }))
           .sort((a, b) => b.total - a.total),
