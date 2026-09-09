@@ -101,6 +101,9 @@ interface ApInvoice {
   trade: string;
   confidence: 'high' | 'medium' | 'low';
   status: 'auto_approved' | 'pending_review' | 'approved' | 'rejected';
+  paymentStatus: 'unpaid' | 'paid' | 'partial' | 'unknown';
+  paidDate: string | null;
+  paidAmount: number | null;
   aiNotes: string;
   subject: string;
   fromEmail: string;
@@ -111,9 +114,13 @@ interface ApInvoice {
 }
 
 interface Summary {
-  grandTotal: number;
-  thisMonthTotal: number;
-  pendingCount: number;
+  grandTotal: number;         // total of all non-rejected invoices
+  outstandingTotal: number;   // unpaid + partial
+  paidThisMonth: number;      // paid this calendar month
+  thisMonthTotal: number;     // all invoices this month
+  pendingCount: number;       // pending_review count
+  unpaidCount: number;
+  paidCount: number;
   topTrade: { trade: string; total: number } | null;
   byJob: Array<{ job: string; total: number; count: number; byTrade: Record<string, number> }>;
   byTrade: Array<{ trade: string; total: number; count: number }>;
@@ -175,6 +182,51 @@ function fmtDate(d: string | null | undefined): string {
 
 // ── Status badge ─────────────────────────────────────────────────────────────
 
+// ── Payment status badge — THE most important visual ─────────────────────────
+function PaymentBadge({
+  paymentStatus,
+  amount,
+  paidDate,
+}: {
+  paymentStatus: string;
+  amount: number | null;
+  paidDate: string | null;
+}) {
+  if (paymentStatus === 'paid') {
+    return (
+      <span
+        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
+        style={{ background: '#dcfce7', color: '#15803d' }}
+        title={paidDate ? `Paid ${paidDate}` : 'Paid'}
+      >
+        <CheckCircle2 className="h-3.5 w-3.5" />
+        PAID
+      </span>
+    );
+  }
+  if (paymentStatus === 'partial') {
+    return (
+      <span
+        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
+        style={{ background: '#fef9c3', color: '#854d0e' }}
+      >
+        <Clock className="h-3.5 w-3.5" />
+        PARTIAL
+      </span>
+    );
+  }
+  // unpaid / unknown
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
+      style={{ background: '#fee2e2', color: '#991b1b' }}
+    >
+      <AlertCircle className="h-3.5 w-3.5" />
+      UNPAID{amount ? ` · ${fmt(amount)}` : ''}
+    </span>
+  );
+}
+
 const STATUS_CONFIG: Record<string, { label: string; bg: string; color: string; icon: any }> = {
   auto_approved: { label: 'Auto-approved', bg: '#d1fae5', color: '#065f46', icon: CheckCircle2 },
   approved:      { label: 'Approved',      bg: '#d1fae5', color: '#065f46', icon: CheckCircle2 },
@@ -214,32 +266,34 @@ function SummaryCard({
   subtitle,
   icon: Icon,
   highlight,
+  highlightColor,
+  highlightText,
 }: {
   title: string;
   value: string;
   subtitle?: string;
   icon: any;
   highlight?: boolean;
+  highlightColor?: string;
+  highlightText?: string;
 }) {
+  const bgColor = highlightColor ?? (highlight ? 'rgba(201,169,110,0.08)' : '#fff');
+  const textColor = highlightText ?? (highlight ? BRAND_GOLD : BRAND_BLACK);
+  const iconBg = highlightColor ? highlightColor : (highlight ? 'rgba(201,169,110,0.12)' : '#f9fafb');
+  const iconColor = highlightText ?? (highlight ? BRAND_GOLD : '#6b7280');
   return (
-    <Card className="border-0 shadow-sm" style={{ backgroundColor: '#fff' }}>
+    <Card className="border-0 shadow-sm" style={{ backgroundColor: bgColor }}>
       <CardContent className="pt-5 pb-4">
         <div className="flex items-start justify-between">
           <div>
-            <p className="text-xs uppercase tracking-wider text-muted-foreground font-sans">{title}</p>
-            <p
-              className="text-2xl font-semibold mt-1 font-heading"
-              style={{ color: highlight ? BRAND_GOLD : BRAND_BLACK }}
-            >
+            <p className="text-xs uppercase tracking-wider font-sans" style={{ color: highlightText ? highlightText + 'bb' : undefined }}>{title}</p>
+            <p className="text-2xl font-semibold mt-1 font-heading" style={{ color: textColor }}>
               {value}
             </p>
-            {subtitle && <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>}
+            {subtitle && <p className="text-xs mt-0.5" style={{ color: highlightText ? highlightText + '99' : '#6b7280' }}>{subtitle}</p>}
           </div>
-          <div
-            className="p-2.5 rounded-lg"
-            style={{ backgroundColor: highlight ? 'rgba(201,169,110,0.1)' : '#f9fafb' }}
-          >
-            <Icon className="h-5 w-5" style={{ color: highlight ? BRAND_GOLD : '#6b7280' }} />
+          <div className="p-2.5 rounded-lg" style={{ backgroundColor: iconBg }}>
+            <Icon className="h-5 w-5" style={{ color: iconColor }} />
           </div>
         </div>
       </CardContent>
@@ -486,6 +540,26 @@ export default function AccountsPayable() {
   };
 
   // ── Invoice update ─────────────────────────────────────────────────────────
+  const handlePaymentStatus = async (id: string, paymentStatus: 'paid' | 'unpaid' | 'partial') => {
+    try {
+      const paidDate = paymentStatus === 'paid' ? new Date().toISOString().slice(0, 10) : null;
+      await apiFetch(`/api/ap/invoices/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ paymentStatus, paidDate }),
+      });
+      setInvoices((prev) =>
+        prev.map((inv) =>
+          inv.id === id ? { ...inv, paymentStatus, paidDate } : inv,
+        ),
+      );
+      toast({ title: paymentStatus === 'paid' ? '✅ Marked as paid' : 'Payment status updated' });
+      // Refresh summary totals
+      apiFetch('/api/ap/summary').then(setSummary).catch(() => {});
+    } catch (e: any) {
+      toast({ title: 'Update failed', description: e.message, variant: 'destructive' });
+    }
+  };
+
   const handleStatusChange = async (id: string, newStatus: string) => {
     try {
       await apiFetch(`/api/ap/invoices/${id}`, {
@@ -605,19 +679,26 @@ export default function AccountsPayable() {
 
         {/* ── Summary cards ─────────────────────────────────────────────────── */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Card 1: Unpaid — THE number that matters most */}
           <SummaryCard
-            title="Total Outstanding"
-            value={fmt(summary?.grandTotal ?? null)}
-            subtitle="All active invoices"
-            icon={DollarSign}
+            title="Unpaid"
+            value={fmt(summary?.outstandingTotal ?? null)}
+            subtitle={summary?.unpaidCount != null ? `${summary.unpaidCount} invoice${summary.unpaidCount !== 1 ? 's' : ''} outstanding` : 'outstanding'}
+            icon={AlertCircle}
             highlight
+            highlightColor="#fee2e2"
+            highlightText="#991b1b"
           />
+          {/* Card 2: Paid this month */}
           <SummaryCard
-            title="This Month"
-            value={fmt(summary?.thisMonthTotal ?? null)}
-            subtitle={new Date().toLocaleString('default', { month: 'long', year: 'numeric' })}
-            icon={Receipt}
+            title="Paid This Month"
+            value={fmt(summary?.paidThisMonth ?? null)}
+            subtitle={summary?.paidCount != null ? `${summary.paidCount} paid` : undefined}
+            icon={CheckCircle2}
+            highlightColor="#dcfce7"
+            highlightText="#15803d"
           />
+          {/* Card 3: Pending review */}
           <SummaryCard
             title="Pending Review"
             value={summary?.pendingCount != null ? String(summary.pendingCount) : '—'}
@@ -625,11 +706,12 @@ export default function AccountsPayable() {
             icon={Clock}
             highlight={!!summary?.pendingCount}
           />
+          {/* Card 4: Total invoiced this month */}
           <SummaryCard
-            title="Top Trade"
-            value={summary?.topTrade?.trade || '—'}
-            subtitle={summary?.topTrade ? fmt(summary.topTrade.total) : undefined}
-            icon={Hammer}
+            title="Total Invoiced"
+            value={fmt(summary?.grandTotal ?? null)}
+            subtitle={new Date().toLocaleString('default', { month: 'long', year: 'numeric' })}
+            icon={DollarSign}
           />
         </div>
 
@@ -742,7 +824,7 @@ export default function AccountsPayable() {
                         className="text-left"
                         style={{ borderBottom: '1px solid rgba(201,169,110,0.15)', background: '#fafaf9' }}
                       >
-                        {['Vendor', 'Job', 'Trade', 'Amount', 'Invoice Date', 'Due Date', 'AI', 'Status', 'Actions'].map((h) => (
+                        {['Payment', 'Vendor', 'Job', 'Trade', 'Amount', 'Due Date', 'Review', 'Actions'].map((h) => (
                           <th
                             key={h}
                             className="px-4 py-3 text-xs uppercase tracking-wider font-medium"
@@ -762,12 +844,43 @@ export default function AccountsPayable() {
                             style={{ borderColor: 'rgba(0,0,0,0.06)' }}
                             onClick={() => setExpandedId(expandedId === inv.id ? null : inv.id)}
                           >
+                            {/* PAYMENT STATUS — leftmost, most prominent */}
+                            <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                              <div className="flex flex-col gap-1">
+                                <PaymentBadge
+                                  paymentStatus={inv.paymentStatus || 'unpaid'}
+                                  amount={inv.amount}
+                                  paidDate={inv.paidDate}
+                                />
+                                {(inv.paymentStatus !== 'paid') && (
+                                  <button
+                                    className="text-xs px-2 py-0.5 rounded border font-medium transition-colors hover:bg-green-50"
+                                    style={{ color: '#15803d', borderColor: '#bbf7d0' }}
+                                    onClick={() => handlePaymentStatus(inv.id, 'paid')}
+                                  >
+                                    ✓ Mark Paid
+                                  </button>
+                                )}
+                                {(inv.paymentStatus === 'paid') && (
+                                  <button
+                                    className="text-xs text-gray-400 hover:text-red-500 transition-colors"
+                                    onClick={() => handlePaymentStatus(inv.id, 'unpaid')}
+                                  >
+                                    Undo
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* VENDOR */}
                             <td className="px-4 py-3 font-medium" style={{ color: BRAND_BLACK }}>
                               <div>{inv.vendor}</div>
-                              <div className="text-xs text-muted-foreground truncate max-w-[160px]">
+                              <div className="text-xs text-muted-foreground truncate max-w-[140px]">
                                 {inv.fromEmail}
                               </div>
                             </td>
+
+                            {/* JOB */}
                             <td className="px-4 py-3">
                               <button
                                 className="text-left hover:underline text-xs"
@@ -778,6 +891,8 @@ export default function AccountsPayable() {
                                 <Edit2 className="h-3 w-3 inline ml-1 opacity-50" />
                               </button>
                             </td>
+
+                            {/* TRADE */}
                             <td className="px-4 py-3">
                               <button
                                 className="text-left hover:underline text-xs"
@@ -788,21 +903,35 @@ export default function AccountsPayable() {
                                 <Edit2 className="h-3 w-3 inline ml-1 opacity-50" />
                               </button>
                             </td>
+
+                            {/* AMOUNT */}
                             <td className="px-4 py-3 font-semibold" style={{ color: BRAND_GOLD }}>
                               {fmt(inv.amount)}
                             </td>
-                            <td className="px-4 py-3 text-xs text-muted-foreground">
-                              {fmtDate(inv.invoiceDate)}
+
+                            {/* DUE DATE — highlight overdue */}
+                            <td className="px-4 py-3 text-xs">
+                              {inv.dueDate ? (
+                                <span
+                                  style={{
+                                    color: (inv.paymentStatus !== 'paid' && inv.dueDate < new Date().toISOString().slice(0, 10))
+                                      ? '#dc2626'
+                                      : '#6b7280',
+                                    fontWeight: (inv.paymentStatus !== 'paid' && inv.dueDate < new Date().toISOString().slice(0, 10)) ? 600 : 400,
+                                  }}
+                                >
+                                  {fmtDate(inv.dueDate)}
+                                  {(inv.paymentStatus !== 'paid' && inv.dueDate < new Date().toISOString().slice(0, 10)) && ' ⚠️'}
+                                </span>
+                              ) : <span className="text-muted-foreground">—</span>}
                             </td>
-                            <td className="px-4 py-3 text-xs text-muted-foreground">
-                              {fmtDate(inv.dueDate)}
-                            </td>
-                            <td className="px-4 py-3">
-                              <ConfidenceDot confidence={inv.confidence} />
-                            </td>
+
+                            {/* REVIEW STATUS */}
                             <td className="px-4 py-3">
                               <StatusBadge status={inv.status} />
                             </td>
+
+                            {/* ACTIONS */}
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                                 {(inv.status === 'pending_review') && (
@@ -838,7 +967,7 @@ export default function AccountsPayable() {
                           </tr>
                           {expandedId === inv.id && (
                             <tr key={`${inv.id}-detail`}>
-                              <td colSpan={9} className="p-0">
+                              <td colSpan={8} className="p-0">
                                 <InvoiceRowDetail invoice={inv} />
                               </td>
                             </tr>

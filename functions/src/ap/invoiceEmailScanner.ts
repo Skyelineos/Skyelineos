@@ -101,6 +101,9 @@ export interface ApInvoice {
   trade: string;
   confidence: 'high' | 'medium' | 'low';
   status: 'auto_approved' | 'pending_review' | 'approved' | 'rejected';
+  paymentStatus: 'unpaid' | 'paid' | 'partial';
+  paidDate: string | null;
+  paidAmount: number | null;
   aiNotes: string;
   subject: string;
   fromEmail: string;
@@ -558,6 +561,9 @@ export async function scanInvoices(
         trade: classification.trade,
         confidence: classification.confidence,
         status,
+        paymentStatus: 'unpaid',   // tracked separately from review status
+        paidDate: null,
+        paidAmount: null,
         aiNotes: classification.notes,
         subject,
         fromEmail,

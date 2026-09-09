@@ -120,9 +120,8 @@ export function registerApRoutes(
   // ── PATCH /api/ap/invoices/:id — update job / trade / status ─────────────
   app.patch('/api/ap/invoices/:id', requireApStaff, async (req: any, res: any) => {
     const { id } = req.params;
-    const { jobName, trade, status, notes } = req.body || {};
+    const { jobName, trade, status, notes, paymentStatus, paidDate, paidAmount } = req.body || {};
 
-    const allowed = ['jobName', 'trade', 'status', 'aiNotes'];
     const patch: Record<string, any> = { updatedAt: admin.firestore.FieldValue.serverTimestamp() };
 
     if (jobName !== undefined) patch.jobName = jobName || null;
@@ -139,6 +138,16 @@ export function registerApRoutes(
       }
     }
     if (notes !== undefined) patch.aiNotes = notes;
+    // Payment status (tracked separately from review status)
+    if (paymentStatus !== undefined) {
+      const validPayment = ['paid', 'unpaid', 'partial'];
+      if (!validPayment.includes(paymentStatus)) {
+        return res.status(400).json({ error: `Invalid paymentStatus: ${paymentStatus}` });
+      }
+      patch.paymentStatus = paymentStatus;
+      patch.paidDate = paidDate || null;
+      patch.paidAmount = paidAmount || null;
+    }
 
     if (Object.keys(patch).length <= 1) {
       return res.status(400).json({ error: 'Nothing to update' });
@@ -167,20 +176,34 @@ export function registerApRoutes(
       const byJob: Record<string, { total: number; count: number; byTrade: Record<string, number> }> = {};
       const byTrade: Record<string, { total: number; count: number }> = {};
       let grandTotal = 0;
+      let outstandingTotal = 0;  // unpaid + partial
+      let paidThisMonth = 0;
+      let thisMonthTotal = 0;
       let pendingCount = 0;
+      let unpaidCount = 0;
+      let paidCount = 0;
       const now = new Date();
       const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-      let thisMonthTotal = 0;
 
       for (const d of snap.docs) {
         const inv = d.data() as any;
         const amt = Number(inv.amount) || 0;
         const job = inv.jobName || 'Unassigned';
         const trade = inv.trade || 'Other';
+        const paymentStatus = inv.paymentStatus || 'unpaid';
 
         grandTotal += amt;
         if (inv.invoiceDate?.startsWith(currentMonth)) thisMonthTotal += amt;
         if (inv.status === 'pending_review') pendingCount += 1;
+
+        // Payment tracking
+        if (paymentStatus === 'paid') {
+          paidCount += 1;
+          if (inv.paidDate?.startsWith(currentMonth)) paidThisMonth += amt;
+        } else {
+          unpaidCount += 1;
+          outstandingTotal += amt;
+        }
 
         // By job
         if (!byJob[job]) byJob[job] = { total: 0, count: 0, byTrade: {} };
@@ -194,13 +217,16 @@ export function registerApRoutes(
         byTrade[trade].count += 1;
       }
 
-      // Top trade
       const topTrade = Object.entries(byTrade).sort(([, a], [, b]) => b.total - a.total)[0];
 
       return res.json({
         grandTotal,
+        outstandingTotal,
+        paidThisMonth,
         thisMonthTotal,
         pendingCount,
+        unpaidCount,
+        paidCount,
         topTrade: topTrade ? { trade: topTrade[0], total: topTrade[1].total } : null,
         byJob: Object.entries(byJob)
           .map(([job, v]) => ({ job, ...v }))
