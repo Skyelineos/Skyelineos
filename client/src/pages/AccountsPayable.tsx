@@ -666,7 +666,7 @@ export default function AccountsPayable() {
               Accounts Payable
             </h1>
             <p className="text-sm text-muted-foreground mt-0.5">
-              Email-scanned vendor invoices · AI-classified with Claude
+              Auto-scanned from Gmail · PDF amounts extracted · keyword-classified
             </p>
           </div>
           <div className="flex items-center gap-2">
