@@ -102,20 +102,15 @@ export function registerApRoutes(
   // ── POST /api/ap/scan — manual trigger ────────────────────────────────────
   // Admin only. Triggers the same Gmail scan logic the scheduled function uses.
   app.post('/api/ap/scan', requireApAdmin, async (req: any, res: any) => {
-    const anthropicKey = process.env.ANTHROPIC_API_KEY;
     const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN;
     const telegramChatId = process.env.TELEGRAM_CHAT_ID;
 
-    if (!anthropicKey) {
-      return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
-    }
     if (!telegramBotToken || !telegramChatId) {
       return res.status(500).json({ error: 'Telegram credentials not configured' });
     }
 
     try {
       const result = await scanInvoices(db, {
-        anthropicKey,
         telegramBotToken,
         telegramChatId,
       });

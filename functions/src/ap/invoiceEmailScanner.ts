@@ -17,14 +17,14 @@ import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { defineSecret } from 'firebase-functions/params';
 import * as admin from 'firebase-admin';
 import { google } from 'googleapis';
-import Anthropic from '@anthropic-ai/sdk';
+// Anthropic import removed — scanner is now zero-token (uses deterministic classifyInvoice)
 import { getAuthorizedClient } from '../ingestionLab/googleClient';
 import { extractInvoiceFromStoragePath } from './pdfExtractor';
+import { classifyInvoice } from './invoiceClassifier';
 
 // admin.initializeApp() is called in index.ts — do not call here
 
 // ── Secret refs ──────────────────────────────────────────────────────────────
-const ANTHROPIC_API_KEY = defineSecret('ANTHROPIC_API_KEY');
 const TELEGRAM_BOT_TOKEN = defineSecret('TELEGRAM_BOT_TOKEN');
 const TELEGRAM_CHAT_ID = defineSecret('TELEGRAM_CHAT_ID');
 const GOOGLE_CLIENT_ID_SECRET = defineSecret('GOOGLE_CLIENT_ID');
@@ -130,103 +130,7 @@ interface AiClassification {
   notes: string;
 }
 
-const SYSTEM_PROMPT = `You are an AP (Accounts Payable) assistant for Skyeline Homes, a custom luxury home builder in Colorado.
-Analyze vendor emails to extract invoice/billing information. Return ONLY valid JSON.`;
-
-async function classifyWithClaude(
-  anthropicKey: string,
-  emailData: {
-    fromName: string;
-    fromEmail: string;
-    subject: string;
-    date: string;
-    bodySnippet: string;
-    attachmentFilenames: string[];
-  },
-  liveProjects: string[] = [],
-): Promise<AiClassification> {
-  const client = new Anthropic({ apiKey: anthropicKey });
-
-  // Prefer live projects from Firestore; fall back to hardcoded list
-  const projectList = (liveProjects.length > 0 ? liveProjects : KNOWN_PROJECTS).join(', ');
-  const tradeList = VALID_TRADES.join(', ');
-
-  const prompt = `Analyze this vendor email and extract AP invoice data as JSON.
-
-Email Details:
-- From: ${emailData.fromName} <${emailData.fromEmail}>
-- Subject: ${emailData.subject}
-- Date: ${emailData.date}
-- Attachments: ${emailData.attachmentFilenames.length > 0 ? emailData.attachmentFilenames.join(', ') : 'None'}
-
-Email Body (first 3000 chars):
-${emailData.bodySnippet}
-
-Known Skyeline projects: ${projectList}
-
-Return ONLY this exact JSON (no markdown, no prose):
-{
-  "vendor": "company or person name sending this invoice",
-  "amount": <total dollar amount as number, or null>,
-  "invoiceDate": "<YYYY-MM-DD or null>",
-  "dueDate": "<YYYY-MM-DD or null>",
-  "jobName": "<one of the known projects if mentioned/implied, or null>",
-  "trade": "<best matching trade from: ${tradeList}>",
-  "confidence": "<high if >85% confident in all fields, medium if 60-85%, low if <60%>",
-  "notes": "<one sentence explaining your reasoning and any uncertainty>"
-}`;
-
-  let raw: string;
-  try {
-    const resp = await client.messages.create({
-      model: 'claude-haiku-3-5',
-      max_tokens: 512,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: prompt }],
-    });
-    const textBlock = resp.content.find((b: any) => b.type === 'text') as any;
-    raw = textBlock?.text?.trim() || '{}';
-    if (raw.startsWith('```')) {
-      raw = raw.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '');
-    }
-  } catch (e: any) {
-    console.error('[apScan] Claude error:', e?.message);
-    return {
-      vendor: emailData.fromName || emailData.fromEmail,
-      amount: null,
-      invoiceDate: null,
-      dueDate: null,
-      jobName: null,
-      trade: 'Other',
-      confidence: 'low',
-      notes: `Claude API error: ${e?.message}`,
-    };
-  }
-
-  try {
-    const parsed = JSON.parse(raw) as AiClassification;
-    // Validate and sanitize
-    parsed.confidence = (['high', 'medium', 'low'] as const).includes(parsed.confidence as any)
-      ? parsed.confidence
-      : 'low';
-    parsed.trade = VALID_TRADES.includes(parsed.trade) ? parsed.trade : 'Other';
-    parsed.vendor = parsed.vendor || emailData.fromName || emailData.fromEmail;
-    parsed.notes = parsed.notes || '';
-    return parsed;
-  } catch (e: any) {
-    console.error('[apScan] JSON parse error:', e?.message, 'raw:', raw.slice(0, 200));
-    return {
-      vendor: emailData.fromName || emailData.fromEmail,
-      amount: null,
-      invoiceDate: null,
-      dueDate: null,
-      jobName: null,
-      trade: 'Other',
-      confidence: 'low',
-      notes: 'Could not parse AI response',
-    };
-  }
-}
+// classifyWithClaude removed — replaced by deterministic classifyInvoice (zero tokens)
 
 // ── Telegram notification ─────────────────────────────────────────────────────
 async function sendTelegramInvoicePrompt(
@@ -392,7 +296,6 @@ export interface ScanResult {
 export async function scanInvoices(
   db: FirebaseFirestore.Firestore,
   options: {
-    anthropicKey: string;
     telegramBotToken: string;
     telegramChatId: string;
   },
@@ -552,36 +455,36 @@ export async function scanInvoices(
             dueDate: extracted.dueDate,
             vendor: extracted.vendor,
             confidence: extracted.confidence,
-          };
+            rawText: extracted.rawText,  // passed to classifier for job matching
+          } as any;
           if (extracted.amount) {
             console.warn(`[apScan] PDF text extracted amount $${extracted.amount} from ${firstPdf}`);
           }
         }
       }
 
-      // AI classification (email body context for job/trade matching)
-      const classification = await classifyWithClaude(options.anthropicKey, {
+      // ── Deterministic classification — zero tokens, zero AI cost ──────────────────
+      const classified = classifyInvoice({
         fromName,
         fromEmail,
         subject,
-        date: dateHeader,
-        // If PDF OCR got the amount, tell Claude so it can focus on job/trade
-        bodySnippet: pdfOcr?.amount
-          ? `[PDF extracted: amount=$${pdfOcr.amount}]\n${bodyText.slice(0, 2500)}`
-          : bodyText.slice(0, 3000),
+        bodySnippet: bodyText.slice(0, 1500),
         attachmentFilenames,
-      }, liveProjects);
+        pdfText: pdfOcr ? (pdfOcr as any).rawText || '' : '',
+        knownProjects: liveProjects,
+      });
 
-      // ── Prefer PDF OCR values over text-only extraction ────────────────────────
-      if (pdfOcr) {
-        if (pdfOcr.amount !== null)      classification.amount      = pdfOcr.amount;
-        if (pdfOcr.invoiceDate !== null) classification.invoiceDate = pdfOcr.invoiceDate;
-        if (pdfOcr.dueDate !== null)     classification.dueDate     = pdfOcr.dueDate;
-        // Upgrade confidence if PDF OCR is clear
-        if (pdfOcr.confidence === 'high' && classification.confidence === 'low') {
-          classification.confidence = 'medium';
-        }
-      }
+      // Merge: PDF extractor wins on amounts/dates; classifier wins on vendor/trade/job
+      const classification: AiClassification = {
+        vendor:      classified.vendor,
+        amount:      pdfOcr?.amount      ?? null,
+        invoiceDate: pdfOcr?.invoiceDate ?? null,
+        dueDate:     pdfOcr?.dueDate     ?? null,
+        jobName:     classified.jobName,
+        trade:       classified.trade,
+        confidence:  classified.confidence,
+        notes:       classified.notes,
+      };
 
       const status: ApInvoice['status'] =
         classification.confidence === 'high' ? 'auto_approved' : 'pending_review';
@@ -652,7 +555,6 @@ export const scheduledApScan = onSchedule(
     schedule: '*/30 * * * *',
     timeZone: 'America/Denver',
     secrets: [
-      ANTHROPIC_API_KEY,
       TELEGRAM_BOT_TOKEN,
       TELEGRAM_CHAT_ID,
       GOOGLE_CLIENT_ID_SECRET,
@@ -664,7 +566,6 @@ export const scheduledApScan = onSchedule(
   async () => {
     const db = admin.firestore();
     await scanInvoices(db, {
-      anthropicKey: ANTHROPIC_API_KEY.value(),
       telegramBotToken: TELEGRAM_BOT_TOKEN.value(),
       telegramChatId: TELEGRAM_CHAT_ID.value(),
     });
