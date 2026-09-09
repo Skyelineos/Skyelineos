@@ -16,6 +16,8 @@ import { registerDailyWorkflowRoutes } from './tasks/dailyWorkflowRoute';
 import { registerEstimateRoutes }   from './estimates/estimateRoutes';
 import { registerExpenseRoutes }    from './expenses/expenseRoutes';
 import { registerDrawRoutes }       from './expenses/drawRoutes';
+import { registerApPublicRoutes }   from './ap/apRoutes';
+import { registerApRoutes }         from './ap/apRoutes';
 
 // Security middleware — added 2026-07-05 to close IDOR + RBAC gaps flagged in
 // security-audit-2026-07-05.md §5 + §6. The legacy /api/** block below only had
@@ -117,6 +119,7 @@ registerVoiceRoutes(app, admin.firestore());
 registerBidTokenEndpoint(app, admin.firestore());
 registerLeadIntakeRoute(app, admin.firestore());
 registerQboWebhookRoutes(app, admin.firestore()); // POST /api/qbo/webhook + GET /api/qbo/sync-customers
+registerApPublicRoutes(app, admin.firestore()); // POST /api/ap/telegram-callback (no auth)
 
 // /api/health stays public (liveness probe).
 app.get('/api/health', async (_req: any, res: any) => {
@@ -198,6 +201,7 @@ registerEstimateRoutes(app, db);     // POST /api/estimates/:id/{send-to-client,
 registerExpenseRoutes(app, db);      // /api/expenses/{capture,:id,:id/reconcile} + /api/projects/:id/expenses
 registerDrawRoutes(app, db);
 registerFeedbackRoutes(app);         // POST /api/feedback (authenticated, with optional screenshot upload)
+registerApRoutes(app, db);          // /api/ap/{scan,invoices,:id,summary}
 
 // Real Firestore API endpoints
 // Global project list — staff only. Clients/subs use per-project endpoints.
@@ -2893,6 +2897,11 @@ export { oneShotPhaseMigration } from './projects/phaseMigration';
 //    create a client "upload a photo" task; complete it when they upload; notify
 //    the designers throughout. (Clients can't write projectTasks directly.)
 export { recommendationTaskBridge } from './projects/recommendationTaskBridge';
+
+// ── AP Invoice Scanner: scheduled every 30 minutes ────────────────────────────
+// Scans Gmail for invoice emails, classifies with Claude Haiku, stores in
+// ap_invoices Firestore collection, and sends Telegram review prompts.
+// scheduledApScan removed — OpenClaw cron handles the 30-min trigger instead (no IAM issues)
 
 
 // (qboOAuth standalone removed — routes folded into the api Express app

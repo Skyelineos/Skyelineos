@@ -76,6 +76,7 @@ const GuestFeedback = lazy(() => import('@/pages/GuestFeedback'));
 const SmsPrivacy = lazy(() => import('@/pages/SmsPrivacy'));
 const SmsTerms = lazy(() => import('@/pages/SmsTerms'));
 const Bills = lazy(() => import('@/pages/Bills'));
+const AccountsPayable = lazy(() => import('@/pages/AccountsPayable'));
 // MVP AUDIT: moved to future-features/pages/ContentStudio.tsx
 // const ContentStudio = lazy(() => import('@/pages/ContentStudio'));
 const SiteLog = lazy(() => import('@/pages/SiteLog'));
@@ -430,6 +431,16 @@ function Router() {
           <RoleGuard allowedRoles={['admin', 'gc']} showNotAuthorized>
             <Suspense fallback={<MinimalSpinner title="Loading Bills" />}>
               <Bills />
+            </Suspense>
+          </RoleGuard>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/ap">
+        <ProtectedRoute>
+          <RoleGuard allowedRoles={['admin', 'gc']} showNotAuthorized>
+            <Suspense fallback={<MinimalSpinner title="Loading Accounts Payable" />}>
+              <AccountsPayable />
             </Suspense>
           </RoleGuard>
         </ProtectedRoute>
