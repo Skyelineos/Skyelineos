@@ -29,6 +29,62 @@ const TELEGRAM_CHAT_ID = defineSecret('TELEGRAM_CHAT_ID');
 const GOOGLE_CLIENT_ID_SECRET = defineSecret('GOOGLE_CLIENT_ID');
 const GOOGLE_CLIENT_SECRET_SECRET = defineSecret('GOOGLE_CLIENT_SECRET');
 
+// ── PDF OCR — extract amount + dates directly from the invoice PDF ────────────
+// Uses Claude vision (same as analyze-bill endpoint). Called after PDF is saved
+// to Storage. Returns extracted fields to override text-only classification.
+async function ocrFirstPdf(
+  anthropicKey: string,
+  storagePath: string,
+  storage: admin.storage.Storage,
+): Promise<{ amount: number | null; invoiceDate: string | null; dueDate: string | null; vendor: string | null; confidence: 'high' | 'medium' | 'low' } | null> {
+  try {
+    const bucket = storage.bucket();
+    const file = bucket.file(storagePath);
+    const [exists] = await file.exists();
+    if (!exists) return null;
+    const [buffer] = await file.download();
+    const [meta] = await file.getMetadata();
+    const mime = (meta.contentType as string) || 'application/pdf';
+
+    const supported = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    if (!supported.includes(mime)) return null;
+
+    const client = new Anthropic({ apiKey: anthropicKey });
+    const isPdf = mime === 'application/pdf';
+    const contentBlock: any = isPdf
+      ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: buffer.toString('base64') } }
+      : { type: 'image',    source: { type: 'base64', media_type: mime,               data: buffer.toString('base64') } };
+
+    const resp = await client.messages.create({
+      // PDFs require Sonnet (document type not supported by Haiku)
+      model: isPdf ? 'claude-sonnet-4-6' : 'claude-haiku-3-5',
+      max_tokens: 512,
+      system: 'You are an expert at reading construction invoices. Extract key financial data as JSON only.',
+      messages: [{
+        role: 'user',
+        content: [
+          contentBlock,
+          { type: 'text', text: 'Extract from this invoice document. Return ONLY valid JSON, no markdown:\n{"amount": <total due as number or null>, "invoiceDate": "YYYY-MM-DD or null", "dueDate": "YYYY-MM-DD or null", "vendor": "company name or null", "confidence": "high|medium|low"}' },
+        ],
+      }],
+    });
+
+    const text = (resp.content.find((b: any) => b.type === 'text') as any)?.text?.trim() || '{}';
+    const cleaned = text.startsWith('```') ? text.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '') : text;
+    const parsed = JSON.parse(cleaned);
+    return {
+      amount: typeof parsed.amount === 'number' ? parsed.amount : null,
+      invoiceDate: parsed.invoiceDate || null,
+      dueDate: parsed.dueDate || null,
+      vendor: parsed.vendor || null,
+      confidence: parsed.confidence || 'medium',
+    };
+  } catch (e: any) {
+    console.warn('[apScan] PDF OCR failed:', e?.message);
+    return null;
+  }
+}
+
 // ── Constants ─────────────────────────────────────────────────────────────────
 export const KNOWN_PROJECTS = [
   'Maple Manor',
@@ -464,7 +520,7 @@ export async function scanInvoices(
   result.scannedCount = messageIds.length;
   console.log(`[apScan] Found ${messageIds.length} candidate messages`);
 
-  const storage = admin.storage().bucket();
+  const storage = admin.storage().bucket('skyelineos.firebasestorage.app');
   const nowYYYYMM = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
 
   // ── Process each message ───────────────────────────────────────────────────
@@ -535,15 +591,43 @@ export async function scanInvoices(
         }
       }
 
-      // AI classification
+      // ── PDF OCR: extract amount + dates directly from the first PDF attachment ──
+      // This is the source of truth for dollar amounts — body text almost never
+      // has the total in a parseable form. OCR runs BEFORE text classification
+      // so the amount can be injected into the prompt as a known fact.
+      let pdfOcr: Awaited<ReturnType<typeof ocrFirstPdf>> = null;
+      const firstPdf = attachmentPaths.find((p) => p.toLowerCase().endsWith('.pdf')
+        || attachmentParts.find((a) => a.filename === p.split('/').pop() && a.mimeType.includes('pdf')));
+      if (firstPdf) {
+        pdfOcr = await ocrFirstPdf(options.anthropicKey, firstPdf, admin.storage());
+        if (pdfOcr?.amount) {
+          console.warn(`[apScan] PDF OCR extracted amount $${pdfOcr.amount} from ${firstPdf}`);
+        }
+      }
+
+      // AI classification (email body context for job/trade matching)
       const classification = await classifyWithClaude(options.anthropicKey, {
         fromName,
         fromEmail,
         subject,
         date: dateHeader,
-        bodySnippet: bodyText.slice(0, 3000),
+        // If PDF OCR got the amount, tell Claude so it can focus on job/trade
+        bodySnippet: pdfOcr?.amount
+          ? `[PDF extracted: amount=$${pdfOcr.amount}]\n${bodyText.slice(0, 2500)}`
+          : bodyText.slice(0, 3000),
         attachmentFilenames,
       }, liveProjects);
+
+      // ── Prefer PDF OCR values over text-only extraction ────────────────────────
+      if (pdfOcr) {
+        if (pdfOcr.amount !== null)      classification.amount      = pdfOcr.amount;
+        if (pdfOcr.invoiceDate !== null) classification.invoiceDate = pdfOcr.invoiceDate;
+        if (pdfOcr.dueDate !== null)     classification.dueDate     = pdfOcr.dueDate;
+        // Upgrade confidence if PDF OCR is clear
+        if (pdfOcr.confidence === 'high' && classification.confidence === 'low') {
+          classification.confidence = 'medium';
+        }
+      }
 
       const status: ApInvoice['status'] =
         classification.confidence === 'high' ? 'auto_approved' : 'pending_review';

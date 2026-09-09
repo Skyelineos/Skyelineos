@@ -662,6 +662,22 @@ export default function AccountsPayable() {
             </Button>
             <Button
               size="sm"
+              variant="outline"
+              onClick={async () => {
+                try {
+                  const res = await apiFetch('/api/ap/ocr-backfill', { method: 'POST' });
+                  toast({ title: `📊 OCR backfill done`, description: `${res.updated} invoices updated, ${res.failed} skipped` });
+                  loadAll();
+                } catch (e: any) {
+                  toast({ title: 'Backfill failed', description: e.message, variant: 'destructive' });
+                }
+              }}
+              title="Re-scan existing invoices to extract dollar amounts from PDFs"
+            >
+              Extract Amounts
+            </Button>
+            <Button
+              size="sm"
               onClick={handleScan}
               disabled={scanning}
               className="text-white font-medium"

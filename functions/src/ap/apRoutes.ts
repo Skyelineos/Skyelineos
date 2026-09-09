@@ -52,6 +52,95 @@ export function registerApRoutes(
   app: Express,
   db: FirebaseFirestore.Firestore,
 ): void {
+  // ── POST /api/ap/ocr-backfill — re-OCR existing invoices missing amounts ─────
+  // Finds ap_invoices where amount is null or 0, downloads their first PDF
+  // attachment, OCRs it with Claude vision, and updates the Firestore doc.
+  app.post('/api/ap/ocr-backfill', requireApAdmin, async (req: any, res: any) => {
+    const anthropicKey = process.env.ANTHROPIC_API_KEY;
+    if (!anthropicKey) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
+
+    try {
+      // Fetch all invoices with missing/zero amounts that have attachments
+      const snap = await db.collection('ap_invoices').get();
+      const candidates = snap.docs.filter((d) => {
+        const inv = d.data();
+        const amt = Number(inv.amount);
+        return (amt === 0 || !inv.amount) && (inv.attachmentPaths || []).length > 0;
+      });
+
+      let updated = 0;
+      let failed  = 0;
+      const errors: string[] = [];
+
+      for (const doc of candidates) {
+        const inv = doc.data();
+        const paths: string[] = inv.attachmentPaths || [];
+        const pdfPath = paths.find((p: string) =>
+          p.toLowerCase().endsWith('.pdf') ||
+          p.toLowerCase().endsWith('.jpg') ||
+          p.toLowerCase().endsWith('.jpeg') ||
+          p.toLowerCase().endsWith('.png'),
+        );
+        if (!pdfPath) { failed += 1; continue; }
+
+        try {
+          const bucket = admin.storage().bucket();
+          const file = bucket.file(pdfPath);
+          const [exists] = await file.exists();
+          if (!exists) { failed += 1; continue; }
+          const [buffer] = await file.download();
+          const [meta] = await file.getMetadata();
+          const mime = (meta.contentType as string) || 'application/pdf';
+
+          const supported = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+          if (!supported.includes(mime)) { failed += 1; continue; }
+
+          const Anthropic = require('@anthropic-ai/sdk');
+          const client = new Anthropic({ apiKey: anthropicKey });
+          const contentBlock: any = mime === 'application/pdf'
+            ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: buffer.toString('base64') } }
+            : { type: 'image',    source: { type: 'base64', media_type: mime,               data: buffer.toString('base64') } };
+
+          const resp = await client.messages.create({
+            model: 'claude-haiku-3-5',
+            max_tokens: 512,
+            system: 'You are an expert at reading construction invoices. Extract key financial data as JSON only.',
+            messages: [{ role: 'user', content: [
+              contentBlock,
+              { type: 'text', text: 'Return ONLY valid JSON, no markdown:\n{"amount": <total due as number or null>, "invoiceDate": "YYYY-MM-DD or null", "dueDate": "YYYY-MM-DD or null", "vendor": "string or null"}' },
+            ]}],
+          });
+
+          const textBlock = (resp.content.find((b: any) => b.type === 'text') as any)?.text?.trim() || '{}';
+          const cleaned = textBlock.startsWith('```') ? textBlock.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '') : textBlock;
+          const parsed = JSON.parse(cleaned);
+
+          const patch: Record<string, any> = { updatedAt: admin.firestore.FieldValue.serverTimestamp() };
+          if (typeof parsed.amount === 'number' && parsed.amount > 0) patch.amount = parsed.amount;
+          if (parsed.invoiceDate && !inv.invoiceDate) patch.invoiceDate = parsed.invoiceDate;
+          if (parsed.dueDate    && !inv.dueDate)     patch.dueDate     = parsed.dueDate;
+          if (parsed.vendor     && inv.vendor === (inv.fromName || inv.fromEmail)) patch.vendor = parsed.vendor;
+
+          if (Object.keys(patch).length > 1) {
+            await doc.ref.update(patch);
+            updated += 1;
+          } else {
+            failed += 1;
+          }
+        } catch (err: any) {
+          console.error('[ocr-backfill] error on doc', doc.id, err?.message);
+          errors.push(`${doc.id}: ${err?.message}`);
+          failed += 1;
+        }
+      }
+
+      return res.json({ ok: true, candidates: candidates.length, updated, failed, errors });
+    } catch (e: any) {
+      console.error('[apRoutes] ocr-backfill error:', e?.message);
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
   // ── POST /api/ap/scan — manual trigger ────────────────────────────────────
   // Admin only. Triggers the same Gmail scan logic the scheduled function uses.
   app.post('/api/ap/scan', requireApAdmin, async (req: any, res: any) => {
@@ -158,6 +247,81 @@ export function registerApRoutes(
       const snap = await ref.get();
       if (!snap.exists) return res.status(404).json({ error: 'Invoice not found' });
       await ref.update(patch);
+
+      // ── Auto-create expense record when marked paid ───────────────────────────
+      // Writes to projects/{projectId}/expenses/{id} so it shows up in job financials.
+      if (paymentStatus === 'paid') {
+        const inv = snap.data() as any;
+        const effectiveJobName = (jobName !== undefined ? jobName : inv.jobName) as string | null;
+        if (effectiveJobName) {
+          try {
+            // Resolve project doc by name
+            const projSnap = await db
+              .collection('projects')
+              .where('name', '==', effectiveJobName)
+              .limit(1)
+              .get();
+
+            const projectDoc = projSnap.empty ? null : projSnap.docs[0];
+            const projectId = projectDoc?.id || null;
+
+            if (projectId) {
+              const effectiveAmount = Number(paidAmount || inv.amount || 0);
+              const effectiveTrade  = (trade !== undefined ? trade : inv.trade) as string || 'Other';
+              // Map AP trade to expense category
+              const tradeToCategory: Record<string, string> = {
+                Framing: 'labor', Concrete: 'labor', Electrical: 'subcontractor',
+                Plumbing: 'subcontractor', HVAC: 'subcontractor', Roofing: 'subcontractor',
+                Drywall: 'labor', Flooring: 'subcontractor', Painting: 'subcontractor',
+                Landscaping: 'subcontractor', Cabinets: 'subcontractor', Countertops: 'materials',
+                Windows: 'materials', Doors: 'materials', Insulation: 'materials',
+                Excavation: 'subcontractor', Foundation: 'labor', Masonry: 'labor',
+                Tile: 'subcontractor', Hardware: 'materials', Materials: 'materials',
+                Subcontractor: 'subcontractor', 'Professional Services': 'fees',
+              };
+              const category = tradeToCategory[effectiveTrade] || 'other';
+
+              // Idempotency: don't create duplicate if already has an expense from this AP invoice
+              const existingExpense = await db
+                .collection('projects').doc(projectId)
+                .collection('expenses')
+                .where('apInvoiceId', '==', id)
+                .limit(1)
+                .get();
+
+              if (existingExpense.empty) {
+                await db.collection('projects').doc(projectId).collection('expenses').add({
+                  apInvoiceId: id,               // link back to AP record
+                  projectId,
+                  projectName: effectiveJobName,
+                  vendor: inv.vendor || 'Unknown',
+                  amount: effectiveAmount,
+                  date: paidDate || inv.invoiceDate || new Date().toISOString().slice(0, 10),
+                  category,
+                  tradeCategory: effectiveTrade,
+                  description: `Invoice from ${inv.vendor || inv.fromName || 'vendor'} — ${effectiveTrade}`,
+                  receiptStoragePath: (inv.attachmentPaths || [])[0] || null,
+                  receiptImageUrl: null,
+                  status: 'reconciled',           // already paid
+                  qboTransactionId: null,
+                  qboMatchedAt: null,
+                  qboSynced: false,
+                  qboSyncError: null,
+                  capturedBy: req.user?.uid || 'ap_auto',
+                  capturedAt: admin.firestore.Timestamp.now(),
+                  notes: `Auto-created from AP invoice ${id}`,
+                  lineItems: [],
+                  source: 'ap_invoice',
+                });
+              }
+            }
+          } catch (expErr: any) {
+            // Non-fatal — AP record is already updated, just log
+            console.error('[apRoutes] auto-expense creation failed:', expErr?.message);
+          }
+        }
+      }
+
       return res.json({ ok: true, id, patch });
     } catch (e: any) {
       console.error('[apRoutes] patch invoice error:', e?.message);
