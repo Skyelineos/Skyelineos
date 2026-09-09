@@ -6,6 +6,8 @@
 // Manual scan trigger, inline edit for job/trade corrections.
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { ref as storageRef, getDownloadURL } from 'firebase/storage';
+import { storage } from '@/lib/firebase';
 import { getAuth } from 'firebase/auth';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -48,6 +50,8 @@ import {
   ChevronUp,
   Edit2,
   CheckCircle2,
+  Paperclip,
+  ExternalLink,
   XCircle,
   AlertCircle,
   Building2,
@@ -246,27 +250,104 @@ function SummaryCard({
 // ── Expanded row detail ────────────────────────────────────────────────────────
 
 function InvoiceRowDetail({ invoice }: { invoice: ApInvoice }) {
+  return <ExpandedDetail invoice={invoice} />;
+}
+
+// ── Attachment viewer with Firebase Storage URLs ──────────────────────────────
+function AttachmentList({ paths }: { paths: string[] }) {
+  const [urls, setUrls] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!paths || paths.length === 0) return;
+    setLoading(true);
+    Promise.all(
+      paths.map(async (p) => {
+        try {
+          const url = await getDownloadURL(storageRef(storage, p));
+          return [p, url] as [string, string];
+        } catch {
+          return [p, ''] as [string, string];
+        }
+      }),
+    ).then((results) => {
+      setUrls(Object.fromEntries(results.filter(([, u]) => u)));
+      setLoading(false);
+    });
+  }, [paths]);
+
+  if (!paths || paths.length === 0) return null;
+
+  const filename = (p: string) => p.split('/').pop() || p;
+  const isPdf = (p: string) => p.toLowerCase().endsWith('.pdf');
+
   return (
-    <div className="px-4 py-3 bg-gray-50 border-t text-sm space-y-2">
+    <div className="mt-2 space-y-1.5">
+      <p className="text-xs font-medium text-gray-600 flex items-center gap-1">
+        <Paperclip className="h-3.5 w-3.5" />
+        {paths.length} attachment{paths.length !== 1 ? 's' : ''}
+      </p>
+      {loading && <p className="text-xs text-gray-400">Loading files…</p>}
+      {paths.map((p) => (
+        <div key={p} className="flex items-center gap-2">
+          {urls[p] ? (
+            <a
+              href={urls[p]}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded border hover:bg-gray-100 transition-colors"
+              style={{ color: BRAND_GOLD, borderColor: BRAND_GOLD + '55' }}
+            >
+              {isPdf(p) ? '📄' : '🖼️'}
+              {filename(p)}
+              <ExternalLink className="h-3 w-3 opacity-60" />
+            </a>
+          ) : (
+            <span className="text-xs text-gray-400">{filename(p)}</span>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Expanded row detail ───────────────────────────────────────────────────────
+function ExpandedDetail({ invoice }: { invoice: ApInvoice }) {
+  return (
+    <div className="px-4 py-4 bg-gray-50 border-t text-sm space-y-3">
+
+      {/* Meta row */}
+      <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-gray-500">
+        <span><b>Subject:</b> {invoice.subject || '—'}</span>
+        <span><b>From:</b> {invoice.fromName || invoice.fromEmail}</span>
+        {invoice.fromEmail && invoice.fromName && (
+          <span className="text-gray-400">&lt;{invoice.fromEmail}&gt;</span>
+        )}
+      </div>
+
+      {/* AI notes */}
       {invoice.aiNotes && (
         <div>
-          <span className="font-medium text-gray-600">AI Notes: </span>
+          <span className="font-medium text-gray-600">AI reasoning: </span>
           <span className="text-gray-700 italic">{invoice.aiNotes}</span>
         </div>
       )}
+
+      {/* Email snippet */}
       {invoice.rawBodySnippet && (
         <div>
-          <span className="font-medium text-gray-600">Email Snippet: </span>
-          <span className="text-gray-500 font-mono text-xs">{invoice.rawBodySnippet.slice(0, 200)}…</span>
+          <span className="font-medium text-gray-600">Email body: </span>
+          <span className="text-gray-500 font-mono text-xs">
+            {invoice.rawBodySnippet.slice(0, 300)}{invoice.rawBodySnippet.length > 300 ? '…' : ''}
+          </span>
         </div>
       )}
-      <div className="flex flex-wrap gap-4 text-xs text-gray-500">
-        <span><b>Subject:</b> {invoice.subject || '—'}</span>
-        <span><b>From:</b> {invoice.fromName} &lt;{invoice.fromEmail}&gt;</span>
-        {invoice.attachmentPaths?.length > 0 && (
-          <span><b>Attachments:</b> {invoice.attachmentPaths.length} file(s)</span>
-        )}
-      </div>
+
+      {/* Attachments — full download links */}
+      {invoice.attachmentPaths?.length > 0 && (
+        <AttachmentList paths={invoice.attachmentPaths} />
+      )}
+
     </div>
   );
 }
