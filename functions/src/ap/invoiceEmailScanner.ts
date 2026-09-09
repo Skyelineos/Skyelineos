@@ -19,6 +19,7 @@ import * as admin from 'firebase-admin';
 import { google } from 'googleapis';
 import Anthropic from '@anthropic-ai/sdk';
 import { getAuthorizedClient } from '../ingestionLab/googleClient';
+import { extractInvoiceFromStoragePath } from './pdfExtractor';
 
 // admin.initializeApp() is called in index.ts — do not call here
 
@@ -28,62 +29,6 @@ const TELEGRAM_BOT_TOKEN = defineSecret('TELEGRAM_BOT_TOKEN');
 const TELEGRAM_CHAT_ID = defineSecret('TELEGRAM_CHAT_ID');
 const GOOGLE_CLIENT_ID_SECRET = defineSecret('GOOGLE_CLIENT_ID');
 const GOOGLE_CLIENT_SECRET_SECRET = defineSecret('GOOGLE_CLIENT_SECRET');
-
-// ── PDF OCR — extract amount + dates directly from the invoice PDF ────────────
-// Uses Claude vision (same as analyze-bill endpoint). Called after PDF is saved
-// to Storage. Returns extracted fields to override text-only classification.
-async function ocrFirstPdf(
-  anthropicKey: string,
-  storagePath: string,
-  storage: admin.storage.Storage,
-): Promise<{ amount: number | null; invoiceDate: string | null; dueDate: string | null; vendor: string | null; confidence: 'high' | 'medium' | 'low' } | null> {
-  try {
-    const bucket = storage.bucket();
-    const file = bucket.file(storagePath);
-    const [exists] = await file.exists();
-    if (!exists) return null;
-    const [buffer] = await file.download();
-    const [meta] = await file.getMetadata();
-    const mime = (meta.contentType as string) || 'application/pdf';
-
-    const supported = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-    if (!supported.includes(mime)) return null;
-
-    const client = new Anthropic({ apiKey: anthropicKey });
-    const isPdf = mime === 'application/pdf';
-    const contentBlock: any = isPdf
-      ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: buffer.toString('base64') } }
-      : { type: 'image',    source: { type: 'base64', media_type: mime,               data: buffer.toString('base64') } };
-
-    const resp = await client.messages.create({
-      // PDFs require Sonnet (document type not supported by Haiku)
-      model: isPdf ? 'claude-sonnet-4-6' : 'claude-haiku-3-5',
-      max_tokens: 512,
-      system: 'You are an expert at reading construction invoices. Extract key financial data as JSON only.',
-      messages: [{
-        role: 'user',
-        content: [
-          contentBlock,
-          { type: 'text', text: 'Extract from this invoice document. Return ONLY valid JSON, no markdown:\n{"amount": <total due as number or null>, "invoiceDate": "YYYY-MM-DD or null", "dueDate": "YYYY-MM-DD or null", "vendor": "company name or null", "confidence": "high|medium|low"}' },
-        ],
-      }],
-    });
-
-    const text = (resp.content.find((b: any) => b.type === 'text') as any)?.text?.trim() || '{}';
-    const cleaned = text.startsWith('```') ? text.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '') : text;
-    const parsed = JSON.parse(cleaned);
-    return {
-      amount: typeof parsed.amount === 'number' ? parsed.amount : null,
-      invoiceDate: parsed.invoiceDate || null,
-      dueDate: parsed.dueDate || null,
-      vendor: parsed.vendor || null,
-      confidence: parsed.confidence || 'medium',
-    };
-  } catch (e: any) {
-    console.warn('[apScan] PDF OCR failed:', e?.message);
-    return null;
-  }
-}
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 export const KNOWN_PROJECTS = [
@@ -591,17 +536,26 @@ export async function scanInvoices(
         }
       }
 
-      // ── PDF OCR: extract amount + dates directly from the first PDF attachment ──
-      // This is the source of truth for dollar amounts — body text almost never
-      // has the total in a parseable form. OCR runs BEFORE text classification
-      // so the amount can be injected into the prompt as a known fact.
-      let pdfOcr: Awaited<ReturnType<typeof ocrFirstPdf>> = null;
-      const firstPdf = attachmentPaths.find((p) => p.toLowerCase().endsWith('.pdf')
-        || attachmentParts.find((a) => a.filename === p.split('/').pop() && a.mimeType.includes('pdf')));
+      // ── PDF text extraction — deterministic, no AI ───────────────────────────
+      // Reads the PDF text layer directly (pdf-parse). No Claude vision call.
+      // Only falls back to AI if text layer is empty (image-only PDF).
+      let pdfOcr: { amount: number | null; invoiceDate: string | null; dueDate: string | null; vendor: string | null; confidence: 'high' | 'medium' | 'low' } | null = null;
+      const firstPdf = attachmentPaths.find((p) =>
+        /\.(pdf|jpg|jpeg|png|webp)$/i.test(p)
+      );
       if (firstPdf) {
-        pdfOcr = await ocrFirstPdf(options.anthropicKey, firstPdf, admin.storage());
-        if (pdfOcr?.amount) {
-          console.warn(`[apScan] PDF OCR extracted amount $${pdfOcr.amount} from ${firstPdf}`);
+        const extracted = await extractInvoiceFromStoragePath(firstPdf, admin.storage());
+        if (extracted) {
+          pdfOcr = {
+            amount: extracted.amount,
+            invoiceDate: extracted.invoiceDate,
+            dueDate: extracted.dueDate,
+            vendor: extracted.vendor,
+            confidence: extracted.confidence,
+          };
+          if (extracted.amount) {
+            console.warn(`[apScan] PDF text extracted amount $${extracted.amount} from ${firstPdf}`);
+          }
         }
       }
 

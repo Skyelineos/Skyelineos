@@ -19,6 +19,7 @@
 import type { Express } from 'express';
 import * as admin from 'firebase-admin';
 import { scanInvoices } from './invoiceEmailScanner';
+import { extractInvoiceFromStoragePath } from './pdfExtractor';
 import { handleTelegramCallback } from './telegramCallbackHandler';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -52,15 +53,11 @@ export function registerApRoutes(
   app: Express,
   db: FirebaseFirestore.Firestore,
 ): void {
-  // ── POST /api/ap/ocr-backfill — re-OCR existing invoices missing amounts ─────
-  // Finds ap_invoices where amount is null or 0, downloads their first PDF
-  // attachment, OCRs it with Claude vision, and updates the Firestore doc.
+  // ── POST /api/ap/ocr-backfill — re-extract amounts from existing PDF attachments ──
+  // Uses deterministic PDF text-layer extraction (pdf-parse). No AI calls.
+  // Falls back to null when PDF has no text layer (image-only scans).
   app.post('/api/ap/ocr-backfill', requireApAdmin, async (req: any, res: any) => {
-    const anthropicKey = process.env.ANTHROPIC_API_KEY;
-    if (!anthropicKey) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
-
     try {
-      // Fetch all invoices with missing/zero amounts that have attachments
       const snap = await db.collection('ap_invoices').get();
       const candidates = snap.docs.filter((d) => {
         const inv = d.data();
@@ -75,60 +72,22 @@ export function registerApRoutes(
       for (const doc of candidates) {
         const inv = doc.data();
         const paths: string[] = inv.attachmentPaths || [];
-        const pdfPath = paths.find((p: string) =>
-          p.toLowerCase().endsWith('.pdf') ||
-          p.toLowerCase().endsWith('.jpg') ||
-          p.toLowerCase().endsWith('.jpeg') ||
-          p.toLowerCase().endsWith('.png'),
-        );
+        const pdfPath = paths.find((p: string) => /\.(pdf|jpg|jpeg|png)$/i.test(p));
         if (!pdfPath) { failed += 1; continue; }
 
         try {
-          const bucket = admin.storage().bucket();
-          const file = bucket.file(pdfPath);
-          const [exists] = await file.exists();
-          if (!exists) { failed += 1; continue; }
-          const [buffer] = await file.download();
-          const [meta] = await file.getMetadata();
-          const mime = (meta.contentType as string) || 'application/pdf';
-
-          const supported = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-          if (!supported.includes(mime)) { failed += 1; continue; }
-
-          const Anthropic = require('@anthropic-ai/sdk');
-          const client = new Anthropic({ apiKey: anthropicKey });
-          const contentBlock: any = mime === 'application/pdf'
-            ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: buffer.toString('base64') } }
-            : { type: 'image',    source: { type: 'base64', media_type: mime,               data: buffer.toString('base64') } };
-
-          const resp = await client.messages.create({
-            model: 'claude-haiku-3-5',
-            max_tokens: 512,
-            system: 'You are an expert at reading construction invoices. Extract key financial data as JSON only.',
-            messages: [{ role: 'user', content: [
-              contentBlock,
-              { type: 'text', text: 'Return ONLY valid JSON, no markdown:\n{"amount": <total due as number or null>, "invoiceDate": "YYYY-MM-DD or null", "dueDate": "YYYY-MM-DD or null", "vendor": "string or null"}' },
-            ]}],
-          });
-
-          const textBlock = (resp.content.find((b: any) => b.type === 'text') as any)?.text?.trim() || '{}';
-          const cleaned = textBlock.startsWith('```') ? textBlock.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '') : textBlock;
-          const parsed = JSON.parse(cleaned);
+          const extracted = await extractInvoiceFromStoragePath(pdfPath, admin.storage());
+          if (!extracted || !extracted.amount) { failed += 1; continue; }
 
           const patch: Record<string, any> = { updatedAt: admin.firestore.FieldValue.serverTimestamp() };
-          if (typeof parsed.amount === 'number' && parsed.amount > 0) patch.amount = parsed.amount;
-          if (parsed.invoiceDate && !inv.invoiceDate) patch.invoiceDate = parsed.invoiceDate;
-          if (parsed.dueDate    && !inv.dueDate)     patch.dueDate     = parsed.dueDate;
-          if (parsed.vendor     && inv.vendor === (inv.fromName || inv.fromEmail)) patch.vendor = parsed.vendor;
+          patch.amount = extracted.amount;
+          if (extracted.invoiceDate && !inv.invoiceDate) patch.invoiceDate = extracted.invoiceDate;
+          if (extracted.dueDate     && !inv.dueDate)     patch.dueDate     = extracted.dueDate;
+          if (extracted.vendor      && extracted.vendor !== inv.vendor) patch.vendor = extracted.vendor;
 
-          if (Object.keys(patch).length > 1) {
-            await doc.ref.update(patch);
-            updated += 1;
-          } else {
-            failed += 1;
-          }
+          await doc.ref.update(patch);
+          updated += 1;
         } catch (err: any) {
-          console.error('[ocr-backfill] error on doc', doc.id, err?.message);
           errors.push(`${doc.id}: ${err?.message}`);
           failed += 1;
         }
@@ -136,7 +95,6 @@ export function registerApRoutes(
 
       return res.json({ ok: true, candidates: candidates.length, updated, failed, errors });
     } catch (e: any) {
-      console.error('[apRoutes] ocr-backfill error:', e?.message);
       return res.status(500).json({ error: e.message });
     }
   });
