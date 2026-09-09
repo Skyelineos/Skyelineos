@@ -99,6 +99,20 @@ export function registerApRoutes(
     }
   });
 
+  // ── POST /api/ap/backfill — historical scan (configurable lookback) ──────────
+  // Body: { lookbackDays: number }  e.g. 90 for 3 months, 365 for a year
+  app.post('/api/ap/backfill', requireApAdmin, async (req: any, res: any) => {
+    const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN;
+    const telegramChatId   = process.env.TELEGRAM_CHAT_ID;
+    if (!telegramBotToken || !telegramChatId) return res.status(500).json({ error: 'Telegram creds missing' });
+    const lookbackDays = Math.min(Number(req.body?.lookbackDays) || 90, 730);
+    // Return immediately — scan runs async inside the function timeout window
+    res.json({ ok: true, message: `Backfill started for ${lookbackDays} days. Invoices will appear in ap_invoices as they are processed.`, lookbackDays });
+    scanInvoices(db, { telegramBotToken, telegramChatId, lookbackDays }).catch((e: any) =>
+      console.error('[apRoutes] backfill error:', e?.message),
+    );
+  });
+
   // ── POST /api/ap/scan — manual trigger ────────────────────────────────────
   // Admin only. Triggers the same Gmail scan logic the scheduled function uses.
   app.post('/api/ap/scan', requireApAdmin, async (req: any, res: any) => {

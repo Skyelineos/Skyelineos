@@ -298,6 +298,7 @@ export async function scanInvoices(
   options: {
     telegramBotToken: string;
     telegramChatId: string;
+    lookbackDays?: number; // default 2; pass 90 for historical backfill
   },
 ): Promise<ScanResult> {
   const result: ScanResult = { newCount: 0, skippedCount: 0, errorCount: 0, errors: [], scannedCount: 0 };
@@ -329,8 +330,9 @@ export async function scanInvoices(
     liveProjects = KNOWN_PROJECTS;
   }
 
-  // ── Build 48-hour query ───────────────────────────────────────────────────
-  const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000);
+  // ── Build query window (default 48h; configurable via lookbackDays) ──────────
+  const lookbackMs = (options.lookbackDays ?? 2) * 24 * 60 * 60 * 1000;
+  const cutoff = new Date(Date.now() - lookbackMs);
   const yyyy = cutoff.getFullYear();
   const mm = String(cutoff.getMonth() + 1).padStart(2, '0');
   const dd = String(cutoff.getDate()).padStart(2, '0');

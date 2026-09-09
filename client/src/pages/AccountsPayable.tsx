@@ -541,6 +541,24 @@ export default function AccountsPayable() {
     }
   };
 
+  const [backfilling, setBackfilling] = useState(false);
+  const handleBackfill = async (days: number) => {
+    setBackfilling(true);
+    try {
+      await apiFetch('/api/ap/backfill', { method: 'POST', body: JSON.stringify({ lookbackDays: days }) });
+      toast({
+        title: `⏳ Backfilling last ${days} days…`,
+        description: 'Invoices will appear as they’re processed. Refresh in a minute.',
+      });
+      // Refresh after 45s to pick up processed invoices
+      setTimeout(() => loadAll(), 45_000);
+    } catch (e: any) {
+      toast({ title: 'Backfill failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setBackfilling(false);
+    }
+  };
+
   // ── Invoice update ─────────────────────────────────────────────────────────
   const handlePaymentStatus = async (id: string, paymentStatus: 'paid' | 'unpaid' | 'partial') => {
     try {
@@ -676,6 +694,16 @@ export default function AccountsPayable() {
               title="Re-scan existing invoices to extract dollar amounts from PDFs"
             >
               Extract Amounts
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => handleBackfill(90)}
+              disabled={backfilling}
+              title="Scan the last 90 days of Gmail for invoices not yet imported"
+            >
+              {backfilling ? <RefreshCw className="h-4 w-4 mr-1.5 animate-spin" /> : <ScanLine className="h-4 w-4 mr-1.5" />}
+              {backfilling ? 'Backfilling…' : 'Import Last 90 Days'}
             </Button>
             <Button
               size="sm"
