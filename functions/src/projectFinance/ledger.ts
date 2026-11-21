@@ -104,7 +104,11 @@ export function matchInvoices(
       return {
         ...invoice,
         projectId: project?.id || '',
-        suggestedId: candidates.length === 1 ? candidates[0].id : '',
+        suggestedId:
+          project?.id ||
+          (!approved && !customerLink && candidates.length === 1
+            ? candidates[0].id
+            : ''),
         match,
       };
     })

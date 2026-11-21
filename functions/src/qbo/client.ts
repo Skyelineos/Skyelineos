@@ -66,13 +66,13 @@ export async function getValidToken(db: adminFirestore.Firestore): Promise<QboTo
     throw Object.assign(new Error(`QuickBooks token refresh failed: ${res.status} ${text}`), { code: 'refresh_failed' });
   }
   const tokens: any = await res.json();
-  await ref.set({
+  await ref.update({
     accessToken: tokens.access_token,
     refreshToken: tokens.refresh_token || data.refreshToken,
     accessTokenExpiresAt: now + tokens.expires_in * 1000,
     refreshTokenExpiresAt: now + (tokens.x_refresh_token_expires_in || 8640000) * 1000,
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-  }, { merge: true });
+  }, { lastUpdateTime: snap.updateTime! });
   return { accessToken: tokens.access_token, realmId: data.realmId, env };
 }
 

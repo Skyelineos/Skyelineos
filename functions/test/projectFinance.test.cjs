@@ -144,3 +144,74 @@ test('finance HTTP routes enforce staff read and admin actions before accessing 
     await new Promise((resolve) => server.close(resolve));
   }
 });
+
+test('review defaults to the approved project even when a legacy ID suggests another job', async () => {
+  const invoices = await loadInvoices(source([invoice]));
+  const projects = [
+    { id: 'legacy', name: 'Legacy job', customerId: '8' },
+    { id: 'actual', name: 'Approved job', customerId: '' },
+  ];
+  const approvals = new Map([['5', 'actual']]);
+  assert.equal(
+    matchInvoices(invoices, projects, approvals)[0].suggestedId,
+    'actual'
+  );
+  assert.equal(
+    matchInvoices(invoices, projects.slice(0, 1), approvals)[0].suggestedId,
+    ''
+  );
+});
+
+test('disconnect or relink during a token refresh prevents the old credentials from being saved', async (t) => {
+  const { getValidToken } = require('../lib/qbo/client');
+  const { refreshQboToken } = require('../lib/qbo/qboClient');
+  const original = global.fetch;
+  t.after(() => {
+    global.fetch = original;
+  });
+  for (const refresh of [getValidToken, refreshQboToken]) {
+    for (const replacement of [
+      { realmId: 'a', refreshToken: '' },
+      { realmId: 'b', refreshToken: 'new' },
+    ]) {
+      const initial = {
+        realmId: 'a',
+        refreshToken: 'old',
+        refreshTokenExpiresAt: Date.now() + 60000,
+      };
+      let current = initial;
+      let version = 1;
+      const ref = {
+        get: async () => ({
+          exists: true,
+          data: () => initial,
+          get: (k) => initial[k],
+          updateTime: version,
+        }),
+        update: async (changes, condition) => {
+          assert.equal(condition.lastUpdateTime, 1);
+          if (condition.lastUpdateTime !== version)
+            throw new Error('Connection changed');
+          current = { ...current, ...changes };
+        },
+      };
+      global.fetch = async () => {
+        current = replacement;
+        version++;
+        return {
+          ok: true,
+          json: async () => ({
+            access_token: 'expired-result',
+            refresh_token: 'obsolete',
+            expires_in: 3600,
+          }),
+        };
+      };
+      await assert.rejects(
+        refresh({ collection: () => ({ doc: () => ref }) }, initial),
+        /Connection changed/
+      );
+      assert.deepEqual(current, replacement);
+    }
+  }
+});
