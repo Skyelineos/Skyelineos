@@ -67,6 +67,15 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 
+// Only display dates supported by source data. A missing project field must
+// never surface as 'Invalid Date' or imply a real milestone exists.
+function displayProjectDate(value: unknown): string {
+  if (!value) return 'Date not set';
+  const date = typeof value === 'object' && value !== null && 'toDate' in value && typeof (value as any).toDate === 'function'
+    ? (value as any).toDate() : new Date(value as string);
+  return Number.isNaN(date.getTime()) ? 'Date not set' : date.toLocaleDateString();
+}
+
 // Project Card component with live progress calculation
 function ProjectCard({
   project,
@@ -104,6 +113,8 @@ function ProjectCard({
   });
 
   // Handle progress display with error states
+  const hasProgressBasis = !progressError && !!liveProgress &&
+    (liveProgress.totalTasks > 0 || liveProgress.estimateProgress > 0);
   const displayProgress = progressLoading
     ? 0
     : progressError
@@ -124,6 +135,7 @@ function ProjectCard({
             project={project}
             displayProgress={displayProgress}
             progressLoading={progressLoading}
+            hasProgressBasis={hasProgressBasis}
             isEditMode={isEditMode}
             handleArchiveProject={handleArchiveProject}
             handleDeleteProject={handleDeleteProject}
@@ -144,6 +156,7 @@ function ProjectCard({
             project={project}
             displayProgress={displayProgress}
             progressLoading={progressLoading}
+            hasProgressBasis={hasProgressBasis}
             isEditMode={true}
             handleArchiveProject={handleArchiveProject}
             handleDeleteProject={handleDeleteProject}
@@ -159,6 +172,7 @@ function ProjectCardContent({
   project,
   displayProgress,
   progressLoading,
+  hasProgressBasis,
   isEditMode,
   handleArchiveProject,
   handleDeleteProject,
@@ -166,6 +180,7 @@ function ProjectCardContent({
   project: any;
   displayProgress: number;
   progressLoading: boolean;
+  hasProgressBasis: boolean;
   isEditMode: boolean;
   handleArchiveProject?: (id: number) => void;
   handleDeleteProject?: (id: number) => void;
@@ -241,16 +256,16 @@ function ProjectCardContent({
           {/* Address */}
           <div className="flex items-start text-sm text-gray-600">
             <MapPin className="mr-2 h-4 w-4 mt-0.5 flex-shrink-0" />
-            <span className="line-clamp-2">{project.address}</span>
+            <span className="line-clamp-2">{project.address || 'Address not entered'}</span>
           </div>
 
           {/* Live Progress */}
           <div>
             <div className="flex justify-between text-sm mb-2">
               <span className="font-medium">Progress</span>
-              <span>{progressLoading ? '...' : `${displayProgress}%`}</span>
+              <span>{progressLoading ? 'Loading…' : hasProgressBasis ? `${displayProgress}%` : 'Not measured'}</span>
             </div>
-            <Progress value={displayProgress} className="h-2" />
+            <Progress value={hasProgressBasis ? displayProgress : 0} className="h-2" aria-label={hasProgressBasis ? 'Construction progress' : 'Progress not yet measured'} />
           </div>
 
           {/* Budget */}
@@ -261,13 +276,14 @@ function ProjectCardContent({
             </div>
             <div className="text-right">
               <div className="font-medium">
-                ${project.spent.toLocaleString()} / $
-                {project.budget.toLocaleString()}
+                {project.budget > 0
+                  ? `${(project.spent || 0).toLocaleString()} / ${project.budget.toLocaleString()}`
+                  : 'Budget not established'}
               </div>
               <div className="text-xs text-gray-500">
                 {project.budget > 0
                   ? `${Math.round((project.spent / project.budget) * 100)}% spent`
-                  : '—'}
+                  : 'Set and verify budget'}
               </div>
             </div>
           </div>
@@ -279,17 +295,15 @@ function ProjectCardContent({
               <span>Timeline</span>
             </div>
             <div className="text-right text-xs text-gray-500">
-              <div>{new Date(project.startDate).toLocaleDateString()}</div>
-              <div>
-                to {new Date(project.targetCompletion).toLocaleDateString()}
-              </div>
+              <div>{displayProjectDate(project.startDate)}</div>
+              <div>to {displayProjectDate(project.targetCompletion)}</div>
             </div>
           </div>
 
           {/* Project Details */}
           <div className="pt-2 border-t text-xs text-gray-500">
             <div className="flex justify-between">
-              <span>{project.squareFootage.toLocaleString()} sq ft</span>
+              <span>{project.squareFootage > 0 ? `${project.squareFootage.toLocaleString()} sq ft` : 'Area not entered'}</span>
               <span>PM: {project.projectManager}</span>
             </div>
           </div>
