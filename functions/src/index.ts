@@ -2727,17 +2727,14 @@ app.get('/api/estimates/approved', requireStaff, async (_req: any, res: any) => 
   } catch (e) { res.json([]); }
 });
 
-// ── Chat (legacy stub) ──────────────────────────────────────────────────────
-// The ChatThread component uses /api/chat/* from a legacy implementation.
-// Stubs return empty data so the UI doesn't error; real-time messaging uses
-// Firestore channels (/api/communications) going forward.
-
-app.get('/api/chat/threads/:threadId/messages', async (req: any, res: any) => {
-  res.json({ messages: [], nextCursor: null, total: 0 });
+// ── Deprecated legacy chat endpoints ─────────────────────────────────────────
+// Do not fake successful message delivery. The legacy ChatThread was retired
+// from active views; supported messages live in Firestore Communication Center.
+app.get('/api/chat/threads/:threadId/messages', (_req: any, res: any) => {
+  res.status(410).json({ error: 'Legacy chat retired. Use /communications.' });
 });
-
-app.post('/api/chat/messages', async (req: any, res: any) => {
-  res.status(201).json({ id: Date.now(), content: req.body?.content || '', createdAt: new Date().toISOString() });
+app.post('/api/chat/messages', (_req: any, res: any) => {
+  res.status(410).json({ error: 'Legacy chat retired. Use /communications.' });
 });
 
 // Catch-all 404 — must come AFTER all route registrations (QBO routes above included)
