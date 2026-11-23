@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useRoute } from 'wouter';
+import { useRoute, Link } from 'wouter';
 import { ProjectLayout } from '@/components/layout/ProjectLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
