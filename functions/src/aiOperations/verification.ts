@@ -26,7 +26,7 @@ export const aiOperationsVerifyGoal = onCall(
     if (!goal.exists) throw new HttpsError('not-found', 'Goal not found.');
     const status = goal.data()?.status;
     if (status === 'verified_done') return { verified: true, alreadyVerified: true };
-    if (status === 'canceled' || status === 'planned' || status === 'queued' || status === 'running') {
+    if (!['waiting_external', 'needs_owner'].includes(status)) {
       throw new HttpsError('failed-precondition', 'Goal is not ready for owner verification.');
     }
     const evidenceUrl = goal.data()?.evidenceUrl;
