@@ -16,6 +16,15 @@ service cloud.firestore {
       return isSignedIn() && getUserRole() == 'admin';
     }
 
+    // Private owner AI workspace: not accessible to staff, designers,
+    // subcontractors, clients or project managers. Google Cloud IAM Owner
+    // and Firebase app role are separate; app admin is still required.
+    function isPrivateAiOwner() {
+      return isAdmin()
+        && request.auth.token.email_verified == true
+        && request.auth.token.email in ['tyler@skyelinehomes.com', 'info@skyelinehomes.com'];
+    }
+
     // ROLE PREDICATES — read together as a unit
     //
     // Per docs/decisions.md §D-001: projectManager is a real role that acts as
@@ -1239,6 +1248,48 @@ service cloud.firestore {
     match /qa_runs/{runId} {
       allow read: if isAdmin();
       allow write: if false; // Cloud Function only
+    }
+
+    // Owner AI Operations goal registry. Server-side agents can write via Admin SDK
+    // after explicit verification; web clients must be owner admins.
+    match /ownerGoals/{goalId} {
+      allow read: if isPrivateAiOwner();
+      allow create: if isPrivateAiOwner()
+        && request.resource.data.createdByUid == request.auth.uid
+        && request.resource.data.status == 'planned'
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 160;
+      // Status and heartbeat updates are server-owned, so a browser cannot
+      // forge an active agent run or verified completion.
+      allow update, delete: if false;
+    }
+
+    // Bridge health is written only by the Cloud Functions service account;
+    // the owner can see when the task relay itself is unavailable.
+    match /ownerAiBridge/{docId} {
+      allow read: if isPrivateAiOwner();
+      allow write: if false;
+    }
+
+    // Append-only audit records written by trusted server processes only.
+    match /ownerGoalEvents/{eventId} {
+      allow read: if isPrivateAiOwner();
+      allow write: if false;
+    }
+
+    // Write-once owner messages: they remain awaiting_bridge until a trusted
+    // server integration acknowledges pickup. UI may not forge agent replies.
+    match /ownerAgentMessages/{messageId} {
+      allow read: if isPrivateAiOwner();
+      allow create: if isPrivateAiOwner()
+        && request.resource.data.createdByUid == request.auth.uid
+        && request.resource.data.sender == 'owner'
+        && request.resource.data.deliveryState == 'awaiting_bridge'
+        && request.resource.data.body is string
+        && request.resource.data.body.size() > 0
+        && request.resource.data.body.size() <= 3000;
+      allow update, delete: if false;
     }
 
     // Deny everything else

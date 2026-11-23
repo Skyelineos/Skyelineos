@@ -35,6 +35,7 @@ import {
   Receipt,
   FileSignature,
   Settings,
+  Bot,
 } from 'lucide-react';
 
 interface NavItem {
@@ -54,6 +55,7 @@ const TEAM_NAV: NavGroup[] = [
     label: 'Overview',
     items: [
       { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+      { label: 'AI Operations', href: '/ai-operations', icon: Bot },
       { label: 'Daily Digest', href: '/daily', icon: ClipboardCheck },
     ],
   },
@@ -155,6 +157,7 @@ const TEAM_NAV: NavGroup[] = [
 
 // Management section only for admins
 const MANAGEMENT_HREFS = [
+  '/ai-operations',
   '/users',
   '/master-tasks',
   '/templates',
@@ -283,7 +286,7 @@ function getNavForRole(role: string, navDisabled: string[]): NavGroup[] {
       base = base
         .map((g) => ({
           ...g,
-          items: g.items.filter((i) => !PORTAL_HREFS.includes(i.href)),
+          items: g.items.filter((i) => !PORTAL_HREFS.includes(i.href) && i.href !== '/ai-operations'),
         }))
         .filter((g) => g.items.length > 0)
         .filter(

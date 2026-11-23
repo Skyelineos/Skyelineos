@@ -2840,6 +2840,11 @@ exports.api = onRequest(
 );
 
 
+// Owner AI Operations: private assistant inbox -> Muse assignment queue and
+// 15-minute inbound reconciliation / stale-run watchdog.
+export { aiOperationsDispatch, aiOperationsWatchdog } from './aiOperations/bridge';
+export { aiOperationsVerifyGoal } from './aiOperations/verification';
+
 // ── Phase 3: Notification dispatch (email + SMS) ─────────────────────────────
 export { dispatchNotification } from './notifications/dispatch';
 

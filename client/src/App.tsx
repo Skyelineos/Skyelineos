@@ -27,6 +27,7 @@ import { usePerformanceOptimizations } from '@/hooks/usePerformanceOptimizations
 
 // Lazy imports for optimal bundle splitting
 const Dashboard = lazy(() => import('@/pages/Dashboard'));
+const AiOperations = lazy(() => import('@/pages/AiOperations'));
 const Projects = lazy(() => import('@/pages/Projects'));
 const ProjectDetail = lazy(() => import('@/pages/ProjectDetail'));
 const ProjectOverview = lazy(() => import('@/pages/ProjectOverview'));
@@ -193,6 +194,16 @@ function Router() {
           >
             <Suspense fallback={<MinimalSpinner title="Loading link queue" />}>
               <AdminLinkQueue />
+            </Suspense>
+          </RoleGuard>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/ai-operations">
+        <ProtectedRoute>
+          <RoleGuard allowedRoles={['admin']} showNotAuthorized>
+            <Suspense fallback={<MinimalSpinner title="Loading AI Operations" />}>
+              <AiOperations />
             </Suspense>
           </RoleGuard>
         </ProtectedRoute>

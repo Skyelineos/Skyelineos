@@ -56,6 +56,19 @@ export async function run(h) {
   // Per-step page + console error capture.
   let errors = [];
   page.on('pageerror', (e) => errors.push('PAGEERR: ' + e.message));
+  // Include failing endpoint names in diagnostics. The earlier suite printed
+  // only a generic 401/400, obscuring whether the fault was API auth,
+  // Firebase Firestore, App Check, or the legacy Socket.IO transport.
+  // Log path, not query params, cookies, auth headers or response bodies.
+  page.on('response', (response) => {
+    if (![400, 401, 403, 500, 502, 503].includes(response.status())) return;
+    try {
+      const url = new URL(response.url());
+      const host = url.hostname === new URL(BASE_URL).hostname ? 'app' : url.hostname;
+      errors.push(`HTTP ${response.status()} ${host}${url.pathname}`);
+    } catch { errors.push(`HTTP ${response.status()} unknown endpoint`); }
+  });
+
   page.on('console', (m) => {
     if (m.type() === 'error') errors.push('CONSOLE: ' + m.text().slice(0, 240));
   });
