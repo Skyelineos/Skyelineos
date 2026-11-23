@@ -153,8 +153,8 @@ export default function DocumentsTab({ projectId }: DocumentsTabProps) {
 
   // Fetch change orders
   const { data: changeOrders = [], isLoading: changeOrdersLoading } = useQuery<any>({
-    queryKey: ['/api/change-orders', projectId],
-    queryFn: () => apiRequest(`/api/change-orders?projectId=${projectId}`),
+    queryKey: ['/api/projects', projectId, 'change-orders'],
+    queryFn: () => apiRequest(`/api/projects/${projectId}/change-orders`),
   });
 
   // Fetch invoices
@@ -354,7 +354,7 @@ export default function DocumentsTab({ projectId }: DocumentsTabProps) {
       // Invalidate all relevant queries
       queryClient.invalidateQueries({ queryKey: ['/api/documents', projectId] });
       queryClient.invalidateQueries({ queryKey: ['/api/purchase-orders', projectId] });
-      queryClient.invalidateQueries({ queryKey: ['/api/change-orders', projectId] });
+      queryClient.invalidateQueries({ queryKey: ['/api/projects', projectId, 'change-orders'] });
       queryClient.invalidateQueries({ queryKey: ['/api/invoices', projectId] });
       
       toast({
