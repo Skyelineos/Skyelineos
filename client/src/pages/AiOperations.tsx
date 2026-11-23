@@ -31,6 +31,16 @@ type Goal = {
   evidenceUrl?: string;
 };
 
+type ActivityEvent = {
+  id: string;
+  title: string;
+  detail?: string;
+  goalId?: string;
+  source?: string;
+  evidenceUrl?: string;
+  createdAt?: Timestamp | null;
+};
+
 type InboxMessage = {
   id: string;
   body: string;
@@ -122,8 +132,9 @@ export default function AiOperations() {
   const { user, firebaseUser } = useAuth();
   const [goals, setGoals] = useState<Goal[]>([]);
   const [messages, setMessages] = useState<InboxMessage[]>([]);
+  const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [selectedGoal, setSelectedGoal] = useState<string>('all');
-  const [tab, setTab] = useState<'goals' | 'inbox'>('goals');
+  const [tab, setTab] = useState<'goals' | 'inbox' | 'activity'>('goals');
   const [newGoal, setNewGoal] = useState('');
   const [newMessage, setNewMessage] = useState('');
   const [saving, setSaving] = useState(false);
@@ -146,7 +157,12 @@ export default function AiOperations() {
       snapshot => { setMessages(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as InboxMessage)).reverse()); },
       err => setError('Assistant inbox sync unavailable: ' + err.message)
     );
-    return () => { stopGoals(); stopMessages(); };
+    const stopEvents = onSnapshot(
+      query(collection(db, 'ownerGoalEvents'), orderBy('createdAt', 'desc'), limit(100)),
+      snapshot => { setEvents(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ActivityEvent))); },
+      err => setError('Activity history sync unavailable: ' + err.message)
+    );
+    return () => { stopGoals(); stopMessages(); stopEvents(); };
   }, [isOwner]);
 
   useEffect(() => {
@@ -235,6 +251,7 @@ export default function AiOperations() {
       <div className="flex gap-2 border-b border-slate-200">
         <button onClick={() => setTab('goals')} className={'px-3 py-2 text-sm font-medium ' + (tab === 'goals' ? 'border-b-2 border-[#A9997E] text-slate-900' : 'text-slate-500')}>Active goals</button>
         <button onClick={() => setTab('inbox')} className={'px-3 py-2 text-sm font-medium ' + (tab === 'inbox' ? 'border-b-2 border-[#A9997E] text-slate-900' : 'text-slate-500')}>Assistant inbox</button>
+        <button onClick={() => setTab('activity')} className={'px-3 py-2 text-sm font-medium ' + (tab === 'activity' ? 'border-b-2 border-[#A9997E] text-slate-900' : 'text-slate-500')}>Activity history</button>
       </div>
 
       {tab === 'goals' ? <>
@@ -251,7 +268,7 @@ export default function AiOperations() {
           <TargetIcon/><h2 className="mt-3 font-semibold text-slate-900">No synced goals yet</h2>
           <p className="mt-1 text-sm text-slate-600">Existing Muse and GitHub work will appear after the task bridge is connected. Add a goal above to save it now.</p>
         </div>}
-      </> : <div className="rounded-xl border border-slate-200 bg-white p-4 sm:p-6">
+      </> : tab === 'inbox' ? <div className="rounded-xl border border-slate-200 bg-white p-4 sm:p-6">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <div><h2 className="font-semibold text-slate-900">Assistant inbox</h2><p className="text-xs text-slate-500">Private, timestamped requests. Delivery to assistants is not connected.</p></div>
           <label className="text-xs text-slate-600">Related goal <select className="ml-2 rounded-md border border-slate-300 p-2 text-sm" value={selectedGoal} onChange={e => setSelectedGoal(e.target.value)}>
@@ -277,7 +294,18 @@ export default function AiOperations() {
             <button type="submit" disabled={saving || !newMessage.trim()} className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"><Send size={15}/>Save request</button>
           </div>
         </form>
-      </div>}
+      </div> : <section className="rounded-xl border border-slate-200 bg-white p-4 sm:p-6">
+        <h2 className="font-semibold text-slate-900">Verified activity history</h2>
+        <p className="mt-1 text-sm text-slate-500">Read-only events written by the trusted agent integration. An empty list does not mean agents are running.</p>
+        <div className="mt-4 space-y-3">
+          {events.length ? events.map(ev => <div key={ev.id} className="rounded-lg border border-slate-100 p-3">
+            <div className="flex flex-wrap justify-between gap-2"><strong className="text-sm text-slate-800">{ev.title}</strong><span className="text-xs text-slate-500">{timeOf(ev.createdAt)}</span></div>
+            {ev.detail && <p className="mt-1 text-sm text-slate-600">{ev.detail}</p>}
+            {ev.source && <p className="mt-1 text-xs text-slate-500">Source: {ev.source}</p>}
+            {ev.evidenceUrl && /^https:\/\/[^ ]+$/i.test(ev.evidenceUrl) && <a href={ev.evidenceUrl} target="_blank" rel="noreferrer" className="mt-1 inline-block text-xs text-blue-700 underline">View evidence</a>}
+          </div>) : <p className="rounded-lg bg-slate-50 p-8 text-center text-sm text-slate-500">No agent events have been verified and synced yet.</p>}
+        </div>
+      </section>}
 
       <footer className="flex flex-wrap items-center gap-2 border-t pt-4 text-xs text-slate-500">
         <ShieldCheck size={15}/> Restricted to verified owner-admin accounts. Agent execution is never inferred from a chat reply.
