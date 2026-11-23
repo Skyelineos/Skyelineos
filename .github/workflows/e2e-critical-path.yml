@@ -10,18 +10,12 @@ name: E2E Critical Path
 # keeps CI turnaround fast for the (many) code-only changes that don't affect
 # the critical path.
 
+# Production checks run only AFTER a successful main-branch deployment.
+# Draft PRs are tested by build/typecheck workflows against their own code.
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'client/src/**'
-      - 'functions/src/**'
-      - 'scripts/e2e/**'
-  pull_request:
-    paths:
-      - 'client/src/**'
-      - 'functions/src/**'
-      - 'scripts/e2e/**'
+  workflow_run:
+    workflows: ['Deploy to Firebase']
+    types: [completed]
   workflow_dispatch:
 
 concurrency:
@@ -30,6 +24,7 @@ concurrency:
 
 jobs:
   smoke:
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -51,7 +46,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
 
       - name: Install dependencies
