@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import {
-  addDoc, collection, limit, onSnapshot, orderBy, query,
+  addDoc, collection, doc, limit, onSnapshot, orderBy, query,
   serverTimestamp, type Timestamp,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -41,13 +41,16 @@ type ActivityEvent = {
   createdAt?: Timestamp | null;
 };
 
+type BridgeHealth = { status?: 'connected' | 'degraded'; message?: string; updatedAt?: Timestamp | null };
+
 type InboxMessage = {
   id: string;
   body: string;
   goalId?: string;
   sender: 'owner' | 'agent';
   agentName?: string;
-  deliveryState?: 'awaiting_bridge' | 'received' | 'processing' | 'answered' | 'blocked';
+  deliveryState?: 'awaiting_bridge' | 'queued_to_muse' | 'received' | 'processing' | 'answered' | 'blocked';
+  deliveryMessage?: string;
   createdAt?: Timestamp | null;
 };
 
@@ -133,6 +136,7 @@ export default function AiOperations() {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [messages, setMessages] = useState<InboxMessage[]>([]);
   const [events, setEvents] = useState<ActivityEvent[]>([]);
+  const [bridge, setBridge] = useState<BridgeHealth | null>(null);
   const [selectedGoal, setSelectedGoal] = useState<string>('all');
   const [tab, setTab] = useState<'goals' | 'inbox' | 'activity'>('goals');
   const [newGoal, setNewGoal] = useState('');
@@ -162,7 +166,10 @@ export default function AiOperations() {
       snapshot => { setEvents(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ActivityEvent))); },
       err => setError('Activity history sync unavailable: ' + err.message)
     );
-    return () => { stopGoals(); stopMessages(); stopEvents(); };
+    const stopBridge = onSnapshot(doc(db, 'ownerAiBridge', 'health'),
+      snap => setBridge(snap.exists() ? (snap.data() as BridgeHealth) : null),
+      err => setError('Agent bridge health unavailable: ' + err.message));
+    return () => { stopGoals(); stopMessages(); stopEvents(); stopBridge(); };
   }, [isOwner]);
 
   useEffect(() => {
@@ -177,6 +184,8 @@ export default function AiOperations() {
     stuck: goals.filter(g => ['blocked', 'stalled'].includes(effectiveStatus(g, now))).length,
   }), [goals, now]);
   const visibleMessages = selectedGoal === 'all' ? messages : messages.filter(m => m.goalId === selectedGoal);
+  const lastBridgeCheck = dateOf(bridge?.updatedAt)?.getTime() || 0;
+  const bridgeOnline = bridge?.status === 'connected' && lastBridgeCheck > now - 40 * 60 * 1000;
 
   async function createGoal(event: FormEvent) {
     event.preventDefault();
@@ -229,9 +238,9 @@ export default function AiOperations() {
         <Link href="/financials" className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700">Financial dashboard</Link>
       </header>
 
-      <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900" role="status">
-        <AlertTriangle className="mt-0.5 shrink-0" size={18} />
-        <p><strong>Agent delivery bridge not active yet.</strong> Tasks and requests entered here are saved privately in SkyelineOS but are not yet delivered to ChatGPT or Muse. Use the existing <a className="underline" href="https://docs.google.com/spreadsheets/d/1TOQe8c0y0_5eIJ7Y1ln6ZJTHc2NAriNjTKa7rk6Od2E/edit" target="_blank" rel="noreferrer">Muse assignment tracker</a> for active coordination until the bridge is verified.</p>
+      <div className={'flex items-start gap-2 rounded-lg border p-3 text-sm ' + (bridgeOnline ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-amber-200 bg-amber-50 text-amber-900')} role="status">
+        {bridgeOnline ? <ShieldCheck className="mt-0.5 shrink-0" size={18} /> : <AlertTriangle className="mt-0.5 shrink-0" size={18} />}
+        <p><strong>{bridgeOnline ? 'Muse assignment queue connected.' : 'Agent delivery is not verified.'}</strong> {bridgeOnline ? 'Requests go to the Muse assignment queue. Check individual messages for pickup and replies; this does not directly open a ChatGPT conversation.' : 'Requests are stored safely, but delivery cannot be guaranteed until the bridge is working. ' + (bridge?.message || '')} <a className="underline" href="https://docs.google.com/spreadsheets/d/1TOQe8c0y0_5eIJ7Y1ln6ZJTHc2NAriNjTKa7rk6Od2E/edit" target="_blank" rel="noreferrer">Shared assignment queue</a></p>
       </div>
 
       {error && <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{error}</div>}
@@ -270,7 +279,7 @@ export default function AiOperations() {
         </div>}
       </> : tab === 'inbox' ? <div className="rounded-xl border border-slate-200 bg-white p-4 sm:p-6">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-          <div><h2 className="font-semibold text-slate-900">Assistant inbox</h2><p className="text-xs text-slate-500">Private, timestamped requests. Delivery to assistants is not connected.</p></div>
+          <div><h2 className="font-semibold text-slate-900">Assistant inbox</h2><p className="text-xs text-slate-500">Private, timestamped requests. Agent delivery and pickup status are shown per message.</p></div>
           <label className="text-xs text-slate-600">Related goal <select className="ml-2 rounded-md border border-slate-300 p-2 text-sm" value={selectedGoal} onChange={e => setSelectedGoal(e.target.value)}>
             <option value="all">General</option>{goals.map(g => <option key={g.id} value={g.id}>{g.title}</option>)}
           </select></label>
@@ -279,19 +288,20 @@ export default function AiOperations() {
           {visibleMessages.length ? visibleMessages.map(msg => <div key={msg.id} className={'rounded-lg border p-3 text-sm ' + (msg.sender === 'owner' ? 'border-slate-200 bg-white' : 'border-blue-100 bg-blue-50')}>
             <div className="mb-1 flex flex-wrap justify-between gap-2 text-xs font-medium text-slate-500">
               <span>{msg.sender === 'owner' ? 'You' : msg.agentName || 'Agent'} · {timeOf(msg.createdAt)}</span>
-              {msg.sender === 'owner' && <span>{msg.deliveryState === 'awaiting_bridge' || !msg.deliveryState ? 'Saved — not dispatched' : msg.deliveryState}</span>}
+              {msg.sender === 'owner' && <span>{msg.deliveryState === 'awaiting_bridge' || !msg.deliveryState ? 'Saved — not dispatched' : msg.deliveryState === 'queued_to_muse' ? 'Queued with Muse' : msg.deliveryState === 'processing' ? 'Muse acknowledged' : msg.deliveryState === 'answered' ? 'Response received' : msg.deliveryState === 'blocked' ? 'Blocked — action needed' : msg.deliveryState}</span>}
             </div>
             <p className="whitespace-pre-wrap break-words text-slate-800">{msg.body}</p>
+            {msg.deliveryMessage && <p className="mt-1 text-xs text-slate-500">{msg.deliveryMessage}</p>
           </div>) : <p className="py-12 text-center text-sm text-slate-500">No requests saved in this conversation yet.</p>}
         </div>
         <form onSubmit={sendRequest} className="mt-4 space-y-2">
-          <label htmlFor="ai-request" className="block text-xs font-medium text-slate-700">Save a request for the assistant handoff queue</label>
+          <label htmlFor="ai-request" className="block text-xs font-medium text-slate-700">Send a request to the assistant queue</label>
           <textarea id="ai-request" rows={3} maxLength={maxMessageLength} value={newMessage} onChange={e => setNewMessage(e.target.value)}
-            placeholder="Describe what you want handled. This is not sent until the agent bridge is enabled."
+            placeholder="Describe what needs handling. Submission saves the request; delivery is confirmed separately."
             className="w-full rounded-lg border border-slate-300 p-3 text-sm" />
           <div className="flex justify-between gap-2">
             <span className="text-xs text-slate-500">{newMessage.length} / {maxMessageLength} characters</span>
-            <button type="submit" disabled={saving || !newMessage.trim()} className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"><Send size={15}/>Save request</button>
+            <button type="submit" disabled={saving || !newMessage.trim()} className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"><Send size={15}/>Submit request</button>
           </div>
         </form>
       </div> : <section className="rounded-xl border border-slate-200 bg-white p-4 sm:p-6">
