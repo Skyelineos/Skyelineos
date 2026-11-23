@@ -1260,7 +1260,15 @@ service cloud.firestore {
         && request.resource.data.title is string
         && request.resource.data.title.size() > 0
         && request.resource.data.title.size() <= 160;
-      allow update, delete: if isPrivateAiOwner();
+      // Status and heartbeat updates are server-owned, so a browser cannot
+      // forge an active agent run or verified completion.
+      allow update, delete: if false;
+    }
+
+    // Append-only audit records written by trusted server processes only.
+    match /ownerGoalEvents/{eventId} {
+      allow read: if isPrivateAiOwner();
+      allow write: if false;
     }
 
     // Write-once owner messages: they remain awaiting_bridge until a trusted
