@@ -30,6 +30,7 @@ import {
   BarChart2,
   Hammer,
   Radio,
+  Bot,
   UserCog,
 } from 'lucide-react';
 
@@ -40,6 +41,7 @@ interface MobileNavProps {
 
 const getNavigationItems = () => [
   { label: 'Dashboard',             href: '/dashboard',            icon: LayoutDashboard, roles: ['Admin', 'GC', 'ProjectManager'] as const },
+  { label: 'AI Operations',         href: '/ai-operations',        icon: Bot,             roles: ['Admin'] as const },
   { label: 'Sales & CRM',           href: '/sales',                icon: TrendingUp,      roles: ['Admin', 'GC', 'ProjectManager'] as const },
   // /estimates RoleGuard: ['admin', 'gc'] — drop ProjectManager.
   { label: 'Estimates',             href: '/estimates',            icon: DollarSign,      roles: ['Admin', 'GC'] as const },
