@@ -3,7 +3,8 @@ import {
   addDoc, collection, doc, limit, onSnapshot, orderBy, query,
   serverTimestamp, type Timestamp,
 } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { db, functions } from '@/lib/firebase';
+import { httpsCallable } from 'firebase/functions';
 import { useAuth } from '@/auth/AuthContext';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Link } from 'wouter';
@@ -91,8 +92,8 @@ function effectiveStatus(goal: Goal, now: number): GoalStatus {
   return 'running';
 }
 
-function GoalCard({ goal, now, active, onClick }: {
-  goal: Goal; now: number; active: boolean; onClick: () => void;
+function GoalCard({ goal, now, active, onClick, onVerify, disabled }: {
+  goal: Goal; now: number; active: boolean; onClick: () => void; onVerify: () => void; disabled: boolean;
 }) {
   const status = effectiveStatus(goal, now);
   const meta = statuses[status];
@@ -126,7 +127,10 @@ function GoalCard({ goal, now, active, onClick }: {
           {goal.blocker && <span className="font-medium text-rose-700">Blocker: {goal.blocker}</span>}
         </div>
       </button>
-      {evidenceSafe && <a className="mt-2 inline-block text-xs font-medium text-blue-700 underline" href={goal.evidenceUrl} target="_blank" rel="noreferrer">View evidence</a>}
+      <div className="mt-2 flex flex-wrap items-center gap-3">
+        {evidenceSafe && <a className="inline-block text-xs font-medium text-blue-700 underline" href={goal.evidenceUrl} target="_blank" rel="noreferrer">View evidence</a>}
+        {evidenceSafe && ['waiting_external', 'needs_owner'].includes(status) && <button disabled={disabled} onClick={onVerify} type="button" className="rounded-md border border-emerald-300 px-2 py-1 text-xs font-medium text-emerald-800 disabled:opacity-50">Verify complete</button>}
+      </div>
     </article>
   );
 }
@@ -204,6 +208,16 @@ export default function AiOperations() {
     } finally { setSaving(false); }
   }
 
+  async function verifyGoal(goal: Goal) {
+    if (!isOwner || saving || !window.confirm('I have checked the source evidence and confirm this goal is complete. Continue?')) return;
+    setSaving(true); setError(null);
+    try {
+      await httpsCallable(functions, 'aiOperationsVerifyGoal')({ goalId: goal.id });
+    } catch (err) {
+      setError('Could not verify goal. ' + (err instanceof Error ? err.message : 'Please retry.'));
+    } finally { setSaving(false); }
+  }
+
   async function sendRequest(event: FormEvent) {
     event.preventDefault();
     const body = newMessage.trim();
@@ -272,7 +286,7 @@ export default function AiOperations() {
           <button disabled={saving || !newGoal.trim()} type="submit" className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"><Plus size={16}/>Add goal</button>
         </form>
         {goals.length ? <div className="grid gap-3 lg:grid-cols-2">
-          {goals.map(goal => <GoalCard key={goal.id} goal={goal} now={now} active={goal.id === selectedGoal} onClick={() => { setSelectedGoal(goal.id); setTab('inbox'); }}/>)}
+          {goals.map(goal => <GoalCard key={goal.id} goal={goal} now={now} active={goal.id === selectedGoal} disabled={saving} onVerify={() => verifyGoal(goal)} onClick={() => { setSelectedGoal(goal.id); setTab('inbox'); }}/>)}
         </div> : <div className="rounded-xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center">
           <TargetIcon/><h2 className="mt-3 font-semibold text-slate-900">No synced goals yet</h2>
           <p className="mt-1 text-sm text-slate-600">Existing Muse and GitHub work will appear after the task bridge is connected. Add a goal above to save it now.</p>
