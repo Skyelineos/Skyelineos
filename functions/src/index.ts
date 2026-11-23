@@ -2727,17 +2727,14 @@ app.get('/api/estimates/approved', requireStaff, async (_req: any, res: any) => 
   } catch (e) { res.json([]); }
 });
 
-// ── Chat (legacy stub) ──────────────────────────────────────────────────────
-// The ChatThread component uses /api/chat/* from a legacy implementation.
-// Stubs return empty data so the UI doesn't error; real-time messaging uses
-// Firestore channels (/api/communications) going forward.
-
-app.get('/api/chat/threads/:threadId/messages', async (req: any, res: any) => {
-  res.json({ messages: [], nextCursor: null, total: 0 });
+// ── Deprecated legacy chat endpoints ─────────────────────────────────────────
+// Do not fake successful message delivery. The legacy ChatThread was retired
+// from active views; supported messages live in Firestore Communication Center.
+app.get('/api/chat/threads/:threadId/messages', (_req: any, res: any) => {
+  res.status(410).json({ error: 'Legacy chat retired. Use /communications.' });
 });
-
-app.post('/api/chat/messages', async (req: any, res: any) => {
-  res.status(201).json({ id: Date.now(), content: req.body?.content || '', createdAt: new Date().toISOString() });
+app.post('/api/chat/messages', (_req: any, res: any) => {
+  res.status(410).json({ error: 'Legacy chat retired. Use /communications.' });
 });
 
 // Catch-all 404 — must come AFTER all route registrations (QBO routes above included)
@@ -2751,40 +2748,10 @@ app.use('*', (req: any, res: any) => {
   });
 });
 
-// ── Socket.IO server (polling transport only) ───────────────────────────────────
-// Firebase Hosting CDN layer cannot upgrade WebSocket connections, so we use
-// HTTP long-polling. The /socket.io/** rewrite in firebase.json routes these
-// polling requests to this function.
-// Note: Cloud Run may run multiple instances; in-memory socket state is NOT
-// shared across instances. For small teams this is acceptable.
-const httpModule = require('http');
-const { Server: SocketIOServer } = require('socket.io');
-
-const httpServer = httpModule.createServer(app);
-const io = new SocketIOServer(httpServer, {
-  cors: { origin: true, methods: ['GET', 'POST'] },
-  transports: ['polling'],
-  allowEIO3: true,
-});
-
-io.on('connection', (socket: any) => {
-  console.log('[Socket.IO] Client connected:', socket.id);
-
-  // Relay schedule / task real-time events between connected clients
-  socket.on('scheduleUpdated', (data: any) => {
-    socket.broadcast.emit('scheduleUpdated', data);
-  });
-  socket.on('taskStatusChanged', (data: any) => {
-    socket.broadcast.emit('taskStatusChanged', data);
-  });
-  socket.on('dependencyChanged', (data: any) => {
-    socket.broadcast.emit('dependencyChanged', data);
-  });
-
-  socket.on('disconnect', () => {
-    console.log('[Socket.IO] Client disconnected:', socket.id);
-  });
-});
+// Legacy Socket.IO polling removed. Firebase Hosting / Cloud Functions does not
+// guarantee session affinity between long-poll requests. The legacy consumers
+// were replaced with Firestore-backed Communication Center and task polling.
+// A transient 400 or missing socket must not block project rendering.
 
 // API function — bound to Anthropic + Meta + QBO credentials via Secret Manager
 exports.api = onRequest(
@@ -2833,10 +2800,7 @@ exports.api = onRequest(
     memory: '512MiB',
     timeoutSeconds: 540, // Reels can take 30-90s to process
   },
-  // Route through the http.Server so Socket.IO can intercept /socket.io/**
-  // polling requests before Express sees them. Non-socket requests pass
-  // through to Express as before.
-  (req: any, res: any) => httpServer.emit('request', req, res),
+  app,
 );
 
 

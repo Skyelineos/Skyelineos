@@ -140,16 +140,19 @@ export function NewProjectForm({ isOpen, onClose, onProjectCreated }: NewProject
   const { data: allContacts = [], refetch: refetchContacts } = useQuery<any>({
     queryKey: ['/api/contacts'],
     queryFn: async () => {
-      console.log('🔄 Fetching contacts for project form...');
-      const response = await fetch('/api/contacts');
-      if (!response.ok) {
-        throw new Error('Failed to fetch contacts');
-      }
-      const data = await response.json();
-      const processedData = data.map((contact: Contact) => ({
+      // /api/contacts is protected by Firebase Auth. Raw fetch() did not
+      // include the ID token and generated 401s on every Projects page load.
+      const data = await apiRequest('/api/contacts');
+      const asArray = (value: unknown): unknown[] => {
+        if (Array.isArray(value)) return value;
+        if (typeof value !== 'string' || !value) return [];
+        try { const parsed = JSON.parse(value); return Array.isArray(parsed) ? parsed : []; }
+        catch { return []; }
+      };
+      const processedData = (Array.isArray(data) ? data : []).map((contact: Contact) => ({
         ...contact,
-        associatedProjects: contact.associatedProjects ? JSON.parse(contact.associatedProjects as unknown as string) : [],
-        tags: contact.tags ? JSON.parse(contact.tags as unknown as string) : [],
+        associatedProjects: asArray(contact.associatedProjects),
+        tags: asArray(contact.tags),
       }));
       console.log('📋 Fetched contacts for project form:', processedData.length, 'contacts');
       return processedData;

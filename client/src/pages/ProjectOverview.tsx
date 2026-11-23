@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useRoute } from 'wouter';
+import { useRoute, Link } from 'wouter';
 import { ProjectLayout } from '@/components/layout/ProjectLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
@@ -25,7 +25,7 @@ import {
   Edit,
   MessageSquare
 } from 'lucide-react';
-import { ChatThread } from '@/components/ui/ChatThread';
+
 import { WalkthroughCapture } from '@/components/walkthrough/WalkthroughCapture';
 import { WalkthroughList } from '@/components/walkthrough/WalkthroughList';
 import { Activity } from 'lucide-react';
@@ -397,12 +397,16 @@ export default function ProjectOverview() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                <div className="h-80 border rounded-lg bg-white">
-                  <ChatThread 
-                    threadId={`project-${parseInt(projectId || '0')}`}
-                    threadTitle={`${transformedProject.name} - General`}
-                    className="h-full"
-                  />
+                <div className="rounded-lg border border-brand-light-gray-blue bg-white p-5">
+                  <p className="text-sm text-brand-dark-gray-blue">
+                    Open the project's real conversation threads, call notes, and decisions. Messages are saved to the Communication Center, not the retired legacy chat.
+                  </p>
+                  <Link
+                    href={`/projects/${projectId}/communications`}
+                    className="mt-4 inline-flex items-center rounded-md bg-brand-black px-4 py-2 text-sm font-medium text-white hover:bg-brand-dark-gray-blue"
+                  >
+                    Open Project Communications
+                  </Link>
                 </div>
               </div>
             </CardContent>
