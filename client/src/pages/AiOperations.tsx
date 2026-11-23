@@ -4,10 +4,10 @@ import {
   serverTimestamp, type Timestamp,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { useAuth } from '@/hooks/use-auth';
+import { useAuth } from '@/auth/AuthContext';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Link } from 'wouter';
-import { Activity, AlertTriangle, Bot, CheckCircle2, Clock3, MessageSquare, Plus, Send, ShieldCheck } from 'lucide-react';
+import { Activity, AlertTriangle, Bot, CheckCircle2, Clock3, Plus, Send, ShieldCheck } from 'lucide-react';
 
 type GoalStatus = 'planned' | 'queued' | 'running' | 'waiting_external' |
   'needs_owner' | 'blocked' | 'stalled' | 'verified_done' | 'canceled';
