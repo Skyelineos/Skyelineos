@@ -291,7 +291,7 @@ export default function AiOperations() {
               {msg.sender === 'owner' && <span>{msg.deliveryState === 'awaiting_bridge' || !msg.deliveryState ? 'Saved — not dispatched' : msg.deliveryState === 'queued_to_muse' ? 'Queued with Muse' : msg.deliveryState === 'processing' ? 'Muse acknowledged' : msg.deliveryState === 'answered' ? 'Response received' : msg.deliveryState === 'blocked' ? 'Blocked — action needed' : msg.deliveryState}</span>}
             </div>
             <p className="whitespace-pre-wrap break-words text-slate-800">{msg.body}</p>
-            {msg.deliveryMessage && <p className="mt-1 text-xs text-slate-500">{msg.deliveryMessage}</p>
+            {msg.deliveryMessage && <p className="mt-1 text-xs text-slate-500">{msg.deliveryMessage}</p>}
           </div>) : <p className="py-12 text-center text-sm text-slate-500">No requests saved in this conversation yet.</p>}
         </div>
         <form onSubmit={sendRequest} className="mt-4 space-y-2">
