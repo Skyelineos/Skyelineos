@@ -66,7 +66,7 @@ const statuses: Record<GoalStatus, { text: string; className: string }> = {
   blocked: { text: 'Blocked', className: 'bg-rose-50 text-rose-800' },
   stalled: { text: 'Stalled', className: 'bg-rose-50 text-rose-800' },
   verified_done: { text: 'Verified complete', className: 'bg-emerald-50 text-emerald-800' },
-  canceled: { text: 'Canceled', className: 'bg-slate-100 text-slate-600' },
+  canceled: { text: 'Canceled', className: 'bg-slate-100 text-brand-dark-gray-blue' },
 };
 
 function dateOf(timestamp?: Timestamp | null): Date | null {
@@ -102,24 +102,24 @@ function GoalCard({ goal, now, active, onClick, onVerify, disabled }: {
   const evidenceSafe = goal.evidenceUrl && /^https:\/\/[^ ]+$/i.test(goal.evidenceUrl);
 
   return (
-    <article className={'rounded-xl border bg-white p-4 ' + (active ? 'border-[#B6A78D] ring-1 ring-[#B6A78D]' : 'border-gray-200')}>
+    <article className={'rounded-xl border bg-white p-4 ' + (active ? 'border-brand-gold ring-1 ring-brand-gold' : 'border-gray-200')}>
       <button type="button" className="w-full text-left" onClick={onClick} aria-label={'Select goal ' + goal.title}>
         <div className="flex items-center justify-between gap-3">
           <span className="text-xs font-semibold tracking-wider text-gray-500">{(goal.priority || 'p2').toUpperCase()}</span>
           <span className={'rounded-full px-2 py-0.5 text-xs font-medium ' + meta.className}>{meta.text}</span>
         </div>
-        <h3 className="mt-2 text-base font-semibold text-slate-900">{goal.title}</h3>
-        {goal.description && <p className="mt-1 text-sm text-slate-600">{goal.description}</p>}
+        <h3 className="mt-2 text-base font-semibold text-brand-black">{goal.title}</h3>
+        {goal.description && <p className="mt-1 text-sm text-brand-dark-gray-blue">{goal.description}</p>}
         <div className="mt-4">
           <div className="mb-1 flex justify-between text-xs text-slate-500">
             <span>Verified milestones</span>
             <span>{total > 0 ? finished + ' of ' + total : 'Not measured'}</span>
           </div>
           <div className="h-1.5 overflow-hidden rounded-full bg-slate-100" role="progressbar" aria-valuemin={0} aria-valuemax={total || 1} aria-valuenow={finished}>
-            <div className="h-full bg-[#A9997E]" style={{ width: (total ? 100 * finished / total : 0) + '%' }} />
+            <div className="h-full bg-brand-gold" style={{ width: (total ? 100 * finished / total : 0) + '%' }} />
           </div>
         </div>
-        <div className="mt-3 grid gap-1 text-xs text-slate-600">
+        <div className="mt-3 grid gap-1 text-xs text-brand-dark-gray-blue">
           <span><strong>Assigned:</strong> {goal.agent || 'Not assigned'}</span>
           <span><strong>Next action:</strong> {goal.nextAction || 'Not recorded'}</span>
           <span><strong>Last update:</strong> {timeOf(goal.updatedAt)} · <strong>Next check:</strong> {timeOf(goal.nextCheckAt)}</span>
@@ -238,7 +238,7 @@ export default function AiOperations() {
   if (!isOwner) {
     return <AppLayout><div className="rounded-xl border bg-white p-6">
       <h1 className="text-xl font-semibold">AI Operations</h1>
-      <p className="mt-2 text-sm text-slate-600">This private owner workspace is restricted to an approved admin account.</p>
+      <p className="mt-2 text-sm text-brand-dark-gray-blue">This private owner workspace is restricted to an approved admin account.</p>
     </div></AppLayout>;
   }
 
@@ -246,10 +246,10 @@ export default function AiOperations() {
     <div className="space-y-6">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2"><Bot size={22} className="text-[#A9997E]" /><h1 className="text-3xl font-semibold text-slate-900">AI Operations</h1></div>
-          <p className="mt-1 text-sm text-slate-600">Your goals, agent assignments and private assistant inbox in one place.</p>
+          <div className="flex items-center gap-2"><Bot size={22} className="text-brand-gold" /><h1 className="text-3xl font-semibold font-heading text-brand-black">AI Operations</h1></div>
+          <p className="mt-1 text-sm text-brand-dark-gray-blue">Your goals, agent assignments and private assistant inbox in one place.</p>
         </div>
-        <Link href="/financials" className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700">Financial dashboard</Link>
+        <Link href="/financials" className="rounded-lg border border-brand-light-gray-blue bg-white px-3 py-2 text-sm font-medium text-slate-700">Financial dashboard</Link>
       </header>
 
       <div className={'flex items-start gap-2 rounded-lg border p-3 text-sm ' + (bridgeOnline ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-amber-200 bg-amber-50 text-amber-900')} role="status">
@@ -265,16 +265,16 @@ export default function AiOperations() {
           { label: 'Verified working', value: counts.active, icon: Bot },
           { label: 'Needs you', value: counts.needYou, icon: Clock3 },
           { label: 'Blocked / stalled', value: counts.stuck, icon: AlertTriangle },
-        ].map(stat => <div key={stat.label} className="rounded-xl border border-slate-200 bg-white p-4">
+        ].map(stat => <div key={stat.label} className="rounded-xl border border-brand-light-gray-blue bg-white p-4">
           <div className="flex items-center gap-2 text-xs text-slate-500"><stat.icon size={15}/>{stat.label}</div>
-          <p className="mt-2 text-2xl font-semibold text-slate-900">{stat.value}</p>
+          <p className="mt-2 text-2xl font-semibold text-brand-black">{stat.value}</p>
         </div>)}
       </div>
 
-      <div className="flex gap-2 border-b border-slate-200">
-        <button onClick={() => setTab('goals')} className={'px-3 py-2 text-sm font-medium ' + (tab === 'goals' ? 'border-b-2 border-[#A9997E] text-slate-900' : 'text-slate-500')}>Active goals</button>
-        <button onClick={() => setTab('inbox')} className={'px-3 py-2 text-sm font-medium ' + (tab === 'inbox' ? 'border-b-2 border-[#A9997E] text-slate-900' : 'text-slate-500')}>Assistant inbox</button>
-        <button onClick={() => setTab('activity')} className={'px-3 py-2 text-sm font-medium ' + (tab === 'activity' ? 'border-b-2 border-[#A9997E] text-slate-900' : 'text-slate-500')}>Activity history</button>
+      <div className="flex gap-2 border-b border-brand-light-gray-blue">
+        <button onClick={() => setTab('goals')} className={'px-3 py-2 text-sm font-medium ' + (tab === 'goals' ? 'border-b-2 border-[#A9997E] text-brand-black' : 'text-slate-500')}>Active goals</button>
+        <button onClick={() => setTab('inbox')} className={'px-3 py-2 text-sm font-medium ' + (tab === 'inbox' ? 'border-b-2 border-[#A9997E] text-brand-black' : 'text-slate-500')}>Assistant inbox</button>
+        <button onClick={() => setTab('activity')} className={'px-3 py-2 text-sm font-medium ' + (tab === 'activity' ? 'border-b-2 border-[#A9997E] text-brand-black' : 'text-slate-500')}>Activity history</button>
       </div>
 
       {tab === 'goals' ? <>
@@ -282,29 +282,29 @@ export default function AiOperations() {
           <label htmlFor="new-ai-goal" className="sr-only">New goal</label>
           <input id="new-ai-goal" maxLength={160} value={newGoal} onChange={e => setNewGoal(e.target.value)}
             placeholder="Capture a new goal (saved as Planned)"
-            className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
-          <button disabled={saving || !newGoal.trim()} type="submit" className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"><Plus size={16}/>Add goal</button>
+            className="min-w-0 flex-1 rounded-lg border border-brand-light-gray-blue bg-white px-3 py-2 text-sm" />
+          <button disabled={saving || !newGoal.trim()} type="submit" className="inline-flex items-center justify-center gap-2 rounded-lg bg-brand-black px-4 py-2 text-sm font-medium text-white disabled:opacity-50"><Plus size={16}/>Add goal</button>
         </form>
         {goals.length ? <div className="grid gap-3 lg:grid-cols-2">
           {goals.map(goal => <GoalCard key={goal.id} goal={goal} now={now} active={goal.id === selectedGoal} disabled={saving} onVerify={() => verifyGoal(goal)} onClick={() => { setSelectedGoal(goal.id); setTab('inbox'); }}/>)}
-        </div> : <div className="rounded-xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center">
-          <TargetIcon/><h2 className="mt-3 font-semibold text-slate-900">No synced goals yet</h2>
-          <p className="mt-1 text-sm text-slate-600">Existing Muse and GitHub work will appear after the task bridge is connected. Add a goal above to save it now.</p>
+        </div> : <div className="rounded-xl border border-dashed border-brand-light-gray-blue bg-white px-6 py-12 text-center">
+          <TargetIcon/><h2 className="mt-3 font-semibold text-brand-black">No synced goals yet</h2>
+          <p className="mt-1 text-sm text-brand-dark-gray-blue">Existing Muse and GitHub work will appear after the task bridge is connected. Add a goal above to save it now.</p>
         </div>}
-      </> : tab === 'inbox' ? <div className="rounded-xl border border-slate-200 bg-white p-4 sm:p-6">
+      </> : tab === 'inbox' ? <div className="rounded-xl border border-brand-light-gray-blue bg-white p-4 sm:p-6">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-          <div><h2 className="font-semibold text-slate-900">Assistant inbox</h2><p className="text-xs text-slate-500">Private, timestamped requests. Agent delivery and pickup status are shown per message.</p></div>
-          <label className="text-xs text-slate-600">Related goal <select className="ml-2 rounded-md border border-slate-300 p-2 text-sm" value={selectedGoal} onChange={e => setSelectedGoal(e.target.value)}>
+          <div><h2 className="font-semibold text-brand-black">Assistant inbox</h2><p className="text-xs text-slate-500">Private, timestamped requests. Agent delivery and pickup status are shown per message.</p></div>
+          <label className="text-xs text-brand-dark-gray-blue">Related goal <select className="ml-2 rounded-md border border-brand-light-gray-blue p-2 text-sm" value={selectedGoal} onChange={e => setSelectedGoal(e.target.value)}>
             <option value="all">General</option>{goals.map(g => <option key={g.id} value={g.id}>{g.title}</option>)}
           </select></label>
         </div>
-        <div className="max-h-[480px] min-h-[160px] space-y-3 overflow-auto rounded-lg bg-slate-50 p-3">
-          {visibleMessages.length ? visibleMessages.map(msg => <div key={msg.id} className={'rounded-lg border p-3 text-sm ' + (msg.sender === 'owner' ? 'border-slate-200 bg-white' : 'border-blue-100 bg-blue-50')}>
+        <div className="max-h-[480px] min-h-[160px] space-y-3 overflow-auto rounded-lg bg-brand-cream p-3">
+          {visibleMessages.length ? visibleMessages.map(msg => <div key={msg.id} className={'rounded-lg border p-3 text-sm ' + (msg.sender === 'owner' ? 'border-brand-light-gray-blue bg-white' : 'border-blue-100 bg-blue-50')}>
             <div className="mb-1 flex flex-wrap justify-between gap-2 text-xs font-medium text-slate-500">
               <span>{msg.sender === 'owner' ? 'You' : msg.agentName || 'Agent'} · {timeOf(msg.createdAt)}</span>
               {msg.sender === 'owner' && <span>{msg.deliveryState === 'awaiting_bridge' || !msg.deliveryState ? 'Saved — not dispatched' : msg.deliveryState === 'queued_to_muse' ? 'Queued with Muse' : msg.deliveryState === 'processing' ? 'Muse acknowledged' : msg.deliveryState === 'answered' ? 'Response received' : msg.deliveryState === 'blocked' ? 'Blocked — action needed' : msg.deliveryState}</span>}
             </div>
-            <p className="whitespace-pre-wrap break-words text-slate-800">{msg.body}</p>
+            <p className="whitespace-pre-wrap break-words text-brand-black">{msg.body}</p>
             {msg.deliveryMessage && <p className="mt-1 text-xs text-slate-500">{msg.deliveryMessage}</p>}
           </div>) : <p className="py-12 text-center text-sm text-slate-500">No requests saved in this conversation yet.</p>}
         </div>
@@ -312,22 +312,22 @@ export default function AiOperations() {
           <label htmlFor="ai-request" className="block text-xs font-medium text-slate-700">Send a request to the assistant queue</label>
           <textarea id="ai-request" rows={3} maxLength={maxMessageLength} value={newMessage} onChange={e => setNewMessage(e.target.value)}
             placeholder="Describe what needs handling. Submission saves the request; delivery is confirmed separately."
-            className="w-full rounded-lg border border-slate-300 p-3 text-sm" />
+            className="w-full rounded-lg border border-brand-light-gray-blue p-3 text-sm" />
           <div className="flex justify-between gap-2">
             <span className="text-xs text-slate-500">{newMessage.length} / {maxMessageLength} characters</span>
-            <button type="submit" disabled={saving || !newMessage.trim()} className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"><Send size={15}/>Submit request</button>
+            <button type="submit" disabled={saving || !newMessage.trim()} className="inline-flex items-center gap-2 rounded-lg bg-brand-black px-4 py-2 text-sm font-medium text-white disabled:opacity-50"><Send size={15}/>Submit request</button>
           </div>
         </form>
-      </div> : <section className="rounded-xl border border-slate-200 bg-white p-4 sm:p-6">
-        <h2 className="font-semibold text-slate-900">Verified activity history</h2>
+      </div> : <section className="rounded-xl border border-brand-light-gray-blue bg-white p-4 sm:p-6">
+        <h2 className="font-semibold text-brand-black">Verified activity history</h2>
         <p className="mt-1 text-sm text-slate-500">Read-only events written by the trusted agent integration. An empty list does not mean agents are running.</p>
         <div className="mt-4 space-y-3">
           {events.length ? events.map(ev => <div key={ev.id} className="rounded-lg border border-slate-100 p-3">
-            <div className="flex flex-wrap justify-between gap-2"><strong className="text-sm text-slate-800">{ev.title}</strong><span className="text-xs text-slate-500">{timeOf(ev.createdAt)}</span></div>
-            {ev.detail && <p className="mt-1 text-sm text-slate-600">{ev.detail}</p>}
+            <div className="flex flex-wrap justify-between gap-2"><strong className="text-sm text-brand-black">{ev.title}</strong><span className="text-xs text-slate-500">{timeOf(ev.createdAt)}</span></div>
+            {ev.detail && <p className="mt-1 text-sm text-brand-dark-gray-blue">{ev.detail}</p>}
             {ev.source && <p className="mt-1 text-xs text-slate-500">Source: {ev.source}</p>}
             {ev.evidenceUrl && /^https:\/\/[^ ]+$/i.test(ev.evidenceUrl) && <a href={ev.evidenceUrl} target="_blank" rel="noreferrer" className="mt-1 inline-block text-xs text-blue-700 underline">View evidence</a>}
-          </div>) : <p className="rounded-lg bg-slate-50 p-8 text-center text-sm text-slate-500">No agent events have been verified and synced yet.</p>}
+          </div>) : <p className="rounded-lg bg-brand-cream p-8 text-center text-sm text-slate-500">No agent events have been verified and synced yet.</p>}
         </div>
       </section>}
 
@@ -340,5 +340,5 @@ export default function AiOperations() {
 }
 
 function TargetIcon() {
-  return <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-[#F3EFE7]"><CheckCircle2 className="text-[#A9997E]" size={22}/></div>;
+  return <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-[#F3EFE7]"><CheckCircle2 className="text-brand-gold" size={22}/></div>;
 }
