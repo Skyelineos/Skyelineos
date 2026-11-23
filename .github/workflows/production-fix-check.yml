@@ -1,0 +1,29 @@
+name: Production repair verification
+on:
+  pull_request:
+    paths:
+      - 'client/src/**'
+      - 'functions/src/**'
+      - '.github/workflows/production-fix-check.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install
+        run: npm ci --no-audit --no-fund
+      - name: Production build
+        run: npm run build
+      - name: Typescript
+        run: npm run check
+      - name: Realtime transport usage audit
+        run: |
+          echo "=== Event socket consumers ==="
+          grep -R -n -E "useEventSocket|useScheduleEvents|useScheduleEventEmitter|useEventSocketLegacy" client/src --include='*.ts' --include='*.tsx' || true
