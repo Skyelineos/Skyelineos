@@ -1,0 +1,31 @@
+name: AI Operations build check
+
+on:
+  pull_request:
+    paths:
+      - 'client/src/App.tsx'
+      - 'client/src/pages/AiOperations.tsx'
+      - 'client/src/components/layout/Sidebar.tsx'
+      - 'client/src/components/layout/MobileNav.tsx'
+      - 'firestore.rules'
+      - '.github/workflows/ai-operations-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Build frontend
+        run: npm run build
+      - name: Typecheck frontend
+        run: npm run check
