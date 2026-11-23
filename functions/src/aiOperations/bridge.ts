@@ -86,6 +86,18 @@ async function dispatch(id: string, data: FirebaseFirestore.DocumentData) {
         requestBody: { values: [rowFor(assignId, data.goalId, body)] },
       });
     }
+    if (data.goalId && /^[A-Za-z0-9_-]{1,150}$/.test(data.goalId)) {
+      const goalRef = db.collection('ownerGoals').doc(data.goalId);
+      const goal = await goalRef.get();
+      if (goal.exists && goal.data()?.status === 'planned') {
+        await goalRef.update({
+          status: 'queued', agent: 'Muse',
+          nextAction: 'Await Muse receipt through the existing 15-minute poll.',
+          nextCheckAt: admin.firestore.Timestamp.fromMillis(Date.now() + 60 * 60_000),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      }
+    }
     await messageRef.set({
       assignmentId: assignId,
       deliveryState: 'queued_to_muse',
@@ -114,6 +126,7 @@ export const aiOperationsDispatch = onDocumentCreated(
 
 async function synchronizeResults() {
   const rows = await loadAssignments();
+  await synchronizeTrackedGoals(rows);
   for (const row of rows) {
     const [id, statusRaw, , resultRaw, blockerRaw] = row;
     if (!id || !id.startsWith(QUEUE_PREFIX)) continue;
@@ -139,6 +152,19 @@ async function synchronizeResults() {
         : 'Awaiting Muse pickup.',
       lastSyncedAt: admin.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
+    const linkedId = snap.data()?.goalId;
+    if (linkedId && /^[A-Za-z0-9_-]{1,150}$/.test(linkedId) && (next === 'answered' || next === 'blocked')) {
+      const linkedRef = db.collection('ownerGoals').doc(linkedId);
+      if ((await linkedRef.get()).exists) {
+        await linkedRef.update({
+          status: next === 'blocked' ? 'blocked' : 'waiting_external',
+          agent: 'Muse',
+          nextAction: next === 'blocked' ? (blocker || 'Review Muse blocker and decide next action.')
+            : 'Review the Muse reply, validate results and assign next milestone.',
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      }
+    }
     if (next === 'answered' || next === 'blocked') {
       const replyBody = result || blocker || 'Muse reported the status without details; follow-up required.';
       await db.collection('ownerAgentMessages').doc('reply-' + messageId).set({
@@ -151,6 +177,49 @@ async function synchronizeResults() {
         next === 'blocked' ? (blocker || replyBody) : 'Muse response saved in Assistant Inbox.',
         'Muse', snap.data()?.goalId);
     }
+  }
+}
+
+function titleForAssignment(id: string, text: string) {
+  if (id.startsWith('FIREBASE-OWNER')) return 'Firebase ownership transfer';
+  if (id.startsWith('SKY-COORD')) return 'Financial agent / Muse coordination';
+  if (id.startsWith('MUSE-EXEC')) return 'Executive AI team coordination';
+  if (id.startsWith('PROVO-')) return 'Provo utility invoice follow-up';
+  return text.slice(0, 110) || 'Muse assignment ' + id;
+}
+
+async function synchronizeTrackedGoals(rows: string[][]) {
+  // Materialize the existing Muse queue as read-only goal cards.
+  // Never consider an unverified Muse "Done" status a verified completed goal.
+  for (const row of rows) {
+    const [id, state, instruction, result, blocker] = row;
+    if (!id || id.startsWith(QUEUE_PREFIX) || id === 'TEST-7K42') continue;
+    const status = (state || '').toLowerCase().trim();
+    const hash = createHash('sha256').update([status, instruction, result, blocker].join('\n')).digest('hex');
+    const goalId = 'muse-' + createHash('sha256').update(id).digest('hex').slice(0, 32);
+    const ref = db.collection('ownerGoals').doc(goalId);
+    const existing = await ref.get();
+    if (existing.exists && existing.data()?.sourceHash === hash) continue;
+    const goalStatus: 'blocked' | 'queued' | 'waiting_external' =
+      status === 'blocked' ? 'blocked' : status === 'done' ? 'waiting_external' : 'queued';
+    await ref.set({
+      title: titleForAssignment(id, instruction || ''),
+      description: (instruction || '').slice(0, 500),
+      status: goalStatus,
+      priority: id.startsWith('FIREBASE-OWNER') || id.startsWith('SKY-COORD') ? 'p0' : 'p1',
+      agent: 'Muse',
+      source: 'Shared Muse Assignment Tracker',
+      sourceId: id,
+      sourceHash: hash,
+      blocker: (blocker || '').slice(0, 1500),
+      nextAction: goalStatus === 'blocked' ? 'Review blocker in Muse result and provide owner action.'
+        : goalStatus === 'waiting_external' ? 'Review Muse result and verify the reported deliverable.'
+        : 'Await Muse pickup or report a missed follow-up.',
+      nextCheckAt: goalStatus === 'queued'
+        ? admin.firestore.Timestamp.fromMillis(Date.now() + 60 * 60_000) : null,
+      evidenceUrl: 'https://docs.google.com/spreadsheets/d/' + SHEET_ID + '/edit',
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
   }
 }
 
