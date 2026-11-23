@@ -1,15 +1,12 @@
 import { useEffect, useState } from 'react';
-import { doc, getDoc, onSnapshot, updateDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { financeRequest } from '@/lib/financeRequest';
+import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { CheckCircle2, Link2, RefreshCw, Unlink, AlertCircle, Download } from 'lucide-react';
 import { QboCustomerImportDialog } from './QboCustomerImportDialog';
 
-// Connect-to-QuickBooks UI. Reads /qboConnections/global to show status.
-// "Connect" button redirects to /qbo/oauth/start which Intuit then bounces
-// back to /qbo/oauth/callback (served by the api Cloud Function).
 export function QboConnectionCard() {
   const [conn, setConn] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -24,42 +21,34 @@ export function QboConnectionCard() {
     | null
   >(null);
 
+  const { user } = useAuth();
+  const isAdmin = user?.role?.toLowerCase() === 'admin';
+  const [error, setError] = useState('');
+
   useEffect(() => {
-    // One-time fetch for fast initial load, then real-time updates
-    getDoc(doc(db, 'qboConnections', 'global'))
-      .then(snap => { setConn(snap.exists() ? snap.data() : null); setLoading(false); })
-      .catch(() => setLoading(false));
-    // Real-time listener for reconnect/disconnect events
-    const unsub = onSnapshot(doc(db, 'qboConnections', 'global'),
-      snap => { setConn(snap.exists() ? snap.data() : null); setLoading(false); },
-      () => setLoading(false));
-    return unsub;
-  }, []);
+    let active = true;
+    if (!user) return;
+    financeRequest('/api/qbo/connection').then(result => { if (active) setConn(result); })
+      .catch(e => { if (active) setError(e.message); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [user?.firebaseUid]);
 
-  const connect = () => {
-    // Bounce to the OAuth start endpoint — Cloud Function-served, will
-    // redirect to Intuit's consent screen, which then comes back to
-    // /qbo/oauth/callback to land the tokens.
-    window.location.href = 'https://skyelineos.web.app/qbo/oauth/start';
-  };
-
-  const disconnect = async () => {
-    if (!confirm('Disconnect QuickBooks? You\'ll need to reconnect to push bills or invoices.')) return;
+  const connect = async () => {
     try {
-      // Soft-disconnect by clearing tokens. We keep the doc so re-connecting
-      // is auditable.
-      await updateDoc(doc(db, 'qboConnections', 'global'), {
-        accessToken: '',
-        refreshToken: '',
-        disconnectedAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      } as any);
-    } catch (e: any) {
-      alert(`Disconnect failed: ${e?.message || 'unknown'}`);
-    }
+      const result = await financeRequest<{ url: string }>('/api/qbo/oauth/start', {});
+      window.location.assign(result.url);
+    } catch (e) { setError((e as Error).message); }
+  };
+  const disconnect = async () => {
+    if (!confirm('Disconnect this QuickBooks company from SkyelineOS?')) return;
+    try {
+      await financeRequest('/api/qbo/disconnect', {});
+      setConn({ connected: false });
+    } catch (e) { setError((e as Error).message); }
   };
 
-  const isConnected = !!(conn && conn.accessToken && !conn.disconnectedAt);
+  const isConnected = !!conn?.connected;
   const expiresInDays = conn?.refreshTokenExpiresAt
     ? Math.round((conn.refreshTokenExpiresAt - Date.now()) / 86400000)
     : null;
@@ -76,7 +65,7 @@ export function QboConnectionCard() {
               Connected
             </Badge>
           )}
-          {!isConnected && (
+          {!isConnected && !loading && !error && (
             <Badge variant="outline" className="bg-gray-50 text-gray-700">
               Not connected
             </Badge>
@@ -87,6 +76,7 @@ export function QboConnectionCard() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {error && <p role="alert">{error}</p>}
         {loading ? (
           <p className="text-sm text-gray-500">Loading…</p>
         ) : isConnected ? (
@@ -108,7 +98,7 @@ export function QboConnectionCard() {
               </div>
             )}
             <div className="flex flex-wrap items-center gap-2">
-              <Button onClick={connect} variant="outline" className="gap-1.5">
+              <Button disabled={!isAdmin} onClick={connect} variant="outline" className="gap-1.5">
                 <RefreshCw className="w-3.5 h-3.5" />
                 Reconnect
               </Button>
@@ -124,7 +114,7 @@ export function QboConnectionCard() {
                 <Download className="w-3.5 h-3.5" />
                 Import from QuickBooks
               </Button>
-              <Button onClick={disconnect} variant="outline" className="gap-1.5 text-red-600 border-red-200 hover:bg-red-50">
+              <Button disabled={!isAdmin} onClick={disconnect} variant="outline" className="gap-1.5 text-red-600 border-red-200 hover:bg-red-50">
                 <Unlink className="w-3.5 h-3.5" />
                 Disconnect
               </Button>
@@ -145,7 +135,7 @@ export function QboConnectionCard() {
             <p className="text-sm text-gray-600">
               Connect Skyeline OS to QuickBooks. You'll be sent to Intuit to authorize, then bounced back here.
             </p>
-            <Button onClick={connect} className="gap-1.5" style={{ backgroundColor: '#2ca01c', color: 'white' }}>
+            <Button disabled={!isAdmin} onClick={connect} className="gap-1.5" style={{ backgroundColor: '#2ca01c', color: 'white' }}>
               <Link2 className="w-4 h-4" />
               Connect to QuickBooks
             </Button>

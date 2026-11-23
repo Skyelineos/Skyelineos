@@ -21,6 +21,8 @@ import PaymentProcessingCenter from '@/components/financial/PaymentProcessingCen
 import EnhancedFinancialDashboard from '@/components/financial/EnhancedFinancialDashboard';
 import { QboConnectionCard } from '@/components/settings/QboConnectionCard';
 
+import { ProjectFinanceAgent } from '@/components/finance/ProjectFinanceAgent';
+
 export default function Financials() {
   const [selectedProjectId, setSelectedProjectId] = useState<number>(0); // 0 = company-wide
   const [location] = useLocation();
@@ -42,6 +44,8 @@ export default function Financials() {
       switch (currentTab) {
         case '':
           return renderOverviewTab();
+        case 'project-agent':
+          return <ProjectFinanceAgent />;
         case 'cash-flow':
           // Development logging removed
           return renderCashFlowTab();

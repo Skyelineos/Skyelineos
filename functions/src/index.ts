@@ -17,6 +17,8 @@ import { registerEstimateRoutes }   from './estimates/estimateRoutes';
 import { registerExpenseRoutes }    from './expenses/expenseRoutes';
 import { registerDrawRoutes }       from './expenses/drawRoutes';
 import { registerApPublicRoutes }   from './ap/apRoutes';
+import { registerProjectFinance } from './projectFinance/routes';
+export { refreshProjectReceivables } from './projectFinance/routes';
 import { registerApRoutes }         from './ap/apRoutes';
 
 // Security middleware — added 2026-07-05 to close IDOR + RBAC gaps flagged in
@@ -201,6 +203,7 @@ registerEstimateRoutes(app, db);     // POST /api/estimates/:id/{send-to-client,
 registerExpenseRoutes(app, db);      // /api/expenses/{capture,:id,:id/reconcile} + /api/projects/:id/expenses
 registerDrawRoutes(app, db);
 registerFeedbackRoutes(app);         // POST /api/feedback (authenticated, with optional screenshot upload)
+registerProjectFinance(app, db);
 registerApRoutes(app, db);          // /api/ap/{scan,invoices,:id,summary}
 
 // Real Firestore API endpoints
@@ -2193,10 +2196,29 @@ app.get('/api/instagram/insights/:mediaId', authMiddleware, async (req: any, res
 const QBO_REDIRECT_URI = 'https://skyelineos.web.app/qbo/oauth/callback';
 const QBO_APP_BASE     = 'https://skyelineos.web.app';
 
-app.get('/qbo/oauth/start', async (req: any, res: any) => {
+app.get('/api/qbo/connection', requireGcOnly, async (_req: any, res: any) => {
   try {
-    const state = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    const doc = await db.collection('qboConnections').doc('global').get();
+    const conn = doc.data() || {};
+    res.set('Cache-Control', 'no-store').json({
+      connected: !!conn.refreshToken, realmId: conn.realmId, env: conn.env,
+      scope: conn.scope, refreshTokenExpiresAt: conn.refreshTokenExpiresAt,
+    });
+  } catch { res.status(503).json({ error: 'Could not read QuickBooks settings.' }); }
+});
+app.post('/api/qbo/disconnect', requireAdmin, async (_req: any, res: any) => {
+  try {
+    await db.collection('qboConnections').doc('global').set({
+      refreshToken: '', accessToken: '', disconnectedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    res.json({ ok: true });
+  } catch { res.status(503).json({ error: 'Could not disconnect QuickBooks.' }); }
+});
+app.post('/api/qbo/oauth/start', requireAdmin, async (req: any, res: any) => {
+  try {
+    const state = require('crypto').randomBytes(32).toString('hex');
     await db.collection('qboOAuthStates').doc(state).set({
+      authorizedBy: req.user.uid,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
     // .trim() — Secret Manager values often have a trailing \n that breaks
@@ -2208,7 +2230,7 @@ app.get('/qbo/oauth/start', async (req: any, res: any) => {
       redirect_uri: QBO_REDIRECT_URI,
       state,
     });
-    res.redirect(`https://appcenter.intuit.com/connect/oauth2?${params.toString()}`);
+    res.json({ url: `https://appcenter.intuit.com/connect/oauth2?${params.toString()}` });
   } catch (e: any) {
     console.error('[qbo/oauth/start] failed:', e);
     res.status(500).send(`Start failed: ${e?.message || 'unknown'}`);
@@ -2218,26 +2240,22 @@ app.get('/qbo/oauth/start', async (req: any, res: any) => {
 app.get('/qbo/oauth/callback', async (req: any, res: any) => {
   const { code, state, realmId, error: oauthError, error_description } = req.query;
   if (oauthError) {
-    return res.status(400).send(`<h2>Connection cancelled</h2><p>${oauthError}: ${error_description || ''}</p><p><a href="${QBO_APP_BASE}/financials">Back to Skyeline OS</a></p>`);
+    return res.status(400).send('Connection cancelled. Return to Financial Settings to try again.');
   }
-  if (!code || !state || !realmId) {
+  if (typeof code !== 'string' || typeof state !== 'string' || !/^[a-f0-9]{64}$/.test(state) || typeof realmId !== 'string' || !/^\d+$/.test(realmId)) {
     return res.status(400).send('Missing code / state / realmId');
   }
   try {
-    const stateDoc = await db.collection('qboOAuthStates').doc(String(state)).get();
-    if (!stateDoc.exists) {
-      return res.status(400).send('Invalid state token. Restart the connection from Skyeline OS.');
-    }
-    await stateDoc.ref.delete();
-
-    const rawCid = process.env.QBO_CLIENT_ID || '';
-    const rawSec = process.env.QBO_CLIENT_SECRET || '';
-    const qboClientId = rawCid.trim();
-    const qboClientSecret = rawSec.trim();
-    // Diagnostic: log lengths + edge chars so we can verify the function is
-    // reading the right bytes (without leaking the full secret).
-    console.log('[qbo/oauth/callback] cid raw len:', rawCid.length, 'trim len:', qboClientId.length, 'first5:', qboClientId.slice(0, 5), 'last5:', qboClientId.slice(-5));
-    console.log('[qbo/oauth/callback] sec raw len:', rawSec.length, 'trim len:', qboClientSecret.length, 'first3:', qboClientSecret.slice(0, 3), 'last3:', qboClientSecret.slice(-3));
+    const stateRef = db.collection('qboOAuthStates').doc(state);
+    const valid = await db.runTransaction(async (tx: any) => {
+      const doc = await tx.get(stateRef);
+      if (!doc.exists) return false;
+      tx.delete(stateRef);
+      return !!doc.get('authorizedBy') && doc.get('createdAt')?.toMillis() >= Date.now() - 600_000;
+    });
+    if (!valid) return res.status(400).send('Connection request expired. Restart from Financial Settings.');
+    const qboClientId = (process.env.QBO_CLIENT_ID || '').trim();
+    const qboClientSecret = (process.env.QBO_CLIENT_SECRET || '').trim();
     const basic = Buffer.from(`${qboClientId}:${qboClientSecret}`).toString('base64');
     const body = new URLSearchParams({
       grant_type: 'authorization_code',
@@ -2254,9 +2272,8 @@ app.get('/qbo/oauth/callback', async (req: any, res: any) => {
       body: body.toString(),
     });
     if (!tokenRes.ok) {
-      const text = await tokenRes.text();
-      console.error('[qbo/oauth/callback] token exchange failed:', tokenRes.status, text);
-      return res.status(500).send(`Token exchange failed: ${tokenRes.status} ${text}`);
+      console.error('[qbo/oauth/callback] token exchange failed:', tokenRes.status);
+      return res.status(502).send('QuickBooks authorization failed. Restart from Financial Settings.');
     }
     const tokens: any = await tokenRes.json();
 

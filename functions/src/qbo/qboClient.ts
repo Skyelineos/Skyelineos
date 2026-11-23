@@ -71,6 +71,12 @@ export async function refreshQboToken(
       code: 'not_connected',
     });
   }
+  const ref = db.collection('qboConnections').doc('global');
+  const snapshot = await ref.get();
+  if (!snapshot.exists || snapshot.get('realmId') !== connection.realmId ||
+      snapshot.get('refreshToken') !== connection.refreshToken) {
+    throw new Error('QuickBooks connection changed before refresh');
+  }
   const clientId = (process.env.QBO_CLIENT_ID || '').trim();
   const clientSecret = (process.env.QBO_CLIENT_SECRET || '').trim();
   const basic = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
@@ -103,7 +109,7 @@ export async function refreshQboToken(
     refreshTokenExpiresAt:
       now + (tokens.x_refresh_token_expires_in || 8640000) * 1000,
   };
-  await db.collection('qboConnections').doc('global').set(
+  await ref.update(
     {
       accessToken: next.accessToken,
       refreshToken: next.refreshToken,
@@ -111,7 +117,7 @@ export async function refreshQboToken(
       refreshTokenExpiresAt: next.refreshTokenExpiresAt,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     },
-    { merge: true },
+    { lastUpdateTime: snapshot.updateTime! },
   );
   return next;
 }

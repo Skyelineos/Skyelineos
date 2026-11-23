@@ -226,7 +226,7 @@ function successPage(provider: Provider, email: string): string {
   <div class="check">${'✓'}</div>
   <h2>${title}</h2>
   <p>Ingestion Lab is now linked to <code>${escapeHtml(email)}</code>.</p>
-  <a href="${APP_BASE}/admin/ingestion-lab">Back to the Lab</a>
+  <a href="${APP_BASE}/financials/project-agent">Back to project finances</a>
 </body></html>`;
 }
 
@@ -240,7 +240,7 @@ function errorPage(msg: string): string {
   <div class="x">${'✗'}</div>
   <h2>Connection failed</h2>
   <p>${escapeHtml(msg)}</p>
-  <a href="${APP_BASE}/admin/ingestion-lab">Back to the Lab</a>
+  <a href="${APP_BASE}/financials/project-agent">Back to project finances</a>
 </body></html>`;
 }
 

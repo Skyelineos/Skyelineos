@@ -1136,13 +1136,11 @@ service cloud.firestore {
     }
 
     // QuickBooks Online connection — single global doc holding access token,
-    // refresh token, and realmId. Admin-only read because tokens are
-    // sensitive; writes happen exclusively from the api Cloud Function via
+    // refresh token, and realmId. Reads and writes use the Cloud Function via
     // Admin SDK (which bypasses these rules). OAuth state tokens (short
     // lived) live in a sibling collection, also Cloud-Function-managed.
     match /qboConnections/{docId} {
-      allow read: if isAdmin();
-      allow write: if false; // Cloud Function only
+      allow read, write: if false; // Connection status is exposed through the authenticated API.
     }
     match /qboOAuthStates/{docId} {
       allow read, write: if false; // Cloud Function only

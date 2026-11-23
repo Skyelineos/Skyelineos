@@ -16,6 +16,7 @@ import {
 
 const financialTabs = [
   { label: 'Overview',         path: '',                icon: BarChart3 },
+  { label: 'Project financial agent', path: 'project-agent', icon: Receipt },
   { label: 'Cash Flow',        path: 'cash-flow',       icon: TrendingUp },
   { label: 'Budget Analysis',  path: 'budget-analysis', icon: PieChart },
   { label: 'Invoices',         path: 'invoices',        icon: Receipt },
