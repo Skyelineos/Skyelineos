@@ -1032,9 +1032,9 @@ export default function DocumentsTab({ projectId }: DocumentsTabProps) {
                             <div className="text-sm text-gray-600 space-y-1">
                               <p><strong>Subcontractor:</strong> {subcontractor?.name || 'Unknown'}</p>
                               <p><strong>Description:</strong> {co.description}</p>
-                              <p className={`flex items-center ${co.costImpact >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                              <p className={`flex items-center ${(co.costImpact ?? 0) >= 0 ? 'text-red-600' : 'text-green-600'}`}>
                                 <DollarSign className="mr-1 h-4 w-4" />
-                                <strong>Cost Impact:</strong> {co.costImpact >= 0 ? '+' : ''}${co.costImpact.toLocaleString()}
+                                <strong>Cost Impact:</strong> {(co.costImpact ?? 0) >= 0 ? '+' : ''}${(co.costImpact ?? 0).toLocaleString()}
                               </p>
                               {co.timeImpact !== null && co.timeImpact !== 0 && (
                                 <p className={`flex items-center ${(co.timeImpact || 0) > 0 ? 'text-red-600' : 'text-green-600'}`}>
@@ -1186,7 +1186,7 @@ export default function DocumentsTab({ projectId }: DocumentsTabProps) {
                             <div className="text-sm text-gray-600 space-y-1">
                               <p><strong>Subcontractor:</strong> {subcontractor?.name || 'Unknown'}</p>
                               <p><strong>Trade:</strong> {invoice.trade}</p>
-                              <p><strong>Amount:</strong> ${invoice.amount.toLocaleString()}</p>
+                              <p><strong>Amount:</strong> ${(invoice.amount ?? 0).toLocaleString()}</p>
                               <p><strong>Date:</strong> {invoice.submittedDate ? new Date(invoice.submittedDate).toLocaleDateString() : 'No date'}</p>
                               {invoice.workPeriod && (
                                 <p><strong>Work Period:</strong> {invoice.workPeriod}</p>
