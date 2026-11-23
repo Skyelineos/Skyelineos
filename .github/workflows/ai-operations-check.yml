@@ -8,6 +8,8 @@ on:
       - 'client/src/components/layout/Sidebar.tsx'
       - 'client/src/components/layout/MobileNav.tsx'
       - 'firestore.rules'
+      - 'functions/src/aiOperations/**'
+      - 'functions/src/index.ts'
       - '.github/workflows/ai-operations-check.yml'
   workflow_dispatch:
 
@@ -25,6 +27,12 @@ jobs:
           cache: 'npm'
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
+      - name: Install functions dependencies
+        working-directory: functions
+        run: npm ci --no-audit --no-fund
+      - name: Build functions
+        working-directory: functions
+        run: npm run build
       - name: Build frontend
         run: npm run build
       - name: Typecheck frontend
