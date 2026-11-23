@@ -23,6 +23,12 @@ jobs:
         run: npm run build
       - name: Typescript
         run: npm run check
+      - name: Install Firebase Functions dependencies
+        working-directory: functions
+        run: npm ci --no-audit --no-fund
+      - name: Compile Firebase Functions
+        working-directory: functions
+        run: npm run build
       - name: Realtime transport usage audit
         run: |
           echo "=== Event socket consumers ==="
