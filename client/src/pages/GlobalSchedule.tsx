@@ -1,14 +1,12 @@
 import React from 'react';
 import { useAuth } from '../hooks/use-auth';
 import { GlobalScheduleCalendar } from '../components/schedule/GlobalScheduleCalendar';
-import { useScheduleEvents } from '../hooks/useEventSocket';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Calendar, Users, Clock, AlertCircle } from 'lucide-react';
 import { AppLayout } from '../components/layout/AppLayout';
 
 export default function GlobalSchedule() {
   const { user } = useAuth();
-  const { isConnected } = useScheduleEvents();
 
   if (!user) {
     return (
@@ -40,9 +38,9 @@ export default function GlobalSchedule() {
 
           {/* Connection Status */}
           <div className="flex items-center gap-2">
-            <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
-            <span className="text-sm text-gray-600">
-              {isConnected ? 'Real-time updates active' : 'Disconnected'}
+            <Clock className="h-4 w-4 text-brand-gold" />
+            <span className="text-sm text-brand-dark-gray-blue">
+              Calendar data refreshes every minute
             </span>
           </div>
         </div>
