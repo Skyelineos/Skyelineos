@@ -1265,6 +1265,13 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // Bridge health is written only by the Cloud Functions service account;
+    // the owner can see when the task relay itself is unavailable.
+    match /ownerAiBridge/{docId} {
+      allow read: if isPrivateAiOwner();
+      allow write: if false;
+    }
+
     // Append-only audit records written by trusted server processes only.
     match /ownerGoalEvents/{eventId} {
       allow read: if isPrivateAiOwner();
